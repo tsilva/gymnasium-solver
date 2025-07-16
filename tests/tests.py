@@ -866,41 +866,23 @@ class TestSyncRolloutCollector(unittest.TestCase):
             return DummyVecEnv([10, 10], obs_dim=self.obs_dim)  # Long episodes for testing
         
         self.build_env_fn = build_env_fn
+        self.env = build_env_fn(self.config.seed)
+        self.policy_model = ConstPolicy()
+        self.value_model = ConstValue()
         self.collector = SyncRolloutCollector(
-            build_env_fn, self.config, self.obs_dim, self.act_dim
+            self.config, self.env, self.policy_model, self.value_model
         )
 
     def test_initialization(self):
         """Test that collector initializes correctly"""
-        self.assertEqual(self.collector.obs_dim, self.obs_dim)
-        self.assertEqual(self.collector.act_dim, self.act_dim)
         self.assertEqual(self.collector.config, self.config)
         self.assertIsNotNone(self.collector.env)
-        self.assertIsNone(self.collector.policy_model)
-        self.assertIsNone(self.collector.value_model)
-        self.assertFalse(self.collector._ready_for_initial)
+        self.assertIsNotNone(self.collector.policy_model)
+        self.assertIsNotNone(self.collector.value_model)
         self.assertIsNone(self.collector.last_obs)
 
-    def test_is_ready_for_initial_rollout(self):
-        """Test ready state checking"""
-        # Initially not ready
-        self.assertFalse(self.collector.is_ready_for_initial_rollout())
-        
-        # After model initialization, should be ready
-        self.collector.initialize_with_models(ConstPolicy(), ConstValue())
-        self.assertTrue(self.collector.is_ready_for_initial_rollout())
-
-    def test_get_rollout_without_models(self):
-        """Test that get_rollout returns None when models not set"""
-        result = self.collector.get_rollout()
-        self.assertIsNone(result)
-
-    def test_get_rollout_with_models(self):
+    def test_get_rollout_basic(self):
         """Test successful rollout collection"""
-        policy_model = ConstPolicy()
-        value_model = ConstValue()
-        self.collector.initialize_with_models(policy_model, value_model)
-        
         # Get rollout
         trajectories = self.collector.get_rollout()
         
@@ -920,8 +902,6 @@ class TestSyncRolloutCollector(unittest.TestCase):
 
     def test_get_rollout_updates_last_obs(self):
         """Test that last_obs is updated after rollout collection"""
-        self.collector.initialize_with_models(ConstPolicy(), ConstValue())
-        
         # Initially None
         self.assertIsNone(self.collector.last_obs)
         
@@ -932,8 +912,6 @@ class TestSyncRolloutCollector(unittest.TestCase):
 
     def test_get_rollout_consecutive_calls(self):
         """Test multiple consecutive rollout calls"""
-        self.collector.initialize_with_models(ConstPolicy(), ConstValue())
-        
         # First rollout
         trajectories1 = self.collector.get_rollout()
         last_obs1 = self.collector.last_obs.copy()
@@ -955,8 +933,6 @@ class TestSyncRolloutCollector(unittest.TestCase):
 
     def test_timeout_parameter_ignored(self):
         """Test that timeout parameter is ignored in sync collector"""
-        self.collector.initialize_with_models(ConstPolicy(), ConstValue())
-        
         # Should work the same regardless of timeout value
         result1 = self.collector.get_rollout(timeout=0.1)
         result2 = self.collector.get_rollout(timeout=10.0)
@@ -974,10 +950,10 @@ class TestSyncRolloutCollector(unittest.TestCase):
     def test_different_config_parameters(self):
         """Test collector with different configuration"""
         config = MockConfig(seed=123, train_rollout_steps=20)
+        env = self.build_env_fn(config.seed)
         collector = type(self.collector)(
-            self.build_env_fn, config, self.obs_dim, self.act_dim
+            config, env, ConstPolicy(), ConstValue()
         )
-        collector.initialize_with_models(ConstPolicy(), ConstValue())
         
         trajectories = collector.get_rollout()
         expected_length = config.train_rollout_steps * collector.env.num_envs
@@ -988,16 +964,14 @@ class TestSyncRolloutCollector(unittest.TestCase):
         """Test that environment is created with correct seed"""
         config = MockConfig(seed=999)
         
-        def build_env_with_seed_check(seed):
-            # This would typically create an environment with the given seed
-            self.assertEqual(seed, config.seed)
-            return DummyVecEnv([5, 5])
-        
+        # Create environment directly since the collector expects an env, not a build function
+        env = DummyVecEnv([5, 5])
         collector = type(self.collector)(
-            build_env_with_seed_check, config, self.obs_dim, self.act_dim
+            config, env, ConstPolicy(), ConstValue()
         )
         
-        # Environment should have been created during initialization
+        # Environment should have been set during initialization
+        self.assertIsNotNone(collector.env)
 
     def test_model_references_preserved(self):
         """Test that model references are preserved, not copied"""
@@ -1007,24 +981,24 @@ class TestSyncRolloutCollector(unittest.TestCase):
         # Add a custom attribute to verify it's the same object
         policy_model.custom_attr = "test_value"
         
-        self.collector.initialize_with_models(policy_model, value_model)
+        collector = type(self.collector)(
+            self.config, self.env, policy_model, value_model
+        )
         
         # Should be the exact same objects
-        self.assertIs(self.collector.policy_model, policy_model)
-        self.assertIs(self.collector.value_model, value_model)
-        self.assertEqual(self.collector.policy_model.custom_attr, "test_value")
+        self.assertIs(collector.policy_model, policy_model)
+        self.assertIs(collector.value_model, value_model)
+        self.assertEqual(collector.policy_model.custom_attr, "test_value")
 
     def test_rollout_with_partial_episode(self):
         """Test rollout collection that doesn't complete full episodes"""
         # Use short episodes to test partial collection
-        def build_short_env(seed):
-            return DummyVecEnv([2, 3], obs_dim=self.obs_dim)  # Very short episodes
+        short_env = DummyVecEnv([2, 3], obs_dim=self.obs_dim)  # Very short episodes
         
         config = MockConfig(train_rollout_steps=1)  # Collect only 1 step
         collector = type(self.collector)(
-            build_short_env, config, self.obs_dim, self.act_dim
+            config, short_env, ConstPolicy(), ConstValue()
         )
-        collector.initialize_with_models(ConstPolicy(), ConstValue())
         
         trajectories = collector.get_rollout()
         
@@ -1033,7 +1007,6 @@ class TestSyncRolloutCollector(unittest.TestCase):
 
     def test_rollout_data_types(self):
         """Test that rollout returns correct data types"""
-        self.collector.initialize_with_models(ConstPolicy(), ConstValue())
         trajectories = self.collector.get_rollout()
         
         states, actions, rewards, dones, logps, values, advs, returns, frames = trajectories
@@ -1061,16 +1034,17 @@ class TestSyncRolloutCollector(unittest.TestCase):
     def test_error_handling_edge_cases(self):
         """Test error handling and edge cases"""
         # Test with None timeout (should still work)
-        self.collector.initialize_with_models(ConstPolicy(), ConstValue())
         result = self.collector.get_rollout(timeout=None)
         self.assertIsNotNone(result)
         
-        # Test reinitializing models
+        # Test with new models
         new_policy = ConstPolicy()
         new_value = ConstValue()
-        self.collector.initialize_with_models(new_policy, new_value)
-        self.assertIs(self.collector.policy_model, new_policy)
-        self.assertIs(self.collector.value_model, new_value)
+        new_collector = type(self.collector)(
+            self.config, self.env, new_policy, new_value
+        )
+        self.assertIs(new_collector.policy_model, new_policy)
+        self.assertIs(new_collector.value_model, new_value)
         
         # Test that collector can handle being reused
         result1 = self.collector.get_rollout()

@@ -14,7 +14,8 @@ dependencies = [
     "ipykernel",
     "jupyter",
     "torchvision",
-    "pytest"
+    "pytest",
+    "pyyaml"
 ]
 
 [tool.pytest.ini_options]

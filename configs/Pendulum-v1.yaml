@@ -1,0 +1,21 @@
+# Pendulum-v1 Environment Configuration
+
+default:
+  gamma: 0.99
+  lam: 0.95
+  clip_epsilon: 0.2
+  batch_size: 64
+  eval_interval: 2
+  eval_episodes: 5
+  reward_threshold: -200
+  policy_lr: 0.0003
+  value_lr: 0.001
+  hidden_dim: [128, 64]
+  entropy_coef: 0.0
+
+reinforce:
+  entropy_coef: 0.02
+  batch_size: 128
+
+ppo:
+  # Uses default config

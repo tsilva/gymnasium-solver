@@ -47,6 +47,10 @@ class RLConfig:
     hidden_dim: Union[int, Tuple[int, ...]] = 64
     entropy_coef: float = 0.01
     
+    # Shared backbone (PPO only)
+    shared_backbone: bool = False
+    backbone_dim: Union[int, Tuple[int, ...]] = 64
+    
     # Other
     normalize: bool = False
     mean_reward_window: int = 100
@@ -97,9 +101,11 @@ class RLConfig:
         # Convert any numeric strings (like scientific notation)
         final_config = _convert_numeric_strings(final_config)
         
-        # Convert list values to tuples for hidden_dim
+        # Convert list values to tuples for hidden_dim and backbone_dim
         if 'hidden_dim' in final_config and isinstance(final_config['hidden_dim'], list):
             final_config['hidden_dim'] = tuple(final_config['hidden_dim'])
+        if 'backbone_dim' in final_config and isinstance(final_config['backbone_dim'], list):
+            final_config['backbone_dim'] = tuple(final_config['backbone_dim'])
         
         return cls(**final_config)
 

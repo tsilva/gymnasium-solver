@@ -12,12 +12,7 @@ class REINFORCELearner(Learner):
 
         # Create REINFORCE-specific models and components
         self.reinforce_loss = REINFORCELoss(config.entropy_coef)
-        
-    def get_models_for_rollout(self):
-        """Return models needed for rollout collection"""
-        # REINFORCE only needs policy model for rollouts
-        return self.policy_model, None
-        
+
     def compute_loss(self, batch):
         """Compute REINFORCE-specific losses"""
         states, actions, rewards, dones, old_logps, values, advantages, returns, frames = batch

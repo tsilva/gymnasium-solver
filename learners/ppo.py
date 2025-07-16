@@ -13,11 +13,7 @@ class PPOLearner(Learner):
         self.value_model = value_model
 
         self.ppo_loss = PPOLoss(config.clip_epsilon, config.entropy_coef)
-        
-    def get_models_for_rollout(self):
-        """Return models needed for rollout collection"""
-        return self.policy_model, self.value_model
-        
+
     def compute_loss(self, batch):
         """Compute PPO-specific losses"""
         states, actions, rewards, dones, old_logps, values, advantages, returns, frames = batch

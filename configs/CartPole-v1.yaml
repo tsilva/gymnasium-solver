@@ -19,4 +19,5 @@ reinforce:
   entropy_coef: 0.02
 
 ppo:
-  # Uses default config (no specific overrides)
+  shared_backbone: True
+  backbone_dim: 64

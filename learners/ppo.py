@@ -13,7 +13,12 @@ class PPOLearner(Learner):
         self.value_model = value_model
         self.shared_model = shared_model
         self.use_shared_backbone = shared_model is not None
-
+        
+        # Register the shared model with PyTorch Lightning if using shared backbone
+        if self.use_shared_backbone:
+            # Register the actual shared model so Lightning handles device movement
+            self.shared_backbone = shared_model
+        
         self.ppo_loss = PPOLoss(config.clip_epsilon, config.entropy_coef, self.use_shared_backbone)
 
     def compute_loss(self, batch):
@@ -23,7 +28,7 @@ class PPOLearner(Learner):
         if self.use_shared_backbone:
             return self.ppo_loss.compute(
                 states, actions, old_logps, advantages, returns, 
-                self.shared_model, None, use_shared=True
+                self.shared_backbone, None, use_shared=True
             )
         else:
             return self.ppo_loss.compute(
@@ -55,7 +60,7 @@ class PPOLearner(Learner):
 
     def configure_optimizers(self):
         if self.use_shared_backbone:
-            return torch.optim.Adam(self.shared_model.parameters(), lr=self.config.policy_lr)
+            return torch.optim.Adam(self.shared_backbone.parameters(), lr=self.config.policy_lr)
         else:
             return [
                 torch.optim.Adam(self.policy_model.parameters(), lr=self.config.policy_lr),
@@ -64,9 +69,28 @@ class PPOLearner(Learner):
 
     def forward(self, x):
         if self.use_shared_backbone:
-            return self.shared_model(x)
+            return self.shared_backbone(x)
         else:
             return self.policy_model(x)
+    
+    def on_train_epoch_start(self):
+        """Override to handle shared backbone model updates"""
+        self.metrics.reset()
+        
+        if self.use_shared_backbone:
+            # For shared backbone, update both policy and value with the same state dict
+            shared_state_dict = self.shared_backbone.state_dict()
+            self.rollout_collector.update_models(shared_state_dict, shared_state_dict)
+        else:
+            # For separate models, use the original approach
+            self.rollout_collector.update_models(
+                self.policy_model.state_dict(), 
+                self.value_model.state_dict() if self.value_model else None
+            )
+        
+        # Collect new rollout if needed
+        if (self.current_epoch + 1) % self.config.rollout_interval == 0:
+            self._collect_and_update_rollout()
 
 class PPOLoss:
     def __init__(self, clip_epsilon, entropy_coef, use_shared_backbone=False):

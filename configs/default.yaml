@@ -23,6 +23,10 @@ value_lr: 0.001
 hidden_dim: 64
 entropy_coef: 0.01
 
+# Shared backbone (PPO only)
+shared_backbone: false
+backbone_dim: 64  # Dimensions for shared backbone layers
+
 # Other
 normalize: false
 mean_reward_window: 100

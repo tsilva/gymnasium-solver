@@ -7,7 +7,7 @@ from tsilva_notebook_utils.lightning import WandbCleanup
 from learners.ppo import PPOLearner
 from learners.reinforce import REINFORCELearner
 from utils.rollouts import AsyncRolloutCollector, SyncRolloutCollector
-from .models import PolicyNet, ValueNet
+from .models import PolicyNet, ValueNet, SharedBackboneNet, SharedPolicyNet, SharedValueNet
 
 
 def create_agent(config, build_env_fn, obs_dim, act_dim, algorithm=None):
@@ -20,18 +20,34 @@ def create_agent(config, build_env_fn, obs_dim, act_dim, algorithm=None):
     else:
         algo_id = algorithm.upper()
     
-    # Create models
-    policy_model = PolicyNet(obs_dim, act_dim, config.hidden_dim)
-    
-    # Create rollout collector
+    # Create rollout collector env
     rollout_env = build_env_fn(config.seed + 1000, n_envs=config.n_envs)
     rollout_collector_cls = AsyncRolloutCollector if config.async_rollouts else SyncRolloutCollector
     
     if algo_id == "PPO":
-        value_model = ValueNet(obs_dim, config.hidden_dim)
-        rollout_collector = rollout_collector_cls(config, rollout_env, policy_model, value_model=value_model)
-        agent = PPOLearner(config, build_env_fn, rollout_collector, policy_model, value_model)
+        # Check if shared backbone is enabled
+        use_shared_backbone = getattr(config, 'shared_backbone', False)
+        
+        if use_shared_backbone:
+            # Create shared backbone model
+            backbone_dim = getattr(config, 'backbone_dim', config.hidden_dim)
+            shared_model = SharedBackboneNet(obs_dim, act_dim, config.hidden_dim, backbone_dim)
+            
+            # Create wrapper models for rollout collector
+            policy_model = SharedPolicyNet(shared_model)
+            value_model = SharedValueNet(shared_model)
+            
+            rollout_collector = rollout_collector_cls(config, rollout_env, policy_model, value_model=value_model)
+            agent = PPOLearner(config, build_env_fn, rollout_collector, policy_model, value_model, shared_model=shared_model)
+        else:
+            # Create separate models (original behavior)
+            policy_model = PolicyNet(obs_dim, act_dim, config.hidden_dim)
+            value_model = ValueNet(obs_dim, config.hidden_dim)
+            rollout_collector = rollout_collector_cls(config, rollout_env, policy_model, value_model=value_model)
+            agent = PPOLearner(config, build_env_fn, rollout_collector, policy_model, value_model)
+            
     elif algo_id == "REINFORCE":
+        policy_model = PolicyNet(obs_dim, act_dim, config.hidden_dim)
         rollout_collector = rollout_collector_cls(config, rollout_env, policy_model, value_model=None)
         agent = REINFORCELearner(config, build_env_fn, rollout_collector, policy_model)
     else:

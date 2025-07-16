@@ -1,0 +1,230 @@
+import time
+import multiprocessing
+from collections import deque
+import numpy as np
+import pytorch_lightning as pl
+from torch.utils.data import DataLoader
+from tsilva_notebook_utils.gymnasium import (
+    collect_rollouts, group_trajectories_by_episode,
+    RolloutDataset, MetricTracker, AsyncRolloutCollector, SyncRolloutCollector
+)
+
+# ---------------------------------------------------------------------
+class Learner(pl.LightningModule):
+    """Base agent class with common RL functionality"""
+    
+    def __init__(self, obs_dim, act_dim, config, build_env_fn):
+        super().__init__()
+        
+        # Store core attributes
+        self.obs_dim = obs_dim
+        self.act_dim = act_dim
+        self.config = config
+        self.build_env_fn = build_env_fn
+        
+        # Common RL components
+        self.env = build_env_fn(config.seed)
+        self.metrics = MetricTracker(self)
+        self.rollout_ds = RolloutDataset()
+        self.episode_reward_deque = deque(maxlen=config.mean_reward_window)
+        
+        # Rollout collection
+        rollout_collector_cls = AsyncRolloutCollector if config.async_rollouts else SyncRolloutCollector
+        self.rollout_collector = rollout_collector_cls(build_env_fn, config, obs_dim, act_dim)
+        
+        # Training state
+        self.automatic_optimization = False
+        self.training_start_time = None
+        self.total_steps = 0  # Track total training steps consumed
+        
+    def create_models(self):
+        """Override in subclass to create algorithm-specific models"""
+        raise NotImplementedError("Subclass must implement create_models()")
+        
+    def compute_loss(self, batch):
+        """Override in subclass to compute algorithm-specific loss"""
+        raise NotImplementedError("Subclass must implement compute_loss()")
+        
+    def optimize_models(self, loss_results):
+        """Override in subclass to implement algorithm-specific optimization"""
+        raise NotImplementedError("Subclass must implement optimize_models()")
+        
+    def get_models_for_rollout(self):
+        """Override in subclass to return models needed for rollout collection"""
+        raise NotImplementedError("Subclass must implement get_models_for_rollout()")
+
+    def setup(self, stage: str):
+        if stage == "fit":
+            policy_model, value_model = self.get_models_for_rollout()
+            self.rollout_collector.initialize_with_models(policy_model, value_model)
+            self.rollout_collector.start()
+            
+            print("Waiting for initial rollout...")
+            while True:
+                if self.rollout_collector.is_ready_for_initial_rollout():
+                    trajectories = self.rollout_collector.get_rollout(timeout=2.0)
+                    if trajectories is not None:
+                        self._update_rollout_data(trajectories)
+                        break
+                print("Still waiting for rollout...")
+
+    def train_dataloader(self):
+        return DataLoader(
+            self.rollout_ds,
+            batch_size=self.config.batch_size,
+            shuffle=True,
+            # Pin memory is not supported on MPS
+            pin_memory=True if self.device.type != 'mps' else False,
+            # TODO: Persistent workers + num_workers is fast but doesn't converge
+            persistent_workers=True if self.device.type != 'mps' else False,
+            # Using multiple workers stalls the start of each epoch when persistent workers are disabled
+            num_workers=multiprocessing.cpu_count() // 2 if self.device.type != 'mps' else 0
+        )
+
+    def on_fit_start(self):
+        self.training_start_time = time.time()
+        self.total_steps = 0  # Reset step counter
+        mode = "async" if self.config.async_rollouts else "sync"
+        print(f"Training started in {mode} mode at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    def on_fit_end(self):
+        self.rollout_collector.stop()
+        if self.training_start_time:
+            total_time = time.time() - self.training_start_time
+            print(f"Training completed in {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
+
+    def on_train_epoch_start(self):
+        self.metrics.reset()
+        policy_model, value_model = self.get_models_for_rollout()
+        self.rollout_collector.update_models(
+            policy_model.state_dict(), value_model.state_dict()
+        )
+        
+        # Collect new rollout if needed
+        if (self.current_epoch + 1) % self.config.rollout_interval == 0:
+            self._collect_and_update_rollout()
+
+    def on_train_epoch_end(self):
+        # Log epoch metrics
+        epoch_metrics = self.metrics.compute_epoch_means()
+        if epoch_metrics:
+            self.metrics.log_metrics(epoch_metrics, prefix="epoch")
+        
+        # Evaluation
+        if (self.current_epoch + 1) % self.config.eval_interval == 0:
+            self._evaluate_and_check_stopping()
+
+    def training_step(self, batch, batch_idx):
+        states, actions, rewards, dones, old_logps, values, advantages, returns, frames = batch
+
+        # Track total steps consumed by trainer
+        batch_size = states.size(0)
+        self.total_steps += batch_size
+
+        # Compute algorithm-specific losses and metrics
+        loss_results = self.compute_loss(batch)
+
+        # Track step metrics
+        self.metrics.add_step_metrics(loss_results)
+
+        # Optimize models
+        self.optimize_models(loss_results)
+
+        # Log training metrics
+        self._log_training_metrics(loss_results, advantages, values, returns)
+
+        return sum(loss for key, loss in loss_results.items() if 'loss' in key)
+
+    def _collect_and_update_rollout(self):
+        """Collect and update rollout data"""
+        timeout = 2.0 if self.config.async_rollouts else 1.0
+        trajectories = self.rollout_collector.get_rollout(timeout=timeout)
+        
+        if trajectories is not None:
+            self._update_rollout_data(trajectories)
+            self.metrics.log_single('rollout/queue_updated', 1.0)
+        else:
+            self.metrics.log_single('rollout/queue_miss', 1.0)
+    
+    def _update_rollout_data(self, trajectories):
+        """Update rollout dataset and episode rewards"""
+        self.rollout_ds.update(*trajectories)
+        episodes = group_trajectories_by_episode(trajectories)
+        episode_rewards = [sum(step[2] for step in episode) for episode in episodes]
+        for r in episode_rewards:
+            self.episode_reward_deque.append(float(r))
+
+    def _log_training_metrics(self, loss_results, advantages, values, returns):
+        """Log common training metrics"""
+        mean_reward = np.mean(self.episode_reward_deque) if len(self.episode_reward_deque) > 0 else 0
+        
+        # Core metrics that most algorithms will have
+        train_metrics = {
+            'mean_reward': mean_reward,
+            'total_steps': self.total_steps,
+        }
+        
+        # Add algorithm-specific loss metrics
+        for key, value in loss_results.items():
+            if 'loss' in key or key in ['entropy', 'kl_divergence', 'explained_variance']:
+                train_metrics[key] = value
+        
+        additional_metrics = {
+            'advantage_mean': advantages.mean(),
+            'advantage_std': advantages.std(),
+            'value_mean': values.mean(),
+            'returns_mean': returns.mean(),
+        }
+        
+        # Add any additional algorithm-specific metrics
+        for key, value in loss_results.items():
+            if key not in train_metrics and key not in additional_metrics:
+                additional_metrics[key] = value
+        
+        self.metrics.log_metrics(train_metrics, prefix="train", prog_bar=True)
+        self.metrics.log_metrics(additional_metrics, prefix="train", prog_bar=False)
+
+    def _evaluate_and_check_stopping(self):
+        """Evaluate model and check for early stopping"""
+        eval_seed = np.random.randint(0, 1_000_000)
+        eval_env = self.build_env_fn(eval_seed)
+        
+        policy_model, value_model = self.get_models_for_rollout()
+        policy_model.eval()
+        try:
+            eval_mean_reward = self._run_evaluation(eval_env, policy_model, value_model)
+            self.metrics.log_single('eval/mean_reward', eval_mean_reward, prog_bar=True)
+            
+            if eval_mean_reward >= self.config.reward_threshold:
+                print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {eval_mean_reward:.2f} >= threshold {self.config.reward_threshold}")
+                self.trainer.should_stop = True
+                
+        finally:
+            policy_model.train()
+            eval_env.close()
+
+    def _run_evaluation(self, env, policy_model, value_model):
+        """Run evaluation and log rollout metrics"""
+        start = time.time()
+        trajectories, _ = collect_rollouts(
+            env, policy_model, value_model,
+            n_episodes=self.config.eval_episodes, deterministic=False
+        )
+        elapsed = time.time() - start
+
+        episodes = group_trajectories_by_episode(trajectories)
+        episode_rewards = [sum(step[2] for step in episode) for episode in episodes]
+        mean_episode_reward = np.mean(episode_rewards)
+        
+        # Log rollout metrics
+        rollout_metrics = {
+            'mean_reward': mean_episode_reward,
+            'num_episodes': len(episodes),
+            'num_steps': len(trajectories[0]),
+            'avg_steps_per_episode': len(trajectories[0]) / (len(episodes) + 1e-3),
+            'time_elapsed': elapsed,
+            'steps_per_second': len(trajectories[0]) / (elapsed + 1e-3)
+        }
+        
+        self.metrics.log_metrics(rollout_metrics, prefix="rollout")
+        return mean_episode_reward

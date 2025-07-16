@@ -42,10 +42,6 @@ class Learner(pl.LightningModule):
     def optimize_models(self, loss_results):
         """Override in subclass to implement algorithm-specific optimization"""
         raise NotImplementedError("Subclass must implement optimize_models()")
-        
-    def get_models_for_rollout(self):
-        """Override in subclass to return models needed for rollout collection"""
-        raise NotImplementedError("Subclass must implement get_models_for_rollout()")
 
     def setup(self, stage: str):
         if stage == "fit":
@@ -84,9 +80,8 @@ class Learner(pl.LightningModule):
 
     def on_train_epoch_start(self):
         self.metrics.reset()
-        policy_model, value_model = self.get_models_for_rollout()
         self.rollout_collector.update_models(
-            policy_model.state_dict(), value_model.state_dict()
+            self.policy_model.state_dict(), self.value_model.state_dict() if self.value_model else None
         )
         
         # Collect new rollout if needed
@@ -178,10 +173,10 @@ class Learner(pl.LightningModule):
         eval_seed = np.random.randint(0, 1_000_000)
         eval_env = self.build_env_fn(eval_seed)
         
-        policy_model, value_model = self.get_models_for_rollout()
-        policy_model.eval()
+        self.policy_model.eval()
+        if self.value_model: self.value_model.eval()
         try:
-            eval_mean_reward = self._run_evaluation(eval_env, policy_model, value_model)
+            eval_mean_reward = self._run_evaluation(eval_env, self.policy_model, self.value_model)
             self.metrics.log_single('eval/mean_reward', eval_mean_reward, prog_bar=True)
             
             if eval_mean_reward >= self.config.reward_threshold:
@@ -189,7 +184,8 @@ class Learner(pl.LightningModule):
                 self.trainer.should_stop = True
                 
         finally:
-            policy_model.train()
+            self.policy_model.train()
+            if self.value_model: self.value_model.train()
             eval_env.close()
 
     def _run_evaluation(self, env, policy_model, value_model):

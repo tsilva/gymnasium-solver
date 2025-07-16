@@ -313,6 +313,9 @@ class AsyncRolloutCollector(BaseRolloutCollector):
         # Control flags
         self.running = False
         self.thread = None
+
+        self.weights_version = 0  # Version counter for model updates
+        self.model_version = 0  # Version counter for model updates
         
     def start(self):
         """Start the background rollout collection thread"""
@@ -329,11 +332,12 @@ class AsyncRolloutCollector(BaseRolloutCollector):
         if self.thread:
             self.thread.join(timeout=5.0)
             
-    def update_models(self, policy_state_dict, value_state_dict):
+    def update_models(self, policy_state_dict, value_state_dict=None):
         """Update model weights from main training thread"""
         with self.model_lock:
             self.policy_state_dict = copy.deepcopy(policy_state_dict)
-            self.value_state_dict = copy.deepcopy(value_state_dict)
+            if value_state_dict: self.value_state_dict = copy.deepcopy(value_state_dict)
+            self.weights_version += 1
             
     def get_rollout(self, timeout=1.0):
         """Get next rollout data (non-blocking with timeout)"""
@@ -344,39 +348,37 @@ class AsyncRolloutCollector(BaseRolloutCollector):
 
     # TODO: only load when it changes?
     def _update_model_weights(self):
+        if self.model_version >= self.weights_version: return
+
         """Update local model weights from shared state dicts"""
         with self.model_lock:
             self.policy_model.load_state_dict(self.policy_state_dict)
-            self.value_model.load_state_dict(self.value_state_dict)
+            if self.value_model: self.value_model.load_state_dict(self.value_state_dict)
+            self.model_version = self.weights_version
                 
     def _collect_loop(self):        
         while self.running:
+            # Update to latest model weights
+            self._update_model_weights()
+            
+            # Collect rollout
+            trajectories, extras = collect_rollouts(
+                self.env,
+                self.policy_model,
+                self.value_model,
+                n_steps=self.config.train_rollout_steps,
+                last_obs=self.last_obs
+            )
+            
+            self.last_obs = extras['last_obs']
+            
+            # Put rollout in queue (non-blocking, drop if full)
             try:
-                # Update to latest model weights
-                self._update_model_weights()
-                
-                # Collect rollout
-                trajectories, extras = collect_rollouts(
-                    self.env,
-                    self.policy_model,
-                    self.value_model,
-                    n_steps=self.config.train_rollout_steps,
-                    last_obs=self.last_obs
-                )
-                
-                self.last_obs = extras['last_obs']
-                
-                # Put rollout in queue (non-blocking, drop if full)
+                self.rollout_queue.put(trajectories, block=False)
+            except queue.Full:
+                # Queue is full, drop oldest and add new
                 try:
+                    self.rollout_queue.get_nowait()
                     self.rollout_queue.put(trajectories, block=False)
-                except queue.Full:
-                    # Queue is full, drop oldest and add new
-                    try:
-                        self.rollout_queue.get_nowait()
-                        self.rollout_queue.put(trajectories, block=False)
-                    except queue.Empty:
-                        pass
-                        
-            except Exception as e:
-                print(f"Error in rollout collection: {e}")
-                time.sleep(0.1)  # Brief pause on error
+                except queue.Empty:
+                    pass

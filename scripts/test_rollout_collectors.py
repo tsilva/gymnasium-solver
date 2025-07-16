@@ -3,7 +3,15 @@ import time
 import numpy as np
 import torch
 import gymnasium as gym
+import sys
+from pathlib import Path
+
+# Add project root to Python path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 from utils.rollouts import SyncRolloutCollector, AsyncRolloutCollector
+from tsilva_notebook_utils.gymnasium import build_env as _build_env
 
 
 class SimpleConfig:
@@ -17,8 +25,8 @@ class SimpleConfig:
 
 
 def build_env(env_id: str, seed: int, n_envs: int):
-    env = gym.vector.make(env_id, num_envs=n_envs, asynchronous=False)
-    env.reset(seed=seed)
+    # Use the same environment building approach as the main code
+    env = _build_env(env_id, norm_obs=False, n_envs=n_envs, seed=seed)
     return env
 
 
@@ -59,8 +67,17 @@ def main():
     )
 
     env = build_env(args.env, args.seed, args.n_envs)
+    
+    # Get observation and action spaces - handle both vector and single envs
+    if hasattr(env, 'single_observation_space'):
+        obs_space = env.single_observation_space
+        act_space = env.single_action_space
+    else:
+        obs_space = env.observation_space
+        act_space = env.action_space
+    
     policy_model, value_model = make_models(
-        env.single_observation_space, env.single_action_space
+        obs_space, act_space
     )
 
     collector_cls = (

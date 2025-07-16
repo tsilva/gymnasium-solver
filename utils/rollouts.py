@@ -71,6 +71,9 @@ def collect_rollouts(
 
     def _device_of(module: torch.nn.Module) -> torch.device:
         """Infer the device of *module*'s first parameter."""
+        # Handle shared backbone wrapper models
+        if hasattr(module, 'shared_net'):
+            return next(module.shared_net.parameters()).device
         return next(module.parameters()).device
 
     device: torch.device = _device_of(policy_model)
@@ -267,10 +270,28 @@ class BaseRolloutCollector:
             from tsilva_notebook_utils.torch import get_default_device
             device = get_default_device()
         except ImportError:
-            device = next(policy_model.parameters()).device
+            # For shared backbone models, get device from the shared model
+            if hasattr(policy_model, 'shared_net'):
+                device = next(policy_model.shared_net.parameters()).device
+            else:
+                device = next(policy_model.parameters()).device
         
-        self.policy_model = policy_model.to(device)
-        self.value_model = value_model.to(device) if value_model is not None else None
+        # Check if these are wrapper models that share a backbone
+        if hasattr(policy_model, 'shared_net') and hasattr(value_model, 'shared_net'):
+            # For shared backbone models, ensure the shared model is on the correct device
+            policy_model.shared_net.to(device)
+            # Force eval mode for rollout collection
+            policy_model.shared_net.eval()
+            self.policy_model = policy_model
+            self.value_model = value_model
+        else:
+            # For separate models, move each to device
+            self.policy_model = policy_model.to(device)
+            self.value_model = value_model.to(device) if value_model is not None else None
+            # Force eval mode for rollout collection
+            self.policy_model.eval()
+            if self.value_model:
+                self.value_model.eval()
         self.last_obs = None
         
     def start(self):
@@ -315,7 +336,10 @@ class AsyncRolloutCollector(BaseRolloutCollector):
         self.rollout_queue = queue.Queue(maxsize=3)  # Buffer 3 rollouts max
         
         # Store the target device from the original models
-        self.device = next(policy_model.parameters()).device
+        if hasattr(policy_model, 'shared_net'):
+            self.device = next(policy_model.shared_net.parameters()).device
+        else:
+            self.device = next(policy_model.parameters()).device
         
         # Shared model weights (CPU copies for thread safety)
         self.policy_state_dict = None
@@ -333,6 +357,21 @@ class AsyncRolloutCollector(BaseRolloutCollector):
         """Start the background rollout collection thread"""
         if self.running:
             return
+        
+        # Initialize with current model weights before starting thread
+        if hasattr(self.policy_model, 'shared_net'):
+            # For shared backbone, use the shared model's state dict
+            initial_state_dict = self.policy_model.shared_net.state_dict()
+            self.policy_state_dict = {k: v.cpu().clone() for k, v in initial_state_dict.items()}
+            self.value_state_dict = self.policy_state_dict  # Same for both
+        else:
+            # For separate models, use each model's state dict
+            self.policy_state_dict = {k: v.cpu().clone() for k, v in self.policy_model.state_dict().items()}
+            if self.value_model:
+                self.value_state_dict = {k: v.cpu().clone() for k, v in self.value_model.state_dict().items()}
+        
+        self.weights_version = 1
+        self.model_version = 0  # Force initial update
             
         self.running = True
         self.thread = threading.Thread(target=self._collect_loop, daemon=True)
@@ -364,14 +403,30 @@ class AsyncRolloutCollector(BaseRolloutCollector):
 
         """Update local model weights from shared state dicts"""
         with self.model_lock:
-            self.policy_model.load_state_dict(self.policy_state_dict)
-            # Ensure model is on the correct device after loading state dict
-            self.policy_model.to(self.device)
-            
-            if self.value_model: 
-                self.value_model.load_state_dict(self.value_state_dict)
-                # Ensure value model is on the correct device after loading state dict
-                self.value_model.to(self.device)
+            # Check if state dicts are available
+            if self.policy_state_dict is None:
+                return  # Skip update if no state dict available yet
+                
+            # Check if these are shared backbone models
+            if (hasattr(self.policy_model, 'shared_net') and hasattr(self.value_model, 'shared_net') 
+                and self.policy_model.shared_net is self.value_model.shared_net):
+                # For shared backbone, update the underlying shared model
+                # Move state dict tensors to target device before loading
+                device_mapped_state_dict = {k: v.to(self.device) for k, v in self.policy_state_dict.items()}
+                self.policy_model.shared_net.load_state_dict(device_mapped_state_dict)
+                # Also ensure it's in eval mode for rollout collection
+                self.policy_model.shared_net.eval()
+            else:
+                # For separate models, update each individually
+                # Move state dict tensors to target device before loading
+                device_mapped_policy_state_dict = {k: v.to(self.device) for k, v in self.policy_state_dict.items()}
+                self.policy_model.load_state_dict(device_mapped_policy_state_dict)
+                self.policy_model.eval()
+                
+                if self.value_model and self.value_state_dict: 
+                    device_mapped_value_state_dict = {k: v.to(self.device) for k, v in self.value_state_dict.items()}
+                    self.value_model.load_state_dict(device_mapped_value_state_dict)
+                    self.value_model.eval()
                 
             self.model_version = self.weights_version
                 

@@ -57,6 +57,7 @@ def main():
     parser.add_argument("--rollout-steps", type=int, default=128)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--n-envs", type=int, default=1)
+    parser.add_argument("--n-rollouts", type=int, default=None, help="Number of rollouts to collect (default: infinite)")
     args = parser.parse_args()
 
     config = SimpleConfig(
@@ -86,19 +87,32 @@ def main():
     collector = collector_cls(config, env, policy_model, value_model)
     collector.start()
 
-    print(
-        f"Running {args.collector} rollout collector on {args.env}. Press Ctrl+C to stop."
-    )
+    if args.n_rollouts:
+        print(
+            f"Running {args.collector} rollout collector on {args.env} for {args.n_rollouts} rollouts."
+        )
+    else:
+        print(
+            f"Running {args.collector} rollout collector on {args.env}. Press Ctrl+C to stop."
+        )
+    
     start_time = time.time()
     total_steps = 0
     rollout_count = 0
+    rollout_times = []
+    
     try:
         while True:
+            # Check if we've reached the target number of rollouts
+            if args.n_rollouts and rollout_count >= args.n_rollouts:
+                break
+                
             roll_start = time.time()
             trajectories = collector.get_rollout(timeout=10.0)
             if trajectories is None:
                 continue
             roll_time = time.time() - roll_start
+            rollout_times.append(roll_time)
             rollout_count += 1
             steps = len(trajectories[0])
             total_steps += steps
@@ -114,6 +128,23 @@ def main():
     finally:
         collector.stop()
         env.close()
+        
+        # Print summary statistics
+        if rollout_times:
+            elapsed_total = time.time() - start_time
+            avg_rollout_time = np.mean(rollout_times)
+            std_rollout_time = np.std(rollout_times)
+            final_steps_per_sec = total_steps / max(elapsed_total, 1e-6)
+            
+            print(f"\n=== Performance Summary ===")
+            print(f"Total rollouts: {rollout_count}")
+            print(f"Total steps: {total_steps}")
+            print(f"Total time: {elapsed_total:.2f}s")
+            print(f"Average rollout time: {avg_rollout_time:.3f}s ± {std_rollout_time:.3f}s")
+            print(f"Final throughput: {final_steps_per_sec:.1f} steps/s")
+            print(f"Environments: {args.n_envs}")
+            print(f"Steps per rollout: {total_steps // max(rollout_count, 1)}")
+            print(f"Throughput per env: {final_steps_per_sec / args.n_envs:.1f} steps/s/env")
 
 
 if __name__ == "__main__":

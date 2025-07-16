@@ -57,30 +57,35 @@ class PPOLoss:
         dist = Categorical(logits=logits)
         new_logps = dist.log_prob(actions)
         
-        ratio = torch.exp(new_logps - old_logps)
-        surr1 = ratio * advantages
-        surr2 = torch.clamp(ratio, 1.0 - self.clip_epsilon, 1.0 + self.clip_epsilon) * advantages
+        # Detach tensors that come from rollout data to prevent in-place operation errors
+        old_logps_detached = old_logps.detach()
+        advantages_detached = advantages.detach()
+        returns_detached = returns.detach()
+        
+        ratio = torch.exp(new_logps - old_logps_detached)
+        surr1 = ratio * advantages_detached
+        surr2 = torch.clamp(ratio, 1.0 - self.clip_epsilon, 1.0 + self.clip_epsilon) * advantages_detached
         entropy = dist.entropy().mean()
         
         policy_loss = -torch.min(surr1, surr2).mean() - self.entropy_coef * entropy
         
         # Value loss
         value_pred = value_model(states).squeeze()
-        value_loss = 0.5 * ((returns - value_pred) ** 2).mean()
+        value_loss = 0.5 * ((returns_detached - value_pred) ** 2).mean()
         
-        # Metrics
+        # Metrics (detached for logging)
         clip_fraction = ((ratio < 1.0 - self.clip_epsilon) | (ratio > 1.0 + self.clip_epsilon)).float().mean()
-        kl_div = (old_logps - new_logps).mean()
+        kl_div = (old_logps_detached - new_logps).mean()
         approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
-        explained_var = 1 - torch.var(returns - value_pred) / torch.var(returns)
+        explained_var = 1 - torch.var(returns_detached - value_pred.detach()) / torch.var(returns_detached)
         
         return {
             'policy_loss': policy_loss,
             'value_loss': value_loss,
-            'entropy': entropy,
-            'clip_fraction': clip_fraction,
-            'kl_div': kl_div,
-            'approx_kl': approx_kl,
-            'explained_var': explained_var
+            'entropy': entropy.detach(),
+            'clip_fraction': clip_fraction.detach(),
+            'kl_div': kl_div.detach(),
+            'approx_kl': approx_kl.detach(),
+            'explained_var': explained_var.detach()
         }
     

@@ -49,14 +49,16 @@ class REINFORCELoss:
         log_probs = dist.log_prob(actions)
         entropy = dist.entropy().mean()
         
-        # REINFORCE loss: -log_prob * return (negative because we want to maximize)
-        policy_loss = -(log_probs * returns).mean() - self.entropy_coef * entropy
+        # Ensure returns are detached from any previous computation graph
+        returns_detached = returns.detach()
         
-        # Metrics
-        # TODO: we should probably return the actual values? (make sure they are detached?)
+        # REINFORCE loss: -log_prob * return (negative because we want to maximize)
+        policy_loss = -(log_probs * returns_detached).mean() - self.entropy_coef * entropy
+        
+        # Metrics (detached for logging)
         return {
             'policy_loss': policy_loss,
-            'entropy': entropy,
-            'log_prob_mean': log_probs.mean(),
-            'returns_mean': returns.mean()
+            'entropy': entropy.detach(),
+            'log_prob_mean': log_probs.mean().detach(),
+            'returns_mean': returns.mean().detach()
         }

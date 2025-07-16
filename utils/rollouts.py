@@ -257,11 +257,11 @@ class RolloutDataset(TorchDataset):
 
 class BaseRolloutCollector:
     """Base class for rollout collectors"""
-    def __init__(self, build_env_fn, config, obs_dim, act_dim):
-        self.build_env_fn = build_env_fn
+    def __init__(self, config, env, policy_model, value_model=None):
         self.config = config
-        self.obs_dim = obs_dim
-        self.act_dim = act_dim
+        self.env = env
+        self.policy_model = policy_model
+        self.value_model = value_model
         self.last_obs = None
         
     def start(self):
@@ -279,32 +279,13 @@ class BaseRolloutCollector:
     def get_rollout(self, timeout=1.0):
         """Get next rollout data"""
         raise NotImplementedError
-        
-    def initialize_with_models(self, policy_model, value_model):
-        """Initialize collector with model references"""
-        pass
-
 
 class SyncRolloutCollector(BaseRolloutCollector):
     """Synchronous rollout collector - collects data on demand"""
-    def __init__(self, build_env_fn, config, obs_dim, act_dim):
-        super().__init__(build_env_fn, config, obs_dim, act_dim)
-        self.env = build_env_fn(config.seed)
-        self.policy_model = None
-        self.value_model = None
-        self._ready_for_initial = False
-        
-    def initialize_with_models(self, policy_model, value_model):
-        """Set model references for sync collector"""
-        self.policy_model = policy_model
-        self.value_model = value_model
-        self._ready_for_initial = True
+    def __init__(self, config, env, policy_model, value_model=None):
+        super().__init__(config, env, policy_model, value_model=value_model)
         
     def get_rollout(self, timeout=1.0):
-        """Collect rollout synchronously using current models"""
-        if self.policy_model is None or self.value_model is None:
-            return None
-            
         trajectories, extras = collect_rollouts(
             self.env,
             self.policy_model,
@@ -315,16 +296,11 @@ class SyncRolloutCollector(BaseRolloutCollector):
         
         self.last_obs = extras['last_obs']
         return trajectories
-        
-    def is_ready_for_initial_rollout(self):
-        """Check if ready for initial rollout collection"""
-        return self._ready_for_initial
-    
 
 class AsyncRolloutCollector(BaseRolloutCollector):
     """Background thread that continuously collects rollouts using latest model weights"""
-    def __init__(self, build_env_fn, config, obs_dim, act_dim):
-        super().__init__(build_env_fn, config, obs_dim, act_dim)
+    def __init__(self, config, env, policy_model, value_model=None):
+        super().__init__(config, env, policy_model, value_model)
         
         # Thread-safe queue for rollout data
         self.rollout_queue = queue.Queue(maxsize=3)  # Buffer 3 rollouts max
@@ -337,15 +313,6 @@ class AsyncRolloutCollector(BaseRolloutCollector):
         # Control flags
         self.running = False
         self.thread = None
-        
-        # Create environment and models for rollout collection
-        self.env = None
-        self.policy_model = None
-        self.value_model = None
-        
-    def initialize_with_models(self, policy_model, value_model):
-        """Initialize with model state dicts for async collector"""
-        self.update_models(policy_model.state_dict(), value_model.state_dict())
         
     def start(self):
         """Start the background rollout collection thread"""
@@ -374,37 +341,15 @@ class AsyncRolloutCollector(BaseRolloutCollector):
             return self.rollout_queue.get(timeout=timeout)
         except queue.Empty:
             return None
-            
-    def is_ready_for_initial_rollout(self):
-        """Check if ready for initial rollout collection"""
-        return self.policy_state_dict is not None and self.value_state_dict is not None
-    
-    # TODO: models must be provided externally
-    def _init_models(self):
-        """Initialize models in the worker thread"""
-        if self.env is None:
-            self.env = self.build_env_fn(self.config.seed + 1000)  # Different seed for rollout env
-        
-        if self.policy_model is None:
-            self.policy_model = PolicyNet(self.obs_dim, self.act_dim, self.config.hidden_dim)
-            self.policy_model.eval()  # Always in eval mode for rollouts
-            
-        if self.value_model is None:
-            self.value_model = ValueNet(self.obs_dim, self.config.hidden_dim)
-            self.value_model.eval()
-            
+
+    # TODO: only load when it changes?
     def _update_model_weights(self):
         """Update local model weights from shared state dicts"""
         with self.model_lock:
-            if self.policy_state_dict is not None:
-                self.policy_model.load_state_dict(self.policy_state_dict)
-            if self.value_state_dict is not None:
-                self.value_model.load_state_dict(self.value_state_dict)
+            self.policy_model.load_state_dict(self.policy_state_dict)
+            self.value_model.load_state_dict(self.value_state_dict)
                 
-    def _collect_loop(self):
-        """Main loop running in background thread"""
-        self._init_models()
-        
+    def _collect_loop(self):        
         while self.running:
             try:
                 # Update to latest model weights

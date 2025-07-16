@@ -1,0 +1,43 @@
+[project]
+name = "gymnasium-solver-env"
+version = "0.1.0"
+description = "Environment for gymnasium-solver (uv/jupyter kernel)"
+requires-python = ">=3.9"
+dependencies = [
+    "gymnasium",
+    "torch",
+    "numpy",
+    "stable-baselines3>=2.0.0",
+    "wandb",
+    "pytorch-lightning",
+    "tsilva-notebook-utils==0.0.124",
+    "ipykernel",
+    "jupyter",
+    "torchvision",
+    "pytest"
+]
+
+[tool.pytest.ini_options]
+# Test discovery patterns
+testpaths = ["tests", "learners", "utils"]
+python_files = ["test_*.py", "*_test.py", "tests.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+# Add the current directory to the Python path so imports work correctly
+addopts = [
+    "-v",                    # Verbose output
+    "--tb=short",           # Short traceback format
+    "--strict-markers",     # Strict marker handling
+    "-ra",                  # Show short test summary for all outcomes
+]
+
+# Configure test markers
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
+
+# Minimum version requirement
+minversion = "6.0"

@@ -1,0 +1,24 @@
+# Acrobot-v1 Environment Configuration
+
+default:
+  gamma: 0.99
+  lam: 0.98
+  clip_epsilon: 0.2
+  batch_size: 128
+  train_rollout_steps: 2048
+  eval_interval: 5
+  reward_threshold: -100
+  policy_lr: 0.0003
+  value_lr: 0.0003
+  hidden_dim: [128, 64]
+  entropy_coef: 0.01
+  rollout_interval: 1
+
+reinforce:
+  train_rollout_steps: 4096
+  batch_size: 256
+  policy_lr: 0.0005
+  entropy_coef: 0.05
+
+ppo:
+  # Uses default config

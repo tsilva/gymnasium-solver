@@ -1,0 +1,22 @@
+# CartPole-v1 Environment Configuration
+# Reference: https://github.com/DLR-RM/rl-baselines3-zoo/tree/master/hyperparams
+
+default:
+  train_rollout_steps: 512
+  batch_size: 256
+  rollout_interval: 1
+  eval_interval: 20
+  eval_episodes: 5
+  reward_threshold: 475
+  policy_lr: 0.001
+  value_lr: 0.001
+  hidden_dim: 32
+
+reinforce:
+  train_rollout_steps: 2048
+  batch_size: 512
+  policy_lr: 0.001
+  entropy_coef: 0.02
+
+ppo:
+  # Uses default config (no specific overrides)

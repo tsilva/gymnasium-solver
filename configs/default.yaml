@@ -1,0 +1,31 @@
+# Default RL configuration parameters
+# These values serve as base defaults for all environments
+
+# Environment
+seed: 42
+
+# Training
+max_epochs: -1
+gamma: 0.99
+lam: 0.95
+clip_epsilon: 0.2
+batch_size: 64
+train_rollout_steps: 2048
+
+# Evaluation
+eval_interval: 10
+eval_episodes: 32
+reward_threshold: 200
+
+# Networks
+policy_lr: 0.0003
+value_lr: 0.001
+hidden_dim: 64
+entropy_coef: 0.01
+
+# Other
+normalize: false
+mean_reward_window: 100
+rollout_interval: 10
+n_envs: "auto"
+async_rollouts: true

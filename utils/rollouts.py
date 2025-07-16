@@ -260,8 +260,17 @@ class BaseRolloutCollector:
     def __init__(self, config, env, policy_model, value_model=None):
         self.config = config
         self.env = env
-        self.policy_model = policy_model
-        self.value_model = value_model
+        
+        # Ensure models are on the correct device
+        # Get device from tsilva_notebook_utils if available, otherwise infer from model
+        try:
+            from tsilva_notebook_utils.torch import get_default_device
+            device = get_default_device()
+        except ImportError:
+            device = next(policy_model.parameters()).device
+        
+        self.policy_model = policy_model.to(device)
+        self.value_model = value_model.to(device) if value_model is not None else None
         self.last_obs = None
         
     def start(self):
@@ -304,6 +313,9 @@ class AsyncRolloutCollector(BaseRolloutCollector):
         
         # Thread-safe queue for rollout data
         self.rollout_queue = queue.Queue(maxsize=3)  # Buffer 3 rollouts max
+        
+        # Store the target device from the original models
+        self.device = next(policy_model.parameters()).device
         
         # Shared model weights (CPU copies for thread safety)
         self.policy_state_dict = None
@@ -353,7 +365,14 @@ class AsyncRolloutCollector(BaseRolloutCollector):
         """Update local model weights from shared state dicts"""
         with self.model_lock:
             self.policy_model.load_state_dict(self.policy_state_dict)
-            if self.value_model: self.value_model.load_state_dict(self.value_state_dict)
+            # Ensure model is on the correct device after loading state dict
+            self.policy_model.to(self.device)
+            
+            if self.value_model: 
+                self.value_model.load_state_dict(self.value_state_dict)
+                # Ensure value model is on the correct device after loading state dict
+                self.value_model.to(self.device)
+                
             self.model_version = self.weights_version
                 
     def _collect_loop(self):        

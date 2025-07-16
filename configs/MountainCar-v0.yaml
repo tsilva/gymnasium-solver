@@ -1,0 +1,21 @@
+# MountainCar-v0 Environment Configuration
+
+default:
+  gamma: 0.99
+  lam: 0.97
+  clip_epsilon: 0.15
+  batch_size: 16
+  eval_interval: 2
+  eval_episodes: 10
+  reward_threshold: -110
+  policy_lr: 0.0001
+  value_lr: 0.0005
+  hidden_dim: [128, 64]
+  entropy_coef: 0.05
+
+reinforce:
+  entropy_coef: 0.08
+  batch_size: 32
+
+ppo:
+  # Uses default config

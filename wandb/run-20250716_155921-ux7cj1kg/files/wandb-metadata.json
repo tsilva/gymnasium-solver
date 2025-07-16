@@ -1,0 +1,36 @@
+{
+  "os":  "macOS-15.5-arm64-arm-64bit",
+  "python":  "CPython 3.12.2",
+  "startedAt":  "2025-07-16T14:59:21.821751Z",
+  "program":  "/Users/tsilva/repos/tsilva/gymnasium-solver/notebook.ipynb",
+  "codePath":  "notebook.ipynb",
+  "codePathLocal":  "notebook.ipynb",
+  "git":  {
+    "remote":  "git@github.com:tsilva/gymnasium-solver.git",
+    "commit":  "f8887e4e627a7c743eb3ddf49c27886242afc392"
+  },
+  "root":  ".",
+  "host":  "Tiagos-MacBook-Pro.local",
+  "executable":  "/Users/tsilva/repos/tsilva/gymnasium-solver/.venv/bin/python",
+  "cpu_count":  8,
+  "cpu_count_logical":  8,
+  "disk":  {
+    "/":  {
+      "total":  "494384795648",
+      "used":  "386220052480"
+    }
+  },
+  "memory":  {
+    "total":  "17179869184"
+  },
+  "apple":  {
+    "name":  "Apple M1 Pro",
+    "ecpuCores":  2,
+    "pcpuCores":  6,
+    "gpuCores":  14,
+    "memoryGb":  16,
+    "swapTotalBytes":  "16106127360",
+    "ramTotalBytes":  "17179869184"
+  },
+  "writerId":  "emugb28nds0o325v93ojw1ol3bbe7j0f"
+}

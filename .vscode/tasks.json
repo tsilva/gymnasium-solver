@@ -1,0 +1,21 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run Tests",
+			"type": "shell",
+			"command": "/Users/tsilva/repos/tsilva/gymnasium-solver/.venv/bin/python",
+			"args": [
+				"-m",
+				"pytest",
+				"tests/tests.py",
+				"-v"
+			],
+			"group": "test",
+			"isBackground": false,
+			"problemMatcher": [
+				"$pytest"
+			]
+		}
+	]
+}

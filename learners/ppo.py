@@ -1,8 +1,54 @@
 import torch
 from torch.distributions import Categorical
 from .base import Learner
-from utils.policy import PolicyNet
-from utils.value import ValueNet
+
+class PPOLearner(Learner):
+    """PPO-specific agent implementation"""
+    
+    def __init__(self, config, build_env_fn, rollout_collector, policy_model, value_model):
+        super().__init__(config, build_env_fn, rollout_collector, policy_model, value_model=value_model)
+        self.save_hyperparameters(ignore=['build_env_fn', 'rollout_collector', 'policy_model', 'value_model'])
+        
+        self.policy_model = policy_model
+        self.value_model = value_model
+
+        self.ppo_loss = PPOLoss(config.clip_epsilon, config.entropy_coef)
+        
+    def get_models_for_rollout(self):
+        """Return models needed for rollout collection"""
+        return self.policy_model, self.value_model
+        
+    def compute_loss(self, batch):
+        """Compute PPO-specific losses"""
+        states, actions, rewards, dones, old_logps, values, advantages, returns, frames = batch
+        
+        return self.ppo_loss.compute(
+            states, actions, old_logps, advantages, returns, 
+            self.policy_model, self.value_model
+        )
+        
+    def optimize_models(self, loss_results):
+        """Optimize PPO policy and value models"""
+        opt_policy, opt_value = self.optimizers()
+        
+        # Optimize policy
+        opt_policy.zero_grad()
+        self.manual_backward(loss_results['policy_loss'])
+        opt_policy.step()
+
+        # Optimize value function
+        opt_value.zero_grad()
+        self.manual_backward(loss_results['value_loss'])
+        opt_value.step()
+
+    def configure_optimizers(self):
+        return [
+            torch.optim.Adam(self.policy_model.parameters(), lr=self.config.policy_lr),
+            torch.optim.Adam(self.value_model.parameters(), lr=self.config.value_lr)
+        ]
+
+    def forward(self, x):
+        return self.policy_model(x)
 
 class PPOLoss:
     def __init__(self, clip_epsilon, entropy_coef):
@@ -42,54 +88,3 @@ class PPOLoss:
             'explained_var': explained_var
         }
     
-class PPOLearner(Learner):
-    """PPO-specific agent implementation"""
-    
-    def __init__(self, obs_dim, act_dim, config, build_env_fn):
-        super().__init__(obs_dim, act_dim, config, build_env_fn)
-        self.save_hyperparameters(ignore=['build_env_fn'])
-        
-        # Create PPO-specific models and components
-        self.create_models()
-        self.ppo_loss = PPOLoss(config.clip_epsilon, config.entropy_coef)
-        
-    def create_models(self):
-        """Create PPO-specific policy and value models"""
-        self.policy_model = PolicyNet(self.obs_dim, self.act_dim, self.config.hidden_dim)
-        self.value_model = ValueNet(self.obs_dim, self.config.hidden_dim)
-        
-    def get_models_for_rollout(self):
-        """Return models needed for rollout collection"""
-        return self.policy_model, self.value_model
-        
-    def compute_loss(self, batch):
-        """Compute PPO-specific losses"""
-        states, actions, rewards, dones, old_logps, values, advantages, returns, frames = batch
-        
-        return self.ppo_loss.compute(
-            states, actions, old_logps, advantages, returns, 
-            self.policy_model, self.value_model
-        )
-        
-    def optimize_models(self, loss_results):
-        """Optimize PPO policy and value models"""
-        opt_policy, opt_value = self.optimizers()
-        
-        # Optimize policy
-        opt_policy.zero_grad()
-        self.manual_backward(loss_results['policy_loss'])
-        opt_policy.step()
-
-        # Optimize value function
-        opt_value.zero_grad()
-        self.manual_backward(loss_results['value_loss'])
-        opt_value.step()
-
-    def configure_optimizers(self):
-        return [
-            torch.optim.Adam(self.policy_model.parameters(), lr=self.config.policy_lr),
-            torch.optim.Adam(self.value_model.parameters(), lr=self.config.value_lr)
-        ]
-
-    def forward(self, x):
-        return self.policy_model(x)

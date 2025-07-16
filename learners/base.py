@@ -4,42 +4,36 @@ from collections import deque
 import numpy as np
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
-from tsilva_notebook_utils.gymnasium import (
+from utils.rollouts import (
     collect_rollouts, group_trajectories_by_episode,
-    RolloutDataset, MetricTracker, AsyncRolloutCollector, SyncRolloutCollector
+    RolloutDataset, AsyncRolloutCollector, SyncRolloutCollector
 )
+from tsilva_notebook_utils.gymnasium import MetricTracker
 
 # ---------------------------------------------------------------------
 class Learner(pl.LightningModule):
     """Base agent class with common RL functionality"""
     
-    def __init__(self, obs_dim, act_dim, config, build_env_fn):
+    def __init__(self, config, build_env_fn, rollout_collector, policy_model, value_model=None):
         super().__init__()
         
         # Store core attributes
-        self.obs_dim = obs_dim
-        self.act_dim = act_dim
         self.config = config
-        self.build_env_fn = build_env_fn
         
         # Common RL components
-        self.env = build_env_fn(config.seed)
+        self.build_env_fn = build_env_fn
+        self.rollout_collector = rollout_collector
         self.metrics = MetricTracker(self)
         self.rollout_ds = RolloutDataset()
         self.episode_reward_deque = deque(maxlen=config.mean_reward_window)
         
-        # Rollout collection
-        rollout_collector_cls = AsyncRolloutCollector if config.async_rollouts else SyncRolloutCollector
-        self.rollout_collector = rollout_collector_cls(build_env_fn, config, obs_dim, act_dim)
+        self.policy_model = policy_model
+        self.value_model = value_model
         
         # Training state
         self.automatic_optimization = False
         self.training_start_time = None
         self.total_steps = 0  # Track total training steps consumed
-        
-    def create_models(self):
-        """Override in subclass to create algorithm-specific models"""
-        raise NotImplementedError("Subclass must implement create_models()")
         
     def compute_loss(self, batch):
         """Override in subclass to compute algorithm-specific loss"""
@@ -55,19 +49,15 @@ class Learner(pl.LightningModule):
 
     def setup(self, stage: str):
         if stage == "fit":
-            policy_model, value_model = self.get_models_for_rollout()
-            self.rollout_collector.initialize_with_models(policy_model, value_model)
             self.rollout_collector.start()
             
             print("Waiting for initial rollout...")
             while True:
-                if self.rollout_collector.is_ready_for_initial_rollout():
-                    trajectories = self.rollout_collector.get_rollout(timeout=2.0)
-                    if trajectories is not None:
-                        self._update_rollout_data(trajectories)
-                        break
-                print("Still waiting for rollout...")
-
+                trajectories = self.rollout_collector.get_rollout(timeout=2.0)
+                if trajectories is None: print("Still waiting for rollout..."); continue
+                self._update_rollout_data(trajectories)
+                break
+                
     def train_dataloader(self):
         return DataLoader(
             self.rollout_ds,
@@ -84,8 +74,7 @@ class Learner(pl.LightningModule):
     def on_fit_start(self):
         self.training_start_time = time.time()
         self.total_steps = 0  # Reset step counter
-        mode = "async" if self.config.async_rollouts else "sync"
-        print(f"Training started in {mode} mode at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
     
     def on_fit_end(self):
         self.rollout_collector.stop()

@@ -59,12 +59,13 @@ class Learner(pl.LightningModule):
             self.rollout_ds,
             batch_size=self.config.batch_size,
             shuffle=True,
+            # TODO: fix num_workers, training not converging when they are on
             # Pin memory is not supported on MPS
-            pin_memory=True if self.device.type != 'mps' else False,
+            #pin_memory=True if self.device.type != 'mps' else False,
             # TODO: Persistent workers + num_workers is fast but doesn't converge
-            persistent_workers=True if self.device.type != 'mps' else False,
+            #persistent_workers=True if self.device.type != 'mps' else False,
             # Using multiple workers stalls the start of each epoch when persistent workers are disabled
-            num_workers=multiprocessing.cpu_count() // 2 if self.device.type != 'mps' else 0
+            #num_workers=multiprocessing.cpu_count() // 2 if self.device.type != 'mps' else 0
         )
 
     def on_fit_start(self):

@@ -173,12 +173,16 @@ class Learner(pl.LightningModule):
         """Evaluate model and check for early stopping"""
         eval_seed = np.random.randint(0, 1_000_000)
         
-        # CRITICAL FIX: Force single environment for evaluation
+        # IMPROVED: Use vectorized environments for faster evaluation
         # 
-        # PROBLEM: When n_envs="auto" in config, build_env_fn creates vectorized environments 
-        # with multiple parallel environments (e.g., 8 envs on an 8-core CPU). During evaluation,
-        # collect_rollouts(n_episodes=5) would collect 5 episodes TOTAL across ALL environments,
-        # not 5 episodes per environment. This caused several issues:
+        # The key insight is that we can use vectorized environments (faster) and let
+        # the evaluation functions handle truncating to exact episode counts.
+        # This is much simpler than forcing single environments.
+        # 
+        # PREVIOUS PROBLEM (now solved): When n_envs="auto", build_env_fn created 
+        # vectorized environments with multiple parallel environments (e.g., 8 envs on an 8-core CPU). 
+        # The old collect_rollouts(n_episodes=5) would collect 5 episodes TOTAL across ALL environments,
+        # not 5 episodes per environment. This caused:
         # 
         # 1. INCOMPLETE EPISODES: With 8 parallel envs and only 5 total episodes requested,
         #    some environments would have incomplete episodes that still contributed to rewards
@@ -188,12 +192,10 @@ class Learner(pl.LightningModule):
         # 3. INCORRECT EARLY STOPPING: Artificially high evaluation rewards triggered
         #    early stopping when the agent wasn't actually performing well
         #
-        # ROOT CAUSE: The vectorized environment's episode handling doesn't align with
-        # how collect_rollouts counts and groups episodes for reward calculation.
-        #
-        # FIX: Override n_envs=1 for evaluation to ensure we get exactly the requested
-        # number of complete episodes with proper reward calculation per episode.
-        eval_env = self.build_env_fn(eval_seed, n_envs=1)
+        # NEW SOLUTION: Let collect_rollouts work with vectorized environments, but ensure
+        # that downstream functions (like group_trajectories_by_episode) properly handle
+        # truncating to exact episode counts for consistent evaluation.
+        eval_env = self.build_env_fn(eval_seed)  # Can use default n_envs now
         
         self.policy_model.eval()
         if self.value_model: self.value_model.eval()
@@ -219,7 +221,8 @@ class Learner(pl.LightningModule):
         )
         elapsed = time.time() - start
 
-        episodes = group_trajectories_by_episode(trajectories)
+        # CRITICAL FIX: Ensure we get exactly the requested number of complete episodes
+        episodes = group_trajectories_by_episode(trajectories, max_episodes=self.config.eval_episodes)
         episode_rewards = [sum(step[2] for step in episode) for episode in episodes]
         mean_episode_reward = np.mean(episode_rewards)
         

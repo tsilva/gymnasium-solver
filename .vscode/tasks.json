@@ -4,7 +4,7 @@
 		{
 			"label": "Run Tests",
 			"type": "shell",
-			"command": "/Users/tsilva/repos/tsilva/gymnasium-solver/.venv/bin/python",
+			"command": "python",
 			"args": [
 				"-m",
 				"pytest",
@@ -14,7 +14,7 @@
 			"group": "test",
 			"isBackground": false,
 			"problemMatcher": [
-				"$pytest"
+				"$python"
 			]
 		}
 	]

@@ -1053,5 +1053,256 @@ class TestSyncRolloutCollector(unittest.TestCase):
         self.assertIsNotNone(result2)
 
 
+# ---------------------------------------------------------------------- #
+#  Tests for exact episode count fix                                     #
+# ---------------------------------------------------------------------- #
+class TestExactEpisodeCounts(unittest.TestCase):
+    """
+    Test suite to verify that when n_episodes is specified, we get exactly
+    that many complete episodes, regardless of vectorized environment size.
+    
+    This addresses the bug where training was stopping with inflated rewards
+    (e.g., 807.80 instead of max 500 for CartPole-v1) due to incomplete
+    episodes being included in reward calculations.
+    """
+    
+    class MockPolicy(torch.nn.Module):
+        """Simple mock policy that returns random actions"""
+        def __init__(self, action_dim=2):
+            super().__init__()
+            self.action_dim = action_dim
+            # Add a dummy parameter so _device_of works
+            self.dummy_param = torch.nn.Parameter(torch.zeros(1))
+            
+        def forward(self, obs):
+            batch_size = obs.shape[0]
+            # Return random logits
+            return torch.randn(batch_size, self.action_dim)
+
+    class MockVecEnv:
+        """Mock vectorized environment for testing"""
+        def __init__(self, n_envs=4, episode_length=10):
+            self.n_envs = n_envs
+            self.num_envs = n_envs  # Add num_envs attribute for compatibility
+            self.episode_length = episode_length
+            self.step_counts = np.zeros(n_envs, dtype=int)
+            self.obs_dim = 4
+            
+        def reset(self):
+            self.step_counts = np.zeros(self.n_envs, dtype=int)
+            return np.random.randn(self.n_envs, self.obs_dim).astype(np.float32)
+        
+        def step(self, actions):
+            self.step_counts += 1
+            
+            # Generate random observations, rewards
+            obs = np.random.randn(self.n_envs, self.obs_dim).astype(np.float32)
+            rewards = np.random.randn(self.n_envs).astype(np.float32)
+            
+            # Episodes end when step count reaches episode_length
+            dones = (self.step_counts >= self.episode_length)
+            
+            # Reset step counts for envs that are done
+            self.step_counts[dones] = 0
+            
+            # Mock infos
+            infos = [{}] * self.n_envs
+            
+            return obs, rewards, dones, infos
+        
+        def get_images(self):
+            # Return dummy frames
+            return [np.random.randint(0, 255, (64, 64, 3), dtype=np.uint8) for _ in range(self.n_envs)]
+
+    def test_exact_episode_count_basic(self):
+        """Test that we get exactly the requested number of complete episodes"""
+        # Create mock environment with 4 parallel environments
+        env = self.MockVecEnv(n_envs=4, episode_length=5)
+        policy = self.MockPolicy(action_dim=2)
+        
+        # Request exactly 3 episodes
+        n_episodes_requested = 3
+        
+        trajectories, info = collect_rollouts(
+            env=env,
+            policy_model=policy,
+            n_episodes=n_episodes_requested,
+            deterministic=True
+        )
+        
+        # Extract data (without frames which is the last element)
+        trajectories_no_frames = trajectories[:-1]
+        
+        # Group by episodes and limit to exactly n_episodes_requested
+        episodes = group_trajectories_by_episode(trajectories_no_frames, max_episodes=n_episodes_requested)
+        
+        # Verify we got exactly the requested number of complete episodes
+        self.assertEqual(len(episodes), n_episodes_requested, 
+                        f"Expected {n_episodes_requested} episodes, got {len(episodes)}")
+        
+        # Verify all episodes are complete (end with done=True)
+        for i, episode in enumerate(episodes):
+            last_step = episode[-1]
+            done = last_step[3]  # done is the 4th element
+            self.assertTrue(done.item(), f"Episode {i} is not complete (doesn't end with done=True)")
+
+    def test_exact_episode_count_multiple_scenarios(self):
+        """Test various scenarios to ensure robustness"""
+        scenarios = [
+            (2, 3, 5),  # n_envs=2, episode_length=3, n_episodes=5
+            (4, 8, 2),  # n_envs=4, episode_length=8, n_episodes=2  
+            (1, 10, 3), # n_envs=1, episode_length=10, n_episodes=3
+            (8, 5, 10), # n_envs=8, episode_length=5, n_episodes=10
+        ]
+        
+        for n_envs, episode_length, n_episodes in scenarios:
+            with self.subTest(n_envs=n_envs, episode_length=episode_length, n_episodes=n_episodes):
+                env = self.MockVecEnv(n_envs=n_envs, episode_length=episode_length)
+                policy = self.MockPolicy(action_dim=2)
+                
+                trajectories, info = collect_rollouts(
+                    env=env,
+                    policy_model=policy,
+                    n_episodes=n_episodes,
+                    deterministic=True
+                )
+                
+                # Group by episodes and limit to exactly n_episodes
+                trajectories_no_frames = trajectories[:-1]
+                episodes = group_trajectories_by_episode(trajectories_no_frames, max_episodes=n_episodes)
+                
+                self.assertEqual(len(episodes), n_episodes, 
+                               f"Expected {n_episodes}, got {len(episodes)}")
+                
+                # Verify all episodes are complete
+                for i, episode in enumerate(episodes):
+                    last_step = episode[-1]
+                    done = last_step[3]
+                    self.assertTrue(done.item(), f"Episode {i} is incomplete")
+
+    def test_group_trajectories_with_max_episodes(self):
+        """Test the max_episodes parameter in group_trajectories_by_episode"""
+        # Create some dummy trajectory data with multiple episodes
+        n_steps = 15
+        states = torch.randn(n_steps, 4)
+        actions = torch.randint(0, 2, (n_steps,))
+        rewards = torch.randn(n_steps)
+        # Create dones that mark episode boundaries at steps 4, 9, 14
+        dones = torch.zeros(n_steps, dtype=torch.bool)
+        dones[[4, 9, 14]] = True
+        
+        trajectories = (states, actions, rewards, dones)
+        
+        # Test without max_episodes (should get all 3 episodes)
+        all_episodes = group_trajectories_by_episode(trajectories)
+        self.assertEqual(len(all_episodes), 3)
+        
+        # Test with max_episodes=2 (should get only first 2 episodes)
+        limited_episodes = group_trajectories_by_episode(trajectories, max_episodes=2)
+        self.assertEqual(len(limited_episodes), 2)
+        
+        # Verify the episodes are the same as the first 2 from the full set
+        for i in range(2):
+            self.assertEqual(len(limited_episodes[i]), len(all_episodes[i]))
+            # Check that the last step of each episode has done=True
+            self.assertTrue(limited_episodes[i][-1][3].item())
+
+    def test_episode_reward_calculation_accuracy(self):
+        """Test that episode rewards are calculated correctly when truncated"""
+        # Create a simple environment where we can control rewards
+        env = self.MockVecEnv(n_envs=2, episode_length=3)
+        policy = self.MockPolicy(action_dim=2)
+        
+        # Mock the step function to return predictable rewards
+        original_step = env.step
+        def mock_step(actions):
+            obs, _, dones, infos = original_step(actions)
+            # Return fixed rewards: 1.0 for all steps
+            rewards = np.ones(env.n_envs, dtype=np.float32)
+            return obs, rewards, dones, infos
+        
+        env.step = mock_step
+        
+        trajectories, _ = collect_rollouts(
+            env=env,
+            policy_model=policy,
+            n_episodes=2,  # Request exactly 2 episodes
+            deterministic=True
+        )
+        
+        trajectories_no_frames = trajectories[:-1]
+        episodes = group_trajectories_by_episode(trajectories_no_frames, max_episodes=2)
+        
+        # Each episode should have exactly 3 steps (episode_length=3)
+        # and total reward should be 3.0 (1.0 per step)
+        for episode in episodes:
+            episode_reward = sum(step[2] for step in episode)  # step[2] is reward
+            self.assertEqual(len(episode), 3, "Episode should have exactly 3 steps")
+            self.assertAlmostEqual(episode_reward.item(), 3.0, places=5,
+                                 msg="Episode reward should be 3.0 (1.0 per step)")
+
+    def test_no_inflated_rewards_bug_regression(self):
+        """
+        Regression test for the original bug where training was stopping with
+        inflated rewards (e.g., 807.80 instead of max 500 for CartPole-v1).
+        
+        This test simulates the scenario that caused the bug and verifies
+        that reward calculations are now correct.
+        """
+        # Simulate a scenario similar to CartPole-v1 evaluation
+        # where max episode reward should be limited by episode length
+        max_episode_length = 5
+        max_possible_reward_per_step = 1.0
+        expected_max_episode_reward = max_episode_length * max_possible_reward_per_step
+        
+        # Use multiple parallel environments (this was the source of the bug)
+        env = self.MockVecEnv(n_envs=8, episode_length=max_episode_length)
+        policy = self.MockPolicy(action_dim=2)
+        
+        # Mock rewards to be exactly 1.0 per step (like CartPole)
+        original_step = env.step
+        def mock_step(actions):
+            obs, _, dones, infos = original_step(actions)
+            rewards = np.ones(env.n_envs, dtype=np.float32)  # 1.0 reward per step
+            return obs, rewards, dones, infos
+        env.step = mock_step
+        
+        # Collect episodes - request exactly 3 episodes
+        trajectories, _ = collect_rollouts(
+            env=env,
+            policy_model=policy,
+            n_episodes=3,
+            deterministic=True
+        )
+        
+        trajectories_no_frames = trajectories[:-1]
+        episodes = group_trajectories_by_episode(trajectories_no_frames, max_episodes=3)
+        
+        # Verify we get exactly 3 episodes
+        self.assertEqual(len(episodes), 3)
+        
+        # Calculate episode rewards and verify they're reasonable
+        episode_rewards = [sum(step[2] for step in episode) for episode in episodes]
+        
+        for i, reward in enumerate(episode_rewards):
+            reward_value = reward.item()
+            # Each episode should have exactly the expected reward (5.0)
+            # NOT inflated values like 807.80
+            self.assertAlmostEqual(reward_value, expected_max_episode_reward, places=5,
+                                 msg=f"Episode {i} reward {reward_value} should be {expected_max_episode_reward}, "
+                                     f"not inflated like the original bug (807.80)")
+            
+            # Double-check: reward should never exceed the theoretical maximum
+            self.assertLessEqual(reward_value, expected_max_episode_reward + 0.01,
+                               msg=f"Episode {i} reward {reward_value} exceeds theoretical maximum "
+                                   f"{expected_max_episode_reward} - this indicates the bug is present")
+        
+        # Calculate mean reward (this is what was inflated in the original bug)
+        mean_reward = np.mean(episode_rewards)
+        self.assertAlmostEqual(mean_reward, expected_max_episode_reward, places=5,
+                             msg=f"Mean reward {mean_reward} should be {expected_max_episode_reward}, "
+                                 f"not inflated like in the original bug")
+
+
 if __name__ == "__main__":
     unittest.main()

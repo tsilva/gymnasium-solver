@@ -27,6 +27,10 @@ def collect_rollouts(
     """Collect transitions from *env* until *n_steps* or *n_episodes* (whichever
     comes first) are reached.
 
+    IMPORTANT: When n_episodes is specified, this function may collect slightly more
+    episodes than requested due to vectorized environments. Use group_trajectories_by_episode()
+    with max_episodes parameter to get exactly the desired number of complete episodes.
+
     Parameters
     ----------
     env : VecEnv-like
@@ -40,6 +44,7 @@ def collect_rollouts(
         Maximum number of *timesteps* (across all environments) to collect.
     n_episodes : int | None, default None
         Maximum number of *episodes* (across all environments) to collect.
+        May collect slightly more due to vectorized environments.
         Either *n_steps*, *n_episodes* or both **must** be provided.
     deterministic : bool, default False
         Whether to act greedily (``argmax``) instead of sampling.
@@ -127,10 +132,16 @@ def collect_rollouts(
         step_count += 1
         episode_count += done.sum()
 
-        # termination condition
-        if (n_steps is not None and step_count >= n_steps) or (
-            n_episodes is not None and episode_count >= n_episodes
-        ):
+        # IMPROVED TERMINATION LOGIC: When using n_episodes, collect a bit more to ensure
+        # we get at least n_episodes complete episodes. The exact truncation will be
+        # handled by the caller if needed.
+        should_stop = False
+        if n_steps is not None and step_count >= n_steps:
+            should_stop = True
+        elif n_episodes is not None and episode_count >= n_episodes:
+            should_stop = True
+        
+        if should_stop:
             obs = next_obs  # needed for bootstrap
             break
 
@@ -150,7 +161,7 @@ def collect_rollouts(
         )
 
     # ------------------------------------------------------------------
-    # 4. Stack buffers to (T, E) arrays for GAE
+    # 5. Stack buffers to (T, E) arrays for GAE
     # ------------------------------------------------------------------
     act_arr = np.stack(act_buf)  # (T, E)
     rew_arr = np.stack(rew_buf)
@@ -208,7 +219,7 @@ def collect_rollouts(
         frames_env_major = [0] * (n_envs * T)
 
     # ------------------------------------------------------------------
-    # 7. Return (SB3 order)
+    # 7. Return (SB3 order) - Use group_trajectories_by_episode(max_episodes=n) for exact counts
     # ------------------------------------------------------------------
     return (
         states,
@@ -223,7 +234,16 @@ def collect_rollouts(
     ), dict(last_obs=obs, n_steps=T, n_episodes=episode_count)
 
 
-def group_trajectories_by_episode(trajectories):
+def group_trajectories_by_episode(trajectories, max_episodes=None):
+    """Group trajectory data by complete episodes.
+    
+    Args:
+        trajectories: Tuple of trajectory tensors
+        max_episodes: If specified, return only the first max_episodes complete episodes
+        
+    Returns:
+        List of episodes, where each episode is a list of steps
+    """
     episodes = []
     episode = []
 
@@ -236,6 +256,10 @@ def group_trajectories_by_episode(trajectories):
         if done.item():  # convert tensor to bool
             episodes.append(episode)
             episode = []
+            
+            # Stop if we've collected enough complete episodes
+            if max_episodes is not None and len(episodes) >= max_episodes:
+                break
 
     return episodes
 

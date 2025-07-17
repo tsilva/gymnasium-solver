@@ -10,3 +10,15 @@
 - run eval in background thread (always)
 - run eval in background thread (always)
 - add environment normalization support
+- benchmark against rlzoo with same hyperparameters
+- add support for plotting charts as text and feeding to llm, check how end of training does it
+- track environment stats, observarion stats, reward distributions, etc
+- shared backbone support is showing parts has being in evaluation mode during training, fix it
+- change api to match sb3
+- add a2c support
+- normalization support through our own env wrapper
+- track selected action distribution
+- add support for conitnous environments
+- align rollout collector with sb3
+- training not working with data loader n_workers > 1
+- Early stopping at epoch 39 with eval mean reward 807.80 >= threshold 475

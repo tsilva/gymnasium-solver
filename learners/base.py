@@ -172,7 +172,28 @@ class Learner(pl.LightningModule):
     def _evaluate_and_check_stopping(self):
         """Evaluate model and check for early stopping"""
         eval_seed = np.random.randint(0, 1_000_000)
-        eval_env = self.build_env_fn(eval_seed)
+        
+        # CRITICAL FIX: Force single environment for evaluation
+        # 
+        # PROBLEM: When n_envs="auto" in config, build_env_fn creates vectorized environments 
+        # with multiple parallel environments (e.g., 8 envs on an 8-core CPU). During evaluation,
+        # collect_rollouts(n_episodes=5) would collect 5 episodes TOTAL across ALL environments,
+        # not 5 episodes per environment. This caused several issues:
+        # 
+        # 1. INCOMPLETE EPISODES: With 8 parallel envs and only 5 total episodes requested,
+        #    some environments would have incomplete episodes that still contributed to rewards
+        # 2. INFLATED REWARDS: Reward calculation summed across all timesteps rather than 
+        #    properly grouping by complete episodes, leading to values like 807.80 instead 
+        #    of the maximum 500 for CartPole-v1
+        # 3. INCORRECT EARLY STOPPING: Artificially high evaluation rewards triggered
+        #    early stopping when the agent wasn't actually performing well
+        #
+        # ROOT CAUSE: The vectorized environment's episode handling doesn't align with
+        # how collect_rollouts counts and groups episodes for reward calculation.
+        #
+        # FIX: Override n_envs=1 for evaluation to ensure we get exactly the requested
+        # number of complete episodes with proper reward calculation per episode.
+        eval_env = self.build_env_fn(eval_seed, n_envs=1)
         
         self.policy_model.eval()
         if self.value_model: self.value_model.eval()

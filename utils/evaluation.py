@@ -10,9 +10,23 @@ def evaluate_agent(agent, build_env_fn, n_episodes=8, deterministic=True, render
                   grid=(2, 2), text_color=(0, 0, 0), out_dir="./tmp"):
     """Evaluate agent performance and optionally render episodes."""
     
-    # Collect evaluation trajectories
+    # CRITICAL FIX: Force single environment for evaluation
+    # 
+    # PROBLEM: The same issue that affected training evaluation also affects this function.
+    # When build_env_fn uses n_envs="auto", it creates multiple parallel environments.
+    # collect_rollouts(n_episodes=8) with multiple environments would collect 8 episodes
+    # TOTAL across all environments, not 8 episodes per environment. This caused:
+    # 
+    # 1. INCOMPLETE EPISODES: Some environments would have partial episodes
+    # 2. REWARD CALCULATION ERRORS: Episodes would be incorrectly grouped and rewards
+    #    summed across incomplete trajectories
+    # 3. INCONSISTENT RESULTS: Evaluation results would vary based on CPU core count
+    #    rather than actual agent performance
+    # 
+    # FIX: Force n_envs=1 to ensure we get exactly n_episodes complete episodes
+    # with proper reward calculation and consistent evaluation results.
     trajectories_with_info = collect_rollouts(
-        build_env_fn(random.randint(0, 1_000_000), n_envs=n_episodes),
+        build_env_fn(random.randint(0, 1_000_000), n_envs=1),  # Force single environment
         agent.policy_model,
         n_episodes=n_episodes,
         deterministic=deterministic,

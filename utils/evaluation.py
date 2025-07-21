@@ -6,6 +6,7 @@ from utils.rollouts import collect_rollouts, group_trajectories_by_episode
 from tsilva_notebook_utils.gymnasium import render_episode_frames
 
 
+# TODO: use rollout 
 def evaluate_agent(agent, build_env_fn, n_episodes=8, deterministic=True, render=True, 
                   grid=(2, 2), text_color=(0, 0, 0), out_dir="./tmp"):
     """Evaluate agent performance and optionally render episodes."""

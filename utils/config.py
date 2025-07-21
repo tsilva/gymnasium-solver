@@ -52,7 +52,7 @@ class RLConfig:
     rollout_interval: int = 10
     
     @classmethod
-    def load_from_yaml(cls, env_id: str, algorithm, config_dir: str = "configs") -> 'RLConfig':
+    def load_from_yaml(cls, env_id: str, algo_id: str, config_dir: str = "configs") -> 'RLConfig':
         """
         Load configuration from YAML files with hierarchical overrides:
         1. Start with default.yaml
@@ -65,18 +65,11 @@ class RLConfig:
         
         # Load default configuration
         default_config_path = config_path / "default.yaml"
-        if default_config_path.exists():
-            with open(default_config_path, 'r') as f:
-                default_config = yaml.safe_load(f)
-        else:
-            default_config = {}
+        with open(default_config_path, 'r') as f: default_config = yaml.safe_load(f)
         
         # Load environment-specific configuration
         env_config_path = config_path / f"{env_id}.yaml"
-        env_config = {}
-        if env_config_path.exists():
-            with open(env_config_path, 'r') as f:
-                env_config = yaml.safe_load(f)
+        with open(env_config_path, 'r') as f: env_config = yaml.safe_load(f)
         
         # Start with default config
         final_config = default_config.copy()
@@ -87,10 +80,9 @@ class RLConfig:
             final_config.update(env_config['default'])
         
         # Apply algorithm-specific config
-        algorithm_lower = algorithm.lower()
-        if algorithm_lower in env_config:
-            final_config.update(env_config[algorithm_lower])
-        
+        algo_id = algo_id.lower()
+        if algo_id in env_config: final_config.update(env_config[algo_id])
+
         # Convert any numeric strings (like scientific notation)
         final_config = _convert_numeric_strings(final_config)
         
@@ -101,6 +93,6 @@ class RLConfig:
         return cls(**final_config)
 
 
-def load_config(env_id: str, algorithm: str = "ppo", config_dir: str = "configs") -> RLConfig:
+def load_config(env_id: str, algo_id: str, config_dir: str = "configs") -> RLConfig:
     """Convenience function to load configuration."""
-    return RLConfig.load_from_yaml(env_id, algorithm, config_dir)
+    return RLConfig.load_from_yaml(env_id, algo_id, config_dir)

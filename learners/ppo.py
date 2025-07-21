@@ -5,9 +5,9 @@ from .base import Learner
 class PPOLearner(Learner):
     """PPO-specific agent implementation with optional shared backbone support"""
     
-    def __init__(self, config, build_env_fn, rollout_collector, policy_model, value_model=None):
-        super().__init__(config, build_env_fn, rollout_collector, policy_model, value_model=value_model)
-        self.save_hyperparameters(ignore=['build_env_fn', 'rollout_collector', 'policy_model', 'value_model'])
+    def __init__(self, config, train_rollout_collector, policy_model, value_model=None, eval_rollout_collector=None):
+        super().__init__(config, train_rollout_collector, policy_model, value_model=value_model, eval_rollout_collector=eval_rollout_collector)
+        self.save_hyperparameters(ignore=['train_rollout_collector', 'policy_model', 'value_model', 'eval_rollout_collector'])
         
         self.policy_model = policy_model
         self.value_model = value_model
@@ -44,22 +44,6 @@ class PPOLearner(Learner):
             torch.optim.Adam(self.value_model.parameters(), lr=self.config.value_lr)
         ]
 
-    def forward(self, x):
-        return self.policy_model(x)
-    
-    def on_train_epoch_start(self):
-        """Override to handle shared backbone model updates"""
-        self.metrics.reset()
-        
-        # For separate models, use the original approach
-        self.rollout_collector.update_models(
-            self.policy_model.state_dict(), 
-            self.value_model.state_dict() if self.value_model else None
-        )
-        
-        # Collect new rollout if needed
-        if (self.current_epoch + 1) % self.config.rollout_interval == 0:
-            self._collect_and_update_rollout()
 
 class PPOLoss:
     def __init__(self, clip_epsilon, entropy_coef):

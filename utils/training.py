@@ -4,26 +4,9 @@ import wandb
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 from tsilva_notebook_utils.lightning import WandbCleanup
-from learners.ppo import PPOLearner
-from learners.reinforce import REINFORCELearner
-from .models import PolicyNet, ValueNet
 from utils.rollouts import SyncRolloutCollector
 
-def create_agent(config, build_env_fn, obs_dim, act_dim, algorithm=None, rollout_collector_cls=SyncRolloutCollector, n_envs=1):
-    """Create RL agent based on algorithm configuration."""
     
-    # Create rollout collector env
-    rollout_env = build_env_fn(config.seed + 1000, n_envs=n_envs)
-    
-    algo_id = algorithm or config.algorithm # TODO: move algo out of config
-    algo_id = algo_id.lower()
-    policy_model = PolicyNet(obs_dim, act_dim, config.hidden_dims)
-    value_model = ValueNet(obs_dim, config.hidden_dims) if algo_id == "ppo" else None
-    rollout_collector = rollout_collector_cls(config, rollout_env, policy_model, value_model=value_model)
-    agent = PPOLearner(config, build_env_fn, rollout_collector, policy_model, value_model) if algo_id == "ppo" else REINFORCELearner(config, build_env_fn, rollout_collector, policy_model)
-    
-    return agent
-
 
 def create_trainer(config, project_name=None, run_name=None):
     """Create PyTorch Lightning trainer with W&B logging."""

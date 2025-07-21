@@ -14,7 +14,7 @@ def collect_rollouts(
     value_model: Optional[torch.nn.Module] = None,
     n_steps: Optional[int] = None,
     n_episodes: Optional[int] = None,
-    *,
+    *, # TODO: what is this?
     deterministic: bool = False,
     gamma: float = 0.99,
     lam: float = 0.95,
@@ -73,6 +73,9 @@ def collect_rollouts(
         n_episodes is not None and n_episodes > 0
     ), "Provide *n_steps*, *n_episodes*, or both (> 0)."
 
+    assert policy_model.training is False, "Policy model must be in eval mode for rollouts."
+    if value_model: assert value_model.training is False, "Value model must be in eval mode for rollouts."
+
     # TODO: is this needed?
     def _device_of(module: torch.nn.Module) -> torch.device:
         """Infer the device of *module*'s first parameter."""
@@ -80,7 +83,7 @@ def collect_rollouts(
         if hasattr(module, 'shared_net'):
             return next(module.shared_net.parameters()).device
         return next(module.parameters()).device
-
+    
     device: torch.device = _device_of(policy_model)
     n_envs: int = env.num_envs
 
@@ -292,71 +295,57 @@ class RolloutDataset(TorchDataset):
     def __getitem__(self, idx):
         return tuple(t[idx] for t in self.trajectories)
 
+import copy
 
 # TODO: stop using get_default_device()?
 class BaseRolloutCollector:
     """Base class for rollout collectors"""
-    def __init__(self, config, env, policy_model, value_model=None):
-        self.config = config
+    def __init__(self, env, policy_model, value_model=None, n_steps=2048):
         self.env = env
+        self.n_steps = n_steps
+
+        # TODO: copy models to be able to keep them always in eval mode (requires periodic updates)
+        self.policy_model = copy.deepcopy(policy_model)
+        self.value_model = copy.deepcopy(value_model) if value_model else None
         
-        # Ensure models are on the correct device
-        # Get device from tsilva_notebook_utils if available, otherwise infer from model
-        try:
-            from tsilva_notebook_utils.torch import get_default_device
-            device = get_default_device()
-        except ImportError:
-            # For shared backbone models, get device from the shared model
-            if hasattr(policy_model, 'shared_net'):
-                device = next(policy_model.shared_net.parameters()).device
-            else:
-                device = next(policy_model.parameters()).device
-        
-        # Check if these are wrapper models that share a backbone
-        if hasattr(policy_model, 'shared_net') and hasattr(value_model, 'shared_net'):
-            # For shared backbone models, ensure the shared model is on the correct device
-            policy_model.shared_net.to(device)
-            # Force eval mode for rollout collection
-            policy_model.shared_net.eval()
-            self.policy_model = policy_model
-            self.value_model = value_model
-        else:
-            # For separate models, move each to device
-            self.policy_model = policy_model.to(device)
-            self.value_model = value_model.to(device) if value_model is not None else None
-            # Force eval mode for rollout collection
-            self.policy_model.eval()
-            if self.value_model:
-                self.value_model.eval()
+        # TODO: should we pass device from outside? should we move to device on collection? 
+        # TODO: should we set policy and value models in eval mode here or outside?
+        # Force eval mode for rollout collection
+        self.policy_model.eval()
+        if self.value_model: self.value_model.eval()
+
         self.last_obs = None
+        self.running = False
         
     def start(self):
         """Start the collector"""
-        pass
+        self.running = True
         
     def stop(self):
         """Stop the collector"""
-        pass
-        
+        self.running = False
+    
     def update_models(self, policy_state_dict, value_state_dict):
         """Update model weights"""
         pass
-        
+    
     def get_rollout(self, timeout=1.0):
         """Get next rollout data"""
         raise NotImplementedError
 
 class SyncRolloutCollector(BaseRolloutCollector):
     """Synchronous rollout collector - collects data on demand"""
-    def __init__(self, config, env, policy_model, value_model=None):
-        super().__init__(config, env, policy_model, value_model=value_model)
+    def __init__(self, env, policy_model, value_model=None, n_steps=2048):
+        super().__init__(env, policy_model, value_model=value_model, n_steps=n_steps)
         
     def get_rollout(self, timeout=1.0):
+        if not self.running: raise RuntimeError("Rollout collector is not running. Call start() first.")
+        
         trajectories, extras = collect_rollouts(
             self.env,
             self.policy_model,
             self.value_model,
-            n_steps=self.config.train_rollout_steps,
+            n_steps=self.n_steps,
             last_obs=self.last_obs
         )
         
@@ -365,18 +354,16 @@ class SyncRolloutCollector(BaseRolloutCollector):
 
 class AsyncRolloutCollector(BaseRolloutCollector):
     """Background thread that continuously collects rollouts using latest model weights"""
-    def __init__(self, config, env, policy_model, value_model=None):
-        super().__init__(config, env, policy_model, value_model)
+    def __init__(self, env, policy_model, value_model=None, n_steps=2048):
+        super().__init__(env, policy_model, value_model, n_steps=n_steps)
         
         # Thread-safe queue for rollout data
+        # TODO: review rollout queue, softcode size
         self.rollout_queue = queue.Queue(maxsize=3)  # Buffer 3 rollouts max
         
-        # Store the target device from the original models
-        if hasattr(policy_model, 'shared_net'):
-            self.device = next(policy_model.shared_net.parameters()).device
-        else:
-            self.device = next(policy_model.parameters()).device
-        
+        # TODO: get rid of this?
+        self.device = next(policy_model.parameters()).device
+    
         # Shared model weights (CPU copies for thread safety)
         self.policy_state_dict = None
         self.value_state_dict = None
@@ -390,34 +377,23 @@ class AsyncRolloutCollector(BaseRolloutCollector):
         self.model_version = 0  # Version counter for model updates
         
     def start(self):
-        """Start the background rollout collection thread"""
-        if self.running:
-            return
+        if self.running: raise RuntimeError("Rollout collector is already running.")
+        self.running = True
         
-        # Initialize with current model weights before starting thread
-        if hasattr(self.policy_model, 'shared_net'):
-            # For shared backbone, use the shared model's state dict
-            initial_state_dict = self.policy_model.shared_net.state_dict()
-            self.policy_state_dict = {k: v.cpu().clone() for k, v in initial_state_dict.items()}
-            self.value_state_dict = self.policy_state_dict  # Same for both
-        else:
-            # For separate models, use each model's state dict
-            self.policy_state_dict = {k: v.cpu().clone() for k, v in self.policy_model.state_dict().items()}
-            if self.value_model:
-                self.value_state_dict = {k: v.cpu().clone() for k, v in self.value_model.state_dict().items()}
-        
+        # For separate models, use each model's state dict
+        self.policy_state_dict = {k: v.cpu().clone() for k, v in self.policy_model.state_dict().items()}
+        if self.value_model: self.value_state_dict = {k: v.cpu().clone() for k, v in self.value_model.state_dict().items()}
+    
         self.weights_version = 1
         self.model_version = 0  # Force initial update
             
-        self.running = True
         self.thread = threading.Thread(target=self._collect_loop, daemon=True)
         self.thread.start()
         
     def stop(self):
-        """Stop the background rollout collection"""
+        if not self.running: raise RuntimeError("Rollout collector is not running.")
         self.running = False
-        if self.thread:
-            self.thread.join(timeout=5.0)
+        if self.thread: self.thread.join(timeout=5.0)
             
     def update_models(self, policy_state_dict, value_state_dict=None):
         """Update model weights from main training thread"""
@@ -425,7 +401,8 @@ class AsyncRolloutCollector(BaseRolloutCollector):
             self.policy_state_dict = copy.deepcopy(policy_state_dict)
             if value_state_dict: self.value_state_dict = copy.deepcopy(value_state_dict)
             self.weights_version += 1
-            
+    
+    # TODO: turn into async method
     def get_rollout(self, timeout=1.0):
         """Get next rollout data (non-blocking with timeout)"""
         try:
@@ -433,6 +410,7 @@ class AsyncRolloutCollector(BaseRolloutCollector):
         except queue.Empty:
             return None
 
+    # TODO: call update model weights also on sync?
     # TODO: only load when it changes?
     def _update_model_weights(self):
         if self.model_version >= self.weights_version: return
@@ -443,26 +421,16 @@ class AsyncRolloutCollector(BaseRolloutCollector):
             if self.policy_state_dict is None:
                 return  # Skip update if no state dict available yet
                 
-            # Check if these are shared backbone models
-            if (hasattr(self.policy_model, 'shared_net') and hasattr(self.value_model, 'shared_net') 
-                and self.policy_model.shared_net is self.value_model.shared_net):
-                # For shared backbone, update the underlying shared model
-                # Move state dict tensors to target device before loading
-                device_mapped_state_dict = {k: v.to(self.device) for k, v in self.policy_state_dict.items()}
-                self.policy_model.shared_net.load_state_dict(device_mapped_state_dict)
-                # Also ensure it's in eval mode for rollout collection
-                self.policy_model.shared_net.eval()
-            else:
-                # For separate models, update each individually
-                # Move state dict tensors to target device before loading
-                device_mapped_policy_state_dict = {k: v.to(self.device) for k, v in self.policy_state_dict.items()}
-                self.policy_model.load_state_dict(device_mapped_policy_state_dict)
-                self.policy_model.eval()
-                
-                if self.value_model and self.value_state_dict: 
-                    device_mapped_value_state_dict = {k: v.to(self.device) for k, v in self.value_state_dict.items()}
-                    self.value_model.load_state_dict(device_mapped_value_state_dict)
-                    self.value_model.eval()
+            # For separate models, update each individually
+            # Move state dict tensors to target device before loading
+            device_mapped_policy_state_dict = {k: v.to(self.device) for k, v in self.policy_state_dict.items()}
+            self.policy_model.load_state_dict(device_mapped_policy_state_dict)
+            self.policy_model.eval()
+            
+            if self.value_model and self.value_state_dict: 
+                device_mapped_value_state_dict = {k: v.to(self.device) for k, v in self.value_state_dict.items()}
+                self.value_model.load_state_dict(device_mapped_value_state_dict)
+                self.value_model.eval()
                 
             self.model_version = self.weights_version
                 
@@ -476,7 +444,7 @@ class AsyncRolloutCollector(BaseRolloutCollector):
                 self.env,
                 self.policy_model,
                 self.value_model,
-                n_steps=self.config.train_rollout_steps,
+                n_steps=self.n_steps,
                 last_obs=self.last_obs
             )
             

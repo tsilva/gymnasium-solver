@@ -1,3 +1,5 @@
+- Make sure rollout evals are closed
+- When I group by episodes I discard data from that rollout that won't be included in the next sequence of trajectories, so I need to make sure I don't lose data
 - Log config into wandb experiment
 - Log "n_steps" and "n_episodes" in the metric tracker
 - BUG: async mode is no longer working, it is not collecting rollouts

@@ -27,5 +27,3 @@ entropy_coef: 0.01
 normalize: false
 mean_reward_window: 100
 rollout_interval: 10
-n_envs: "auto"
-async_rollouts: false

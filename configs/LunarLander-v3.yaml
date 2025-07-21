@@ -16,7 +16,3 @@ default:
 reinforce:
   entropy_coef: 0.03
   batch_size: 128
-
-ppo:
-  # TODO: n_envs: 16, n_epochs: 4, n_steps: 1024
-  # Uses default config with above TODO items

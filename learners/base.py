@@ -120,8 +120,7 @@ class Learner(pl.LightningModule):
 
     def _collect_and_update_rollout(self):
         """Collect and update rollout data"""
-        timeout = 2.0 if self.config.async_rollouts else 1.0
-        trajectories = self.rollout_collector.get_rollout(timeout=timeout)
+        trajectories = self.rollout_collector.get_rollout()
         
         if trajectories is not None:
             self._update_rollout_data(trajectories)

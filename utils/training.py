@@ -6,16 +6,14 @@ from pytorch_lightning.loggers import WandbLogger
 from tsilva_notebook_utils.lightning import WandbCleanup
 from learners.ppo import PPOLearner
 from learners.reinforce import REINFORCELearner
-from utils.rollouts import AsyncRolloutCollector, SyncRolloutCollector
 from .models import PolicyNet, ValueNet
+from utils.rollouts import SyncRolloutCollector
 
-
-def create_agent(config, build_env_fn, obs_dim, act_dim, algorithm=None):
+def create_agent(config, build_env_fn, obs_dim, act_dim, algorithm=None, rollout_collector_cls=SyncRolloutCollector, n_envs=1):
     """Create RL agent based on algorithm configuration."""
     
     # Create rollout collector env
-    rollout_env = build_env_fn(config.seed + 1000, n_envs=config.n_envs)
-    rollout_collector_cls = AsyncRolloutCollector if config.async_rollouts else SyncRolloutCollector
+    rollout_env = build_env_fn(config.seed + 1000, n_envs=n_envs)
     
     algo_id = algorithm or config.algorithm # TODO: move algo out of config
     algo_id = algo_id.lower()

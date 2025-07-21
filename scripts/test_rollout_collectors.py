@@ -33,16 +33,12 @@ CollectorCls = {
 class SimpleConfig:
     seed: int = 0
     train_rollout_steps: int = 128
-    async_rollouts: bool = True
-    n_envs: int = 1
 
     @classmethod
     def from_args(cls, args) -> "SimpleConfig":
         return cls(
             seed=args.seed,
-            train_rollout_steps=args.rollout_steps,
-            async_rollouts=(args.collector == "async"),
-            n_envs=args.n_envs,
+            train_rollout_steps=args.rollout_steps
         )
 
 
@@ -102,12 +98,13 @@ def run_rollouts(
     env_id: str,
     collector_kind: str,
     n_rollouts: Optional[int] = None,
-    trained_policy_path: Optional[Path] = None
+    trained_policy_path: Optional[Path] = None,
+    n_envs: int = 1,
 ) -> Dict[str, float]:
     """Collect `n_rollouts` (or infinite) and return performance statistics."""
 
     # Create the environment
-    env = build_env(env_id, cfg.seed, cfg.n_envs)
+    env = build_env(env_id, cfg.seed, n_envs)
     obs_space, act_space = get_spaces(env)
 
     # Create the models
@@ -166,7 +163,7 @@ def run_rollouts(
     rollout_durations_np = np.array(rollout_durations)
     stats = {
         "collector": collector_kind,
-        "n_envs": cfg.n_envs,
+        "n_envs": n_envs,
         "steps_per_rollout": int(total_steps / max(rollout_count, 1)),
         "total_steps": total_steps,
         "total_rollouts": rollout_count,
@@ -174,86 +171,12 @@ def run_rollouts(
         "avg_rollout_time": float(rollout_durations_np.mean()) if rollout_count else 0.0,
         "std_rollout_time": float(rollout_durations_np.std()) if rollout_count else 0.0,
         "total_throughput": total_steps / max(total_elapsed, 1e-6),
-        "throughput_per_env": (total_steps / max(total_elapsed, 1e-6)) / cfg.n_envs,
+        "throughput_per_env": (total_steps / max(total_elapsed, 1e-6)) / n_envs,
     }
     print("\n=== Performance Summary ===")
     for k, v in stats.items(): print(f"{k.replace('_', ' ').title():<20}: {v}")
 
     return stats
-
-
-# -----------------------------------------------------------------------------
-# Benchmark runner
-# -----------------------------------------------------------------------------
-
-def run_performance_tests(env_id: str, seed: int):#
-    print(f"🚀 Running rollout-collection benchmarks for {env_id}\n")
-
-    TESTS = [
-        ("sync", 1, 100, 10),
-        ("sync", 2, 100, 10),
-        ("sync", 4, 100, 10),
-        ("async", 1, 100, 10),
-        ("async", 2, 100, 10),
-        ("async", 4, 100, 10),
-        ("async", 8, 100, 5),
-        ("async", 4, 256, 5),
-    ]
-
-    results = []
-    for i, (kind, n_envs, steps, rolls) in enumerate(TESTS, 1):
-        print(f"[{i}/{len(TESTS)}] {kind} | envs: {n_envs} | steps: {steps}")
-        cfg = SimpleConfig(seed=seed, train_rollout_steps=steps, async_rollouts=(kind == "async"), n_envs=n_envs)
-        try:
-            stats = run_rollouts(cfg, env_id, kind, n_rollouts=rolls, quiet=True)
-            results.append(stats)
-            print(f"   ✓ {stats['total_throughput']:.1f} steps/s")
-        except Exception as exc:
-            print(f"   ✗ {exc}")
-
-    if not results:
-        print("No successful runs – aborting benchmark.")
-        return
-
-    # ---------------------------------------------------------------------
-    # Pretty print table
-    # ---------------------------------------------------------------------
-    print("\n" + "=" * 80)
-    header = (
-        f"{'Collector':<9} {'Envs':<4} {'Steps/R':<7} "
-        f"{'Tot Steps/s':<11} {'Per-Env':<9} {'Avg Time':<8}"
-    )
-    print(header)
-    print("-" * len(header))
-    for r in sorted(results, key=lambda s: s["total_throughput"], reverse=True):
-        print(
-            f"{r['collector']:<9} {r['n_envs']:<4} {r['steps_per_rollout']:<7} "
-            f"{r['total_throughput']:<11.1f} {r['throughput_per_env']:<9.1f} {r['avg_rollout_time']:<8.3f}"
-        )
-    print("=" * 80)
-
-    # ---------------------------------------------------------------------
-    # Insights
-    # ---------------------------------------------------------------------
-    best_total = max(results, key=lambda r: r["total_throughput"])
-    best_per_env = max(results, key=lambda r: r["throughput_per_env"])
-    print(
-        f"🏆 Best total throughput: {best_total['collector']} "
-        f"({best_total['n_envs']} envs, {best_total['total_throughput']:.1f} steps/s)"
-    )
-    print(
-        f"🎯 Best per-env efficiency: {best_per_env['collector']} "
-        f"({best_per_env['n_envs']} envs, {best_per_env['throughput_per_env']:.1f} steps/s/env)"
-    )
-
-    # Async vs Sync @ 4 envs
-    try:
-        sync_4 = next(r for r in results if r["collector"] == "sync" and r["n_envs"] == 4)
-        async_4 = next(r for r in results if r["collector"] == "async" and r["n_envs"] == 4)
-        delta = (async_4["total_throughput"] - sync_4["total_throughput"]) / sync_4["total_throughput"] * 100
-        print(f"⚡ Async advantage (4 envs): {delta:+.1f}%")
-    except StopIteration:
-        pass
 
 
 # -----------------------------------------------------------------------------
@@ -269,13 +192,8 @@ def main() -> None:
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--n-envs", type=int, default=1)
     p.add_argument("--n-rollouts", type=int, default=None, help="Number of rollouts (default: infinite)")
-    p.add_argument("--test-mode", action="store_true", help="Run benchmarks instead of live collection")
     args = p.parse_args()
 
-    if args.test_mode:
-        run_performance_tests(args.env, args.seed)
-        return
-    
     # Load configuration
     cfg = SimpleConfig.from_args(args)
 

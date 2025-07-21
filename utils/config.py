@@ -50,8 +50,6 @@ class RLConfig:
     normalize: bool = False
     mean_reward_window: int = 100
     rollout_interval: int = 10
-    n_envs: Union[str, int] = "auto"
-    async_rollouts: bool = True
     
     @classmethod
     def load_from_yaml(cls, env_id: str, algorithm, config_dir: str = "configs") -> 'RLConfig':

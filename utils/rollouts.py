@@ -4,7 +4,6 @@ from typing import Optional, Tuple, Sequence
 from torch.utils.data import Dataset as TorchDataset
 from torch.distributions import Categorical
 import copy
-import time
 import threading
 import queue
 
@@ -277,6 +276,7 @@ def group_trajectories_by_episode(trajectories, max_episodes=None):
 
 
 
+# TODO: add test script for collection using dataset/dataloader
 # TODO: should dataloader move to gpu?
 class RolloutDataset(TorchDataset):
     """Holds PPO roll-out tensors and lets them be swapped in-place."""
@@ -293,7 +293,7 @@ class RolloutDataset(TorchDataset):
         return tuple(t[idx] for t in self.trajectories)
 
 
-
+# TODO: stop using get_default_device()?
 class BaseRolloutCollector:
     """Base class for rollout collectors"""
     def __init__(self, config, env, policy_model, value_model=None):

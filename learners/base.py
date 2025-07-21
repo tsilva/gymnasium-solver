@@ -1,12 +1,10 @@
 import time
-import multiprocessing
 from collections import deque
 import numpy as np
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 from utils.rollouts import (
-    collect_rollouts, group_trajectories_by_episode,
-    RolloutDataset, AsyncRolloutCollector, SyncRolloutCollector
+    collect_rollouts, group_trajectories_by_episode, RolloutDataset
 )
 from tsilva_notebook_utils.gymnasium import MetricTracker
 
@@ -169,6 +167,7 @@ class Learner(pl.LightningModule):
         self.metrics.log_metrics(train_metrics, prefix="train", prog_bar=True)
         self.metrics.log_metrics(additional_metrics, prefix="train", prog_bar=False)
 
+    # TODO: drop most of this codebase, just want to pass rollout collector inside
     def _evaluate_and_check_stopping(self):
         """Evaluate model and check for early stopping"""
         eval_seed = np.random.randint(0, 1_000_000)
@@ -212,6 +211,7 @@ class Learner(pl.LightningModule):
             if self.value_model: self.value_model.train()
             eval_env.close()
 
+    # TODO: drop most of this codebase, just want to pass rollout collector inside
     def _run_evaluation(self, env, policy_model, value_model):
         """Run evaluation and log rollout metrics"""
         start = time.time()

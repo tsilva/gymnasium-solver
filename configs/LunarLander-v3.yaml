@@ -10,7 +10,7 @@ default:
   eval_interval: 2
   policy_lr: 0.0001
   value_lr: 0.0005
-  hidden_dim: 32
+  hidden_dims: [32]
   entropy_coef: 0.01
 
 reinforce:

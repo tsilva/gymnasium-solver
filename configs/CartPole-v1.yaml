@@ -10,7 +10,7 @@ default:
   reward_threshold: 475
   policy_lr: 0.001
   value_lr: 0.001
-  hidden_dim: 32
+  hidden_dims: [32]
 
 reinforce:
   train_rollout_steps: 2048
@@ -18,6 +18,3 @@ reinforce:
   policy_lr: 0.001
   entropy_coef: 0.02
 
-ppo:
-  shared_backbone: True
-  backbone_dim: 64

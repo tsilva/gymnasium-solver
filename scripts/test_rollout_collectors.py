@@ -1,130 +1,195 @@
+from __future__ import annotations
+
 import argparse
+import sys
 import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Dict, List, Optional
+
+import gymnasium as gym
 import numpy as np
 import torch
-import gymnasium as gym
-import sys
-from pathlib import Path
 
-# Add project root to Python path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+# -----------------------------------------------------------------------------
+# Project import path & third-party helpers
+# -----------------------------------------------------------------------------
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))  # noqa: E402  (add root to PYTHONPATH)
 
-from utils.rollouts import SyncRolloutCollector, AsyncRolloutCollector
-from tsilva_notebook_utils.gymnasium import build_env as _build_env
+from utils.rollouts import AsyncRolloutCollector, SyncRolloutCollector, group_trajectories_by_episode  # noqa: E402
+from tsilva_notebook_utils.gymnasium import build_env as _build_env  # noqa: E402
 
+CollectorCls = {
+    "sync": SyncRolloutCollector,
+    "async": AsyncRolloutCollector,
+}
 
+# -----------------------------------------------------------------------------
+# Lightweight data holders
+# -----------------------------------------------------------------------------
+
+@dataclass
 class SimpleConfig:
-    def __init__(
-        self, seed: int, train_rollout_steps: int, async_rollouts: bool, n_envs: int
-    ):
-        self.seed = seed
-        self.train_rollout_steps = train_rollout_steps
-        self.async_rollouts = async_rollouts
-        self.n_envs = n_envs
+    seed: int = 0
+    train_rollout_steps: int = 128
+    async_rollouts: bool = True
+    n_envs: int = 1
 
+    @classmethod
+    def from_args(cls, args) -> "SimpleConfig":
+        return cls(
+            seed=args.seed,
+            train_rollout_steps=args.rollout_steps,
+            async_rollouts=(args.collector == "async"),
+            n_envs=args.n_envs,
+        )
+
+
+# -----------------------------------------------------------------------------
+# Helper functions
+# -----------------------------------------------------------------------------
 
 def build_env(env_id: str, seed: int, n_envs: int):
-    # Use the same environment building approach as the main code
-    env = _build_env(env_id, norm_obs=False, n_envs=n_envs, seed=seed)
-    return env
+    """Delegate to the project-wide `_build_env` helper."""
+    return _build_env(env_id, norm_obs=False, n_envs=n_envs, seed=seed)
+
+
+def get_spaces(env):
+    """Return `(obs_space, act_space)` for both vectorised & single envs."""
+    if hasattr(env, "single_observation_space"):
+        return env.single_observation_space, env.single_action_space
+    return env.observation_space, env.action_space
+
+
+def make_fc_network(in_dim: int, out_dim: int) -> torch.nn.Sequential:
+    return torch.nn.Sequential(
+        torch.nn.Linear(in_dim, 64),
+        torch.nn.Tanh(),
+        torch.nn.Linear(64, out_dim),
+    )
 
 
 def make_models(obs_space, act_space):
     if len(obs_space.shape) != 1:
         raise NotImplementedError("Only flat observation spaces are supported")
-    obs_dim = obs_space.shape[0]
     if not isinstance(act_space, gym.spaces.Discrete):
         raise NotImplementedError("Only discrete action spaces are supported")
-    act_dim = act_space.n
-    policy_model = torch.nn.Sequential(
-        torch.nn.Linear(obs_dim, 64),
-        torch.nn.Tanh(),
-        torch.nn.Linear(64, act_dim),
-    )
-    value_model = torch.nn.Sequential(
-        torch.nn.Linear(obs_dim, 64),
-        torch.nn.Tanh(),
-        torch.nn.Linear(64, 1),
-    )
-    return policy_model, value_model
+
+    obs_dim, act_dim = obs_space.shape[0], act_space.n
+    return make_fc_network(obs_dim, act_dim), make_fc_network(obs_dim, 1)
 
 
-def run_single_test(env_id, seed, collector_type, n_envs, rollout_steps, n_rollouts):
-    """Run a single performance test and return results"""
-    config = SimpleConfig(
-        seed=seed,
-        train_rollout_steps=rollout_steps,
-        async_rollouts=(collector_type == "async"),
-        n_envs=n_envs,
-    )
+def maybe_load_trained_policy(
+    default_path: Path, policy_model: torch.nn.Module
+) -> torch.nn.Module:
+    """Load a trained policy if it exists; otherwise return the given model."""
+    if False and default_path.is_file():
+        try:
+            policy_model = torch.load(default_path, weights_only=False)
+            print(f"Loaded trained policy from {default_path}")
+        except Exception as exc:  # pragma: no cover
+            print(f"⚠️  Failed to load policy ({exc}); using random init.")
+    return policy_model
 
-    env = build_env(env_id, seed, n_envs)
-    
-    # Get observation and action spaces - handle both vector and single envs
-    if hasattr(env, 'single_observation_space'):
-        obs_space = env.single_observation_space
-        act_space = env.single_action_space
-    else:
-        obs_space = env.observation_space
-        act_space = env.action_space
-    
+
+# -----------------------------------------------------------------------------
+# Core rollout routine – used by *both* benchmark *and* normal mode
+# -----------------------------------------------------------------------------
+
+def run_rollouts(
+    cfg: SimpleConfig, # TODO: call SimpleConfig something else
+    env_id: str,
+    collector_kind: str,
+    n_rollouts: Optional[int] = None,
+    trained_policy_path: Optional[Path] = None
+) -> Dict[str, float]:
+    """Collect `n_rollouts` (or infinite) and return performance statistics."""
+
+    # Create the environment
+    env = build_env(env_id, cfg.seed, cfg.n_envs)
+    obs_space, act_space = get_spaces(env)
+
+    # Create the models
     policy_model, value_model = make_models(obs_space, act_space)
+    if trained_policy_path is not None: policy_model = maybe_load_trained_policy(trained_policy_path, policy_model)
 
-    collector_cls = AsyncRolloutCollector if collector_type == "async" else SyncRolloutCollector
-    collector = collector_cls(config, env, policy_model, value_model)
+    # Initialize the rollout collector
+    collector_cls = CollectorCls[collector_kind]
+    collector = collector_cls(cfg, env, policy_model, value_model)
     collector.start()
 
-    start_time = time.time()
+    total_start = time.time()
+    rollout_durations: List[float] = []
     total_steps = 0
     rollout_count = 0
-    rollout_times = []
-    
     try:
-        while rollout_count < n_rollouts:
-            roll_start = time.time()
-            trajectories = collector.get_rollout(timeout=10.0)
-            if trajectories is None:
-                continue
-            roll_time = time.time() - roll_start
-            rollout_times.append(roll_time)
+        # While we haven't collected enough rollouts
+        while n_rollouts is None or rollout_count < n_rollouts:
+            # Collect rollout, if rollout not available (async mode), restart loop and try again
+            rollout_start = time.time()
+            trajectories = collector.get_rollout(timeout=10.0) # TODO: adjust timeout
+            if trajectories is None: continue 
+            rollout_end = time.time()
+            rollout_elapsed = rollout_end - rollout_start
+            rollout_durations.append(rollout_elapsed)
+
+            # Calculate stats
+            steps_count = len(trajectories[0])
+            total_steps += steps_count
             rollout_count += 1
-            steps = len(trajectories[0])
-            total_steps += steps
+            mean_step_reward = trajectories[2].mean().item()
+            episodes = group_trajectories_by_episode(trajectories)
+            mean_ep_reward = np.mean([sum(step[2] for step in episode) for episode in episodes])
+            steps_per_second = steps_count / max(rollout_elapsed, 1e-6)
+            n_episodes = len(episodes)
+            
+            # Log stats
+            print(f"Rollout {rollout_count:04d} | steps: {steps_count:<4d} | " + " | ".join([
+                f"{label}: {format(value, fmt)}"
+                for label, value, fmt in [
+                    ("time", rollout_elapsed, "5.2f"),
+                    ("n_episodes", n_episodes, "3d"),
+                    ("mean_ep_reward", mean_ep_reward, "+7.2f"),
+                    ("mean_step_reward", mean_step_reward, "+7.2f"),
+                    ("steps/s", steps_per_second, ".1f")
+                ]
+            ]))
+    except KeyboardInterrupt:
+        print("KeyboardInterrupt - stopping collector…")
     finally:
+        # Stop collector and environment
         collector.stop()
         env.close()
-        
-    # Calculate statistics
-    elapsed_total = time.time() - start_time
-    avg_rollout_time = np.mean(rollout_times)
-    std_rollout_time = np.std(rollout_times)
-    final_steps_per_sec = total_steps / max(elapsed_total, 1e-6)
-    steps_per_rollout = total_steps // max(rollout_count, 1)
-    throughput_per_env = final_steps_per_sec / n_envs
-    
-    return {
-        'collector': collector_type,
-        'n_envs': n_envs,
-        'rollout_steps': rollout_steps,
-        'steps_per_rollout': steps_per_rollout,
-        'total_steps': total_steps,
-        'total_rollouts': rollout_count,
-        'total_time': elapsed_total,
-        'avg_rollout_time': avg_rollout_time,
-        'std_rollout_time': std_rollout_time,
-        'total_throughput': final_steps_per_sec,
-        'throughput_per_env': throughput_per_env
+
+    total_elapsed = time.time() - total_start
+    rollout_durations_np = np.array(rollout_durations)
+    stats = {
+        "collector": collector_kind,
+        "n_envs": cfg.n_envs,
+        "steps_per_rollout": int(total_steps / max(rollout_count, 1)),
+        "total_steps": total_steps,
+        "total_rollouts": rollout_count,
+        "total_time": total_elapsed,
+        "avg_rollout_time": float(rollout_durations_np.mean()) if rollout_count else 0.0,
+        "std_rollout_time": float(rollout_durations_np.std()) if rollout_count else 0.0,
+        "total_throughput": total_steps / max(total_elapsed, 1e-6),
+        "throughput_per_env": (total_steps / max(total_elapsed, 1e-6)) / cfg.n_envs,
     }
+    print("\n=== Performance Summary ===")
+    for k, v in stats.items(): print(f"{k.replace('_', ' ').title():<20}: {v}")
+
+    return stats
 
 
-def run_performance_tests(env_id, seed):
-    """Run comprehensive performance tests and display results in a table"""
-    print(f"🚀 Running comprehensive rollout collection performance tests for {env_id}")
-    print("This may take a few minutes...\n")
-    
-    # Test configurations: (collector, n_envs, rollout_steps, n_rollouts)
-    test_configs = [
+# -----------------------------------------------------------------------------
+# Benchmark runner
+# -----------------------------------------------------------------------------
+
+def run_performance_tests(env_id: str, seed: int):#
+    print(f"🚀 Running rollout-collection benchmarks for {env_id}\n")
+
+    TESTS = [
         ("sync", 1, 100, 10),
         ("sync", 2, 100, 10),
         ("sync", 4, 100, 10),
@@ -132,183 +197,101 @@ def run_performance_tests(env_id, seed):
         ("async", 2, 100, 10),
         ("async", 4, 100, 10),
         ("async", 8, 100, 5),
-        ("async", 4, 256, 5),  # Test different rollout sizes
+        ("async", 4, 256, 5),
     ]
-    
+
     results = []
-    
-    for i, (collector, n_envs, rollout_steps, n_rollouts) in enumerate(test_configs, 1):
-        print(f"[{i}/{len(test_configs)}] Testing {collector} collector with {n_envs} envs, {rollout_steps} steps...")
-        
+    for i, (kind, n_envs, steps, rolls) in enumerate(TESTS, 1):
+        print(f"[{i}/{len(TESTS)}] {kind} | envs: {n_envs} | steps: {steps}")
+        cfg = SimpleConfig(seed=seed, train_rollout_steps=steps, async_rollouts=(kind == "async"), n_envs=n_envs)
         try:
-            result = run_single_test(env_id, seed, collector, n_envs, rollout_steps, n_rollouts)
-            results.append(result)
-            print(f"  ✓ {result['total_throughput']:.1f} steps/s")
-        except Exception as e:
-            print(f"  ✗ Failed: {e}")
-            continue
-    
-    # Display results table
-    print("\n" + "="*80)
-    print("📊 ROLLOUT COLLECTION PERFORMANCE RESULTS")
-    print("="*80)
-    
-    # Table header
-    header = f"{'Collector':<10} {'Envs':<5} {'Steps/Roll':<10} {'Total Steps/s':<12} {'Per-Env Steps/s':<15} {'Avg Roll Time':<12}"
+            stats = run_rollouts(cfg, env_id, kind, n_rollouts=rolls, quiet=True)
+            results.append(stats)
+            print(f"   ✓ {stats['total_throughput']:.1f} steps/s")
+        except Exception as exc:
+            print(f"   ✗ {exc}")
+
+    if not results:
+        print("No successful runs – aborting benchmark.")
+        return
+
+    # ---------------------------------------------------------------------
+    # Pretty print table
+    # ---------------------------------------------------------------------
+    print("\n" + "=" * 80)
+    header = (
+        f"{'Collector':<9} {'Envs':<4} {'Steps/R':<7} "
+        f"{'Tot Steps/s':<11} {'Per-Env':<9} {'Avg Time':<8}"
+    )
     print(header)
     print("-" * len(header))
-    
-    # Sort results by total throughput descending
-    results.sort(key=lambda x: x['total_throughput'], reverse=True)
-    
-    # Table rows
-    for result in results:
-        row = (f"{result['collector']:<10} "
-               f"{result['n_envs']:<5} "
-               f"{result['steps_per_rollout']:<10} "
-               f"{result['total_throughput']:<12.1f} "
-               f"{result['throughput_per_env']:<15.1f} "
-               f"{result['avg_rollout_time']:<12.3f}")
-        print(row)
-    
-    print("\n" + "="*80)
-    print("📈 KEY INSIGHTS")
-    print("="*80)
-    
-    # Find best configurations
-    best_total = max(results, key=lambda x: x['total_throughput'])
-    best_per_env = max(results, key=lambda x: x['throughput_per_env'])
-    sync_results = [r for r in results if r['collector'] == 'sync']
-    async_results = [r for r in results if r['collector'] == 'async']
-    
-    print(f"🏆 Best total throughput: {best_total['collector']} with {best_total['n_envs']} envs ({best_total['total_throughput']:.1f} steps/s)")
-    print(f"🎯 Best per-env efficiency: {best_per_env['collector']} with {best_per_env['n_envs']} envs ({best_per_env['throughput_per_env']:.1f} steps/s/env)")
-    
-    if sync_results and async_results:
-        # Compare sync vs async at same env count
-        sync_4_env = next((r for r in sync_results if r['n_envs'] == 4), None)
-        async_4_env = next((r for r in async_results if r['n_envs'] == 4), None)
-        
-        if sync_4_env and async_4_env:
-            improvement = ((async_4_env['total_throughput'] - sync_4_env['total_throughput']) / 
-                          sync_4_env['total_throughput'] * 100)
-            print(f"⚡ Async vs Sync (4 envs): {improvement:+.1f}% throughput improvement")
-    
-    # Scaling analysis
-    env_counts = sorted(set(r['n_envs'] for r in results))
-    if len(env_counts) > 1:
-        print(f"📊 Scaling: {env_counts[0]} → {env_counts[-1]} envs")
-        for collector_type in ['sync', 'async']:
-            type_results = [r for r in results if r['collector'] == collector_type]
-            if len(type_results) >= 2:
-                type_results.sort(key=lambda x: x['n_envs'])
-                first = type_results[0]
-                last = type_results[-1]
-                scaling_efficiency = (last['total_throughput'] / last['n_envs']) / (first['total_throughput'] / first['n_envs'])
-                print(f"  {collector_type}: {scaling_efficiency:.2f}x per-env efficiency retention")
+    for r in sorted(results, key=lambda s: s["total_throughput"], reverse=True):
+        print(
+            f"{r['collector']:<9} {r['n_envs']:<4} {r['steps_per_rollout']:<7} "
+            f"{r['total_throughput']:<11.1f} {r['throughput_per_env']:<9.1f} {r['avg_rollout_time']:<8.3f}"
+        )
+    print("=" * 80)
+
+    # ---------------------------------------------------------------------
+    # Insights
+    # ---------------------------------------------------------------------
+    best_total = max(results, key=lambda r: r["total_throughput"])
+    best_per_env = max(results, key=lambda r: r["throughput_per_env"])
+    print(
+        f"🏆 Best total throughput: {best_total['collector']} "
+        f"({best_total['n_envs']} envs, {best_total['total_throughput']:.1f} steps/s)"
+    )
+    print(
+        f"🎯 Best per-env efficiency: {best_per_env['collector']} "
+        f"({best_per_env['n_envs']} envs, {best_per_env['throughput_per_env']:.1f} steps/s/env)"
+    )
+
+    # Async vs Sync @ 4 envs
+    try:
+        sync_4 = next(r for r in results if r["collector"] == "sync" and r["n_envs"] == 4)
+        async_4 = next(r for r in results if r["collector"] == "async" and r["n_envs"] == 4)
+        delta = (async_4["total_throughput"] - sync_4["total_throughput"]) / sync_4["total_throughput"] * 100
+        print(f"⚡ Async advantage (4 envs): {delta:+.1f}%")
+    except StopIteration:
+        pass
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Test rollout collectors")
-    parser.add_argument("--env", required=True, help="Gymnasium environment id")
-    parser.add_argument("--collector", choices=["sync", "async"], default="async")
-    parser.add_argument("--rollout-steps", type=int, default=128)
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--n-envs", type=int, default=1)
-    parser.add_argument("--n-rollouts", type=int, default=None, help="Number of rollouts to collect (default: infinite)")
-    parser.add_argument("--test-mode", action="store_true", help="Run comprehensive performance tests and output table")
-    args = parser.parse_args()
+# -----------------------------------------------------------------------------
+# Entry point
+# -----------------------------------------------------------------------------
+
+def main() -> None:
+    # Parse command-line arguments
+    p = argparse.ArgumentParser(description="Rollout-collector benchmark & runner")
+    p.add_argument("--env", default="CartPole-v1", help="Gymnasium environment ID")
+    p.add_argument("--collector", choices=["sync", "async"], default="sync")
+    p.add_argument("--rollout-steps", type=int, default=128)
+    p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--n-envs", type=int, default=1)
+    p.add_argument("--n-rollouts", type=int, default=None, help="Number of rollouts (default: infinite)")
+    p.add_argument("--test-mode", action="store_true", help="Run benchmarks instead of live collection")
+    args = p.parse_args()
 
     if args.test_mode:
         run_performance_tests(args.env, args.seed)
         return
+    
+    # Load configuration
+    cfg = SimpleConfig.from_args(args)
 
-    config = SimpleConfig(
-        seed=args.seed,
-        train_rollout_steps=args.rollout_steps,
-        async_rollouts=(args.collector == "async"),
-        n_envs=args.n_envs,
+    # Load trained model (if any)
+    trained_path = Path(f"./models/{args.env}_ppo_full_model_seed{args.seed}.pth")
+
+    # Run the rollouts
+    run_rollouts(
+        cfg=cfg,
+        env_id=args.env,
+        collector_kind=args.collector,
+        n_rollouts=args.n_rollouts,
+        trained_policy_path=trained_path,
     )
-
-    env = build_env(args.env, args.seed, args.n_envs)
-    
-    # Get observation and action spaces - handle both vector and single envs
-    if hasattr(env, 'single_observation_space'):
-        obs_space = env.single_observation_space
-        act_space = env.single_action_space
-    else:
-        obs_space = env.observation_space
-        act_space = env.action_space
-    
-    policy_model, value_model = make_models(
-        obs_space, act_space
-    )
-
-    collector_cls = (
-        AsyncRolloutCollector if args.collector == "async" else SyncRolloutCollector
-    )
-    collector = collector_cls(config, env, policy_model, value_model)
-    collector.start()
-
-    if args.n_rollouts:
-        print(
-            f"Running {args.collector} rollout collector on {args.env} for {args.n_rollouts} rollouts."
-        )
-    else:
-        print(
-            f"Running {args.collector} rollout collector on {args.env}. Press Ctrl+C to stop."
-        )
-    
-    start_time = time.time()
-    total_steps = 0
-    rollout_count = 0
-    rollout_times = []
-    
-    try:
-        while True:
-            # Check if we've reached the target number of rollouts
-            if args.n_rollouts and rollout_count >= args.n_rollouts:
-                break
-                
-            roll_start = time.time()
-            trajectories = collector.get_rollout(timeout=10.0)
-            if trajectories is None:
-                continue
-            roll_time = time.time() - roll_start
-            rollout_times.append(roll_time)
-            rollout_count += 1
-            steps = len(trajectories[0])
-            total_steps += steps
-            mean_reward = trajectories[2].mean().item()
-            elapsed = time.time() - start_time
-            steps_per_sec = total_steps / max(elapsed, 1e-6)
-            print(
-                f"Rollout {rollout_count:04d} | steps: {steps} | mean_reward: {mean_reward:.2f} "
-                f"| rollout_time: {roll_time:.2f}s | steps/s: {steps_per_sec:.1f}"
-            )
-    except KeyboardInterrupt:
-        print("Stopping collector...")
-    finally:
-        collector.stop()
-        env.close()
-        
-        # Print summary statistics
-        if rollout_times:
-            elapsed_total = time.time() - start_time
-            avg_rollout_time = np.mean(rollout_times)
-            std_rollout_time = np.std(rollout_times)
-            final_steps_per_sec = total_steps / max(elapsed_total, 1e-6)
-            
-            print(f"\n=== Performance Summary ===")
-            print(f"Total rollouts: {rollout_count}")
-            print(f"Total steps: {total_steps}")
-            print(f"Total time: {elapsed_total:.2f}s")
-            print(f"Average rollout time: {avg_rollout_time:.3f}s ± {std_rollout_time:.3f}s")
-            print(f"Final throughput: {final_steps_per_sec:.1f} steps/s")
-            print(f"Environments: {args.n_envs}")
-            print(f"Steps per rollout: {total_steps // max(rollout_count, 1)}")
-            print(f"Throughput per env: {final_steps_per_sec / args.n_envs:.1f} steps/s/env")
 
 
 if __name__ == "__main__":
     main()
+    

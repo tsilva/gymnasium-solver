@@ -10,7 +10,7 @@ default:
   reward_threshold: -100
   policy_lr: 0.0003
   value_lr: 0.0003
-  hidden_dim: [128, 64]
+  hidden_dims: [128, 64]
   entropy_coef: 0.01
   rollout_interval: 1
 

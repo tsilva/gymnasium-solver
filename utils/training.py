@@ -7,65 +7,22 @@ from tsilva_notebook_utils.lightning import WandbCleanup
 from learners.ppo import PPOLearner
 from learners.reinforce import REINFORCELearner
 from utils.rollouts import AsyncRolloutCollector, SyncRolloutCollector
-from .models import PolicyNet, ValueNet, SharedBackboneNet, SharedPolicyNet, SharedValueNet
+from .models import PolicyNet, ValueNet
 
 
 def create_agent(config, build_env_fn, obs_dim, act_dim, algorithm=None):
     """Create RL agent based on algorithm configuration."""
     
-    # Determine algorithm - can be passed explicitly or derived from config
-    if algorithm is None:
-        # Try to get algorithm from config, default to PPO
-        algo_id = getattr(config, 'algorithm', 'PPO').upper()
-    else:
-        algo_id = algorithm.upper()
-    
     # Create rollout collector env
     rollout_env = build_env_fn(config.seed + 1000, n_envs=config.n_envs)
+    rollout_collector_cls = AsyncRolloutCollector if config.async_rollouts else SyncRolloutCollector
     
-    # For shared backbone models, use synchronous rollouts to avoid device threading issues
-    use_shared_backbone = getattr(config, 'shared_backbone', False)
-    if use_shared_backbone:
-        rollout_collector_cls = SyncRolloutCollector
-    else:
-        rollout_collector_cls = AsyncRolloutCollector if config.async_rollouts else SyncRolloutCollector
-    
-    if algo_id == "PPO":
-        # Check if shared backbone is enabled
-        use_shared_backbone = getattr(config, 'shared_backbone', False)
-        
-        if use_shared_backbone:
-            # Create shared backbone model
-            backbone_dim = getattr(config, 'backbone_dim', config.hidden_dim)
-            shared_model = SharedBackboneNet(obs_dim, act_dim, config.hidden_dim, backbone_dim)
-            
-            # Move shared model to device first
-            try:
-                from tsilva_notebook_utils.torch import get_default_device
-                device = get_default_device()
-                shared_model = shared_model.to(device)
-            except ImportError:
-                pass  # Device will be handled by Lightning
-            
-            # Create wrapper models for rollout collector
-            policy_model = SharedPolicyNet(shared_model)
-            value_model = SharedValueNet(shared_model)
-            
-            rollout_collector = rollout_collector_cls(config, rollout_env, policy_model, value_model=value_model)
-            agent = PPOLearner(config, build_env_fn, rollout_collector, policy_model, value_model, shared_model=shared_model)
-        else:
-            # Create separate models (original behavior)
-            policy_model = PolicyNet(obs_dim, act_dim, config.hidden_dim)
-            value_model = ValueNet(obs_dim, config.hidden_dim)
-            rollout_collector = rollout_collector_cls(config, rollout_env, policy_model, value_model=value_model)
-            agent = PPOLearner(config, build_env_fn, rollout_collector, policy_model, value_model)
-            
-    elif algo_id == "REINFORCE":
-        policy_model = PolicyNet(obs_dim, act_dim, config.hidden_dim)
-        rollout_collector = rollout_collector_cls(config, rollout_env, policy_model, value_model=None)
-        agent = REINFORCELearner(config, build_env_fn, rollout_collector, policy_model)
-    else:
-        raise ValueError(f"Unsupported algorithm: {algo_id}. Choose 'PPO' or 'REINFORCE'")
+    algo_id = algorithm or config.algorithm # TODO: move algo out of config
+    algo_id = algo_id.lower()
+    policy_model = PolicyNet(obs_dim, act_dim, config.hidden_dims)
+    value_model = ValueNet(obs_dim, config.hidden_dims) if algo_id == "ppo" else None
+    rollout_collector = rollout_collector_cls(config, rollout_env, policy_model, value_model=value_model)
+    agent = PPOLearner(config, build_env_fn, rollout_collector, policy_model, value_model) if algo_id == "ppo" else REINFORCELearner(config, build_env_fn, rollout_collector, policy_model)
     
     return agent
 
@@ -74,7 +31,7 @@ def create_trainer(config, project_name=None, run_name=None):
     """Create PyTorch Lightning trainer with W&B logging."""
     
     project_name = project_name or config.env_id
-    run_name = run_name or f"{getattr(config, 'algorithm', 'PPO')}-{wandb.util.generate_id()[:5]}"
+    run_name = run_name or f"{getattr(config, 'algorithm')}-{wandb.util.generate_id()[:5]}"
     
     wandb_logger = WandbLogger(
         project=project_name,
@@ -97,27 +54,3 @@ def create_trainer(config, project_name=None, run_name=None):
     
     return trainer
 
-
-def get_monitoring_info():
-    """Get information about key metrics to monitor during training."""
-    
-    primary_metrics = [
-        "eval/mean_reward",           # Main success indicator
-        "train/mean_reward",          # Training progress
-        "epoch/explained_var",        # Value function quality
-        "epoch/entropy",              # Exploration level
-        "epoch/clip_fraction"         # Policy update stability
-    ]
-
-    warning_conditions = {
-        "epoch/clip_fraction > 0.5": "Reduce policy_lr or clip_epsilon",
-        "epoch/approx_kl > 0.1": "Reduce policy_lr", 
-        "epoch/explained_var < 0.3": "Increase value_lr or network size",
-        "epoch/entropy < 0.01": "Increase entropy_coef",
-        "rollout/queue_miss > rollout/queue_updated": "Check async collection"
-    }
-    
-    return {
-        "primary_metrics": primary_metrics,
-        "warning_conditions": warning_conditions
-    }

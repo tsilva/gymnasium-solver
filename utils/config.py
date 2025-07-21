@@ -1,9 +1,8 @@
 """Configuration management utilities."""
 
-import os
 import yaml
 from pathlib import Path
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Union, Tuple, Dict, Any
 
 
@@ -44,12 +43,8 @@ class RLConfig:
     # Networks
     policy_lr: float = 3e-4
     value_lr: float = 1e-3
-    hidden_dim: Union[int, Tuple[int, ...]] = 64
+    hidden_dims: Union[int, Tuple[int, ...]] = 64
     entropy_coef: float = 0.01
-    
-    # Shared backbone (PPO only)
-    shared_backbone: bool = False
-    backbone_dim: Union[int, Tuple[int, ...]] = 64
     
     # Other
     normalize: bool = False
@@ -59,7 +54,7 @@ class RLConfig:
     async_rollouts: bool = True
     
     @classmethod
-    def load_from_yaml(cls, env_id: str, algorithm: str = "ppo", config_dir: str = "configs") -> 'RLConfig':
+    def load_from_yaml(cls, env_id: str, algorithm, config_dir: str = "configs") -> 'RLConfig':
         """
         Load configuration from YAML files with hierarchical overrides:
         1. Start with default.yaml
@@ -101,11 +96,9 @@ class RLConfig:
         # Convert any numeric strings (like scientific notation)
         final_config = _convert_numeric_strings(final_config)
         
-        # Convert list values to tuples for hidden_dim and backbone_dim
-        if 'hidden_dim' in final_config and isinstance(final_config['hidden_dim'], list):
-            final_config['hidden_dim'] = tuple(final_config['hidden_dim'])
-        if 'backbone_dim' in final_config and isinstance(final_config['backbone_dim'], list):
-            final_config['backbone_dim'] = tuple(final_config['backbone_dim'])
+        # Convert list values to tuples for hidden_dims
+        if 'hidden_dims' in final_config and isinstance(final_config['hidden_dims'], list):
+            final_config['hidden_dims'] = tuple(final_config['hidden_dims'])
         
         return cls(**final_config)
 

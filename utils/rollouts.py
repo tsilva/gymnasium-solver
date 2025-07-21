@@ -74,6 +74,7 @@ def collect_rollouts(
         n_episodes is not None and n_episodes > 0
     ), "Provide *n_steps*, *n_episodes*, or both (> 0)."
 
+    # TODO: is this needed?
     def _device_of(module: torch.nn.Module) -> torch.device:
         """Infer the device of *module*'s first parameter."""
         # Handle shared backbone wrapper models
@@ -96,7 +97,7 @@ def collect_rollouts(
     frame_buf: list[Sequence[np.ndarray]] | None = [] if collect_frames else None
 
     step_count = 0
-    episode_count = 0
+    episode_count = 0 # why does this appear as a numpy value in the debugger?
 
     # ------------------------------------------------------------------
     # 2. Rollout
@@ -119,7 +120,7 @@ def collect_rollouts(
         next_obs, reward, done, infos = env.step(act_t.cpu().numpy())
 
         # store step
-        obs_buf.append(obs.copy())
+        obs_buf.append(obs.copy()) # TODO: why copy here and do detach().cpu().numpy() in others?
         act_buf.append(act_t.cpu().numpy())
         rew_buf.append(reward)
         done_buf.append(done)
@@ -141,11 +142,10 @@ def collect_rollouts(
         elif n_episodes is not None and episode_count >= n_episodes:
             should_stop = True
         
-        if should_stop:
-            obs = next_obs  # needed for bootstrap
-            break
-
         obs = next_obs
+
+        if should_stop:
+            break
 
     T = step_count  # actual collected timesteps
 
@@ -154,6 +154,7 @@ def collect_rollouts(
     # ------------------------------------------------------------------
     with torch.no_grad():
         obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device)
+        # TODO: lambda for this value inference
         next_values = (
             value_model(obs_t).squeeze(-1).cpu().numpy()
             if value_model is not None
@@ -175,17 +176,28 @@ def collect_rollouts(
     adv_arr = np.zeros_like(rew_arr, dtype=np.float32)
 
     gae = np.zeros(n_envs, dtype=np.float32)
-    next_non_terminal = 1.0 - done_arr[-1].astype(np.float32)
-    next_value = next_values
+
+    # Pre‑compute the mask that tells us whether each step is terminal (0) or not (1).
+    non_terminal = 1.0 - done_arr.astype(np.float32)
+
+    # Start with the value *after* the last step (bootstrapped estimate) …
+    next_value = next_values          # V(s_{T})
+    next_non_terminal = non_terminal[-1]
 
     for t in reversed(range(T)):
+        # Generalised Advantage Estimation update
         delta = rew_arr[t] + gamma * next_value * next_non_terminal - val_arr[t]
-        gae = delta + gamma * lam * next_non_terminal * gae
+        gae = delta + gamma * lam * gae * next_non_terminal 
         adv_arr[t] = gae
 
-        next_non_terminal = 1.0 - done_arr[t].astype(np.float32)
-        next_value = val_arr[t]
+        # Shift the window backwards so that in the next loop iteration
+        # `next_value` / `next_non_terminal` correspond to step t‑1.
+        next_value = val_arr[t]        # V(s_{t})
+        next_non_terminal = non_terminal[t]
 
+    # The actual returns, which is essentially the same as the
+    # predicted returns plus the advantages (how much better 
+    # or worse the returns were from the predicted)
     ret_arr = adv_arr + val_arr
 
     if normalize_advantage:
@@ -480,3 +492,5 @@ class AsyncRolloutCollector(BaseRolloutCollector):
                     self.rollout_queue.put(trajectories, block=False)
                 except queue.Empty:
                     pass
+
+

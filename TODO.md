@@ -1,3 +1,6 @@
+- Log config into wandb experiment
+- Log "n_steps" and "n_episodes" in the metric tracker
+- BUG: async mode is no longer working, it is not collecting rollouts
 - BUG: early stopping at epoch 39 with eval mean reward 721.80 (wrong)
 - fix duplicate metric logging bug
 - add alert support to metric tracker

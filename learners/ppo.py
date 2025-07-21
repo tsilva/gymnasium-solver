@@ -5,109 +5,71 @@ from .base import Learner
 class PPOLearner(Learner):
     """PPO-specific agent implementation with optional shared backbone support"""
     
-    def __init__(self, config, build_env_fn, rollout_collector, policy_model, value_model=None, shared_model=None):
+    def __init__(self, config, build_env_fn, rollout_collector, policy_model, value_model=None):
         super().__init__(config, build_env_fn, rollout_collector, policy_model, value_model=value_model)
-        self.save_hyperparameters(ignore=['build_env_fn', 'rollout_collector', 'policy_model', 'value_model', 'shared_model'])
+        self.save_hyperparameters(ignore=['build_env_fn', 'rollout_collector', 'policy_model', 'value_model'])
         
         self.policy_model = policy_model
         self.value_model = value_model
-        self.shared_model = shared_model
-        self.use_shared_backbone = shared_model is not None
         
-        # Register the shared model with PyTorch Lightning if using shared backbone
-        if self.use_shared_backbone:
-            # Register the actual shared model so Lightning handles device movement
-            self.shared_backbone = shared_model
-        
-        self.ppo_loss = PPOLoss(config.clip_epsilon, config.entropy_coef, self.use_shared_backbone)
+        self.ppo_loss = PPOLoss(config.clip_epsilon, config.entropy_coef)
 
     def compute_loss(self, batch):
         """Compute PPO-specific losses"""
         states, actions, rewards, dones, old_logps, values, advantages, returns, frames = batch
         
-        if self.use_shared_backbone:
-            return self.ppo_loss.compute(
-                states, actions, old_logps, advantages, returns, 
-                self.shared_backbone, None, use_shared=True
-            )
-        else:
-            return self.ppo_loss.compute(
-                states, actions, old_logps, advantages, returns, 
-                self.policy_model, self.value_model, use_shared=False
-            )
+        return self.ppo_loss.compute(
+            states, actions, old_logps, advantages, returns, 
+            self.policy_model, self.value_model
+        )
         
     def optimize_models(self, loss_results):
         """Optimize PPO policy and value models"""
-        if self.use_shared_backbone:
-            # Single optimizer for shared backbone
-            opt_shared = self.optimizers()
-            opt_shared.zero_grad()
-            self.manual_backward(loss_results['total_loss'])
-            opt_shared.step()
-        else:
-            # Separate optimizers for policy and value
-            opt_policy, opt_value = self.optimizers()
-            
-            # Optimize policy
-            opt_policy.zero_grad()
-            self.manual_backward(loss_results['policy_loss'])
-            opt_policy.step()
+        # Separate optimizers for policy and value
+        opt_policy, opt_value = self.optimizers()
+        
+        # Optimize policy
+        opt_policy.zero_grad()
+        self.manual_backward(loss_results['policy_loss'])
+        opt_policy.step()
 
-            # Optimize value function
-            opt_value.zero_grad()
-            self.manual_backward(loss_results['value_loss'])
-            opt_value.step()
+        # Optimize value function
+        opt_value.zero_grad()
+        self.manual_backward(loss_results['value_loss'])
+        opt_value.step()
 
     def configure_optimizers(self):
-        if self.use_shared_backbone:
-            return torch.optim.Adam(self.shared_backbone.parameters(), lr=self.config.policy_lr)
-        else:
-            return [
-                torch.optim.Adam(self.policy_model.parameters(), lr=self.config.policy_lr),
-                torch.optim.Adam(self.value_model.parameters(), lr=self.config.value_lr)
-            ]
+        return [
+            torch.optim.Adam(self.policy_model.parameters(), lr=self.config.policy_lr),
+            torch.optim.Adam(self.value_model.parameters(), lr=self.config.value_lr)
+        ]
 
     def forward(self, x):
-        if self.use_shared_backbone:
-            return self.shared_backbone(x)
-        else:
-            return self.policy_model(x)
+        return self.policy_model(x)
     
     def on_train_epoch_start(self):
         """Override to handle shared backbone model updates"""
         self.metrics.reset()
         
-        if self.use_shared_backbone:
-            # For shared backbone, update both policy and value with the same state dict
-            shared_state_dict = self.shared_backbone.state_dict()
-            self.rollout_collector.update_models(shared_state_dict, shared_state_dict)
-        else:
-            # For separate models, use the original approach
-            self.rollout_collector.update_models(
-                self.policy_model.state_dict(), 
-                self.value_model.state_dict() if self.value_model else None
-            )
+        # For separate models, use the original approach
+        self.rollout_collector.update_models(
+            self.policy_model.state_dict(), 
+            self.value_model.state_dict() if self.value_model else None
+        )
         
         # Collect new rollout if needed
         if (self.current_epoch + 1) % self.config.rollout_interval == 0:
             self._collect_and_update_rollout()
 
 class PPOLoss:
-    def __init__(self, clip_epsilon, entropy_coef, use_shared_backbone=False):
+    def __init__(self, clip_epsilon, entropy_coef):
         self.clip_epsilon = clip_epsilon
         self.entropy_coef = entropy_coef
-        self.use_shared_backbone = use_shared_backbone
     
-    def compute(self, states, actions, old_logps, advantages, returns, policy_model, value_model=None, use_shared=False):
-        if use_shared:
-            # Shared backbone: get both policy and value in one forward pass
-            logits, value_pred = policy_model.forward_both(states)
-            value_pred = value_pred.squeeze()
-        else:
-            # Separate models
-            logits = policy_model(states)
-            value_pred = value_model(states).squeeze()
-        
+    def compute(self, states, actions, old_logps, advantages, returns, policy_model, value_model=None):
+        logits = policy_model(states)
+        value_pred = value_model(states).squeeze()
+    
         dist = Categorical(logits=logits)
         new_logps = dist.log_prob(actions)
         
@@ -142,9 +104,5 @@ class PPOLoss:
             'explained_var': explained_var.detach()
         }
         
-        # For shared backbone, we need a total loss for the single optimizer
-        if use_shared:
-            result['total_loss'] = policy_loss + value_loss
-            
         return result
     

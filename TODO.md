@@ -1,3 +1,6 @@
+- Add support for logging metric prefixes (add logging method to base class)
+- Add support for logging relevant metrics in the progress bar
+- Run training from notebook again and make sure eval/rendering works
 - Make sure rollout evals are closed
 - When I group by episodes I discard data from that rollout that won't be included in the next sequence of trajectories, so I need to make sure I don't lose data
 - Log config into wandb experiment

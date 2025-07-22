@@ -29,13 +29,13 @@ class MLPNet(nn.Module):
 class PolicyNet(MLPNet):
     """Policy network for RL agents."""
     
-    def __init__(self, obs_dim, act_dim, hidden_dims):
-        super().__init__(obs_dim, act_dim, hidden_dims)
+    def __init__(self, input_dim, output_dim, hidden_dims):
+        super().__init__(input_dim, output_dim, hidden_dims)
 
 
 class ValueNet(MLPNet):
     """Value network for RL agents."""
     
-    def __init__(self, obs_dim, hidden_dims):
-        super().__init__(obs_dim, 1, hidden_dims)
+    def __init__(self, input_dim, hidden_dims):
+        super().__init__(input_dim, 1, hidden_dims)
 

@@ -50,12 +50,11 @@ class Learner(pl.LightningModule):
     
     def _setup_stage_fit(self):
         # Initialize rollout collectors
-        self.train_rollout_collector.start()
-        self.eval_rollout_collector.start()
+        #self.train_rollout_collector.start()
+        #self.eval_rollout_collector.start()
         
         # Collect 
-        trajectories = None
-        while trajectories is None: trajectories = self.train_rollout_collector.get_rollout()
+        trajectories = self.train_rollout_collector.collect_rollouts()
         self._update_rollout_data(trajectories)
 
     def train_dataloader(self):
@@ -79,23 +78,13 @@ class Learner(pl.LightningModule):
         print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
     
     def on_fit_end(self):
-        self.train_rollout_collector.stop()
-        self.eval_rollout_collector.stop()
         if self.training_start_time:
             total_time = time.time() - self.training_start_time
             print(f"Training completed in {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
 
+    # TODO: log train epoch duration
     def on_train_epoch_start(self):
         self.metrics.reset()
-
-        # TODO: monitor how fast this operation is, we may have to do it less frequently
-        # TODO: single ActorCritic model?
-        self.train_rollout_collector.update_models(
-            self.policy_model.state_dict(), self.value_model.state_dict() if self.value_model else None
-        )
-        self.eval_rollout_collector.update_models(
-            self.policy_model.state_dict(), self.value_model.state_dict() if self.value_model else None
-        )
         
         # Collect new rollout if needed
         if (self.current_epoch + 1) % self.config.rollout_interval == 0:
@@ -110,6 +99,7 @@ class Learner(pl.LightningModule):
         # Evaluation
         if (self.current_epoch + 1) % self.config.eval_interval == 0: self._check_eval_early_stop()
 
+    # TODO: log training step duration
     def training_step(self, batch, batch_idx):
         states, actions, rewards, dones, old_logps, values, advantages, returns, frames = batch
 
@@ -134,23 +124,18 @@ class Learner(pl.LightningModule):
     # TODO: move this inside rollout collector
     def _collect_and_update_rollout(self):
         """Collect and update rollout data"""
-        trajectories = self.train_rollout_collector.get_rollout()
-        
-        if trajectories is not None:
-            self._update_rollout_data(trajectories)
-            self.metrics.log_single('rollout/queue_updated', 1.0)
-        else:
-            self.metrics.log_single('rollout/queue_miss', 1.0)
+        trajectories = self.train_rollout_collector.collect_rollouts()
+        self._update_rollout_data(trajectories)
     
     # TODO: move this inside rollout collector
     def _update_rollout_data(self, trajectories):
         """Update rollout dataset and episode rewards"""
         self.rollout_ds.update(*trajectories)
-        episodes = group_trajectories_by_episode(trajectories)
+        episodes = group_trajectories_by_episode(trajectories) # TODO: this is broken, as well as all other places that group per episode, because some episodes are lost in process
         episode_rewards = [sum(step[2] for step in episode) for episode in episodes]
-        for r in episode_rewards:
-            self.episode_reward_deque.append(float(r))
+        for r in episode_rewards: self.episode_reward_deque.append(float(r))
 
+    # TODO: make all training metrics be logged in end of epoch
     def _log_training_metrics(self, loss_results, advantages, values, returns):
         """Log common training metrics"""
         mean_reward = np.mean(self.episode_reward_deque) if len(self.episode_reward_deque) > 0 else 0
@@ -185,7 +170,7 @@ class Learner(pl.LightningModule):
     # TODO: drop most of this codebase, just want to pass rollout collector inside
     def _check_eval_early_stop(self):
         trajectories = None
-        while trajectories is None: trajectories = self.eval_rollout_collector.get_rollout() # TODO: move this loop inside the collector
+        while trajectories is None: trajectories = self.eval_rollout_collector.collect_rollouts() # TODO: move this loop inside the collector
         episodes = group_trajectories_by_episode(trajectories, max_episodes=self.config.eval_episodes)
         episode_rewards = [sum(step[2] for step in episode) for episode in episodes]
         mean_episode_reward = np.mean(episode_rewards)

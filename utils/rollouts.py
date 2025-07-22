@@ -3,87 +3,44 @@ import numpy as np
 from typing import Optional, Tuple, Sequence
 from torch.utils.data import Dataset as TorchDataset
 from torch.distributions import Categorical
-import copy
-import threading
-import queue
 
+# TODO: is this needed?
+def _device_of(module: torch.nn.Module) -> torch.device:
+    return next(module.parameters()).device
 
+# TODO: add # env.normalize_obs() support
+# TODO: batch value inference post rollout
+# TODO: consider returning transition object
 def collect_rollouts(
     env,
     policy_model: torch.nn.Module,
+    *,
     value_model: Optional[torch.nn.Module] = None,
     n_steps: Optional[int] = None,
     n_episodes: Optional[int] = None,
-    *, # TODO: what is this?
     deterministic: bool = False,
-    gamma: float = 0.99,
-    lam: float = 0.95,
-    normalize_advantage: bool = True,
-    adv_norm_eps: float = 1e-8,
+    gamma: float = 0.99, # TODO: rename these?
+    lam: float = 0.95, # TODO: rename these?
+    normalize_advantage: bool = True, # TODO: should advantages be normalized during rollouts or during batch training?
+    advantages_norm_eps: float = 1e-8,
     collect_frames: bool = False,
-    last_obs: Optional[np.ndarray] = None
+    last_obs: Optional[np.ndarray] = None # TODO: can I avoid using this by using a generator?
 ) -> Tuple[torch.Tensor, ...]:
-    """Collect transitions from *env* until *n_steps* or *n_episodes* (whichever
-    comes first) are reached.
-
-    IMPORTANT: When n_episodes is specified, this function may collect slightly more
-    episodes than requested due to vectorized environments. Use group_trajectories_by_episode()
-    with max_episodes parameter to get exactly the desired number of complete episodes.
-
-    Parameters
-    ----------
-    env : VecEnv-like
-        Vectorised environment exposing ``reset()``, ``step(actions)`` and
-        ``get_images()`` (if *collect_frames* is ``True``).
-    policy_model : nn.Module
-        Model that maps observations to *logits* (action probabilities).
-    value_model : nn.Module | None
-        Optional value network; if ``None``, value estimates are *zero*.
-    n_steps : int | None, default 1024
-        Maximum number of *timesteps* (across all environments) to collect.
-    n_episodes : int | None, default None
-        Maximum number of *episodes* (across all environments) to collect.
-        May collect slightly more due to vectorized environments.
-        Either *n_steps*, *n_episodes* or both **must** be provided.
-    deterministic : bool, default False
-        Whether to act greedily (``argmax``) instead of sampling.
-    gamma, lam : float
-        Discount and GAE-λ parameters.
-    normalize_advantage : bool, default True
-        Whether to standardise advantages.
-    adv_norm_eps : float, default 1e-8
-        Numerical stability epsilon for advantage normalisation.
-    collect_frames : bool, default False
-        If ``True``, return RGB frames alongside transition tensors.
-    last_obs : np.ndarray | None, default None
-        If provided, use these observations to continue collection without
-        resetting the environment. If ``None``, reset the environment first.
-
-    Returns
-    -------
-    Tuple[Tensor, ...]
-        ``(states, actions, rewards, dones, logps, values, advs, returns, frames)``
-        in *Stable-Baselines3*-compatible, env-major flattened order.
-    """
-
-    # ------------------------------------------------------------------
-    # 0. Sanity checks & helpers
-    # ------------------------------------------------------------------
+    # Assert that a stop condition is provided (either n_steps or n_episodes)
     assert (n_steps is not None and n_steps > 0) or (
         n_episodes is not None and n_episodes > 0
     ), "Provide *n_steps*, *n_episodes*, or both (> 0)."
 
+    # Assert that the models that are going to be used to perform 
+    # the rollout are in eval mode (eg: no dropout, no batch norm updates)
     assert policy_model.training is False, "Policy model must be in eval mode for rollouts."
     if value_model: assert value_model.training is False, "Value model must be in eval mode for rollouts."
 
-    # TODO: is this needed?
-    def _device_of(module: torch.nn.Module) -> torch.device:
-        """Infer the device of *module*'s first parameter."""
-        # Handle shared backbone wrapper models
-        if hasattr(module, 'shared_net'):
-            return next(module.shared_net.parameters()).device
-        return next(module.parameters()).device
-    
+    # Assert that the policy model is on the same device as the value model
+    policy_model_device = _device_of(policy_model)
+    value_model_device = _device_of(value_model) if value_model else None
+    if value_model_device: assert policy_model_device == value_model_device, "Policy and value models must be on the same device."
+
     device: torch.device = _device_of(policy_model)
     n_envs: int = env.num_envs
 
@@ -94,9 +51,9 @@ def collect_rollouts(
     act_buf: list[np.ndarray] = []
     rew_buf: list[np.ndarray] = []
     done_buf: list[np.ndarray] = []
-    logp_buf: list[np.ndarray] = []
-    val_buf: list[np.ndarray] = []
-    frame_buf: list[Sequence[np.ndarray]] | None = [] if collect_frames else None
+    logprobs_buf: list[np.ndarray] = []
+    values_buf: list[np.ndarray] = []
+    frame_buf: list[Sequence[np.ndarray]] = []
 
     step_count = 0
     episode_count = 0 # why does this appear as a numpy value in the debugger?
@@ -104,125 +61,130 @@ def collect_rollouts(
     # ------------------------------------------------------------------
     # 2. Rollout
     # ------------------------------------------------------------------
+    
+    # Retrieve the first observation to start the rollout from, 
+    # if last_obs is provided then it means we are resuming a previous rollout
     obs = env.reset() if last_obs is None else last_obs
-    while True:
-        obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device)
+
+    def _infer_value(obs: np.ndarray) -> np.ndarray:
         with torch.no_grad():
+            obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device)
+            if value_model: return value_model(obs_t).squeeze(-1).cpu().numpy()
+            else: return np.zeros((n_envs,), dtype=np.float32)
+
+    def _infer_policy(obs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        with torch.no_grad():
+            obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device) # TODO: as_tensor vs tensor()
             logits = policy_model(obs_t)
-        dist = Categorical(logits=logits)
+            dist = Categorical(logits=logits)
+            action_t = dist.sample() if not deterministic else logits.argmax(-1)
+            action_logp_t = dist.log_prob(action_t)
+            action_np = action_t.cpu().numpy()
+            action_logp_np = action_logp_t.cpu().numpy()
+            return action_np, action_logp_np
 
-        act_t = logits.argmax(-1) if deterministic else dist.sample()
-        logp_t = dist.log_prob(act_t)
-        val_t = (
-            value_model(obs_t).squeeze(-1)
-            if value_model is not None
-            else torch.zeros(n_envs, device=device)
-        )
+    # If last_obs is provided, we need to ensure it is on the correct device
+    while True:
+        # Use policy model to select action
+        action_np, action_logp_np = _infer_policy(obs)
 
-        next_obs, reward, done, infos = env.step(act_t.cpu().numpy())
+        # Use value model to infer value of being in current state
+        value_np = _infer_value(obs)
 
-        # store step
-        obs_buf.append(obs.copy()) # TODO: why copy here and do detach().cpu().numpy() in others?
-        act_buf.append(act_t.cpu().numpy())
+        # Step the environment with the selected action
+        next_obs, reward, done, _ = env.step(action_np)
+
+        # Store collected data in buffers
+        # NOTE: observation is copied to avoid issues with environments that mutate their observation arrays
+        obs_buf.append(obs.copy())
+        values_buf.append(value_np)
+        act_buf.append(action_np)
+        logprobs_buf.append(action_logp_np)
         rew_buf.append(reward)
         done_buf.append(done)
-        logp_buf.append(logp_t.detach().cpu().numpy())
-        val_buf.append(val_t.detach().cpu().numpy())
-
-        if collect_frames and frame_buf is not None:
-            frame_buf.append(env.get_images())
-
-        step_count += 1
-        episode_count += done.sum()
-
-        # IMPROVED TERMINATION LOGIC: When using n_episodes, collect a bit more to ensure
-        # we get at least n_episodes complete episodes. The exact truncation will be
-        # handled by the caller if needed.
-        should_stop = False
-        if n_steps is not None and step_count >= n_steps:
-            should_stop = True
-        elif n_episodes is not None and episode_count >= n_episodes:
-            should_stop = True
+        if collect_frames: frame_buf.append(env.get_images())
         
+        # Next state is now current state
         obs = next_obs
 
-        if should_stop:
-            break
+        # Increment the number of steps taken
+        step_count += 1
 
-    T = step_count  # actual collected timesteps
+        # Increment the number of episodes completed 
+        # so far (add number of envs that are done)
+        episode_count += done.sum()
+
+        # If we reached a stop condition, pause the rollout
+        if n_steps is not None and step_count >= n_steps: break # TODO: do we want the n_steps to be per env or total?
+        if n_episodes is not None and episode_count >= n_episodes: break
 
     # ------------------------------------------------------------------
     # 3. Bootstrap value for the next state of each env
     # ------------------------------------------------------------------
-    with torch.no_grad():
-        obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device)
-        # TODO: lambda for this value inference
-        next_values = (
-            value_model(obs_t).squeeze(-1).cpu().numpy()
-            if value_model is not None
-            else np.zeros(n_envs, dtype=np.float32)
-        )
+    next_value = _infer_value(obs) # TODO: referencing next_obs could be less confusing
 
     # ------------------------------------------------------------------
     # 5. Stack buffers to (T, E) arrays for GAE
     # ------------------------------------------------------------------
-    act_arr = np.stack(act_buf)  # (T, E)
-    rew_arr = np.stack(rew_buf)
-    done_arr = np.stack(done_buf)
-    logp_arr = np.stack(logp_buf)
-    val_arr = np.stack(val_buf)
-
+    # TODO: not sure what this is
+    obs_arr = np.stack(obs_buf)  # (T, E, obs)
+    values_arr = np.stack(values_buf)
+    actions_arr = np.stack(act_buf)
+    logprobs_arr = np.stack(logprobs_buf)
+    rewards_arr = np.stack(rew_buf)
+    dones_arr = np.stack(done_buf)
+    
     # ------------------------------------------------------------------
     # 5. GAE-λ advantage / return (with masking)
     # ------------------------------------------------------------------
-    adv_arr = np.zeros_like(rew_arr, dtype=np.float32)
+    advantages_arr = np.zeros_like(rewards_arr, dtype=np.float32)
 
     gae = np.zeros(n_envs, dtype=np.float32)
 
     # Pre‑compute the mask that tells us whether each step is terminal (0) or not (1).
-    non_terminal = 1.0 - done_arr.astype(np.float32)
+    non_terminal = 1.0 - dones_arr.astype(np.float32)
 
     # Start with the value *after* the last step (bootstrapped estimate) …
-    next_value = next_values          # V(s_{T})
     next_non_terminal = non_terminal[-1]
-
+    T = step_count # TODO: should step_count be the total and T be steps_count // n_envs?
     for t in reversed(range(T)):
         # Generalised Advantage Estimation update
-        delta = rew_arr[t] + gamma * next_value * next_non_terminal - val_arr[t]
+        delta = rewards_arr[t] + gamma * next_value * next_non_terminal - values_arr[t]
         gae = delta + gamma * lam * gae * next_non_terminal 
-        adv_arr[t] = gae
+        advantages_arr[t] = gae
 
         # Shift the window backwards so that in the next loop iteration
         # `next_value` / `next_non_terminal` correspond to step t‑1.
-        next_value = val_arr[t]        # V(s_{t})
+        next_value = values_arr[t]        # V(s_{t})
         next_non_terminal = non_terminal[t]
 
     # The actual returns, which is essentially the same as the
     # predicted returns plus the advantages (how much better 
     # or worse the returns were from the predicted)
-    ret_arr = adv_arr + val_arr
+    returns_arr = advantages_arr + values_arr # TODO: collect returns directly and then assert they match the computed ones
 
     if normalize_advantage:
-        adv_flat = adv_arr.reshape(-1)
-        adv_arr = (adv_arr - adv_flat.mean()) / (adv_flat.std() + adv_norm_eps)
+        advantages_flat = advantages_arr.reshape(-1)
+        advantages_arr = (advantages_arr - advantages_flat.mean()) / (advantages_flat.std() + advantages_norm_eps)
 
     # ------------------------------------------------------------------
     # 6. Env-major flattening: (T, E, …) -> (E, T, …) -> (E*T, …)
     # ------------------------------------------------------------------
-    obs_arr = np.stack(obs_buf)  # (T, E, obs)
+    
+    # TODO: need to understand what's going on here
     obs_env_major = obs_arr.transpose(1, 0, 2)  # (E, T, obs)
     states = torch.as_tensor(obs_env_major.reshape(n_envs * T, -1), dtype=torch.float32)
 
     def _flat_env_major(arr: np.ndarray, dtype: torch.dtype):
         return torch.as_tensor(arr.transpose(1, 0).reshape(-1), dtype=dtype)
 
-    actions = _flat_env_major(act_arr, torch.int64)
-    rewards = _flat_env_major(rew_arr, torch.float32)
-    dones = _flat_env_major(done_arr, torch.bool)
-    logps = _flat_env_major(logp_arr, torch.float32)
-    values = _flat_env_major(val_arr, torch.float32)
-    advs = _flat_env_major(adv_arr, torch.float32)
-    returns = _flat_env_major(ret_arr, torch.float32)
+    actions = _flat_env_major(actions_arr, torch.int64)
+    rewards = _flat_env_major(rewards_arr, torch.float32)
+    dones = _flat_env_major(dones_arr, torch.bool)
+    logps = _flat_env_major(logprobs_arr, torch.float32)
+    values = _flat_env_major(values_arr, torch.float32)
+    advantages = _flat_env_major(advantages_arr, torch.float32)
+    returns = _flat_env_major(returns_arr, torch.float32)
 
     if collect_frames and frame_buf is not None:
         frames_env_major: list[np.ndarray] = []
@@ -232,9 +194,6 @@ def collect_rollouts(
     else:
         frames_env_major = [0] * (n_envs * T)
 
-    # ------------------------------------------------------------------
-    # 7. Return (SB3 order) - Use group_trajectories_by_episode(max_episodes=n) for exact counts
-    # ------------------------------------------------------------------
     return (
         states,
         actions,
@@ -242,13 +201,13 @@ def collect_rollouts(
         dones,
         logps,
         values,
-        advs,
+        advantages,
         returns,
         frames_env_major,
     ), dict(last_obs=obs, n_steps=T, n_episodes=episode_count)
 
 
-def group_trajectories_by_episode(trajectories, max_episodes=None):
+def group_trajectories_by_episode(trajectories, max_episodes=None):#
     """Group trajectory data by complete episodes.
     
     Args:
@@ -295,170 +254,32 @@ class RolloutDataset(TorchDataset):
     def __getitem__(self, idx):
         return tuple(t[idx] for t in self.trajectories)
 
-import copy
-
-# TODO: stop using get_default_device()?
-class BaseRolloutCollector:
-    """Base class for rollout collectors"""
+# TODO: make rollout collector use its own buffer
+class SyncRolloutCollector():
     def __init__(self, env, policy_model, value_model=None, n_steps=2048):
         self.env = env
+        self.policy_model = policy_model
+        self.value_model = value_model
         self.n_steps = n_steps
 
-        # TODO: copy models to be able to keep them always in eval mode (requires periodic updates)
-        self.policy_model = copy.deepcopy(policy_model)
-        self.value_model = copy.deepcopy(value_model) if value_model else None
-        
-        # TODO: should we pass device from outside? should we move to device on collection? 
-        # TODO: should we set policy and value models in eval mode here or outside?
-        # Force eval mode for rollout collection
+        self.last_obs = None
+
+    # TODO: should this be called collect_rollout instead?
+    # TODO: should this be a generator?
+    # TODO: create decorator that ensures models are in eval mode until function end and then restores them to origial mode (eval or train)
+    def collect_rollouts(self):
         self.policy_model.eval()
         if self.value_model: self.value_model.eval()
-
-        self.last_obs = None
-        self.running = False
-        
-    def start(self):
-        """Start the collector"""
-        self.running = True
-        
-    def stop(self):
-        """Stop the collector"""
-        self.running = False
-    
-    def update_models(self, policy_state_dict, value_state_dict):
-        """Update model weights"""
-        pass
-    
-    def get_rollout(self, timeout=1.0):
-        """Get next rollout data"""
-        raise NotImplementedError
-
-class SyncRolloutCollector(BaseRolloutCollector):
-    """Synchronous rollout collector - collects data on demand"""
-    def __init__(self, env, policy_model, value_model=None, n_steps=2048):
-        super().__init__(env, policy_model, value_model=value_model, n_steps=n_steps)
-        
-    def get_rollout(self, timeout=1.0):
-        if not self.running: raise RuntimeError("Rollout collector is not running. Call start() first.")
-        
-        trajectories, extras = collect_rollouts(
-            self.env,
-            self.policy_model,
-            self.value_model,
-            n_steps=self.n_steps,
-            last_obs=self.last_obs
-        )
-        
-        self.last_obs = extras['last_obs']
-        return trajectories
-
-class AsyncRolloutCollector(BaseRolloutCollector):
-    """Background thread that continuously collects rollouts using latest model weights"""
-    def __init__(self, env, policy_model, value_model=None, n_steps=2048):
-        super().__init__(env, policy_model, value_model, n_steps=n_steps)
-        
-        # Thread-safe queue for rollout data
-        # TODO: review rollout queue, softcode size
-        self.rollout_queue = queue.Queue(maxsize=3)  # Buffer 3 rollouts max
-        
-        # TODO: get rid of this?
-        self.device = next(policy_model.parameters()).device
-    
-        # Shared model weights (CPU copies for thread safety)
-        self.policy_state_dict = None
-        self.value_state_dict = None
-        self.model_lock = threading.Lock()
-        
-        # Control flags
-        self.running = False
-        self.thread = None
-
-        self.weights_version = 0  # Version counter for model updates
-        self.model_version = 0  # Version counter for model updates
-        
-    def start(self):
-        if self.running: raise RuntimeError("Rollout collector is already running.")
-        self.running = True
-        
-        # For separate models, use each model's state dict
-        self.policy_state_dict = {k: v.cpu().clone() for k, v in self.policy_model.state_dict().items()}
-        if self.value_model: self.value_state_dict = {k: v.cpu().clone() for k, v in self.value_model.state_dict().items()}
-    
-        self.weights_version = 1
-        self.model_version = 0  # Force initial update
-            
-        self.thread = threading.Thread(target=self._collect_loop, daemon=True)
-        self.thread.start()
-        
-    def stop(self):
-        if not self.running: raise RuntimeError("Rollout collector is not running.")
-        self.running = False
-        if self.thread: self.thread.join(timeout=5.0)
-            
-    def update_models(self, policy_state_dict, value_state_dict=None):
-        """Update model weights from main training thread"""
-        with self.model_lock:
-            self.policy_state_dict = copy.deepcopy(policy_state_dict)
-            if value_state_dict: self.value_state_dict = copy.deepcopy(value_state_dict)
-            self.weights_version += 1
-    
-    # TODO: turn into async method
-    def get_rollout(self, timeout=1.0):
-        """Get next rollout data (non-blocking with timeout)"""
         try:
-            return self.rollout_queue.get(timeout=timeout)
-        except queue.Empty:
-            return None
-
-    # TODO: call update model weights also on sync?
-    # TODO: only load when it changes?
-    def _update_model_weights(self):
-        if self.model_version >= self.weights_version: return
-
-        """Update local model weights from shared state dicts"""
-        with self.model_lock:
-            # Check if state dicts are available
-            if self.policy_state_dict is None:
-                return  # Skip update if no state dict available yet
-                
-            # For separate models, update each individually
-            # Move state dict tensors to target device before loading
-            device_mapped_policy_state_dict = {k: v.to(self.device) for k, v in self.policy_state_dict.items()}
-            self.policy_model.load_state_dict(device_mapped_policy_state_dict)
-            self.policy_model.eval()
-            
-            if self.value_model and self.value_state_dict: 
-                device_mapped_value_state_dict = {k: v.to(self.device) for k, v in self.value_state_dict.items()}
-                self.value_model.load_state_dict(device_mapped_value_state_dict)
-                self.value_model.eval()
-                
-            self.model_version = self.weights_version
-                
-    def _collect_loop(self):        
-        while self.running:
-            # Update to latest model weights
-            self._update_model_weights()
-            
-            # Collect rollout
             trajectories, extras = collect_rollouts(
                 self.env,
                 self.policy_model,
-                self.value_model,
+                value_model=self.value_model,
                 n_steps=self.n_steps,
                 last_obs=self.last_obs
             )
-            
-            self.last_obs = extras['last_obs']
-            
-            # Put rollout in queue (non-blocking, drop if full)
-            try:
-                self.rollout_queue.put(trajectories, block=False)
-            except queue.Full:
-                # Queue is full, drop oldest and add new
-                try:
-                    self.rollout_queue.get_nowait()
-                    self.rollout_queue.put(trajectories, block=False)
-                except queue.Empty:
-                    pass
-
-
+            self.last_obs = extras['last_obs'] # TODO: could I get rid of this if I used a generator?
+            return trajectories
+        finally:
+            self.policy_model.train()
+            if self.value_model: self.value_model.train()

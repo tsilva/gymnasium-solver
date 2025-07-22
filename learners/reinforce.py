@@ -49,6 +49,7 @@ class REINFORCELoss:
         log_probs = dist.log_prob(actions)
         entropy = dist.entropy().mean()
         
+        # TODO: why does this work with returns detached?
         # Ensure returns are detached from any previous computation graph
         returns_detached = returns.detach()
         

@@ -44,7 +44,9 @@ class Learner(pl.LightningModule):
 
     def train_dataloader(self):
         #device = _device_of(self.policy_model) # models are alredy in correct device ehre
-        return self.train_rollout_collector.create_dataloader(self.config.batch_size)
+        _, stats, dataloader = self.train_rollout_collector.create_dataloader(self.config.batch_size)
+        #self.logger.experiment.log_dict(stats, on_step=False, on_epoch=True)#, prefix="train") # TODO: what are the on_step/on_epoch defaults?
+        return dataloader
 
     def on_fit_start(self):
         self.training_start_time = time.time()
@@ -61,8 +63,9 @@ class Learner(pl.LightningModule):
         #self.metrics.reset()
         
         # Collect new rollout if needed
-        if (self.current_epoch + 1) % self.config.rollout_interval == 0:
-            _, stats = self.train_rollout_collector.collect_rollouts() # TODO: prefix keys?
+        # TODO: hack, skipping rollout collection for first epoch because a rollout was collected when the dataloader was created (this seems like a hack)
+        if self.current_epoch > 0 and (self.current_epoch + 1) % self.config.rollout_interval == 0:
+            _, stats = self.train_rollout_collector.collect_rollouts() # TODO: prefix keys? BUG: this is discarding first rollout
             self.log_dict(stats, on_step=False, on_epoch=True)#, prefix="train") # TODO: what are the on_step/on_epoch defaults?
             #self._collect_and_update_rollout()
 
@@ -76,20 +79,11 @@ class Learner(pl.LightningModule):
                 self.trainer.should_stop = True
 
     # TODO: log training step duration
-    def training_step(self, batch, batch_idx):
-        states, actions, rewards, dones, old_logps, values, advantages, returns, frames = batch
-
-        # Track total steps consumed by trainer
-        batch_size = states.size(0)
-        self.total_steps += batch_size
-
-        # Compute algorithm-specific losses and metrics
+    def training_step(self, batch, batch_idx): # TODO: should I call super?
+        self.total_steps += batch[0].size(0)
         loss_results = self.compute_loss(batch)
-
-        # Optimize models
         self.optimize_models(loss_results)
 
-        # TODO: do I need to return this?
-        #return sum(loss for key, loss in loss_results.items() if 'loss' in key)
-
+    def validation_step(self, *args, **kwargs):
+        return super().validation_step(*args, **kwargs)
     

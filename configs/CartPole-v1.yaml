@@ -2,7 +2,7 @@
 # Reference: https://github.com/DLR-RM/rl-baselines3-zoo/tree/master/hyperparams
 
 default:
-  train_rollout_steps: 512
+  train_rollout_steps: 2048
   batch_size: 256
   rollout_interval: 1
   eval_interval: 20

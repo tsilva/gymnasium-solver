@@ -17,10 +17,10 @@ class PPOLearner(Learner):
         self.ppo_loss = PPOLoss(config.clip_epsilon, config.entropy_coef)
 
     def compute_loss(self, batch):
-        states, actions, rewards, dones, old_logps, values, advantages, returns, frames = batch
+        states, actions, rewards, dones, old_logprobs, values, advantages, returns, frames = batch
         
         return self.ppo_loss.compute(
-            states, actions, old_logps, advantages, returns, 
+            states, actions, old_logprobs, advantages, returns, 
             self.policy_model, self.value_model
         )
         
@@ -45,7 +45,7 @@ class PPOLearner(Learner):
             torch.optim.Adam(self.value_model.parameters(), lr=self.config.value_lr)
         ]
 
-
+# TODO: move loss to learner
 class PPOLoss:
     def __init__(self, clip_epsilon, entropy_coef):
         self.clip_epsilon = clip_epsilon
@@ -59,27 +59,27 @@ class PPOLoss:
         new_logps = dist.log_prob(actions)
         
         # Detach tensors that come from rollout data to prevent in-place operation errors
-        old_logps_detached = old_logps.detach() # TODO: aren't these already detached?
-        advantages_detached = advantages.detach() # TODO: aren't these already detached?
-        returns_detached = returns.detach() # TODO: aren't these already detached?
+        #old_logps_detached = old_logps.detach() # TODO: aren't these already detached?
+        #advantages_detached = advantages.detach() # TODO: aren't these already detached?
+        #returns_detached = returns.detach() # TODO: aren't these already detached?
         
-        ratio = torch.exp(new_logps - old_logps_detached)
-        surr1 = ratio * advantages_detached
-        surr2 = torch.clamp(ratio, 1.0 - self.clip_epsilon, 1.0 + self.clip_epsilon) * advantages_detached
+        ratio = torch.exp(new_logps - old_logps)
+        surr1 = ratio * advantages
+        surr2 = torch.clamp(ratio, 1.0 - self.clip_epsilon, 1.0 + self.clip_epsilon) * advantages
         entropy = dist.entropy().mean()
         
         policy_loss = -torch.min(surr1, surr2).mean() - self.entropy_coef * entropy
         
         # Value loss
         # TODO: softcode value scaling coefficient
-        value_loss = 0.5 * ((returns_detached - value_pred) ** 2).mean()
+        value_loss = 0.5 * ((returns - value_pred) ** 2).mean()
         
         # Metrics (detached for logging)
         clip_fraction = ((ratio < 1.0 - self.clip_epsilon) | (ratio > 1.0 + self.clip_epsilon)).float().mean()
-        kl_div = (old_logps_detached - new_logps).mean()
+        kl_div = (old_logps - new_logps).mean()
         approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
-        explained_var = 1 - torch.var(returns_detached - value_pred.detach()) / torch.var(returns_detached)
-        
+        explained_var = 1 - torch.var(returns - value_pred.detach()) / torch.var(returns)
+
         result = {
             'policy_loss': policy_loss,
             'value_loss': value_loss,

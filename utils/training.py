@@ -24,7 +24,7 @@ def create_trainer(config, project_name=None, run_name=None):
     
     trainer = pl.Trainer(
         logger=wandb_logger,
-        log_every_n_steps=10,
+        log_every_n_steps=1,
         max_epochs=config.max_epochs,
         enable_progress_bar=True,
         enable_checkpointing=False,  # Disable checkpointing for speed

@@ -11,13 +11,13 @@ def _build_env(env_id, n_envs=1, seed=None, norm_obs=False, norm_reward=False):
     if norm_obs or norm_reward: env = VecNormalize(env, norm_obs=norm_obs, norm_reward=norm_reward)
     return env
 
-def setup_environment(config):
+def setup_environment(config, n_envs="auto"):
     """Setup environment with configuration."""
     from stable_baselines3.common.utils import set_random_seed
     set_random_seed(config.seed)
 
     # Create environment builder
-    def _build_env_fn(seed, n_envs=1):
+    def _build_env_fn(seed):
         return _build_env(
             config.env_id,
             norm_obs=config.normalize,

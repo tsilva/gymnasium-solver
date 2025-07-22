@@ -14,6 +14,8 @@ def _device_of(module: torch.nn.Module) -> torch.device:
 # TODO: batch value inference post rollout
 # TODO: consider returning transition object
 # TODO: log more stats
+# TODO: rename var names
+# TODO: look for bugs
 def collect_rollouts(
     env,
     policy_model: torch.nn.Module,
@@ -50,19 +52,8 @@ def collect_rollouts(
     device: torch.device = _device_of(policy_model)
     n_envs: int = env.num_envs
 
-    # ------------------------------------------------------------------
-    # 1. Buffers (dynamic lists — we'll stack/concat later)
-    # ------------------------------------------------------------------
-    obs_buf: list[np.ndarray] = []
-    actions_buf: list[np.ndarray] = []
-    rewards_buf: list[np.ndarray] = []
-    done_buf: list[np.ndarray] = []
-    logprobs_buf: list[np.ndarray] = []
-    values_buf: list[np.ndarray] = []
-    frame_buf: list[Sequence[np.ndarray]] = []
-
-    step_count = 0
-    episode_count = 0 # why does this appear as a numpy value in the debugger?
+    total_step_count = 0
+    total_episode_count = 0 # why does this appear as a numpy value in the debugger?
 
     env_reward = np.zeros(n_envs, dtype=np.float32)  # TODO: should this be a deque?
     env_length = np.zeros(n_envs, dtype=np.int32)  # TODO: should this be a deque?
@@ -98,6 +89,20 @@ def collect_rollouts(
     # Generator loop
     while True:
         # Rollout collection loop 
+        rollout_step_count = 0
+        rollout_episode_count = 0
+
+        # ------------------------------------------------------------------
+        # 1. Buffers (dynamic lists — we'll stack/concat later)
+        # ------------------------------------------------------------------
+        obs_buf: list[np.ndarray] = []
+        actions_buf: list[np.ndarray] = []
+        rewards_buf: list[np.ndarray] = []
+        done_buf: list[np.ndarray] = []
+        logprobs_buf: list[np.ndarray] = []
+        values_buf: list[np.ndarray] = []
+        frame_buf: list[Sequence[np.ndarray]] = []
+
         while True:
             # Use policy model to select action
             action_np, action_logp_np = _infer_policy(obs)
@@ -131,17 +136,19 @@ def collect_rollouts(
             obs = next_obs
 
             # Increment the number of steps taken
-            step_count += n_envs
+            rollout_step_count += n_envs
 
             # Increment the number of episodes completed 
             # so far (add number of envs that are done)
-            episode_count += done.sum()
+            rollout_episode_count += done.sum().item()
 
             # If we reached a stop condition, pause the rollout
             # TODO: rollout steps count vs total steps count
-            if n_steps is not None and step_count >= n_steps: break # TODO: do we want the n_steps to be per env or total?
-            if n_episodes is not None and episode_count >= n_episodes: break
+            if n_steps is not None and rollout_step_count >= n_steps: break # TODO: do we want the n_steps to be per env or total?
+            if n_episodes is not None and rollout_episode_count >= n_episodes: break
 
+        total_episode_count += rollout_episode_count
+        total_step_count += rollout_step_count
         # ------------------------------------------------------------------
         # 3. Bootstrap value for the next state of each env
         # ------------------------------------------------------------------
@@ -168,9 +175,10 @@ def collect_rollouts(
         # Pre‑compute the mask that tells us whether each step is terminal (0) or not (1).
         non_terminal = 1.0 - dones_arr.astype(np.float32)
 
+        # TODO: move advantage calculation out of rollout collector?
         # Start with the value *after* the last step (bootstrapped estimate) …
         next_non_terminal = non_terminal[-1]
-        T = step_count // n_envs  # Total number of time steps
+        T = rollout_step_count // n_envs  # Total number of time steps
         for t in reversed(range(T)):
             # Generalised Advantage Estimation update
             delta = rewards_arr[t] + gamma * next_value * next_non_terminal - values_arr[t]
@@ -230,10 +238,10 @@ def collect_rollouts(
             frames_env_major,
         )
         stats = {
-            'n_episodes': episode_count,
-            'n_steps': step_count,
-            'mean_ep_reward': np.mean(episode_reward_deque) if len(episode_reward_deque) > 0 else 0,
-            'mean_ep_length': np.mean(episode_length_deque) if len(episode_length_deque) > 0 else 0
+            'n_episodes': total_episode_count,
+            'n_steps': rollout_step_count,
+            'mean_ep_reward': np.mean(episode_reward_deque).item() if len(episode_reward_deque) > 0 else 0,
+            'mean_ep_length': np.mean(episode_length_deque).item() if len(episode_length_deque) > 0 else 0
         }
         yield trajectories, stats
 
@@ -270,10 +278,12 @@ class RolloutDataset(TorchDataset):
 
     def __len__(self):
         if self.trajectories is None: return 0
-        return len(self.trajectories[0])
+        length = len(self.trajectories[0])
+        return length
 
     def __getitem__(self, idx):
-        return tuple(t[idx] for t in self.trajectories)
+        item = tuple(t[idx] for t in self.trajectories)
+        return item
 
 def _device_of(module: torch.nn.Module) -> torch.device:
     return next(module.parameters()).device
@@ -293,8 +303,8 @@ class SyncRolloutCollector():
 
     def create_dataloader(self, batch_size: int = 64):
         # TODO: ensure a rollout is created before creating the dataloader
-        self.collect_rollouts() # TODO: this seems fishy, what if it was already called
-        return DataLoader(
+        trajectories, stats = self.collect_rollouts() # TODO: this seems fishy, what if it was already called
+        dataloader = DataLoader(
             self.dataset,
             batch_size=batch_size,
             shuffle=True,
@@ -306,6 +316,7 @@ class SyncRolloutCollector():
             # Using multiple workers stalls the start of each epoch when persistent workers are disabled
             #num_workers=multiprocessing.cpu_count() // 2 if self.device.type != 'mps' else 0
         )
+        return trajectories, stats, dataloader
     
     # TODO: should this be called collect_rollout instead?
     # TODO: should this be a generator?
@@ -326,7 +337,7 @@ class SyncRolloutCollector():
 
     def _collect_rollouts(self):
         if not self.generator:
-            self.generator = collect_rollouts(
+            self.generator = collect_rollouts( # TODO: don't return tensors, return numpy arrays?
                 self.env,
                 self.policy_model,
                 value_model=self.value_model,

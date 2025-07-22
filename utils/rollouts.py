@@ -3,6 +3,8 @@ import numpy as np
 from typing import Optional, Tuple, Sequence
 from torch.utils.data import Dataset as TorchDataset
 from torch.distributions import Categorical
+from torch.utils.data import DataLoader
+from collections import deque
 
 # TODO: is this needed?
 def _device_of(module: torch.nn.Module) -> torch.device:
@@ -236,8 +238,6 @@ def group_trajectories_by_episode(trajectories, max_episodes=None):#
 
     return episodes
 
-
-
 # TODO: add test script for collection using dataset/dataloader
 # TODO: should dataloader move to gpu?
 class RolloutDataset(TorchDataset):
@@ -249,6 +249,7 @@ class RolloutDataset(TorchDataset):
         self.trajectories = trajectories
 
     def __len__(self):
+        if self.trajectories is None: return 0
         return len(self.trajectories[0])
 
     def __getitem__(self, idx):
@@ -261,9 +262,27 @@ class SyncRolloutCollector():
         self.policy_model = policy_model
         self.value_model = value_model
         self.n_steps = n_steps
+        self.dataset = RolloutDataset()
+        
+        # TODO: move inside rollout collector?
+        self.episode_reward_deque = deque(maxlen=100)#TODO: softcode config.mean_reward_window)
 
         self.last_obs = None
 
+    def create_dataloader(self, batch_size: int = 64):
+        return DataLoader(
+            self.dataset,
+            batch_size=64,
+            shuffle=True,
+            # TODO: fix num_workers, training not converging when they are on
+            # Pin memory is not supported on MPS
+            #pin_memory=True if self.device.type != 'mps' else False,
+            # TODO: Persistent workers + num_workers is fast but doesn't converge
+            #persistent_workers=True if self.device.type != 'mps' else False,
+            # Using multiple workers stalls the start of each epoch when persistent workers are disabled
+            #num_workers=multiprocessing.cpu_count() // 2 if self.device.type != 'mps' else 0
+        )
+    
     # TODO: should this be called collect_rollout instead?
     # TODO: should this be a generator?
     # TODO: create decorator that ensures models are in eval mode until function end and then restores them to origial mode (eval or train)
@@ -278,6 +297,12 @@ class SyncRolloutCollector():
                 n_steps=self.n_steps,
                 last_obs=self.last_obs
             )
+            self.dataset.update(*trajectories)
+            
+            episodes = group_trajectories_by_episode(trajectories) # TODO: this is broken, as well as all other places that group per episode, because some episodes are lost in process
+            episode_rewards = [sum(step[2] for step in episode) for episode in episodes]
+            for r in episode_rewards: self.episode_reward_deque.append(float(r))
+
             self.last_obs = extras['last_obs'] # TODO: could I get rid of this if I used a generator?
             return trajectories
         finally:

@@ -7,6 +7,8 @@ class PPOLearner(Learner):
     
     def __init__(self, config, train_rollout_collector, policy_model, value_model=None, eval_rollout_collector=None):
         super().__init__(config, train_rollout_collector, policy_model, value_model=value_model, eval_rollout_collector=eval_rollout_collector)
+        
+        # TODO: review how save_hyperparameters works
         self.save_hyperparameters(ignore=['train_rollout_collector', 'policy_model', 'value_model', 'eval_rollout_collector'])
         
         self.policy_model = policy_model
@@ -15,7 +17,6 @@ class PPOLearner(Learner):
         self.ppo_loss = PPOLoss(config.clip_epsilon, config.entropy_coef)
 
     def compute_loss(self, batch):
-        """Compute PPO-specific losses"""
         states, actions, rewards, dones, old_logps, values, advantages, returns, frames = batch
         
         return self.ppo_loss.compute(
@@ -26,17 +27,17 @@ class PPOLearner(Learner):
     def optimize_models(self, loss_results):
         """Optimize PPO policy and value models"""
         # Separate optimizers for policy and value
-        opt_policy, opt_value = self.optimizers()
+        policy_optimizer, value_optimizer = self.optimizers()
         
         # Optimize policy
-        opt_policy.zero_grad()
+        policy_optimizer.zero_grad()
         self.manual_backward(loss_results['policy_loss'])
-        opt_policy.step()
+        policy_optimizer.step()
 
         # Optimize value function
-        opt_value.zero_grad()
+        value_optimizer.zero_grad()
         self.manual_backward(loss_results['value_loss'])
-        opt_value.step()
+        value_optimizer.step()
 
     def configure_optimizers(self):
         return [
@@ -58,9 +59,9 @@ class PPOLoss:
         new_logps = dist.log_prob(actions)
         
         # Detach tensors that come from rollout data to prevent in-place operation errors
-        old_logps_detached = old_logps.detach()
-        advantages_detached = advantages.detach()
-        returns_detached = returns.detach()
+        old_logps_detached = old_logps.detach() # TODO: aren't these already detached?
+        advantages_detached = advantages.detach() # TODO: aren't these already detached?
+        returns_detached = returns.detach() # TODO: aren't these already detached?
         
         ratio = torch.exp(new_logps - old_logps_detached)
         surr1 = ratio * advantages_detached
@@ -70,6 +71,7 @@ class PPOLoss:
         policy_loss = -torch.min(surr1, surr2).mean() - self.entropy_coef * entropy
         
         # Value loss
+        # TODO: softcode value scaling coefficient
         value_loss = 0.5 * ((returns_detached - value_pred) ** 2).mean()
         
         # Metrics (detached for logging)

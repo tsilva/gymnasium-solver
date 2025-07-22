@@ -1,10 +1,8 @@
 import time
-from collections import deque
 import numpy as np
 import pytorch_lightning as pl
-from torch.utils.data import DataLoader
-from utils.rollouts import (group_trajectories_by_episode, RolloutDataset)
-from tsilva_notebook_utils.gymnasium import MetricTracker
+from utils.rollouts import (group_trajectories_by_episode)
+#from tsilva_notebook_utils.gymnasium import MetricTracker
 
 # ---------------------------------------------------------------------
 class Learner(pl.LightningModule):
@@ -19,13 +17,8 @@ class Learner(pl.LightningModule):
         # Common RL components
         self.train_rollout_collector = train_rollout_collector
         self.eval_rollout_collector = eval_rollout_collector
-        self.metrics = MetricTracker(self)
+        #self.metrics = MetricTracker(self)
 
-        # TODO: move inside rollout collector?
-        self.rollout_ds = RolloutDataset()
-        # TODO: move inside rollout collector?
-        self.episode_reward_deque = deque(maxlen=config.mean_reward_window)
-        
         self.policy_model = policy_model
         self.value_model = value_model
         
@@ -49,28 +42,10 @@ class Learner(pl.LightningModule):
         if stage == "fit": self._setup_stage_fit()
     
     def _setup_stage_fit(self):
-        # Initialize rollout collectors
-        #self.train_rollout_collector.start()
-        #self.eval_rollout_collector.start()
-        
-        # Collect 
-        trajectories = self.train_rollout_collector.collect_rollouts()
-        self._update_rollout_data(trajectories)
+        self.train_rollout_collector.collect_rollouts()
 
     def train_dataloader(self):
-        # TODO: encapsulate data loader inside rollout collector
-        return DataLoader(
-            self.rollout_ds,
-            batch_size=self.config.batch_size,
-            shuffle=True,
-            # TODO: fix num_workers, training not converging when they are on
-            # Pin memory is not supported on MPS
-            #pin_memory=True if self.device.type != 'mps' else False,
-            # TODO: Persistent workers + num_workers is fast but doesn't converge
-            #persistent_workers=True if self.device.type != 'mps' else False,
-            # Using multiple workers stalls the start of each epoch when persistent workers are disabled
-            #num_workers=multiprocessing.cpu_count() // 2 if self.device.type != 'mps' else 0
-        )
+        return self.train_rollout_collector.create_dataloader(self.config.batch_size)
 
     def on_fit_start(self):
         self.training_start_time = time.time()
@@ -84,17 +59,18 @@ class Learner(pl.LightningModule):
 
     # TODO: log train epoch duration
     def on_train_epoch_start(self):
-        self.metrics.reset()
+        #self.metrics.reset()
         
         # Collect new rollout if needed
         if (self.current_epoch + 1) % self.config.rollout_interval == 0:
-            self._collect_and_update_rollout()
+            self.train_rollout_collector.collect_rollouts()
+            #self._collect_and_update_rollout()
 
     def on_train_epoch_end(self):
         # Log epoch metrics
-        epoch_metrics = self.metrics.compute_epoch_means()
-        if epoch_metrics:
-            self.metrics.log_metrics(epoch_metrics, prefix="epoch")
+        #epoch_metrics = self.metrics.compute_epoch_means()
+        #if epoch_metrics:
+        #    self.metrics.log_metrics(epoch_metrics, prefix="epoch")
         
         # Evaluation
         if (self.current_epoch + 1) % self.config.eval_interval == 0: self._check_eval_early_stop()
@@ -111,7 +87,7 @@ class Learner(pl.LightningModule):
         loss_results = self.compute_loss(batch)
 
         # Track step metrics
-        self.metrics.add_step_metrics(loss_results)
+        #self.metrics.add_step_metrics(loss_results)
 
         # Optimize models
         self.optimize_models(loss_results)
@@ -120,29 +96,15 @@ class Learner(pl.LightningModule):
         self._log_training_metrics(loss_results, advantages, values, returns)
 
         return sum(loss for key, loss in loss_results.items() if 'loss' in key)
-
-    # TODO: move this inside rollout collector
-    def _collect_and_update_rollout(self):
-        """Collect and update rollout data"""
-        trajectories = self.train_rollout_collector.collect_rollouts()
-        self._update_rollout_data(trajectories)
     
-    # TODO: move this inside rollout collector
-    def _update_rollout_data(self, trajectories):
-        """Update rollout dataset and episode rewards"""
-        self.rollout_ds.update(*trajectories)
-        episodes = group_trajectories_by_episode(trajectories) # TODO: this is broken, as well as all other places that group per episode, because some episodes are lost in process
-        episode_rewards = [sum(step[2] for step in episode) for episode in episodes]
-        for r in episode_rewards: self.episode_reward_deque.append(float(r))
-
     # TODO: make all training metrics be logged in end of epoch
     def _log_training_metrics(self, loss_results, advantages, values, returns):
         """Log common training metrics"""
-        mean_reward = np.mean(self.episode_reward_deque) if len(self.episode_reward_deque) > 0 else 0
+       # mean_reward = np.mean(self.episode_reward_deque) if len(self.episode_reward_deque) > 0 else 0
         
         # Core metrics that most algorithms will have
         train_metrics = {
-            'mean_reward': mean_reward,
+           # 'mean_reward': mean_reward,
             'total_steps': self.total_steps,
         }
         
@@ -163,8 +125,8 @@ class Learner(pl.LightningModule):
             if key not in train_metrics and key not in additional_metrics:
                 additional_metrics[key] = value
         
-        self.metrics.log_metrics(train_metrics, prefix="train", prog_bar=True)
-        self.metrics.log_metrics(additional_metrics, prefix="train", prog_bar=False)
+        #self.metrics.log_metrics(train_metrics, prefix="train", prog_bar=True)
+        #self.metrics.log_metrics(additional_metrics, prefix="train", prog_bar=False)
 
     # TODO: this measurement is incorrect because we get different number of episodes each time
     # TODO: drop most of this codebase, just want to pass rollout collector inside
@@ -185,7 +147,7 @@ class Learner(pl.LightningModule):
             #'time_elapsed': elapsed,
             #'steps_per_second': len(trajectories[0]) / (elapsed + 1e-3)
         }
-        self.metrics.log_metrics(rollout_metrics, prefix="eval")
+        #self.metrics.log_metrics(rollout_metrics, prefix="eval")
 
         # TODO: can't log twice
         # self.metrics.log_single('eval/mean_reward', mean_episode_reward, prog_bar=True)

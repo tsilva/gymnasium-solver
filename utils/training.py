@@ -3,8 +3,7 @@
 import wandb
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
-from tsilva_notebook_utils.lightning import WandbCleanup
-from utils.rollouts import SyncRolloutCollector
+#from tsilva_notebook_utils.lightning import WandbCleanup
 
     
 
@@ -30,7 +29,7 @@ def create_trainer(config, project_name=None, run_name=None):
         enable_progress_bar=True,
         enable_checkpointing=False,  # Disable checkpointing for speed
         accelerator="auto",
-        callbacks=[WandbCleanup()]
+       #callbacks=[WandbCleanup()]
     )
     
     return trainer

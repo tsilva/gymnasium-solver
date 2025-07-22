@@ -50,8 +50,8 @@ def collect_rollouts(
     # 1. Buffers (dynamic lists — we'll stack/concat later)
     # ------------------------------------------------------------------
     obs_buf: list[np.ndarray] = []
-    act_buf: list[np.ndarray] = []
-    rew_buf: list[np.ndarray] = []
+    actions_buf: list[np.ndarray] = []
+    rewards_buf: list[np.ndarray] = []
     done_buf: list[np.ndarray] = []
     logprobs_buf: list[np.ndarray] = []
     values_buf: list[np.ndarray] = []
@@ -80,9 +80,9 @@ def collect_rollouts(
             logits = policy_model(obs_t)
             dist = Categorical(logits=logits)
             action_t = dist.sample() if not deterministic else logits.argmax(-1)
-            action_logp_t = dist.log_prob(action_t)
+            lobprob_t = dist.log_prob(action_t)
             action_np = action_t.cpu().numpy()
-            action_logp_np = action_logp_t.cpu().numpy()
+            action_logp_np = lobprob_t.cpu().numpy()
             return action_np, action_logp_np
 
     # If last_obs is provided, we need to ensure it is on the correct device
@@ -100,9 +100,9 @@ def collect_rollouts(
         # NOTE: observation is copied to avoid issues with environments that mutate their observation arrays
         obs_buf.append(obs.copy())
         values_buf.append(value_np)
-        act_buf.append(action_np)
+        actions_buf.append(action_np)
         logprobs_buf.append(action_logp_np)
-        rew_buf.append(reward)
+        rewards_buf.append(reward)
         done_buf.append(done)
         if collect_frames: frame_buf.append(env.get_images())
         
@@ -131,9 +131,9 @@ def collect_rollouts(
     # TODO: not sure what this is
     obs_arr = np.stack(obs_buf)  # (T, E, obs)
     values_arr = np.stack(values_buf)
-    actions_arr = np.stack(act_buf)
+    actions_arr = np.stack(actions_buf)
     logprobs_arr = np.stack(logprobs_buf)
-    rewards_arr = np.stack(rew_buf)
+    rewards_arr = np.stack(rewards_buf)
     dones_arr = np.stack(done_buf)
     
     # ------------------------------------------------------------------

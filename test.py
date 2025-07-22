@@ -56,15 +56,14 @@ train_rollout_collector = SyncRolloutCollector(
 )
 
 # %%
-trajectories = train_rollout_collector.collect_rollouts() # TODO: consider making get rollout be async method even in sync rollout?
-sum(1 if t else 0 for t in trajectories[3]), len(trajectories[3])
+#trajectories, stats = train_rollout_collector.collect_rollouts() # TODO: consider making get rollout be async method even in sync rollout?
+#sum(1 if t else 0 for t in trajectories[3]), len(trajectories[3])
 
 # %% [markdown]
 # Define models:
 
 # %%
 from utils.training import create_trainer
-from tsilva_notebook_utils.torch import get_default_device # TODO: get rid of tsilva_noteb
 from utils.rollouts import SyncRolloutCollector # TODO: restore async functionality
 from utils.models import PolicyNet, ValueNet
 from learners.ppo import PPOLearner

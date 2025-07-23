@@ -1,7 +1,7 @@
 - Benchmark rollout collector, improve speed
 - Run training from notebook again and make sure eval/rendering works
 
-
+- Add support for different rollout collecotrs for different envs (for multitask learning)
 - Add support for multitask heads based on envid and/or controller type
 - Make sure rollout evals are closed
 - When I group by episodes I discard data from that rollout that won't be included in the next sequence of trajectories, so I need to make sure I don't lose data

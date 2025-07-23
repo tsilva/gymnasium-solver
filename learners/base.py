@@ -60,8 +60,6 @@ class Learner(pl.LightningModule):
 
     # TODO: log train epoch duration
     def on_train_epoch_start(self):
-        #self.metrics.reset()
-        
         # Collect new rollout if needed
         # TODO: hack, skipping rollout collection for first epoch because a rollout was collected when the dataloader was created (this seems like a hack)
         if self.current_epoch > 0 and (self.current_epoch + 1) % self.config.rollout_interval == 0:

@@ -245,28 +245,6 @@ def collect_rollouts(
         }
         yield trajectories, stats
 
-"""
-def group_trajectories_by_episode(trajectories, max_episodes=None):
-    episodes = []
-    episode = []
-
-    T = trajectories[0].shape[0]  # number of time steps
-
-    for t in range(T):
-        step = tuple(x[t] for x in trajectories)  # (state, action, reward, done, ...)
-        episode.append(step)
-        done = step[3]
-        if done.item():  # convert tensor to bool
-            episodes.append(episode)
-            episode = []
-            
-            # Stop if we've collected enough complete episodes
-            if max_episodes is not None and len(episodes) >= max_episodes:
-                break
-
-    return episodes
-"""
-
 # TODO: add test script for collection using dataset/dataloader
 # TODO: should dataloader move to gpu?
 class RolloutDataset(TorchDataset):

@@ -1,4 +1,8 @@
+- Add max_grad_norm support (0.5 for cartpole)
+- Add value baseline support for reinforce
+- train_rollout_steps_per_env
 - Match sb3rlzoo performance
+- Add support for softcoding activations
 - Match sb3rlzoo metric names
 - Fix reinforce algo
 - Benchmark rollout collector, improve speed

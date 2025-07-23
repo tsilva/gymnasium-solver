@@ -11,7 +11,7 @@ def build_env(env_id, n_envs=1, seed=None, norm_obs=False, norm_reward=False):
     if norm_obs or norm_reward: env = VecNormalize(env, norm_obs=norm_obs, norm_reward=norm_reward)
     return env
 
-def log_env_info(env) -> None:
+def _old_log_env_info(env) -> None:
     """Print key attributes of an environment or a vec-env.
 
     Handles:
@@ -96,6 +96,106 @@ def log_env_info(env) -> None:
     print(f"  Max episode steps: {max_steps}")
 
 
+import numpy as np
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+from typing import Dict, Any
+
+
+# ───────────────────────── helpers ─────────────────────────────────────────────
+def _compact(arr: np.ndarray) -> str:
+    """Return a 1-D array as '[a, b, c]' with exactly one space after commas."""
+    def fmt(x):
+        if np.isposinf(x):
+            return "inf"
+        if np.isneginf(x):
+            return "-inf"
+        return f"{x:.3g}"          # 3 significant digits, no extra padding
+    return "[" + ", ".join(fmt(v) for v in arr.ravel()) + "]"
+
+
+def _fmt_space(space) -> str:
+    """Pretty-print Box / Discrete / etc. with compact low/high arrays."""
+    if hasattr(space, "low") and hasattr(space, "high"):
+        low  = _compact(space.low)
+        high = _compact(space.high)
+        return (f"{space.__class__.__name__}"
+                f"(low={low}, high={high}, shape={space.shape}, dtype={space.dtype})")
+    return str(space)
+
+
+# ──────────────────────── data-gathering core ────────────────────────────────
+def get_env_spec(env) -> Dict[str, Any]:
+    """
+    Inspect an environment (plain, DummyVecEnv, or SubprocVecEnv) and return the
+    key characteristics in a dictionary.  No printing here.
+    """
+    # 1) Detect vec-env type and pick a sub-env handle when possible
+    if isinstance(env, DummyVecEnv):
+        vec_kind, n = "DummyVecEnv", len(env.envs)
+        base_env    = env.envs[0]                  # local object
+    elif isinstance(env, SubprocVecEnv):
+        vec_kind, n = "SubprocVecEnv", env.num_envs
+        base_env    = None                         # must query via RPC
+    else:
+        vec_kind, n = None, 1                      # single or wrapped env
+        base_env    = env
+
+    # 2) Safe remote attribute fetcher for SubprocVecEnv
+    def remote_attr(name):
+        if not isinstance(env, SubprocVecEnv):
+            return None
+        try:
+            return env.get_attr(name, indices=0)[0]
+        except Exception:
+            return None                            # Attribute missing → None
+
+    # 3) Gather ID, max-steps, reward range
+    if base_env is not None:                       # DummyVecEnv or plain env
+        spec       = getattr(base_env, "spec", None)
+        env_id     = getattr(spec, "id", None) or getattr(base_env, "id", "Unknown")
+        max_steps  = getattr(spec, "max_episode_steps", None) \
+                     or getattr(base_env, "_max_episode_steps", "Unknown")
+        reward_rng = getattr(base_env, "reward_range", None)  # Gym only
+    else:                                          # SubprocVecEnv
+        spec       = remote_attr("spec")
+        env_id     = getattr(spec, "id", None) or remote_attr("id") or "Unknown"
+        max_steps  = getattr(spec, "max_episode_steps", None) \
+                     or remote_attr("_max_episode_steps") or "Unknown"
+        reward_rng = None                          # don’t fetch reward_range remotely
+
+    # 4) Observation / action spaces are exposed on the vec-env itself
+    obs_space = env.observation_space
+    act_space = env.action_space
+
+    # 5) Assemble dictionary
+    return {
+        "vec_kind"      : vec_kind,
+        "num_envs"      : n,
+        "env_id"        : env_id,
+        "obs_space_str" : _fmt_space(obs_space),
+        "act_space_str" : _fmt_space(act_space),
+        "input_dim"    : int(env.observation_space.shape[0]),
+        "output_dim"   : int(env.action_space.n),
+        "reward_range"  : reward_rng,
+        "max_steps"     : max_steps,
+    }
+
+
+# ─────────────────────── public logging helper ───────────────────────────────
+def log_env_info(env) -> None:
+    """Pretty-print the information returned by `gather_env_info`."""
+    info = get_env_spec(env)
+
+    header = (f"Environment Info ({info['vec_kind']} with {info['num_envs']} envs)"
+              if info["vec_kind"] else "Environment Info")
+    print(header)
+    print(f"  Env ID: {info['env_id']}")
+    print(f"  Observation space: {info['obs_space_str']}")
+    print(f"  Action space: {info['act_space_str']}")
+    if info["reward_range"] is not None:
+        print(f"  Reward range: {info['reward_range']}")
+    print(f"  Max episode steps: {info['max_steps']}")
+    
 import numpy as np
 from typing import Iterable, Tuple
 import os

@@ -2,17 +2,21 @@
 # Reference: https://github.com/DLR-RM/rl-baselines3-zoo/tree/master/hyperparams
 
 default:
-  reward_threshold: 475
-  rollout_interval: 1
+  eval_reward_threshold: 475
+  train_rollout_interval: 1
   train_rollout_steps: 2048
-  batch_size: 2048
-  eval_interval: 10
-  eval_episodes: 10
+  train_batch_size: 256
+  eval_rollout_interval: 10
+  eval_rollout_episodes: 10
   hidden_dims: [64, 64]
+  gamma: 1.0
+  entropy_coef: 0.0 
 
 reinforce:
-  policy_lr: 5e-3
+  policy_lr: 1e-3
 
 ppo:
-  policy_lr: 0.001
-  value_lr: 0.001
+  policy_lr: 1e-3
+  value_lr: 1e-3
+  lam: 0.95
+  clip_epsilon: 0.2

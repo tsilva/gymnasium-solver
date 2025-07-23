@@ -9,13 +9,15 @@ max_epochs: -1
 gamma: 0.99
 lam: 0.95
 clip_epsilon: 0.2
-batch_size: 64
-train_rollout_steps: 2048
+
+train_rollout_interval: 1
+train_rollout_steps: 128
+train_batch_size: 64
 
 # Evaluation
-eval_interval: 10
-eval_episodes: 32
-reward_threshold: 200
+#eval_rollout_interval: 10
+#eval_rollout_episodes: 32
+#eval_reward_threshold: 200
 
 # Networks
 policy_lr: 0.0003
@@ -24,6 +26,6 @@ hidden_dims: [64]
 entropy_coef: 0.01
 
 # Other
-normalize: false
+normalize_obs: false
+normalize_reward: false
 mean_reward_window: 100
-rollout_interval: 10

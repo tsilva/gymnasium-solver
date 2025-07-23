@@ -1,4 +1,6 @@
 import time
+import json
+from dataclasses import  asdict
 import pytorch_lightning as pl
 from torch.utils.data import Dataset as TorchDataset
 from torch.utils.data import DataLoader
@@ -37,6 +39,8 @@ class BaseAgent(pl.LightningModule):
         config = load_config(env_id, algo_id)
         self.config = config
 
+        print(json.dumps(asdict(config), indent=2))
+
         # TODO: should I set this before training starts? think deeply to where this should be set
         from stable_baselines3.common.utils import set_random_seed
         set_random_seed(config.seed)
@@ -45,40 +49,40 @@ class BaseAgent(pl.LightningModule):
         from utils.environment import build_env
         build_env_fn = lambda seed: build_env(
             config.env_id,
-            norm_obs=config.normalize,
+            norm_obs=config.normalize_obs,
+            norm_reward=config.normalize_reward,
             n_envs=n_envs,
             seed=seed
         )
         self.build_env_fn = build_env_fn
         
-        # TODO: move this inside config?
-        env = build_env_fn(config.seed)
-        config.input_dim = env.observation_space.shape[0]
-        config.output_dim = env.action_space.n
-
-        policy_model = PolicyNet(config.input_dim, config.output_dim, config.hidden_dims)
+        input_dim = config.env_spec['input_dim']
+        output_dim = config.env_spec['output_dim']
+        policy_model = PolicyNet(input_dim, output_dim, config.hidden_dims)
         self.policy_model = policy_model
 
         # TODO: softcode this better
-        value_model = ValueNet(config.input_dim, config.hidden_dims) if config.algo_id == "ppo" else None
+        value_model = ValueNet(input_dim, config.hidden_dims) if config.algo_id == "ppo" else None
         self.value_model = value_model
 
         # Common RL components
+        # TODO: create this only for training? create on_fit_start() and destroy with on_fit_end()?
+        self.rollout_dataset = RolloutDataset()
         self.train_rollout_collector = SyncRolloutCollector(
             build_env_fn(config.seed),
             policy_model,
             value_model=value_model,
             n_steps=config.train_rollout_steps
         )
+
+        # TODO: create a new one each eval with a different seed
         self.eval_rollout_collector = SyncRolloutCollector(
             # TODO: pass env factory and rebuild env on start/stop? this allows using same rollout collector for final evaluation
             build_env_fn(config.seed + 1000),
             policy_model,
-            n_episodes=config.eval_episodes,
+            n_episodes=config.eval_rollout_episodes,
             deterministic=True
         )
-
-        self.rollout_dataset = RolloutDataset()
 
         # Training state
         self.automatic_optimization = False
@@ -105,7 +109,7 @@ class BaseAgent(pl.LightningModule):
         # TODO: does this approach work where we swap the data underneath the dataloader between epochs?
         return DataLoader(
             self.rollout_dataset,
-            batch_size=self.config.batch_size,
+            batch_size=self.config.train_batch_size,
             shuffle=True,
             # TODO: fix num_workers, training not converging when they are on
             # Pin memory is not supported on MPS
@@ -138,16 +142,22 @@ class BaseAgent(pl.LightningModule):
 
     def on_train_epoch_end(self):
         if self._train_rollout_stats:
+            mean_ep_reward = self._train_rollout_stats["mean_ep_reward"]
             self.log_metrics(self._train_rollout_stats, prog_bar=["mean_ep_reward"], prefix="train")
             self._train_rollout_stats = None  # Reset stats after logging
 
-        if (self.current_epoch + 1) % self.config.eval_interval == 0: 
+            if self.config.train_reward_threshold and mean_ep_reward >= self.config.train_reward_threshold:
+                print(f"Early stopping at epoch {self.current_epoch} with train mean reward {mean_ep_reward:.2f} >= threshold {self.config.train_reward_threshold}")
+                self.trainer.should_stop = True
+
+
+        if (self.current_epoch + 1) % self.config.eval_rollout_interval == 0: 
             _, stats = self.eval_rollout_collector.collect() # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
             self.log_metrics(stats, prog_bar=["mean_ep_reward"], prefix="eval")
             
             mean_ep_reward = stats['mean_ep_reward']
-            if mean_ep_reward >= self.config.reward_threshold: # TODO; change to eval_reward_threshold
-                print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {mean_ep_reward:.2f} >= threshold {self.config.reward_threshold}")
+            if self.config.eval_reward_threshold and mean_ep_reward >= self.config.eval_reward_threshold:
+                print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {mean_ep_reward:.2f} >= threshold {self.config.eval_reward_threshold}")
                 self.trainer.should_stop = True
 
     # TODO: when does this run? should I run eval_rollout_collector here?
@@ -180,7 +190,7 @@ class BaseAgent(pl.LightningModule):
             enable_progress_bar=True,
             enable_checkpointing=False,  # Disable checkpointing for speed
             accelerator="auto",
-            reload_dataloaders_every_n_epochs=self.config.rollout_interval # TODO: train_rollout_interval
+            reload_dataloaders_every_n_epochs=self.config.train_rollout_interval
             #callbacks=[WandbCleanup()]
         )
         trainer.fit(self)

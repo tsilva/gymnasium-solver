@@ -18,7 +18,9 @@ def _convert_numeric_strings(config_dict: Dict[str, Any]) -> Dict[str, Any]:
                     pass  # Keep as string if conversion fails
     return config_dict
 
-
+# TODO: make some of these optional
+# TODO: add validation method 
+# TODO: another name for this class
 @dataclass
 class RLConfig:
     """Reinforcement Learning Configuration."""
@@ -27,19 +29,24 @@ class RLConfig:
     env_id: str
     algo_id: str
     seed: int = 42
+
+    env_spec: Dict[str, Any] = None  # Environment specification
     
     # Training
     max_epochs: int = -1
     gamma: float = 0.99
     lam: float = 0.95
     clip_epsilon: float = 0.2
-    batch_size: int = 64
+
+    train_rollout_interval: int = 10
     train_rollout_steps: int = 2048
+    train_reward_threshold: float = None
+    train_batch_size: int = 64
     
     # Evaluation
-    eval_interval: int = 10
-    eval_episodes: int = 32
-    reward_threshold: float = 200
+    eval_rollout_interval: int = 10
+    eval_rollout_episodes: int = 32
+    eval_reward_threshold: float = None
     
     # Networks
     policy_lr: float = 3e-4
@@ -48,9 +55,10 @@ class RLConfig:
     entropy_coef: float = 0.01
     
     # Other
-    normalize: bool = False
+    normalize_obs: bool = False
+    normalize_reward: bool = False
+
     mean_reward_window: int = 100
-    rollout_interval: int = 10
     
     @classmethod
     def load_from_yaml(cls, env_id: str, algo_id: str, config_dir: str = "configs") -> 'RLConfig':
@@ -91,6 +99,12 @@ class RLConfig:
         # Convert list values to tuples for hidden_dims
         if 'hidden_dims' in final_config and isinstance(final_config['hidden_dims'], list):
             final_config['hidden_dims'] = tuple(final_config['hidden_dims'])
+        
+        # TODO: better way to do this?
+        from utils.environment import build_env, get_env_spec
+        env = build_env(env_id)
+        env_spec = get_env_spec(env)
+        final_config['env_spec'] = env_spec
         
         return cls(**final_config)
 

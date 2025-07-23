@@ -13,6 +13,42 @@ import torch
 from torch.distributions import Categorical
 
 
+import torch.nn as nn
+from contextlib import contextmanager
+
+from contextlib import contextmanager
+import torch.nn as nn
+from typing import Optional, Union, List
+
+@contextmanager
+def eval_model(
+    models: Optional[Union[nn.Module, List[nn.Module], tuple]]
+):
+    """Temporarily sets models to eval mode, restoring their original state after.
+
+    Args:
+        models (None | nn.Module | list/tuple of nn.Module): Model(s) to set to eval.
+    """
+    if models is None:
+        yield
+        return
+
+    if isinstance(models, (nn.Module)):
+        models = [models]
+    elif not isinstance(models, (list, tuple)):
+        raise TypeError("Expected nn.Module, list, tuple, or None.")
+
+    original_modes = [model.training for model in models]
+
+    try:
+        for model in models:
+            model.eval()
+        yield
+    finally:
+        for model, was_training in zip(models, original_modes):
+            if was_training:
+                model.train()
+
 # TODO: is this needed?
 def _device_of(module: torch.nn.Module) -> torch.device:
     return next(module.parameters()).device
@@ -23,22 +59,9 @@ def _device_of(module: torch.nn.Module) -> torch.device:
 # TODO: log more stats
 # TODO: rename var names
 # TODO: look for bugs
-def collect_rollouts(env, policy_model, *args, value_model=None, **kwargs):
-    was_policy_train = policy_model.training
-    was_value_train = value_model.training if value_model else None
-    policy_model.eval()
-    if value_model: value_model.eval()
-    try:
-        return _collect_rollouts(
-            env, policy_model, *args, value_model=value_model, **kwargs
-        )
-    finally:
-        if was_policy_train: policy_model.train()
-        if was_value_train: value_model.train()
-
 # TODO: empirically torch.inference_mode() is not faster than torch.no_grad() for this use case, retest for other envs
 @torch.no_grad()
-def _collect_rollouts(
+def collect_rollouts(
     env,
     policy_model: torch.nn.Module,
     *,
@@ -59,13 +82,9 @@ def _collect_rollouts(
         n_episodes is not None and n_episodes > 0
     ), "Provide *n_steps*, *n_episodes*, or both (> 0)."
 
-    assert not policy_model.training, "Policy model must be in eval mode for rollouts."
-    if value_model is not None:
-        assert not value_model.training, "Value model must be in eval mode for rollouts."
-
     policy_device = _device_of(policy_model)
-    value_device = _device_of(value_model)
     if value_model is not None:
+        value_device = _device_of(value_model)
         assert (
             policy_device == value_device
         ), "Policy and value models must be on the same device."
@@ -88,12 +107,14 @@ def _collect_rollouts(
     # ------------------------------------------------------------------
     # 2. Helper fns ----------------------------------------------------
     # ------------------------------------------------------------------
+    @eval_model(value_model)
     def _bootstrap_value(obs_np: np.ndarray) -> np.ndarray:
         if value_model is None:
             return np.zeros((n_envs,), dtype=np.float32)
         obs_t = torch.as_tensor(obs_np, dtype=torch.float32, device=device)
         return value_model(obs_t).squeeze(-1).cpu().numpy()
 
+    @eval_model(policy_model)
     def _infer_policy(obs_np: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         obs_t = torch.as_tensor(obs_np, dtype=torch.float32, device=device)
         logits = policy_model(obs_t)
@@ -183,7 +204,7 @@ def _collect_rollouts(
                 dtype=torch.float32,
                 device=device,
             )
-            values_flat = value_model(obs_flat_t).squeeze(-1).cpu().numpy()
+            with eval_model(value_model): values_flat = value_model(obs_flat_t).squeeze(-1).cpu().numpy()
             values_arr = values_flat.reshape(T, n_envs)
 
         # Bootstrap value for the *next* state ------------------------

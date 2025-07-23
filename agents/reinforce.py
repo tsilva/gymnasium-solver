@@ -1,8 +1,8 @@
 import torch
 from torch.distributions import Categorical
-from .base import Learner
+from .base_agent import Agent
 
-class REINFORCELearner(Learner):
+class REINFORCE(Agent):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         

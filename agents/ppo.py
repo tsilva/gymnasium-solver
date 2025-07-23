@@ -1,8 +1,8 @@
 import torch
 from torch.distributions import Categorical
-from .base import Learner
+from .base_agent import BaseAgent
 
-class PPOLearner(Learner):
+class PPO(BaseAgent):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         

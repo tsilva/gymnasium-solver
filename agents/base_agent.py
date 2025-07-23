@@ -27,7 +27,7 @@ class RolloutDataset(TorchDataset):
         return item
     
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
-class Learner(pl.LightningModule):
+class BaseAgent(pl.LightningModule):
     
     def __init__(self, env_id: str, algo_id: str, n_envs: int = 1):
         super().__init__()

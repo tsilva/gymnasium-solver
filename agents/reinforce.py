@@ -1,13 +1,9 @@
 import torch
 from torch.distributions import Categorical
-from .base_agent import Agent
+from .base_agent import BaseAgent
 
-class REINFORCE(Agent):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        
-        self.save_hyperparameters(ignore=['build_env_fn', 'train_rollout_collector', 'policy_model', 'value_model', 'eval_rollout_collector'])
-
+class REINFORCE(BaseAgent):
+    
     def compute_loss(self, batch):
         states, actions, rewards, dones, old_logps, values, advantages, returns, frames = batch
         

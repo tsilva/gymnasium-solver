@@ -2,10 +2,8 @@ import time
 import pytorch_lightning as pl
 from torch.utils.data import Dataset as TorchDataset
 from torch.utils.data import DataLoader
-from utils.rollouts import SyncRolloutCollector # TODO: restore async functionality
 from utils.models import PolicyNet, ValueNet
 from utils.rollouts import SyncRolloutCollector
-from utils.models import PolicyNet, ValueNet
 from utils.config import load_config
 
 # TODO: add test script for collection using dataset/dataloader
@@ -29,14 +27,17 @@ class RolloutDataset(TorchDataset):
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class BaseAgent(pl.LightningModule):
     
-    def __init__(self, env_id: str, algo_id: str, n_envs: int = 1):
+    def __init__(self, env_id: str, *, n_envs = "auto"):
         super().__init__()
         
+        self.save_hyperparameters()
+
         # Store core attributes
+        algo_id = self.__class__.__name__.lower()
         config = load_config(env_id, algo_id)
         self.config = config
 
-        """Setup environment with configuration."""
+        # TODO: should I set this before training starts? think deeply to where this should be set
         from stable_baselines3.common.utils import set_random_seed
         set_random_seed(config.seed)
 
@@ -125,13 +126,21 @@ class BaseAgent(pl.LightningModule):
             total_time = time.time() - self.training_start_time
             print(f"Training completed in {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
 
-    # TODO: log train epoch duration
-    def on_train_epoch_start(self):
+    def training_step(self, batch, batch_idx):
+        batch_size = batch[0].size(0)
+        self.total_steps += batch_size
+
+        loss_results = self.compute_loss(batch)
+
+        self._train_rollout_stats = {**(self._train_rollout_stats or {}), **loss_results}
+
+        self.optimize_models(loss_results)
+
+    def on_train_epoch_end(self):
         if self._train_rollout_stats:
             self.log_metrics(self._train_rollout_stats, prog_bar=["mean_ep_reward"], prefix="train")
             self._train_rollout_stats = None  # Reset stats after logging
 
-    def on_train_epoch_end(self):
         if (self.current_epoch + 1) % self.config.eval_interval == 0: 
             _, stats = self.eval_rollout_collector.collect() # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
             self.log_metrics(stats, prog_bar=["mean_ep_reward"], prefix="eval")
@@ -140,12 +149,6 @@ class BaseAgent(pl.LightningModule):
             if mean_ep_reward >= self.config.reward_threshold: # TODO; change to eval_reward_threshold
                 print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {mean_ep_reward:.2f} >= threshold {self.config.reward_threshold}")
                 self.trainer.should_stop = True
-
-    def training_step(self, batch, batch_idx):
-        batch_size = batch[0].size(0)
-        self.total_steps += batch_size
-        loss_results = self.compute_loss(batch)
-        self.optimize_models(loss_results)
 
     # TODO: when does this run? should I run eval_rollout_collector here?
     #def validation_step(self, *args, **kwargs):

@@ -1,7 +1,7 @@
 
 def main():
-    from agents.reinforce import REINFORCELearner
-    agent = REINFORCELearner("CartPole-v1", "reinforce", n_envs="auto") # TODO: build env_fn inside?
+    from agents import create_agent
+    agent = create_agent("reinforce", "CartPole-v1", n_envs="auto") # TODO: build env_fn inside?
     agent.train()
     #agent.eval()
 

@@ -3,12 +3,7 @@ from torch.distributions import Categorical
 from .base_agent import BaseAgent
 
 class PPO(BaseAgent):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        
-        # TODO: review how save_hyperparameters works
-        self.save_hyperparameters(ignore=['build_env_fn', 'train_rollout_collector', 'policy_model', 'value_model', 'eval_rollout_collector'])
-
+    
     def compute_loss(self, batch):
         states, actions, rewards, dones, old_logprobs, values, advantages, returns, frames = batch
         

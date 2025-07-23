@@ -23,25 +23,22 @@ def _device_of(module: torch.nn.Module) -> torch.device:
 # TODO: log more stats
 # TODO: rename var names
 # TODO: look for bugs
-
-# ---------------------------------------------------------------------------
-# Helper --------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-
-def _device_of(module: Optional[torch.nn.Module]) -> torch.device:
-    """Return the torch.device where *module*'s parameters live, falling back to CPU."""
-    if module is None:
-        return torch.device("cpu")
+def collect_rollouts(env, policy_model, *args, value_model=None, **kwargs):
+    was_policy_train = policy_model.training
+    was_value_train = value_model.training if value_model else None
+    policy_model.eval()
+    if value_model: value_model.eval()
     try:
-        return next(module.parameters()).device
-    except StopIteration:  # empty param list (unlikely)
-        return torch.device("cpu")
+        return _collect_rollouts(
+            env, policy_model, *args, value_model=value_model, **kwargs
+        )
+    finally:
+        if was_policy_train: policy_model.train()
+        if was_value_train: value_model.train()
 
-# ---------------------------------------------------------------------------
-# Main ----------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-
-def collect_rollouts(
+# TODO: empirically torch.inference_mode() is not faster than torch.no_grad() for this use case, retest for other envs
+@torch.no_grad()
+def _collect_rollouts(
     env,
     policy_model: torch.nn.Module,
     *,
@@ -55,15 +52,6 @@ def collect_rollouts(
     advantages_norm_eps: float = 1e-8,
     collect_frames: bool = False,
 ):
-    """Vectorised rollout generator with (optional) Generalised Advantage Estimation.
-
-    **What changed?**
-    ▸ Values are no longer inferred *inside* the step‑loop.  After a rollout is
-      collected, we perform **one batched forward‑pass** through *value_model*
-      over the entire `(T × E)` tensor of observations.  This cuts the number of
-      value‑network calls from *T·E* to *1*.
-    """
-
     # ------------------------------------------------------------------
     # 0. Sanity checks --------------------------------------------------
     # ------------------------------------------------------------------
@@ -100,14 +88,12 @@ def collect_rollouts(
     # ------------------------------------------------------------------
     # 2. Helper fns ----------------------------------------------------
     # ------------------------------------------------------------------
-    @torch.no_grad()
     def _bootstrap_value(obs_np: np.ndarray) -> np.ndarray:
         if value_model is None:
             return np.zeros((n_envs,), dtype=np.float32)
         obs_t = torch.as_tensor(obs_np, dtype=torch.float32, device=device)
         return value_model(obs_t).squeeze(-1).cpu().numpy()
 
-    @torch.no_grad()
     def _infer_policy(obs_np: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         obs_t = torch.as_tensor(obs_np, dtype=torch.float32, device=device)
         logits = policy_model(obs_t)
@@ -192,13 +178,12 @@ def collect_rollouts(
         if value_model is None:
             values_arr = np.zeros((T, n_envs), dtype=np.float32)
         else:
-            with torch.no_grad():
-                obs_flat_t = torch.as_tensor(
-                    obs_arr.reshape(T * n_envs, -1),
-                    dtype=torch.float32,
-                    device=device,
-                )
-                values_flat = value_model(obs_flat_t).squeeze(-1).cpu().numpy()
+            obs_flat_t = torch.as_tensor(
+                obs_arr.reshape(T * n_envs, -1),
+                dtype=torch.float32,
+                device=device,
+            )
+            values_flat = value_model(obs_flat_t).squeeze(-1).cpu().numpy()
             values_arr = values_flat.reshape(T, n_envs)
 
         # Bootstrap value for the *next* state ------------------------
@@ -294,8 +279,6 @@ class RolloutDataset(TorchDataset):
         item = tuple(t[idx] for t in self.trajectories)
         return item
 
-def _device_of(module: torch.nn.Module) -> torch.device:
-    return next(module.parameters()).device
 # TODO: close envs in the end
 # TODO: make rollout collector use its own buffer
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
@@ -332,19 +315,6 @@ class SyncRolloutCollector():
     # TODO: create decorator that ensures models are in eval mode until function end and then restores them to origial mode (eval or train)
     # TODO: should I call this collect_rollout()
     def collect_rollouts(self):
-        self._set_models_eval()
-        try: return self._collect_rollouts()
-        finally: self._set_models_train()
-
-    def _set_models_train(self):
-        self.policy_model.train()
-        if self.value_model: self.value_model.train()
-
-    def _set_models_eval(self):
-        self.policy_model.eval()
-        if self.value_model: self.value_model.eval()
-
-    def _collect_rollouts(self):
         if not self.generator:
             self.generator = collect_rollouts( # TODO: don't return tensors, return numpy arrays?
                 self.env,

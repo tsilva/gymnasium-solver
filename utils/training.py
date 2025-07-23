@@ -27,6 +27,7 @@ def create_trainer(config, project_name=None, run_name=None):
         enable_progress_bar=True,
         enable_checkpointing=False,  # Disable checkpointing for speed
         accelerator="auto",
+        reload_dataloaders_every_n_epochs=config.rollout_interval # TODO: train_rollout_interval
        #callbacks=[WandbCleanup()]
     )
     

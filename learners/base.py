@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader
 
 # TODO: add test script for collection using dataset/dataloader
 # TODO: should dataloader move to gpu?
+# TODO: would converting trajectories to tuples in advance be faster?
 class RolloutDataset(TorchDataset):
     def __init__(self):
         self.trajectories = None 
@@ -38,6 +39,8 @@ class Learner(pl.LightningModule):
         self.policy_model = policy_model
         self.value_model = value_model
         
+        self.dataset = RolloutDataset()
+
         # Training state
         self.automatic_optimization = False
         self.training_start_time = None
@@ -55,9 +58,12 @@ class Learner(pl.LightningModule):
         raise NotImplementedError("Subclass must implement optimize_models()")
 
     def train_dataloader(self):
+        trajectories, stats = self.train_rollout_collector.collect()
+        self.dataset.update(*trajectories)
+        self._train_rollout_stats = stats # TODO: do I need to do this
+
+        # TODO: memory leaks? what if I initialize the dataloader with correct rollout size?
         # TODO: does this approach work where we swap the data underneath the dataloader between epochs?
-        self.dataset = RolloutDataset()
-        self.dataset.update((torch.zeros(100),)) # TODO: add mock data just so dataloader is not empty
         return DataLoader(
             self.dataset,
             batch_size=self.config.batch_size,
@@ -83,10 +89,9 @@ class Learner(pl.LightningModule):
 
     # TODO: log train epoch duration
     def on_train_epoch_start(self):
-        if (self.current_epoch + 1) % self.config.rollout_interval == 0:
-            trajectories, stats = self.train_rollout_collector.collect()
-            self.dataset.update(*trajectories) 
-            self.log_metrics(stats, prog_bar=["mean_ep_reward"], prefix="train")
+        if self._train_rollout_stats:
+            self.log_metrics(self._train_rollout_stats, prog_bar=["mean_ep_reward"], prefix="train")
+            self._train_rollout_stats = None  # Reset stats after logging
 
     def on_train_epoch_end(self):
         if (self.current_epoch + 1) % self.config.eval_interval == 0: 
@@ -99,7 +104,8 @@ class Learner(pl.LightningModule):
                 self.trainer.should_stop = True
 
     def training_step(self, batch, batch_idx):
-        self.total_steps += batch[0].size(0)
+        batch_size = batch[0].size(0)
+        self.total_steps += batch_size
         loss_results = self.compute_loss(batch)
         self.optimize_models(loss_results)
 

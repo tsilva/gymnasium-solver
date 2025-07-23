@@ -3,19 +3,11 @@ from torch.distributions import Categorical
 from .base import Learner
 
 class PPOLearner(Learner):
-    """PPO-specific agent implementation with optional shared backbone support"""
-    
-    def __init__(self, config, train_rollout_collector, policy_model, value_model=None, eval_rollout_collector=None):
-        super().__init__(config, train_rollout_collector, policy_model, value_model=value_model, eval_rollout_collector=eval_rollout_collector)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         
         # TODO: review how save_hyperparameters works
         self.save_hyperparameters(ignore=['build_env_fn', 'train_rollout_collector', 'policy_model', 'value_model', 'eval_rollout_collector'])
-
-        self.policy_model = policy_model
-        self.value_model = value_model
-        
-        self.clip_epsilon = config.clip_epsilon
-        self.entropy_coef = config.entropy_coef
 
     def compute_loss(self, batch):
         states, actions, rewards, dones, old_logprobs, values, advantages, returns, frames = batch

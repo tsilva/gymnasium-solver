@@ -1,8 +1,12 @@
 import time
-import torch
 import pytorch_lightning as pl
 from torch.utils.data import Dataset as TorchDataset
 from torch.utils.data import DataLoader
+from utils.rollouts import SyncRolloutCollector # TODO: restore async functionality
+from utils.models import PolicyNet, ValueNet
+from utils.rollouts import SyncRolloutCollector
+from utils.models import PolicyNet, ValueNet
+from utils.config import load_config
 
 # TODO: add test script for collection using dataset/dataloader
 # TODO: should dataloader move to gpu?
@@ -22,24 +26,58 @@ class RolloutDataset(TorchDataset):
         item = tuple(t[idx] for t in self.trajectories)
         return item
     
-
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class Learner(pl.LightningModule):
     
-    def __init__(self, config, train_rollout_collector, policy_model, value_model=None, eval_rollout_collector=None):
+    def __init__(self, env_id: str, algo_id: str, n_envs: int = 1):
         super().__init__()
         
         # Store core attributes
+        config = load_config(env_id, algo_id)
         self.config = config
-        
-        # Common RL components
-        self.train_rollout_collector = train_rollout_collector
-        self.eval_rollout_collector = eval_rollout_collector
 
-        self.policy_model = policy_model
-        self.value_model = value_model
+        """Setup environment with configuration."""
+        from stable_baselines3.common.utils import set_random_seed
+        set_random_seed(config.seed)
+
+        # Create environment builder
+        from utils.environment import build_env
+        build_env_fn = lambda seed: build_env(
+            config.env_id,
+            norm_obs=config.normalize,
+            n_envs=n_envs,
+            seed=seed
+        )
+        self.build_env_fn = build_env_fn
         
-        self.dataset = RolloutDataset()
+        # TODO: move this inside config?
+        env = build_env_fn(config.seed)
+        config.input_dim = env.observation_space.shape[0]
+        config.output_dim = env.action_space.n
+
+        policy_model = PolicyNet(config.input_dim, config.output_dim, config.hidden_dims)
+        self.policy_model = policy_model
+
+        # TODO: softcode this better
+        value_model = ValueNet(config.input_dim, config.hidden_dims) if config.algo_id == "ppo" else None
+        self.value_model = value_model
+
+        # Common RL components
+        self.train_rollout_collector = SyncRolloutCollector(
+            build_env_fn(config.seed),
+            policy_model,
+            value_model=value_model,
+            n_steps=config.train_rollout_steps
+        )
+        self.eval_rollout_collector = SyncRolloutCollector(
+            # TODO: pass env factory and rebuild env on start/stop? this allows using same rollout collector for final evaluation
+            build_env_fn(config.seed + 1000),
+            policy_model,
+            n_episodes=config.eval_episodes,
+            deterministic=True
+        )
+
+        self.rollout_dataset = RolloutDataset()
 
         # Training state
         self.automatic_optimization = False
@@ -59,13 +97,13 @@ class Learner(pl.LightningModule):
 
     def train_dataloader(self):
         trajectories, stats = self.train_rollout_collector.collect()
-        self.dataset.update(*trajectories)
+        self.rollout_dataset.update(*trajectories)
         self._train_rollout_stats = stats # TODO: do I need to do this
 
         # TODO: memory leaks? what if I initialize the dataloader with correct rollout size?
         # TODO: does this approach work where we swap the data underneath the dataloader between epochs?
         return DataLoader(
-            self.dataset,
+            self.rollout_dataset,
             batch_size=self.config.batch_size,
             shuffle=True,
             # TODO: fix num_workers, training not converging when they are on
@@ -120,3 +158,28 @@ class Learner(pl.LightningModule):
             _prog_bar = True if prog_bar is True or key in (prog_bar or []) else None
             _key = f"{prefix}/{key}" if prefix else key
             self.log(_key, value, on_epoch=_on_epoch, on_step=_on_step, prog_bar=_prog_bar)
+
+    def train(self):
+        from pytorch_lightning.loggers import WandbLogger
+        from tsilva_notebook_utils.colab import load_secrets_into_env
+
+        _ = load_secrets_into_env(['WANDB_API_KEY'])
+        wandb_logger = WandbLogger(
+            project=self.config.env_id,
+            name=f"{self.config.algo_id}-{self.config.seed}",
+            log_model=True
+        )
+        
+        trainer = pl.Trainer(
+            logger=wandb_logger,
+            log_every_n_steps=1, # TODO: softcode this
+            max_epochs=self.config.max_epochs,
+            enable_progress_bar=True,
+            enable_checkpointing=False,  # Disable checkpointing for speed
+            accelerator="auto",
+            reload_dataloaders_every_n_epochs=self.config.rollout_interval # TODO: train_rollout_interval
+            #callbacks=[WandbCleanup()]
+        )
+        trainer.fit(self)
+
+

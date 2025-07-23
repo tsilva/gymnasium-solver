@@ -25,6 +25,7 @@ class RLConfig:
     
     # Environment
     env_id: str
+    algo_id: str
     seed: int = 42
     
     # Training
@@ -74,6 +75,7 @@ class RLConfig:
         # Start with default config
         final_config = default_config.copy()
         final_config['env_id'] = env_id
+        final_config['algo_id'] = algo_id
         
         # Apply environment default config
         if 'default' in env_config:

@@ -1,27 +1,11 @@
-import torch
-import numpy as np
-from typing import Optional, Tuple, Sequence
-from torch.utils.data import Dataset as TorchDataset
-from torch.distributions import Categorical
-from torch.utils.data import DataLoader
+import itertools
 from collections import deque
+from contextlib import contextmanager
 from typing import Optional, Sequence, Tuple
-from collections import deque
 
 import numpy as np
 import torch
 from torch.distributions import Categorical
-
-
-import torch.nn as nn
-from contextlib import contextmanager
-
-from contextlib import contextmanager
-import torch.nn as nn
-from typing import Optional, Union, List
-
-from contextlib import contextmanager
-import torch, itertools
 
 @contextmanager
 def inference_ctx(*modules):
@@ -315,5 +299,5 @@ class SyncRolloutCollector():
                 #collect_frames=True
             )
         trajectories, stats = next(self.generator)
-        #self.dataset.update(*trajectories)
+        #self.rollout_dataset.update(*trajectories)
         return trajectories, stats

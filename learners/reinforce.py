@@ -3,17 +3,12 @@ from torch.distributions import Categorical
 from .base import Learner
 
 class REINFORCELearner(Learner):
-    def __init__(self, config, train_rollout_collector, policy_model, value_model=None, eval_rollout_collector=None):
-        super().__init__(config, train_rollout_collector, policy_model, value_model=value_model, eval_rollout_collector=eval_rollout_collector)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         
         self.save_hyperparameters(ignore=['build_env_fn', 'train_rollout_collector', 'policy_model', 'value_model', 'eval_rollout_collector'])
 
-        self.policy_model = policy_model
-
-        self.entropy_coef = config.entropy_coef
-
     def compute_loss(self, batch):
-        """Compute REINFORCE-specific losses"""
         states, actions, rewards, dones, old_logps, values, advantages, returns, frames = batch
         
         # REINFORCE uses Monte Carlo returns dir
@@ -24,7 +19,7 @@ class REINFORCELearner(Learner):
         entropy = dist.entropy().mean()
 
         # REINFORCE loss: -log_prob * return (negative because we want to maximize)
-        policy_loss = -(log_probs * returns).mean() - self.entropy_coef * entropy
+        policy_loss = -(log_probs * returns).mean() - self.config.entropy_coef * entropy
         
         # Metrics (detached for logging)
         return {

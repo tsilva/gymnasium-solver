@@ -305,13 +305,14 @@ class RolloutDataset(TorchDataset):
 # TODO: make rollout collector use its own buffer
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class SyncRolloutCollector():
-    def __init__(self, env, policy_model, value_model=None, n_steps=None, n_episodes=None):
+    def __init__(self, env, policy_model, value_model=None, deterministic=False, n_steps=None, n_episodes=None):
         self.env = env
         self.policy_model = policy_model
         self.value_model = value_model
         self.n_steps = n_steps
         self.n_episodes = n_episodes
         self.dataset = RolloutDataset()
+        self.deterministic = deterministic  # TODO: make this configurable
         self.generator = None  # Generator for collecting rollouts
 
         #self.last_obs = None
@@ -337,14 +338,20 @@ class SyncRolloutCollector():
     # TODO: should this be a generator?
     # TODO: create decorator that ensures models are in eval mode until function end and then restores them to origial mode (eval or train)
     # TODO: should I call this collect_rollout()
-    def collect(self):
+    # TODO: is this dataset/dataloader update strategy correct?
+    def collect(self, n_episodes=None, n_steps=None, deterministic=None, collect_frames=False):
         if not self.generator:
+            n_episodes = n_episodes if n_episodes is not None else self.n_episodes
+            n_steps = n_steps if n_steps is not None else self.n_steps
+            deterministic = deterministic if deterministic is not None else self.deterministic
             self.generator = collect_rollouts( # TODO: don't return tensors, return numpy arrays?
                 self.env,
                 self.policy_model,
                 value_model=self.value_model,
-                n_steps=self.n_steps,
-                n_episodes=self.n_episodes,
+                n_steps=n_steps,
+                n_episodes=n_episodes,
+                deterministic=deterministic,
+                collect_frames=collect_frames
                 #last_obs=self.last_obs, # TODO: should I use this?
                 #collect_frames=True
             )

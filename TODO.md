@@ -1,3 +1,4 @@
+- Fix reinforce algo
 - Benchmark rollout collector, improve speed
 - Run training from notebook again and make sure eval/rendering works
 - use torch.inference_mode() where applicable

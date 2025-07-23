@@ -79,7 +79,6 @@ def main():
         build_env_fn(CONFIG.seed + 1000),  # Use a different seed for evaluation
         policy_model,
         n_episodes=10,
-        deterministic=True,  # Ensure evaluation is deterministic
         #n_steps=CONFIG.train_rollout_steps # TODO: change this
     )
     algo_id = ALGO_ID.lower()
@@ -92,6 +91,24 @@ def main():
 
     # Fit the model
     trainer.fit(agent)
+
+
+    from utils.evaluation import evaluate_agent
+
+    # Evaluate agent and render episodes
+    # TODO: evaluate agent should receive rollout collector as an argument, not the agent and build_env_fn
+    results = evaluate_agent(
+        agent, 
+        build_env_fn, 
+        n_episodes=8, 
+        deterministic=True, 
+        render=True,
+        grid=(2, 2), 
+        text_color=(0, 0, 0), 
+        out_dir="./tmp"
+    )
+    print(f"Mean reward: {results['mean_reward']:.2f}")
+
 
 
 if __name__ == "__main__":

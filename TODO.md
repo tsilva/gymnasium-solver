@@ -1,6 +1,6 @@
 - Benchmark rollout collector, improve speed
 - Run training from notebook again and make sure eval/rendering works
-
+- use torch.inference_mode() where applicable
 - Add support for different rollout collecotrs for different envs (for multitask learning)
 - Add support for multitask heads based on envid and/or controller type
 - Make sure rollout evals are closed

@@ -5,6 +5,13 @@ from torch.utils.data import Dataset as TorchDataset
 from torch.distributions import Categorical
 from torch.utils.data import DataLoader
 from collections import deque
+from typing import Optional, Sequence, Tuple
+from collections import deque
+
+import numpy as np
+import torch
+from torch.distributions import Categorical
+
 
 # TODO: is this needed?
 def _device_of(module: torch.nn.Module) -> torch.device:
@@ -16,6 +23,24 @@ def _device_of(module: torch.nn.Module) -> torch.device:
 # TODO: log more stats
 # TODO: rename var names
 # TODO: look for bugs
+
+# ---------------------------------------------------------------------------
+# Helper --------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+
+def _device_of(module: Optional[torch.nn.Module]) -> torch.device:
+    """Return the torch.device where *module*'s parameters live, falling back to CPU."""
+    if module is None:
+        return torch.device("cpu")
+    try:
+        return next(module.parameters()).device
+    except StopIteration:  # empty param list (unlikely)
+        return torch.device("cpu")
+
+# ---------------------------------------------------------------------------
+# Main ----------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+
 def collect_rollouts(
     env,
     policy_model: torch.nn.Module,
@@ -24,188 +49,187 @@ def collect_rollouts(
     n_steps: Optional[int] = None,
     n_episodes: Optional[int] = None,
     deterministic: bool = False,
-    gamma: float = 0.99, # TODO: rename these?
-    lam: float = 0.95, # TODO: rename these?
-    normalize_advantage: bool = True, # TODO: should advantages be normalized during rollouts or during batch training?
+    gamma: float = 0.99,
+    lam: float = 0.95,
+    normalize_advantage: bool = True,
     advantages_norm_eps: float = 1e-8,
-    collect_frames: bool = False#,
-    #last_obs: Optional[np.ndarray] = None # TODO: can I avoid using this by using a generator?
+    collect_frames: bool = False,
 ):
-    # Assert that a stop condition is provided (either n_steps or n_episodes)
+    """Vectorised rollout generator with (optional) Generalised Advantage Estimation.
+
+    **What changed?**
+    ▸ Values are no longer inferred *inside* the step‑loop.  After a rollout is
+      collected, we perform **one batched forward‑pass** through *value_model*
+      over the entire `(T × E)` tensor of observations.  This cuts the number of
+      value‑network calls from *T·E* to *1*.
+    """
+
+    # ------------------------------------------------------------------
+    # 0. Sanity checks --------------------------------------------------
+    # ------------------------------------------------------------------
     assert (n_steps is not None and n_steps > 0) or (
         n_episodes is not None and n_episodes > 0
-    ), "Provide *n_steps*, *n_episodes*, or both (> 0)."
+    ), "Provide *n_steps*, *n_episodes*, or both (> 0)."
 
-    # Assert that the models that are going to be used to perform 
-    # the rollout are in eval mode (eg: no dropout, no batch norm updates)
-    assert policy_model.training is False, "Policy model must be in eval mode for rollouts."
-    if value_model: assert value_model.training is False, "Value model must be in eval mode for rollouts."
+    assert not policy_model.training, "Policy model must be in eval mode for rollouts."
+    if value_model is not None:
+        assert not value_model.training, "Value model must be in eval mode for rollouts."
 
-    # Assert that the policy model is on the same device as the value model
-    policy_model_device = _device_of(policy_model)
-    value_model_device = _device_of(value_model) if value_model else None
-    if value_model_device: assert policy_model_device == value_model_device, "Policy and value models must be on the same device."
+    policy_device = _device_of(policy_model)
+    value_device = _device_of(value_model)
+    if value_model is not None:
+        assert (
+            policy_device == value_device
+        ), "Policy and value models must be on the same device."
 
-    print("policy_model device:", policy_model_device)
-    if value_model: print("value_model device:", value_model_device)
-    
-    device: torch.device = _device_of(policy_model)
+    device: torch.device = policy_device
     n_envs: int = env.num_envs
 
+    # ------------------------------------------------------------------
+    # 1. Per‑env running stats -----------------------------------------
+    # ------------------------------------------------------------------
+    env_reward = np.zeros(n_envs, dtype=np.float32)
+    env_length = np.zeros(n_envs, dtype=np.int32)
+
+    episode_reward_deque: deque[float] = deque(maxlen=100)
+    episode_length_deque: deque[int] = deque(maxlen=100)
+
+    # First observation ------------------------------------------------------
+    obs = env.reset()
+
+    # ------------------------------------------------------------------
+    # 2. Helper fns ----------------------------------------------------
+    # ------------------------------------------------------------------
+    @torch.no_grad()
+    def _bootstrap_value(obs_np: np.ndarray) -> np.ndarray:
+        if value_model is None:
+            return np.zeros((n_envs,), dtype=np.float32)
+        obs_t = torch.as_tensor(obs_np, dtype=torch.float32, device=device)
+        return value_model(obs_t).squeeze(-1).cpu().numpy()
+
+    @torch.no_grad()
+    def _infer_policy(obs_np: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        obs_t = torch.as_tensor(obs_np, dtype=torch.float32, device=device)
+        logits = policy_model(obs_t)
+        dist = Categorical(logits=logits)
+        action_t = logits.argmax(-1) if deterministic else dist.sample()
+        logp_t = dist.log_prob(action_t)
+        return action_t.cpu().numpy(), logp_t.cpu().numpy()
+
+    # ------------------------------------------------------------------
+    # 3. Main generator loop -------------------------------------------
+    # ------------------------------------------------------------------
     total_step_count = 0
-    total_episode_count = 0 # why does this appear as a numpy value in the debugger?
+    total_episode_count = 0
 
-    env_reward = np.zeros(n_envs, dtype=np.float32)  # TODO: should this be a deque?
-    env_length = np.zeros(n_envs, dtype=np.int32)  # TODO: should this be a deque?
-
-    episode_reward_deque = deque(maxlen=100)  # TODO: softcode config.mean_reward_window
-    episode_length_deque = deque(maxlen=100)  # TODO: softcode config.mean_reward_window
-
-    # ------------------------------------------------------------------
-    # 2. Rollout
-    # ------------------------------------------------------------------
-    
-    # Retrieve the first observation to start the rollout from, 
-    # if last_obs is provided then it means we are resuming a previous rollout
-    obs = env.reset()# if last_obs is None else last_obs
-
-    def _infer_value(obs: np.ndarray) -> np.ndarray:
-        with torch.no_grad():
-            obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device)
-            if value_model: return value_model(obs_t).squeeze(-1).cpu().numpy()
-            else: return np.zeros((n_envs,), dtype=np.float32)
-
-    def _infer_policy(obs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        with torch.no_grad():
-            obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device) # TODO: as_tensor vs tensor()
-            logits = policy_model(obs_t)
-            dist = Categorical(logits=logits)
-            action_t = dist.sample() if not deterministic else logits.argmax(-1)
-            lobprob_t = dist.log_prob(action_t)
-            action_np = action_t.cpu().numpy()
-            action_logp_np = lobprob_t.cpu().numpy()
-            return action_np, action_logp_np
-
-    # Generator loop
     while True:
-        # Rollout collection loop 
-        rollout_step_count = 0
-        rollout_episode_count = 0
-
-        # ------------------------------------------------------------------
-        # 1. Buffers (dynamic lists — we'll stack/concat later)
-        # ------------------------------------------------------------------
+        # Reset the rollout buffers -----------------------------------
         obs_buf: list[np.ndarray] = []
         actions_buf: list[np.ndarray] = []
         rewards_buf: list[np.ndarray] = []
         done_buf: list[np.ndarray] = []
         logprobs_buf: list[np.ndarray] = []
-        values_buf: list[np.ndarray] = []
         frame_buf: list[Sequence[np.ndarray]] = []
 
+        rollout_step_count = 0
+        rollout_episode_count = 0
+
+        # --------------------------------------------------------------
+        # 3.1 Collect one rollout -------------------------------------
+        # --------------------------------------------------------------
         while True:
-            # Use policy model to select action
+            # ▸ Policy step — note: **no value call here** ----------------
             action_np, action_logp_np = _infer_policy(obs)
 
-            # Use value model to infer value of being in current state
-            value_np = _infer_value(obs)
-
-            # Step the environment with the selected action
+            # Environment step ----------------------------------------
             next_obs, reward, done, _ = env.step(action_np)
 
+            # Per‑env episodic bookkeeping ----------------------------
             for i, r in enumerate(reward):
                 env_reward[i] += r
                 env_length[i] += 1
-                if not done[i]: continue
-                episode_reward_deque.append(float(env_reward[i]))
-                episode_length_deque.append(int(env_length[i]))
-                env_reward[i] = 0.0
-                env_length[i] = 0
+                if done[i]:
+                    episode_reward_deque.append(float(env_reward[i]))
+                    episode_length_deque.append(int(env_length[i]))
+                    env_reward[i] = 0.0
+                    env_length[i] = 0
 
-            # Store collected data in buffers
-            # NOTE: observation is copied to avoid issues with environments that mutate their observation arrays
-            obs_buf.append(obs.copy())
-            values_buf.append(value_np)
+            # Buffer write -------------------------------------------
+            obs_buf.append(obs.copy())  # defensive copy — some envs mutate obs
             actions_buf.append(action_np)
             logprobs_buf.append(action_logp_np)
             rewards_buf.append(reward)
             done_buf.append(done)
-            if collect_frames: frame_buf.append(env.get_images())
-            
-            # Next state is now current state
+            if collect_frames:
+                frame_buf.append(env.get_images())
+
+            # Advance --------------------------------------------------
             obs = next_obs
-
-            # Increment the number of steps taken
             rollout_step_count += n_envs
-
-            # Increment the number of episodes completed 
-            # so far (add number of envs that are done)
             rollout_episode_count += done.sum().item()
 
-            # If we reached a stop condition, pause the rollout
-            # TODO: rollout steps count vs total steps count
-            if n_steps is not None and rollout_step_count >= n_steps: break # TODO: do we want the n_steps to be per env or total?
-            if n_episodes is not None and rollout_episode_count >= n_episodes: break
+            # Stop condition ------------------------------------------
+            if n_steps is not None and rollout_step_count >= n_steps:
+                break
+            if n_episodes is not None and rollout_episode_count >= n_episodes:
+                break
 
-        total_episode_count += rollout_episode_count
         total_step_count += rollout_step_count
-        # ------------------------------------------------------------------
-        # 3. Bootstrap value for the next state of each env
-        # ------------------------------------------------------------------
-        next_value = _infer_value(obs) # TODO: referencing next_obs could be less confusing
+        total_episode_count += rollout_episode_count
 
-        # ------------------------------------------------------------------
-        # 5. Stack buffers to (T, E) arrays for GAE
-        # ------------------------------------------------------------------
-        # TODO: not sure what this is
-        obs_arr = np.stack(obs_buf)  # (T, E, obs)
-        values_arr = np.stack(values_buf)
-        actions_arr = np.stack(actions_buf)
+        # --------------------------------------------------------------
+        # 3.2 End‑of‑rollout processing -------------------------------
+        # --------------------------------------------------------------
+        # 3.2.1  Stack buffers ----------------------------------------
+        obs_arr = np.stack(obs_buf)          # (T, E, obs_dim)
+        actions_arr = np.stack(actions_buf)  # (T, E)
         logprobs_arr = np.stack(logprobs_buf)
         rewards_arr = np.stack(rewards_buf)
         dones_arr = np.stack(done_buf)
-        
-        # ------------------------------------------------------------------
-        # 5. GAE-λ advantage / return (with masking)
-        # ------------------------------------------------------------------
+        T = obs_arr.shape[0]
+
+        # 3.2.2  **Batched value inference** --------------------------
+        if value_model is None:
+            values_arr = np.zeros((T, n_envs), dtype=np.float32)
+        else:
+            with torch.no_grad():
+                obs_flat_t = torch.as_tensor(
+                    obs_arr.reshape(T * n_envs, -1),
+                    dtype=torch.float32,
+                    device=device,
+                )
+                values_flat = value_model(obs_flat_t).squeeze(-1).cpu().numpy()
+            values_arr = values_flat.reshape(T, n_envs)
+
+        # Bootstrap value for the *next* state ------------------------
+        next_value = _bootstrap_value(obs)  # shape: (E,)
+
+        # 3.2.3  GAE‑λ advantages & returns ---------------------------
         advantages_arr = np.zeros_like(rewards_arr, dtype=np.float32)
-
         gae = np.zeros(n_envs, dtype=np.float32)
-
-        # Pre‑compute the mask that tells us whether each step is terminal (0) or not (1).
         non_terminal = 1.0 - dones_arr.astype(np.float32)
-
-        # TODO: move advantage calculation out of rollout collector?
-        # Start with the value *after* the last step (bootstrapped estimate) …
         next_non_terminal = non_terminal[-1]
-        T = rollout_step_count // n_envs  # Total number of time steps
-        for t in reversed(range(T)):
-            # Generalised Advantage Estimation update
-            delta = rewards_arr[t] + gamma * next_value * next_non_terminal - values_arr[t]
-            gae = delta + gamma * lam * gae * next_non_terminal 
-            advantages_arr[t] = gae
 
-            # Shift the window backwards so that in the next loop iteration
-            # `next_value` / `next_non_terminal` correspond to step t‑1.
-            next_value = values_arr[t]        # V(s_{t})
+        for t in reversed(range(T)):
+            delta = rewards_arr[t] + gamma * next_value * next_non_terminal - values_arr[t]
+            gae = delta + gamma * lam * gae * next_non_terminal
+            advantages_arr[t] = gae
+            next_value = values_arr[t]
             next_non_terminal = non_terminal[t]
 
-        # The actual returns, which is essentially the same as the
-        # predicted returns plus the advantages (how much better 
-        # or worse the returns were from the predicted)
-        returns_arr = advantages_arr + values_arr # TODO: collect returns directly and then assert they match the computed ones
+        returns_arr = advantages_arr + values_arr
 
         if normalize_advantage:
-            advantages_flat = advantages_arr.reshape(-1)
-            advantages_arr = (advantages_arr - advantages_flat.mean()) / (advantages_flat.std() + advantages_norm_eps)
+            adv_flat = advantages_arr.reshape(-1)
+            advantages_arr = (advantages_arr - adv_flat.mean()) / (
+                adv_flat.std() + advantages_norm_eps
+            )
 
-        # ------------------------------------------------------------------
-        # 6. Env-major flattening: (T, E, …) -> (E, T, …) -> (E*T, …)
-        # ------------------------------------------------------------------
-        
-        # TODO: need to understand what's going on here
-        obs_env_major = obs_arr.transpose(1, 0, 2)  # (E, T, obs)
-        states = torch.as_tensor(obs_env_major.reshape(n_envs * T, -1), dtype=torch.float32)
+        # 3.2.4  Env‑major flattening --------------------------------
+        obs_env_major = obs_arr.transpose(1, 0, 2)  # (E, T, obs_dim)
+        states = torch.as_tensor(
+            obs_env_major.reshape(n_envs * T, -1), dtype=torch.float32
+        )
 
         def _flat_env_major(arr: np.ndarray, dtype: torch.dtype):
             return torch.as_tensor(arr.transpose(1, 0).reshape(-1), dtype=dtype)
@@ -218,14 +242,15 @@ def collect_rollouts(
         advantages = _flat_env_major(advantages_arr, torch.float32)
         returns = _flat_env_major(returns_arr, torch.float32)
 
-        if collect_frames and frame_buf is not None:
-            frames_env_major: list[np.ndarray] = []
-            for e in range(n_envs):
-                for t in range(T):
-                    frames_env_major.append(frame_buf[t][e])
+        # 3.2.5  Frames (optional) ------------------------------------
+        if collect_frames:
+            frames_env_major: list[np.ndarray] = [
+                frame_buf[t][e] for e in range(n_envs) for t in range(T)
+            ]
         else:
             frames_env_major = [0] * (n_envs * T)
 
+        # 3.2.6  Yield -------------------------------------------------
         trajectories = (
             states,
             actions,
@@ -238,12 +263,18 @@ def collect_rollouts(
             frames_env_major,
         )
         stats = {
-            'n_episodes': total_episode_count,
-            'n_steps': rollout_step_count,
-            'mean_ep_reward': np.mean(episode_reward_deque).item() if len(episode_reward_deque) > 0 else 0,
-            'mean_ep_length': np.mean(episode_length_deque).item() if len(episode_length_deque) > 0 else 0
+            "n_episodes": total_episode_count,
+            "n_steps": rollout_step_count,
+            "mean_ep_reward": float(np.mean(episode_reward_deque))
+            if episode_reward_deque
+            else 0.0,
+            "mean_ep_length": float(np.mean(episode_length_deque))
+            if episode_length_deque
+            else 0.0,
         }
+
         yield trajectories, stats
+
 
 # TODO: add test script for collection using dataset/dataloader
 # TODO: should dataloader move to gpu?

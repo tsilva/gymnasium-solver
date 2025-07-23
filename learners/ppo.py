@@ -57,12 +57,7 @@ class PPOLoss:
     
         dist = Categorical(logits=logits)
         new_logps = dist.log_prob(actions)
-        
-        # Detach tensors that come from rollout data to prevent in-place operation errors
-        #old_logps_detached = old_logps.detach() # TODO: aren't these already detached?
-        #advantages_detached = advantages.detach() # TODO: aren't these already detached?
-        #returns_detached = returns.detach() # TODO: aren't these already detached?
-        
+
         ratio = torch.exp(new_logps - old_logps)
         surr1 = ratio * advantages
         surr2 = torch.clamp(ratio, 1.0 - self.clip_epsilon, 1.0 + self.clip_epsilon) * advantages

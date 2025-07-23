@@ -59,6 +59,7 @@ def _device_of(module: torch.nn.Module) -> torch.device:
 # TODO: close envs in the end
 # TODO: make rollout collector use its own buffer
 # TODO: add # env.normalize_obs() support
+# TODO: add # env.normalize_rewards() support
 # TODO: batch value inference post rollout
 # TODO: consider returning transition object
 # TODO: log more stats
@@ -88,6 +89,7 @@ def collect_rollouts(
     ), "Provide *n_steps*, *n_episodes*, or both (> 0)."
 
     policy_device = _device_of(policy_model)
+    assert policy_device.type != 'cpu', "Policy model must be on GPU or MPS, not CPU."
     if value_model is not None:
         value_device = _device_of(value_model)
         assert (
@@ -285,26 +287,6 @@ def collect_rollouts(
 
         yield trajectories, stats
 
-
-# TODO: add test script for collection using dataset/dataloader
-# TODO: should dataloader move to gpu?
-class RolloutDataset(TorchDataset):
-    def __init__(self):
-        self.trajectories = None 
-
-    def update(self, *trajectories):
-        self.trajectories = trajectories
-
-    def __len__(self):
-        if self.trajectories is None: return 0
-        length = len(self.trajectories[0])
-        return length
-
-    def __getitem__(self, idx):
-        item = tuple(t[idx] for t in self.trajectories)
-        return item
-
-# TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class SyncRolloutCollector():
     def __init__(self, env, policy_model, value_model=None, deterministic=False, n_steps=None, n_episodes=None):
         self.env = env
@@ -313,9 +295,10 @@ class SyncRolloutCollector():
         self.deterministic = deterministic
         self.n_steps = n_steps
         self.n_episodes = n_episodes
-        self.dataset = RolloutDataset()
+        #self.dataset = RolloutDataset()
         self.generator = None
-
+    """
+    
     def create_dataloader(self, batch_size: int = 64):
         # TODO: ensure a rollout is created before creating the dataloader
         trajectories, stats = self.collect() # TODO: this seems fishy, what if it was already called
@@ -332,6 +315,7 @@ class SyncRolloutCollector():
             #num_workers=multiprocessing.cpu_count() // 2 if self.device.type != 'mps' else 0
         )
         return trajectories, stats, dataloader
+    """
     
     # TODO: is this dataset/dataloader update strategy correct?
     def collect(self, n_episodes=None, n_steps=None, deterministic=None, collect_frames=False):
@@ -351,5 +335,5 @@ class SyncRolloutCollector():
                 #collect_frames=True
             )
         trajectories, stats = next(self.generator)
-        self.dataset.update(*trajectories)
+        #self.dataset.update(*trajectories)
         return trajectories, stats

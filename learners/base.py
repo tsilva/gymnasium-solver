@@ -1,6 +1,28 @@
 import time
+import torch
 import pytorch_lightning as pl
+from torch.utils.data import Dataset as TorchDataset
+from torch.utils.data import DataLoader
 
+# TODO: add test script for collection using dataset/dataloader
+# TODO: should dataloader move to gpu?
+class RolloutDataset(TorchDataset):
+    def __init__(self):
+        self.trajectories = None 
+
+    def update(self, *trajectories):
+        self.trajectories = trajectories
+
+    def __len__(self):
+        length = len(self.trajectories[0])
+        return length
+
+    def __getitem__(self, idx):
+        item = tuple(t[idx] for t in self.trajectories)
+        return item
+    
+
+# TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class Learner(pl.LightningModule):
     
     def __init__(self, config, train_rollout_collector, policy_model, value_model=None, eval_rollout_collector=None):
@@ -33,10 +55,21 @@ class Learner(pl.LightningModule):
         raise NotImplementedError("Subclass must implement optimize_models()")
 
     def train_dataloader(self):
-        #device = _device_of(self.policy_model) # models are alredy in correct device ehre
-        _, stats, dataloader = self.train_rollout_collector.create_dataloader(self.config.batch_size)
-        #self.logger.experiment.log_dict(stats, on_step=False, on_epoch=True)#, prefix="train") # TODO: what are the on_step/on_epoch defaults?
-        return dataloader
+        # TODO: does this approach work where we swap the data underneath the dataloader between epochs?
+        self.dataset = RolloutDataset()
+        self.dataset.update((torch.zeros(100),)) # TODO: add mock data just so dataloader is not empty
+        return DataLoader(
+            self.dataset,
+            batch_size=self.config.batch_size,
+            shuffle=True,
+            # TODO: fix num_workers, training not converging when they are on
+            # Pin memory is not supported on MPS
+            #pin_memory=True if self.device.type != 'mps' else False,
+            # TODO: Persistent workers + num_workers is fast but doesn't converge
+            #persistent_workers=True if self.device.type != 'mps' else False,
+            # Using multiple workers stalls the start of each epoch when persistent workers are disabled
+            #num_workers=multiprocessing.cpu_count() // 2 if self.device.type != 'mps' else 0
+        )
 
     def on_fit_start(self):
         self.training_start_time = time.time()
@@ -50,9 +83,9 @@ class Learner(pl.LightningModule):
 
     # TODO: log train epoch duration
     def on_train_epoch_start(self):
-        # TODO: hack, skipping rollout collection for first epoch because a rollout was collected when the dataloader was created (this seems like a hack)
-        if self.current_epoch > 0 and (self.current_epoch + 1) % self.config.rollout_interval == 0:
-            _, stats = self.train_rollout_collector.collect()
+        if (self.current_epoch + 1) % self.config.rollout_interval == 0:
+            trajectories, stats = self.train_rollout_collector.collect()
+            self.dataset.update(*trajectories) 
             self.log_metrics(stats, prog_bar=["mean_ep_reward"], prefix="train")
 
     def on_train_epoch_end(self):
@@ -64,15 +97,14 @@ class Learner(pl.LightningModule):
                 print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {mean_ep_reward:.2f} >= threshold {self.config.reward_threshold}")
                 self.trainer.should_stop = True
 
-    # TODO: log training step duration
-    def training_step(self, batch, batch_idx): # TODO: should I call super?
-        super().training_step(batch, batch_idx)
+    def training_step(self, batch, batch_idx):
         self.total_steps += batch[0].size(0)
         loss_results = self.compute_loss(batch)
         self.optimize_models(loss_results)
 
-    def validation_step(self, *args, **kwargs):
-        return super().validation_step(*args, **kwargs)
+    # TODO: when does this run? should I run eval_rollout_collector here?
+    #def validation_step(self, *args, **kwargs):
+    #    return super().validation_step(*args, **kwargs)
     
     def log_metrics(self, metrics, *, on_epoch=None, on_step=None, prog_bar=None, prefix=None):
         for key, value in metrics.items():

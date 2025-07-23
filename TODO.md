@@ -1,3 +1,5 @@
+- Match sb3rlzoo performance
+- Match sb3rlzoo metric names
 - Fix reinforce algo
 - Benchmark rollout collector, improve speed
 - Run training from notebook again and make sure eval/rendering works

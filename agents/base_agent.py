@@ -140,6 +140,7 @@ class BaseAgent(pl.LightningModule):
                 self.trainer.should_stop = True
 
         if (self.current_epoch + 1) % self.config.eval_rollout_interval == 0: 
+            # TODO: reuse this with eval()
             eval_rollout_collector = SyncRolloutCollector(
                 lambda: self.build_env_fn(random.randint(0, 10000)),  # Random seed for eval
                 self.policy_model,
@@ -199,4 +200,20 @@ class BaseAgent(pl.LightningModule):
         )
         trainer.fit(self)
 
-
+    # TODO: softcode this further
+    def eval_and_render(self):
+        # TODO: softcode this
+        self.to("mps")
+      
+        from utils.environment import group_frames_by_episodes, render_episode_frames
+        eval_rollout_collector = SyncRolloutCollector(
+            lambda: self.build_env_fn(random.randint(0, 10000)),  # Random seed for eval
+            self.policy_model,
+            n_episodes=self.config.eval_rollout_episodes,
+            deterministic=True
+        )
+        try: trajectories, stats = eval_rollout_collector.collect(collect_frames=True) # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
+        finally: del eval_rollout_collector
+        print(json.dumps(stats, indent=2))        
+        episode_frames = group_frames_by_episodes(trajectories)
+        return render_episode_frames(episode_frames, out_dir="./tmp", grid=(2, 2), text_color=(0, 0, 0)) # TODO: review if eval collector should be deterministic or not

@@ -449,10 +449,3 @@ def group_frames_by_episodes(trajectories):
         episodes.append(current_episode)
 
     return episodes
-
-def render_rollouts(rollout_collector, n_episodes=None):
-    trajectories, stats = rollout_collector.collect(collect_frames=True, n_episodes=n_episodes)
-    episode_frames = group_frames_by_episodes(trajectories)
-    # TODO: softcode path
-    render_episode_frames(episode_frames, out_dir="./tmp", grid=(2, 2), text_color=(0, 0, 0)) # TODO: review if eval collector should be deterministic or not
-    return stats

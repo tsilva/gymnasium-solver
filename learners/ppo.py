@@ -9,8 +9,8 @@ class PPOLearner(Learner):
         super().__init__(config, train_rollout_collector, policy_model, value_model=value_model, eval_rollout_collector=eval_rollout_collector)
         
         # TODO: review how save_hyperparameters works
-        self.save_hyperparameters(ignore=['train_rollout_collector', 'policy_model', 'value_model', 'eval_rollout_collector'])
-        
+        self.save_hyperparameters(ignore=['build_env_fn', 'train_rollout_collector', 'policy_model', 'value_model', 'eval_rollout_collector'])
+
         self.policy_model = policy_model
         self.value_model = value_model
         

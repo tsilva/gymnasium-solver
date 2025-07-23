@@ -35,7 +35,7 @@ def main():
     # Build environment:
 
 
-    build_env_fn = setup_environment(CONFIG, n_envs=1) # TODO: consider getting rid of this method or moving everything inside it
+    build_env_fn = setup_environment(CONFIG)#, n_envs=1) # TODO: consider getting rid of this method or moving everything inside it
     env = build_env_fn(CONFIG.seed)
     log_env_info(env)
 

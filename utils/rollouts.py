@@ -276,7 +276,7 @@ def collect_rollouts(
             )
             stats = {
                 "n_episodes": total_episode_count,
-                "n_steps": rollout_step_count,
+                "n_steps": total_step_count,
                 "mean_ep_reward": float(np.mean(episode_reward_deque))
                 if episode_reward_deque
                 else 0.0,
@@ -295,28 +295,8 @@ class SyncRolloutCollector():
         self.deterministic = deterministic
         self.n_steps = n_steps
         self.n_episodes = n_episodes
-        #self.dataset = RolloutDataset()
         self.generator = None
-    """
-    
-    def create_dataloader(self, batch_size: int = 64):
-        # TODO: ensure a rollout is created before creating the dataloader
-        trajectories, stats = self.collect() # TODO: this seems fishy, what if it was already called
-        dataloader = DataLoader(
-            self.dataset,
-            batch_size=batch_size,
-            shuffle=True,
-            # TODO: fix num_workers, training not converging when they are on
-            # Pin memory is not supported on MPS
-            #pin_memory=True if self.device.type != 'mps' else False,
-            # TODO: Persistent workers + num_workers is fast but doesn't converge
-            #persistent_workers=True if self.device.type != 'mps' else False,
-            # Using multiple workers stalls the start of each epoch when persistent workers are disabled
-            #num_workers=multiprocessing.cpu_count() // 2 if self.device.type != 'mps' else 0
-        )
-        return trajectories, stats, dataloader
-    """
-    
+
     # TODO: is this dataset/dataloader update strategy correct?
     def collect(self, n_episodes=None, n_steps=None, deterministic=None, collect_frames=False):
         if not self.generator:

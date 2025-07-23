@@ -92,8 +92,9 @@ class Learner(pl.LightningModule):
         if (self.current_epoch + 1) % self.config.eval_interval == 0: 
             _, stats = self.eval_rollout_collector.collect() # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
             self.log_metrics(stats, prog_bar=["mean_ep_reward"], prefix="eval")
+            
             mean_ep_reward = stats['mean_ep_reward']
-            if mean_ep_reward >= self.config.reward_threshold:
+            if mean_ep_reward >= self.config.reward_threshold: # TODO; change to eval_reward_threshold
                 print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {mean_ep_reward:.2f} >= threshold {self.config.reward_threshold}")
                 self.trainer.should_stop = True
 

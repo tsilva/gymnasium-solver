@@ -6,7 +6,7 @@ class REINFORCELearner(Learner):
     def __init__(self, config, train_rollout_collector, policy_model, value_model=None, eval_rollout_collector=None):
         super().__init__(config, train_rollout_collector, policy_model, value_model=value_model, eval_rollout_collector=eval_rollout_collector)
         
-        self.save_hyperparameters(ignore=['build_env_fn', 'rollout_collector', 'policy_model'])
+        self.save_hyperparameters(ignore=['build_env_fn', 'train_rollout_collector', 'policy_model', 'value_model', 'eval_rollout_collector'])
 
         self.policy_model = policy_model
 

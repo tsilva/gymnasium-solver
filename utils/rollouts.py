@@ -61,7 +61,7 @@ def _collect_rollouts(
     n_episodes: Optional[int] = None,
     deterministic: bool = False,
     gamma: float = 0.99,
-    lam: float = 0.95,
+    gae_lambda: float = 0.95,
     normalize_advantage: bool = True,
     advantages_norm_eps: float = 1e-8,
     collect_frames: bool = False,
@@ -209,7 +209,7 @@ def _collect_rollouts(
 
             for t in reversed(range(T)):
                 delta = rewards_arr[t] + gamma * next_value * next_non_terminal - values_arr[t]
-                gae = delta + gamma * lam * gae * next_non_terminal
+                gae = delta + gamma * gae_lambda * gae * next_non_terminal
                 advantages_arr[t] = gae
                 next_value = values_arr[t]
                 next_non_terminal = non_terminal[t]
@@ -273,7 +273,7 @@ def _collect_rollouts(
         yield trajectories, stats
 
 class SyncRolloutCollector():
-    def __init__(self, build_env_fn, policy_model, value_model=None, deterministic=False, n_steps=None, n_episodes=None):
+    def __init__(self, build_env_fn, policy_model, value_model=None, deterministic=False, n_steps=None, n_episodes=None, **kwargs):
         self.env = build_env_fn()
         self.policy_model = policy_model
         self.value_model = value_model
@@ -281,6 +281,7 @@ class SyncRolloutCollector():
         self.n_steps = n_steps
         self.n_episodes = n_episodes
         self._generator = None
+        self.kwargs = kwargs
 
     # TODO: is this dataset/dataloader update strategy correct?
     def collect(self, *args, **kwargs):
@@ -301,7 +302,8 @@ class SyncRolloutCollector():
             n_steps=n_steps,
             n_episodes=n_episodes,
             deterministic=deterministic,
-            collect_frames=collect_frames
+            collect_frames=collect_frames,
+            **self.kwargs
         )
         return self._generator
 

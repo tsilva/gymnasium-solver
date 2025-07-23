@@ -35,7 +35,7 @@ class RLConfig:
     # Training
     max_epochs: int = -1
     gamma: float = 0.99
-    lam: float = 0.95
+    gae_lambda: float = 0.95
     clip_epsilon: float = 0.2
 
     train_rollout_interval: int = 10
@@ -107,6 +107,13 @@ class RLConfig:
         final_config['env_spec'] = env_spec
         
         return cls(**final_config)
+    
+    # TODO: make sure these are making it through rollout collecotr
+    def rollout_collector_hyperparams(self) -> Dict[str, Any]:
+        return {
+            'gamma': self.gamma,
+            'gae_lambda': self.gae_lambda
+        }
 
 
 def load_config(env_id: str, algo_id: str, config_dir: str = "configs") -> RLConfig:

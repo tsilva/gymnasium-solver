@@ -88,7 +88,8 @@ class BaseAgent(pl.LightningModule):
             lambda: self.build_env_fn(self.config.seed),
             self.policy_model,
             value_model=self.value_model,
-            n_steps=self.config.train_rollout_steps
+            n_steps=self.config.train_rollout_steps,
+            **self.config.rollout_collector_hyperparams()
         )
 
         self.training_start_time = time.time()
@@ -145,7 +146,8 @@ class BaseAgent(pl.LightningModule):
                 lambda: self.build_env_fn(random.randint(0, 10000)),  # Random seed for eval
                 self.policy_model,
                 n_episodes=self.config.eval_rollout_episodes,
-                deterministic=True
+                deterministic=True,
+                **self.config.rollout_collector_hyperparams()
             )
             _, stats = eval_rollout_collector.collect() # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
             del eval_rollout_collector  # Clean up collector
@@ -206,11 +208,13 @@ class BaseAgent(pl.LightningModule):
         self.to("mps")
       
         from utils.environment import group_frames_by_episodes, render_episode_frames
+        # TODO: make sure this is not calculating advantages
         eval_rollout_collector = SyncRolloutCollector(
             lambda: self.build_env_fn(random.randint(0, 10000)),  # Random seed for eval
             self.policy_model,
             n_episodes=self.config.eval_rollout_episodes,
-            deterministic=True
+            deterministic=True,
+            **self.config.rollout_collector_hyperparams()
         )
         try: trajectories, stats = eval_rollout_collector.collect(collect_frames=True) # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
         finally: del eval_rollout_collector

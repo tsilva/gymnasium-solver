@@ -14,6 +14,9 @@ class PPO(BaseAgent):
     def compute_loss(self, batch):
         states, actions, rewards, dones, old_logprobs, values, advantages, returns, frames = batch
         
+        clip_epsilon = self.config.clip_epsilon
+        entropy_coef = self.config.entropy_coef
+
         logits = self.policy_model(states)
         value_pred = self.value_model(states).squeeze()
     
@@ -22,17 +25,17 @@ class PPO(BaseAgent):
 
         ratio = torch.exp(new_logps - old_logprobs)
         surr1 = ratio * advantages
-        surr2 = torch.clamp(ratio, 1.0 - self.clip_epsilon, 1.0 + self.clip_epsilon) * advantages
+        surr2 = torch.clamp(ratio, 1.0 - clip_epsilon, 1.0 + clip_epsilon) * advantages
         entropy = dist.entropy().mean()
         
-        policy_loss = -torch.min(surr1, surr2).mean() - self.entropy_coef * entropy
+        policy_loss = -torch.min(surr1, surr2).mean() - entropy_coef * entropy
         
         # Value loss
         # TODO: softcode value scaling coefficient
         value_loss = 0.5 * ((returns - value_pred) ** 2).mean()
         
         # Metrics (detached for logging)
-        clip_fraction = ((ratio < 1.0 - self.clip_epsilon) | (ratio > 1.0 + self.clip_epsilon)).float().mean()
+        clip_fraction = ((ratio < 1.0 - clip_epsilon) | (ratio > 1.0 + clip_epsilon)).float().mean()
         kl_div = (old_logprobs - new_logps).mean()
         approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
         explained_var = 1 - torch.var(returns - value_pred.detach()) / torch.var(returns)

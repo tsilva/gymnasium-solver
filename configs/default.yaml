@@ -7,7 +7,7 @@ seed: 42
 # Training
 max_epochs: -1
 gamma: 0.99
-lam: 0.95
+gae_lambda: 0.95
 clip_epsilon: 0.2
 
 train_rollout_interval: 1

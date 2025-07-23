@@ -16,7 +16,7 @@ reinforce:
   policy_lr: 1e-3
 
 ppo:
-  policy_lr: 1e-3
-  value_lr: 1e-3
-  lam: 0.95
+  policy_lr: 3e-3
+  value_lr: 3e-3
   clip_epsilon: 0.2
+  gae_lambda: 0.95

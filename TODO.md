@@ -1,3 +1,4 @@
+- BUG: eval is being calculated before window is full, consider evaling frequently by n_steps instead of n_episodes
 - Add max_grad_norm support (0.5 for cartpole)
 - Add value baseline support for reinforce
 - train_rollout_steps_per_env

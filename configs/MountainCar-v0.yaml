@@ -1,0 +1,23 @@
+# CartPole-v1 Environment Configuration
+# Reference: https://github.com/DLR-RM/rl-baselines3-zoo/tree/master/hyperparams
+
+default:
+  eval_reward_threshold: -110     # Environment is considered solved around this value
+  train_rollout_interval: 1
+  train_rollout_steps: 10000      # Longer rollouts help with sparse rewards
+  train_batch_size: 1000
+  eval_rollout_interval: 10
+  eval_rollout_episodes: 5
+  hidden_dims: [128, 128]         # More capacity helps model long-term strategies
+  gamma: 0.99                     # Avoid γ=1.0 due to infinite horizon & unstable returns
+  entropy_coef: 0.15              # Encourage exploration for sparse reward
+
+reinforce:
+  policy_lr: 5e-4                 # Lower LR due to unstable gradients from sparse rewards
+
+ppo:
+  policy_lr: 1e-3
+  value_lr: 1e-3
+  clip_epsilon: 0.2
+  gae_lambda: 0.95
+

@@ -78,7 +78,8 @@ def main():
         # TODO: pass env factory and rebuild env on start/stop? this allows using same rollout collector for final evaluation
         build_env_fn(CONFIG.seed + 1000),  # Use a different seed for evaluation
         policy_model,
-        n_steps=CONFIG.train_rollout_steps # TODO: change this
+        n_episodes=10,
+        #n_steps=CONFIG.train_rollout_steps # TODO: change this
     )
     algo_id = ALGO_ID.lower()
     if algo_id == "ppo": agent = PPOLearner(CONFIG, train_rollout_collector, policy_model, value_model, eval_rollout_collector=eval_rollout_collector)
@@ -105,7 +106,7 @@ def main():
         grid=(2, 2), 
         text_color=(0, 0, 0), 
         out_dir="./tmp"
-    )
+)
 
     print(f"Mean reward: {results['mean_reward']:.2f}")
 

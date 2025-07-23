@@ -40,7 +40,7 @@ class Learner(pl.LightningModule):
     #    if stage == "fit": self._setup_stage_fit()
     
     #def _setup_stage_fit(self):
-        #self.train_rollout_collector.collect_rollouts()
+        #self.train_rollout_collector.collect()
 
     def train_dataloader(self):
         #device = _device_of(self.policy_model) # models are alredy in correct device ehre
@@ -63,13 +63,13 @@ class Learner(pl.LightningModule):
         # Collect new rollout if needed
         # TODO: hack, skipping rollout collection for first epoch because a rollout was collected when the dataloader was created (this seems like a hack)
         if self.current_epoch > 0 and (self.current_epoch + 1) % self.config.rollout_interval == 0:
-            _, stats = self.train_rollout_collector.collect_rollouts() # TODO: prefix keys? BUG: this is discarding first rollout
+            _, stats = self.train_rollout_collector.collect() # TODO: prefix keys? BUG: this is discarding first rollout
             self.log_metrics(stats, prog_bar=["mean_ep_reward"], prefix="train")
             #self._collect_and_update_rollout()
 
     def on_train_epoch_end(self):
         if (self.current_epoch + 1) % self.config.eval_interval == 0: 
-            _, stats = self.eval_rollout_collector.collect_rollouts() # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
+            _, stats = self.eval_rollout_collector.collect() # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
             self.log_metrics(stats, prog_bar=["mean_ep_reward"], prefix="eval")
             mean_ep_reward = stats['mean_ep_reward']
             if mean_ep_reward >= self.config.reward_threshold:

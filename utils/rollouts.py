@@ -55,6 +55,9 @@ def inference_ctx(*modules):
 def _device_of(module: torch.nn.Module) -> torch.device:
     return next(module.parameters()).device
 
+
+# TODO: close envs in the end
+# TODO: make rollout collector use its own buffer
 # TODO: add # env.normalize_obs() support
 # TODO: batch value inference post rollout
 # TODO: consider returning transition object
@@ -301,21 +304,17 @@ class RolloutDataset(TorchDataset):
         item = tuple(t[idx] for t in self.trajectories)
         return item
 
-# TODO: close envs in the end
-# TODO: make rollout collector use its own buffer
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class SyncRolloutCollector():
     def __init__(self, env, policy_model, value_model=None, deterministic=False, n_steps=None, n_episodes=None):
         self.env = env
         self.policy_model = policy_model
         self.value_model = value_model
+        self.deterministic = deterministic
         self.n_steps = n_steps
         self.n_episodes = n_episodes
         self.dataset = RolloutDataset()
-        self.deterministic = deterministic  # TODO: make this configurable
-        self.generator = None  # Generator for collecting rollouts
-
-        #self.last_obs = None
+        self.generator = None
 
     def create_dataloader(self, batch_size: int = 64):
         # TODO: ensure a rollout is created before creating the dataloader
@@ -334,10 +333,6 @@ class SyncRolloutCollector():
         )
         return trajectories, stats, dataloader
     
-    # TODO: should this be called collect_rollout instead?
-    # TODO: should this be a generator?
-    # TODO: create decorator that ensures models are in eval mode until function end and then restores them to origial mode (eval or train)
-    # TODO: should I call this collect_rollout()
     # TODO: is this dataset/dataloader update strategy correct?
     def collect(self, n_episodes=None, n_steps=None, deterministic=None, collect_frames=False):
         if not self.generator:

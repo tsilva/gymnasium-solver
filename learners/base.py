@@ -1,9 +1,5 @@
 import time
 import pytorch_lightning as pl
-import torch
-
-def _device_of(module: torch.nn.Module) -> torch.device:
-    return next(module.parameters()).device
 
 class Learner(pl.LightningModule):
     
@@ -36,12 +32,6 @@ class Learner(pl.LightningModule):
         """Override in subclass to implement algorithm-specific optimization"""
         raise NotImplementedError("Subclass must implement optimize_models()")
 
-    #def setup(self, stage: str):
-    #    if stage == "fit": self._setup_stage_fit()
-    
-    #def _setup_stage_fit(self):
-        #self.train_rollout_collector.collect()
-
     def train_dataloader(self):
         #device = _device_of(self.policy_model) # models are alredy in correct device ehre
         _, stats, dataloader = self.train_rollout_collector.create_dataloader(self.config.batch_size)
@@ -60,12 +50,10 @@ class Learner(pl.LightningModule):
 
     # TODO: log train epoch duration
     def on_train_epoch_start(self):
-        # Collect new rollout if needed
         # TODO: hack, skipping rollout collection for first epoch because a rollout was collected when the dataloader was created (this seems like a hack)
         if self.current_epoch > 0 and (self.current_epoch + 1) % self.config.rollout_interval == 0:
-            _, stats = self.train_rollout_collector.collect() # TODO: prefix keys? BUG: this is discarding first rollout
+            _, stats = self.train_rollout_collector.collect()
             self.log_metrics(stats, prog_bar=["mean_ep_reward"], prefix="train")
-            #self._collect_and_update_rollout()
 
     def on_train_epoch_end(self):
         if (self.current_epoch + 1) % self.config.eval_interval == 0: 
@@ -78,6 +66,7 @@ class Learner(pl.LightningModule):
 
     # TODO: log training step duration
     def training_step(self, batch, batch_idx): # TODO: should I call super?
+        super().training_step(batch, batch_idx)
         self.total_steps += batch[0].size(0)
         loss_results = self.compute_loss(batch)
         self.optimize_models(loss_results)

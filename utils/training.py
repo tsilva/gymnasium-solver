@@ -5,8 +5,6 @@ import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 #from tsilva_notebook_utils.lightning import WandbCleanup
 
-    
-
 def create_trainer(config, project_name=None, run_name=None):
     """Create PyTorch Lightning trainer with W&B logging."""
     

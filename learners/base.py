@@ -66,13 +66,13 @@ class Learner(pl.LightningModule):
         # TODO: hack, skipping rollout collection for first epoch because a rollout was collected when the dataloader was created (this seems like a hack)
         if self.current_epoch > 0 and (self.current_epoch + 1) % self.config.rollout_interval == 0:
             _, stats = self.train_rollout_collector.collect_rollouts() # TODO: prefix keys? BUG: this is discarding first rollout
-            self.log_dict(stats, on_step=False, on_epoch=True)#, prefix="train") # TODO: what are the on_step/on_epoch defaults?
+            self.log_metrics(stats, prog_bar=["mean_ep_reward"], prefix="train")
             #self._collect_and_update_rollout()
 
     def on_train_epoch_end(self):
         if (self.current_epoch + 1) % self.config.eval_interval == 0: 
             _, stats = self.eval_rollout_collector.collect_rollouts() # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
-            self.log_dict(stats, on_step=False, on_epoch=True)#, prefix="eval") # TODO: log prefix?
+            self.log_metrics(stats, prog_bar=["mean_ep_reward"], prefix="eval")
             mean_ep_reward = stats['mean_ep_reward']
             if mean_ep_reward >= self.config.reward_threshold:
                 print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {mean_ep_reward:.2f} >= threshold {self.config.reward_threshold}")
@@ -87,3 +87,10 @@ class Learner(pl.LightningModule):
     def validation_step(self, *args, **kwargs):
         return super().validation_step(*args, **kwargs)
     
+    def log_metrics(self, metrics, *, on_epoch=None, on_step=None, prog_bar=None, prefix=None):
+        for key, value in metrics.items():
+            _on_epoch = True if on_epoch is True or key in (on_epoch or []) else None
+            _on_step =  True if on_step is True or key in (on_step or []) else None
+            _prog_bar = True if prog_bar is True or key in (prog_bar or []) else None
+            _key = f"{prefix}/{key}" if prefix else key
+            self.log(_key, value, on_epoch=_on_epoch, on_step=_on_step, prog_bar=_prog_bar)

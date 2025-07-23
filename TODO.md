@@ -1,6 +1,8 @@
-- Add support for logging metric prefixes (add logging method to base class)
-- Add support for logging relevant metrics in the progress bar
+- Benchmark rollout collector, improve speed
 - Run training from notebook again and make sure eval/rendering works
+
+
+- Add support for multitask heads based on envid and/or controller type
 - Make sure rollout evals are closed
 - When I group by episodes I discard data from that rollout that won't be included in the next sequence of trajectories, so I need to make sure I don't lose data
 - Log config into wandb experiment

@@ -7,6 +7,7 @@ import numpy as np
 import torch
 from torch.distributions import Categorical
 
+# TODO: move this somewhere else?
 @contextmanager
 def inference_ctx(*modules):
     """
@@ -35,7 +36,7 @@ def inference_ctx(*modules):
             if flag:   # only restore if it *was* in train mode
                 m.train()
 
-# TODO: is this needed?
+# TODO: move this somewhere else?
 def _device_of(module: torch.nn.Module) -> torch.device:
     return next(module.parameters()).device
 
@@ -51,7 +52,7 @@ def _device_of(module: torch.nn.Module) -> torch.device:
 # TODO: look for bugs
 # TODO: empirically torch.inference_mode() is not faster than torch.no_grad() for this use case, retest for other envs
 @torch.no_grad()
-def collect_rollouts(
+def _collect_rollouts(
     env,
     policy_model: torch.nn.Module,
     *,
@@ -272,32 +273,39 @@ def collect_rollouts(
         yield trajectories, stats
 
 class SyncRolloutCollector():
-    def __init__(self, env, policy_model, value_model=None, deterministic=False, n_steps=None, n_episodes=None):
-        self.env = env
+    def __init__(self, build_env_fn, policy_model, value_model=None, deterministic=False, n_steps=None, n_episodes=None):
+        self.env = build_env_fn()
         self.policy_model = policy_model
         self.value_model = value_model
         self.deterministic = deterministic
         self.n_steps = n_steps
         self.n_episodes = n_episodes
-        self.generator = None
+        self._generator = None
 
     # TODO: is this dataset/dataloader update strategy correct?
-    def collect(self, n_episodes=None, n_steps=None, deterministic=None, collect_frames=False):
-        if not self.generator:
-            n_episodes = n_episodes if n_episodes is not None else self.n_episodes
-            n_steps = n_steps if n_steps is not None else self.n_steps
-            deterministic = deterministic if deterministic is not None else self.deterministic
-            self.generator = collect_rollouts( # TODO: don't return tensors, return numpy arrays?
-                self.env,
-                self.policy_model,
-                value_model=self.value_model,
-                n_steps=n_steps,
-                n_episodes=n_episodes,
-                deterministic=deterministic,
-                collect_frames=collect_frames
-                #last_obs=self.last_obs, # TODO: should I use this?
-                #collect_frames=True
-            )
-        trajectories, stats = next(self.generator)
-        #self.rollout_dataset.update(*trajectories)
+    def collect(self, *args, **kwargs):
+        generator = self._ensure_generator(*args, **kwargs)
+        trajectories, stats = next(generator)
         return trajectories, stats
+    
+    def _ensure_generator(self, n_episodes=None, n_steps=None, deterministic=None, collect_frames=False):
+        if self._generator: return self._generator
+
+        n_episodes = n_episodes if n_episodes is not None else self.n_episodes
+        n_steps = n_steps if n_steps is not None else self.n_steps
+        deterministic = deterministic if deterministic is not None else self.deterministic
+        self._generator = _collect_rollouts( # TODO: don't return tensors, return numpy arrays?
+            self.env,
+            self.policy_model,
+            value_model=self.value_model,
+            n_steps=n_steps,
+            n_episodes=n_episodes,
+            deterministic=deterministic,
+            collect_frames=collect_frames
+        )
+        return self._generator
+
+    def __del__(self):
+        if self._generator is None: return 
+        self._generator.close()
+        self.env.close()

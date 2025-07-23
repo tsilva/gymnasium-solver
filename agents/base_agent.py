@@ -1,10 +1,10 @@
 import time
 import json
+import random
 from dataclasses import  asdict
 import pytorch_lightning as pl
 from torch.utils.data import Dataset as TorchDataset
 from torch.utils.data import DataLoader
-from utils.models import PolicyNet, ValueNet
 from utils.rollouts import SyncRolloutCollector
 from utils.config import load_config
 
@@ -41,56 +41,32 @@ class BaseAgent(pl.LightningModule):
 
         print(json.dumps(asdict(config), indent=2))
 
-        # TODO: should I set this before training starts? think deeply to where this should be set
-        from stable_baselines3.common.utils import set_random_seed
-        set_random_seed(config.seed)
-
         # Create environment builder
         from utils.environment import build_env
-        build_env_fn = lambda seed: build_env(
+        self.build_env_fn = lambda seed: build_env(
             config.env_id,
             norm_obs=config.normalize_obs,
             norm_reward=config.normalize_reward,
             n_envs=n_envs,
             seed=seed
         )
-        self.build_env_fn = build_env_fn
-        
-        input_dim = config.env_spec['input_dim']
-        output_dim = config.env_spec['output_dim']
-        policy_model = PolicyNet(input_dim, output_dim, config.hidden_dims)
-        self.policy_model = policy_model
-
-        # TODO: softcode this better
-        value_model = ValueNet(input_dim, config.hidden_dims) if config.algo_id == "ppo" else None
-        self.value_model = value_model
-
-        # Common RL components
-        # TODO: create this only for training? create on_fit_start() and destroy with on_fit_end()?
-        self.rollout_dataset = RolloutDataset()
-        self.train_rollout_collector = SyncRolloutCollector(
-            build_env_fn(config.seed),
-            policy_model,
-            value_model=value_model,
-            n_steps=config.train_rollout_steps
-        )
-
-        # TODO: create a new one each eval with a different seed
-        self.eval_rollout_collector = SyncRolloutCollector(
-            # TODO: pass env factory and rebuild env on start/stop? this allows using same rollout collector for final evaluation
-            build_env_fn(config.seed + 1000),
-            policy_model,
-            n_episodes=config.eval_rollout_episodes,
-            deterministic=True
-        )
 
         # Training state
         self.automatic_optimization = False
         self.training_start_time = None
         self.total_steps = 0  # Track total training steps consumed
+
+        # TODO: move this to on_fit_start()?
+        self.policy_model = None
+        self.value_model = None
+        self.create_models()
         
     def forward(self, x):
         return self.policy_model(x)
+    
+    def create_models(self):
+        """Override in subclass to create algorithm-specific models"""
+        raise NotImplementedError("Subclass must implement create_models()")
     
     def compute_loss(self, batch):
         """Override in subclass to compute algorithm-specific loss"""
@@ -100,15 +76,38 @@ class BaseAgent(pl.LightningModule):
         """Override in subclass to implement algorithm-specific optimization"""
         raise NotImplementedError("Subclass must implement optimize_models()")
 
+    def on_fit_start(self):
+        # TODO: should I set this before training starts? think deeply to where this should be set
+        from stable_baselines3.common.utils import set_random_seed
+        set_random_seed(self.config.seed)
+
+        # Common RL components
+        # TODO: create this only for training? create on_fit_start() and destroy with on_fit_end()?
+        self.train_rollout_dataset = RolloutDataset()
+        self.train_rollout_collector = SyncRolloutCollector(
+            lambda: self.build_env_fn(self.config.seed),
+            self.policy_model,
+            value_model=self.value_model,
+            n_steps=self.config.train_rollout_steps
+        )
+
+        self.training_start_time = time.time()
+        self.total_steps = 0  # Reset step counter
+        print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    def on_epoch_start(self):
+        pass
+
     def train_dataloader(self):
         trajectories, stats = self.train_rollout_collector.collect()
-        self.rollout_dataset.update(*trajectories)
+        self.train_rollout_dataset.update(*trajectories)
         self._train_rollout_stats = stats # TODO: do I need to do this
 
         # TODO: memory leaks? what if I initialize the dataloader with correct rollout size?
         # TODO: does this approach work where we swap the data underneath the dataloader between epochs?
+        # TODO: only try enabling num workers after PPO converges
         return DataLoader(
-            self.rollout_dataset,
+            self.train_rollout_dataset,
             batch_size=self.config.train_batch_size,
             shuffle=True,
             # TODO: fix num_workers, training not converging when they are on
@@ -119,16 +118,6 @@ class BaseAgent(pl.LightningModule):
             # Using multiple workers stalls the start of each epoch when persistent workers are disabled
             #num_workers=multiprocessing.cpu_count() // 2 if self.device.type != 'mps' else 0
         )
-
-    def on_fit_start(self):
-        self.training_start_time = time.time()
-        self.total_steps = 0  # Reset step counter
-        print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
-    
-    def on_fit_end(self):
-        if self.training_start_time:
-            total_time = time.time() - self.training_start_time
-            print(f"Training completed in {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
 
     def training_step(self, batch, batch_idx):
         batch_size = batch[0].size(0)
@@ -150,15 +139,30 @@ class BaseAgent(pl.LightningModule):
                 print(f"Early stopping at epoch {self.current_epoch} with train mean reward {mean_ep_reward:.2f} >= threshold {self.config.train_reward_threshold}")
                 self.trainer.should_stop = True
 
-
         if (self.current_epoch + 1) % self.config.eval_rollout_interval == 0: 
-            _, stats = self.eval_rollout_collector.collect() # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
+            eval_rollout_collector = SyncRolloutCollector(
+                lambda: self.build_env_fn(random.randint(0, 10000)),  # Random seed for eval
+                self.policy_model,
+                n_episodes=self.config.eval_rollout_episodes,
+                deterministic=True
+            )
+            _, stats = eval_rollout_collector.collect() # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
+            del eval_rollout_collector  # Clean up collector
+
             self.log_metrics(stats, prog_bar=["mean_ep_reward"], prefix="eval")
             
             mean_ep_reward = stats['mean_ep_reward']
             if self.config.eval_reward_threshold and mean_ep_reward >= self.config.eval_reward_threshold:
                 print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {mean_ep_reward:.2f} >= threshold {self.config.eval_reward_threshold}")
                 self.trainer.should_stop = True
+    
+    def on_fit_end(self):
+        total_time = time.time() - self.training_start_time
+        print(f"Training completed in {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
+
+        # TODO: are these set to None?
+        del self.train_rollout_collector  # Clean up collector
+        del self.train_rollout_dataset  # Clean up dataset
 
     # TODO: when does this run? should I run eval_rollout_collector here?
     #def validation_step(self, *args, **kwargs):

@@ -1,9 +1,16 @@
 import torch
 from torch.distributions import Categorical
 from .base_agent import BaseAgent
+from utils.models import PolicyNet, ValueNet
 
 class PPO(BaseAgent):
-    
+
+    def create_models(self):
+        input_dim = self.config.env_spec['input_dim']
+        output_dim = self.config.env_spec['output_dim']
+        self.policy_model = PolicyNet(input_dim, output_dim, self.config.hidden_dims)
+        self.value_model  = ValueNet(input_dim, self.config.hidden_dims)
+
     def compute_loss(self, batch):
         states, actions, rewards, dones, old_logprobs, values, advantages, returns, frames = batch
         

@@ -26,82 +26,82 @@ class RLConfig:
     env_id: str  # Environment ID string (e.g., 'CartPole-v1')
     algo_id: str  # Algorithm ID string (e.g., 'ppo', 'dqn')
     env_spec: Dict[str, Any]  # Environment specification dictionary
-    seed: int  # Random seed for reproducibility
+    seed: int = 42  # Default: 42
 
     # Networks
-    hidden_dims: Union[int, Tuple[int, ...]]  # Hidden layer dimensions for neural networks
-    policy_lr: float  # Learning rate for the policy network
-    value_lr: float  # Learning rate for the value network
-    entropy_coef: float  # Entropy coefficient for exploration
+    hidden_dims: Union[int, Tuple[int, ...]] = (64,)  # Default: [64]
+    policy_lr: float = 0.0003  # Default: 0.0003
+    value_lr: float = 0.001  # Default: 0.001
+    entropy_coef: float = 0.01  # Default: 0.01
 
     # Training
-    max_epochs: int  # Maximum number of training epochs
-    train_rollout_interval: int  # Interval (in epochs) between training rollouts
-    train_rollout_steps: int  # Number of steps per training rollout
-    train_reward_threshold: float  # Reward threshold to stop training early
-    train_batch_size: int  # Batch size for training updates
-    gamma: float  # Discount factor for future rewards
-    gae_lambda: float  # Lambda for Generalized Advantage Estimation (GAE)
-    clip_epsilon: float  # Clipping epsilon for PPO or similar algorithms
+    max_epochs: int = -1  # Default: -1
+    train_rollout_interval: int = 1  # Default: 1
+    train_rollout_steps: int = 128  # Default: 128
+    train_reward_threshold: float = None  # No default
+    train_batch_size: int = 64  # Default: 64
+    gamma: float = 0.99  # Default: 0.99
+    gae_lambda: float = 0.95  # Default: 0.95
+    clip_epsilon: float = 0.2  # Default: 0.2
 
     # Evaluation
-    eval_rollout_interval: int  # Interval (in epochs) between evaluation rollouts
-    eval_rollout_episodes: int  # Number of episodes per evaluation rollout
-    eval_reward_threshold: float  # Reward threshold for evaluation
+    eval_rollout_interval: int = 10  # Default: 10
+    eval_rollout_episodes: int = 32  # Default: 32
+    eval_reward_threshold: float = None  # No default
 
     # Normalization
-    normalize_obs: bool  # Whether to normalize observations
-    normalize_reward: bool  # Whether to normalize rewards
+    normalize_obs: bool = False  # Default: false
+    normalize_reward: bool = False  # Default: false
 
     # Miscellaneous
-    mean_reward_window: int  # Window size for calculating mean reward
+    mean_reward_window: int = 100  # Default: 100
     
     @classmethod
     def load_from_yaml(cls, env_id: str, algo_id: str, config_dir: str = "configs") -> 'RLConfig':
         """
         Load configuration from YAML files with hierarchical overrides:
-        1. Start with default.yaml
+        1. Start with RLConfig class defaults
         2. Apply environment-specific config (env_id.yaml -> default section)
         3. Apply algorithm-specific config (env_id.yaml -> algorithm section)
         """
         # Get the project root directory
         project_root = Path(__file__).parent.parent
         config_path = project_root / config_dir
-        
-        # Load default configuration
-        default_config_path = config_path / "default.yaml"
-        with open(default_config_path, 'r') as f: default_config = yaml.safe_load(f)
-        
+
+        # Start with class defaults
+        final_config = {field.name: getattr(cls, field.name) for field in cls.__dataclass_fields__.values()}
+
         # Load environment-specific configuration
         env_config_path = config_path / f"{env_id}.yaml"
-        with open(env_config_path, 'r') as f: env_config = yaml.safe_load(f)
-        
-        # Start with default config
-        final_config = default_config.copy()
+        with open(env_config_path, 'r') as f:
+            env_config = yaml.safe_load(f)
+
+        # Set env_id and algo_id
         final_config['env_id'] = env_id
         final_config['algo_id'] = algo_id
-        
+
         # Apply environment default config
         if 'default' in env_config:
             final_config.update(env_config['default'])
-        
+
         # Apply algorithm-specific config
-        algo_id = algo_id.lower()
-        if algo_id in env_config: final_config.update(env_config[algo_id])
+        algo_id_lower = algo_id.lower()
+        if algo_id_lower in env_config:
+            final_config.update(env_config[algo_id_lower])
 
         # Convert any numeric strings (like scientific notation)
         final_config = _convert_numeric_strings(final_config)
-        
+
         # Convert list values to tuples for hidden_dims
         if 'hidden_dims' in final_config and isinstance(final_config['hidden_dims'], list):
             final_config['hidden_dims'] = tuple(final_config['hidden_dims'])
-        
+
         # TODO: better way to do this?
         from utils.environment import build_env, get_env_spec
         env = build_env(env_id)
         env_spec = get_env_spec(env)
         final_config['env_spec'] = env_spec
-        
+
         instance = cls(**final_config)
         instance.validate()
         return instance

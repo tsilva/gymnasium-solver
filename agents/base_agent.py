@@ -95,6 +95,14 @@ class BaseAgent(pl.LightningModule):
             n_steps=self.config.train_rollout_steps,
             **self.config.rollout_collector_hyperparams()
         )
+
+        self.eval_rollout_collector = SyncRolloutCollector(
+            lambda: self.build_env_fn(random.randint(0, 10000)),  # Random seed for eval
+            self.policy_model,
+            n_episodes=self.config.eval_rollout_episodes,
+            deterministic=True,
+            **self.config.rollout_collector_hyperparams()
+        )
     
     def on_train_epoch_start(self):
         pass
@@ -140,13 +148,7 @@ class BaseAgent(pl.LightningModule):
 
         if (self.current_epoch + 1) % self.config.eval_rollout_interval == 0: 
             # TODO: reuse this with eval()
-            eval_rollout_collector = SyncRolloutCollector(
-                lambda: self.build_env_fn(random.randint(0, 10000)),  # Random seed for eval
-                self.policy_model,
-                n_episodes=self.config.eval_rollout_episodes,
-                deterministic=True,
-                **self.config.rollout_collector_hyperparams()
-            )
+           
             _, stats = eval_rollout_collector.collect() # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
             del eval_rollout_collector  # Clean up collector
 

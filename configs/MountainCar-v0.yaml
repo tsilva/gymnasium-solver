@@ -2,6 +2,8 @@
 # Reference: https://github.com/DLR-RM/rl-baselines3-zoo/tree/master/hyperparams
 
 default:
+  eval_reward_threshold: -110         # Environment is considered solved around this value
+
   hidden_dims: [128, 128]             # More capacity helps model long-term strategies
   policy_lr: 1e-3                     # Default policy LR (overridden per algo below)
   value_lr: 1e-3                      # Default value LR (overridden per algo below)
@@ -15,10 +17,6 @@ default:
   gamma: 0.99                         # Slight discount to avoid instability from infinite horizon
   gae_lambda: 0.95                    # Standard GAE lambda for bias/variance tradeoff
   clip_epsilon: 0.2                   # Standard PPO clipping
-
-  eval_rollout_interval: 10           # Evaluate every 10 epochs
-  eval_rollout_episodes: 5            # Fewer episodes for faster eval, enough for stability
-  eval_reward_threshold: -110         # Environment is considered solved around this value
 
   normalize_obs: true                 # Normalize observations for better learning
   normalize_reward: false             # Reward normalization not needed for this env

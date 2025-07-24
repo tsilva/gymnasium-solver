@@ -181,6 +181,7 @@ class BaseAgent(pl.LightningModule):
             n_steps=self.config.train_rollout_steps,
             **self.config.rollout_collector_hyperparams()
         )
+        print(str(self.train_collector))
 
     def _start_eval_collector(self):
         # TODO: assert running with subprocenv +single env

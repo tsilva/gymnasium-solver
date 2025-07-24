@@ -1,7 +1,11 @@
+- Review CartPole-v1 hyperparams from https://github.com/DLR-RM/rl-baselines3-zoo/blob/master/hyperparams/ppo.yml
+- FEAT: n_envs should be in hyperparams because some envs won't do well with too much parallelism
+- REFACTOR: call train_rollout_steps -> n_steps and use same for eval (rollout size = n_steps * n_envs)
 - FEAT: add config __repr__ support
 - FEAT: add agent __repr__ support
 - FEAT: add collector __repr__ support
 - FEAT: Log config into wandb experiment
+- BUG: REINFORCE is calculating returns using value model?
 - BUG: eval is being calculated before window is full, consider evaling frequently by n_steps instead of n_episodes
 - BUG: fix thread safety issues with async eval collector (copy model weights with lock)
 - FEAT: get reward threshold from env specs (hardcoded)
@@ -16,7 +20,6 @@
 - Match sb3rlzoo metric names
 - Match sb3rlzoo performance
 - Add support for softcoding activations
-- Fix reinforce algo
 - Add support for different rollout collecotrs for different envs (for multitask learning)
 - When I group by episodes I discard data from that rollout that won't be included in the next sequence of trajectories, so I need to make sure I don't lose data
 - Log "n_steps" and "n_episodes" in the metric tracker

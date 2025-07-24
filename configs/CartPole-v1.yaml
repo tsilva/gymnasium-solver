@@ -2,6 +2,7 @@
 # Reference: https://github.com/DLR-RM/rl-baselines3-zoo/tree/master/hyperparams
 
 default:
+
   eval_reward_threshold: 475           # Environment is considered solved at 475
 
   hidden_dims: [64, 64]                # Sufficient capacity for CartPole
@@ -17,7 +18,7 @@ default:
   gae_lambda: 0.95                     # Standard GAE lambda for bias/variance tradeoff
   clip_epsilon: 0.2                    # Standard PPO clipping
 
-  normalize_obs: false                  # Normalize observations for better learning
+  normalize_obs: false                 # Normalize observations for better learning
   normalize_reward: false              # Reward normalization not needed for CartPole
 
   mean_reward_window: 100              # Standard window for reward smoothing
@@ -27,8 +28,8 @@ reinforce:
   entropy_coef: 0.02                   # Slightly higher entropy for more exploration
 
 ppo:
-  policy_lr: 3e-3                      # Higher LR for faster convergence with PPO
+  policy_lr: 1e-3                      # Higher LR for faster convergence with PPO
   value_lr: 1e-3                       # Standard value network LR
   clip_epsilon: 0.2                    # Standard PPO clipping
   gae_lambda: 0.95                     # Standard GAE lambda for bias/variance tradeoff
-  entropy_coef: 0.01                   # Small entropy for PPO, CartPole doesn't need much exploration
+  entropy_coef: 0.00                   # Small entropy for PPO, CartPole doesn't need much exploration

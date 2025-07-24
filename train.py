@@ -1,11 +1,18 @@
 import argparse
+import sys
+import os
 
+def is_debugger_attached():
+    return (
+        sys.gettrace() is not None or
+        os.environ.get("PYCHARM_HOSTED") == "1" or
+        os.environ.get("VSCODE_PID") is not None
+    )
 def main():
     parser = argparse.ArgumentParser(description="Train RL agent.")
     parser.add_argument("--agent", type=str, default="ppo", help="Agent type (default: ppo)")
     parser.add_argument("--env", type=str, default="CartPole-v1", help="Gymnasium environment (default: CartPole-v1)")
-    # TODO: set to 1 if in debug mode
-    parser.add_argument("--n_envs", type=str, default=1, help="Number of environments (default: auto)")
+    parser.add_argument("--n_envs", type=str, default=1 if is_debugger_attached else "auto", help="Number of environments (default: auto)")
     args = parser.parse_args()
 
     from agents import create_agent

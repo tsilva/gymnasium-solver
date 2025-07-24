@@ -81,6 +81,10 @@ class BaseAgent(pl.LightningModule):
         from stable_baselines3.common.utils import set_random_seed
         set_random_seed(self.config.seed)
 
+        self.training_start_time = time.time()
+        self.total_steps = 0  # Reset step counter
+        print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+
         # Common RL components
         # TODO: create this only for training? create on_fit_start() and destroy with on_fit_end()?
         self.train_rollout_dataset = RolloutDataset()
@@ -91,15 +95,6 @@ class BaseAgent(pl.LightningModule):
             n_steps=self.config.train_rollout_steps,
             **self.config.rollout_collector_hyperparams()
         )
-
-        self.training_start_time = time.time()
-        self.total_steps = 0  # Reset step counter
-        print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
-    
-    def on_epoch_start(self):
-        pass
-
-    def train_dataloader(self):
         trajectories, stats = self.train_rollout_collector.collect()
         self.train_rollout_dataset.update(*trajectories)
         self._train_rollout_stats = stats # TODO: do I need to do this
@@ -107,7 +102,8 @@ class BaseAgent(pl.LightningModule):
         # TODO: memory leaks? what if I initialize the dataloader with correct rollout size?
         # TODO: does this approach work where we swap the data underneath the dataloader between epochs?
         # TODO: only try enabling num workers after PPO converges
-        return DataLoader(
+        import multiprocessing
+        self.dataloader = DataLoader(
             self.train_rollout_dataset,
             batch_size=self.config.train_batch_size,
             shuffle=True,
@@ -115,10 +111,16 @@ class BaseAgent(pl.LightningModule):
             # Pin memory is not supported on MPS
             #pin_memory=True if self.device.type != 'mps' else False,
             # TODO: Persistent workers + num_workers is fast but doesn't converge
-            #persistent_workers=True if self.device.type != 'mps' else False,
+            #persistent_workers=True,# if self.device.type != 'mps' else False,
             # Using multiple workers stalls the start of each epoch when persistent workers are disabled
-            #num_workers=multiprocessing.cpu_count() // 2 if self.device.type != 'mps' else 0
+            #num_workers=multiprocessing.cpu_count() -1#// 2 if self.device.type != 'mps' else 0
         )
+    
+    def on_train_epoch_start(self):
+        pass
+
+    def train_dataloader(self):
+        return self.dataloader
 
     def training_step(self, batch, batch_idx):
         batch_size = batch[0].size(0)
@@ -132,6 +134,7 @@ class BaseAgent(pl.LightningModule):
 
     def on_train_epoch_end(self):
         if self._train_rollout_stats:
+            print(self._train_rollout_stats)
             mean_ep_reward = self._train_rollout_stats["mean_ep_reward"]
             self.log_metrics(self._train_rollout_stats, prog_bar=["mean_ep_reward"], prefix="train")
             self._train_rollout_stats = None  # Reset stats after logging
@@ -139,6 +142,10 @@ class BaseAgent(pl.LightningModule):
             if self.config.train_reward_threshold and mean_ep_reward >= self.config.train_reward_threshold:
                 print(f"Early stopping at epoch {self.current_epoch} with train mean reward {mean_ep_reward:.2f} >= threshold {self.config.train_reward_threshold}")
                 self.trainer.should_stop = True
+
+        trajectories, stats = self.train_rollout_collector.collect()
+        self.train_rollout_dataset.update(*trajectories)
+        self._train_rollout_stats = stats # TODO: do I need to do this
 
         if (self.current_epoch + 1) % self.config.eval_rollout_interval == 0: 
             # TODO: reuse this with eval()

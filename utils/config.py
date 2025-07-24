@@ -18,47 +18,43 @@ def _convert_numeric_strings(config_dict: Dict[str, Any]) -> Dict[str, Any]:
                     pass  # Keep as string if conversion fails
     return config_dict
 
-# TODO: make some of these optional
-# TODO: add validation method 
-# TODO: another name for this class
 @dataclass
 class RLConfig:
     """Reinforcement Learning Configuration."""
     
     # Environment
-    env_id: str
-    algo_id: str
-    seed: int = 42
+    env_id: str  # Environment ID string (e.g., 'CartPole-v1')
+    algo_id: str  # Algorithm ID string (e.g., 'ppo', 'dqn')
+    env_spec: Dict[str, Any] = None  # Environment specification dictionary
+    seed: int = 42  # Random seed for reproducibility
 
-    env_spec: Dict[str, Any] = None  # Environment specification
-    
-    # Training
-    max_epochs: int = -1
-    gamma: float = 0.99
-    gae_lambda: float = 0.95
-    clip_epsilon: float = 0.2
-
-    train_rollout_interval: int = 10
-    train_rollout_steps: int = 2048
-    train_reward_threshold: float = None
-    train_batch_size: int = 64
-    
-    # Evaluation
-    eval_rollout_interval: int = 10
-    eval_rollout_episodes: int = 32
-    eval_reward_threshold: float = None
-    
     # Networks
-    policy_lr: float = 3e-4
-    value_lr: float = 1e-3
-    hidden_dims: Union[int, Tuple[int, ...]] = 64
-    entropy_coef: float = 0.01
-    
-    # Other
-    normalize_obs: bool = False
-    normalize_reward: bool = False
+    hidden_dims: Union[int, Tuple[int, ...]] = 64  # Hidden layer dimensions for neural networks
+    policy_lr: float = 3e-4  # Learning rate for the policy network
+    value_lr: float = 1e-3  # Learning rate for the value network
+    entropy_coef: float = 0.01  # Entropy coefficient for exploration
 
-    mean_reward_window: int = 100
+    # Training
+    max_epochs: int = -1  # Maximum number of training epochs (-1 for unlimited)
+    train_rollout_interval: int = 10  # Interval (in epochs) between training rollouts
+    train_rollout_steps: int = 2048  # Number of steps per training rollout
+    train_reward_threshold: float = None  # Reward threshold to stop training early
+    train_batch_size: int = 64  # Batch size for training updates
+    gamma: float = 0.99  # Discount factor for future rewards
+    gae_lambda: float = 0.95  # Lambda for Generalized Advantage Estimation (GAE)
+    clip_epsilon: float = 0.2  # Clipping epsilon for PPO or similar algorithms
+
+    # Evaluation
+    eval_rollout_interval: int = 10  # Interval (in epochs) between evaluation rollouts
+    eval_rollout_episodes: int = 32  # Number of episodes per evaluation rollout
+    eval_reward_threshold: float = None  # Reward threshold for evaluation
+
+    # Normalization
+    normalize_obs: bool = False  # Whether to normalize observations
+    normalize_reward: bool = False  # Whether to normalize rewards
+
+    # Miscellaneous
+    mean_reward_window: int = 100  # Window size for calculating mean reward
     
     @classmethod
     def load_from_yaml(cls, env_id: str, algo_id: str, config_dir: str = "configs") -> 'RLConfig':
@@ -108,7 +104,7 @@ class RLConfig:
         
         return cls(**final_config)
     
-    # TODO: make sure these are making it through rollout collecotr
+
     def rollout_collector_hyperparams(self) -> Dict[str, Any]:
         return {
             'gamma': self.gamma,

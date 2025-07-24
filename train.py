@@ -13,6 +13,7 @@ def main():
 
     from agents import create_agent
     agent = create_agent(args.agent, args.env, n_envs=args.n_envs)
+    print(str(agent))
     agent.train()
     
 if __name__ == "__main__":

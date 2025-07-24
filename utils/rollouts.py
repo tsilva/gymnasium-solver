@@ -289,7 +289,8 @@ def _collect_rollouts(
         yield trajectories, stats
 
 class RolloutCollector():
-    def __init__(self, env, policy_model, value_model=None, deterministic=False, n_steps=None, n_episodes=None, **kwargs):
+    def __init__(self, _id, env, policy_model, value_model=None, deterministic=False, n_steps=None, n_episodes=None, **kwargs):
+        self._id = _id
         self.env = env
         self.policy_model = policy_model
         self.value_model = value_model
@@ -331,3 +332,49 @@ class RolloutCollector():
         if self._generator is None: return 
         self._generator.close()
         self.env.close()
+
+    def __str__(self) -> str:
+        """Return a human-readable string representation of the rollout collector."""
+        lines = [f"RolloutCollector '{self._id}'", "=" * (len(f"RolloutCollector '{self._id}'")), ""]
+        
+        # Configuration section
+        lines.extend([
+            "CONFIGURATION:",
+            f"  Environment: {getattr(self.env, 'spec', 'Unknown')} ({self.env.num_envs} parallel envs)",
+            f"  Policy Model: {self.policy_model.__class__.__name__}",
+            f"  Value Model: {self.value_model.__class__.__name__ if self.value_model else 'None'}",
+            f"  Mode: {'Deterministic' if self.deterministic else 'Stochastic'}",
+            f"  Collection: {self.n_steps or 'None'} steps, {self.n_episodes or 'None'} episodes",
+            f"  Generator Active: {'Yes' if self._generator else 'No'}",
+            ""
+        ])
+        
+        # Statistics section
+        if self.stats:
+            lines.extend([
+                "CURRENT STATISTICS:",
+                f"  Total Rollouts: {self.stats.get('n_rollouts', 0)}",
+                f"  Total Episodes: {self.stats.get('n_episodes', 0)}",
+                f"  Total Steps: {self.stats.get('n_steps', 0)}",
+                f"  Mean Episode Reward: {self.stats.get('mean_ep_reward', 0.0):.3f}",
+                f"  Mean Episode Length: {self.stats.get('mean_ep_length', 0.0):.1f}",
+                f"  Mean Rollout Duration: {self.stats.get('mean_rollout_duration', 0.0):.3f}s",
+                ""
+            ])
+            
+            # Performance metrics
+            steps_per_second = self.stats.get('n_steps', 0) / max(self.stats.get('mean_rollout_duration', 1e-6), 1e-6)
+            episodes_per_rollout = self.stats.get('n_episodes', 0) / max(self.stats.get('n_rollouts', 1), 1)
+            
+            lines.extend([
+                "PERFORMANCE METRICS:",
+                f"  Steps per Second: {steps_per_second:.1f}",
+                f"  Episodes per Rollout: {episodes_per_rollout:.1f}",
+            ])
+        else:
+            lines.extend([
+                "CURRENT STATISTICS:",
+                "  No rollouts collected yet",
+            ])
+        
+        return "\n".join(lines)

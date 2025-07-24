@@ -40,8 +40,6 @@ class BaseAgent(pl.LightningModule):
         config = load_config(env_id, algo_id)
         self.config = config
 
-        print(json.dumps(asdict(config), indent=2))
-
         # Create environment builder
         from utils.environment import build_env
         self.build_env_fn = lambda seed, n_envs: build_env(
@@ -176,6 +174,7 @@ class BaseAgent(pl.LightningModule):
         # TODO: create this only for training? create on_fit_start() and destroy with on_fit_end()?
         self.train_rollout_dataset = RolloutDataset()
         self.train_collector = RolloutCollector(
+            'train',
             self.build_env_fn(self.config.seed, max(1, multiprocessing.cpu_count() - 1) if self.config.eval_async else "auto"),
             self.policy_model,
             value_model=self.value_model,
@@ -186,6 +185,7 @@ class BaseAgent(pl.LightningModule):
     def _start_eval_collector(self):
         # TODO: assert running with subprocenv +single env
         self.eval_collector = RolloutCollector(
+            'eval',
             self.build_env_fn(self.config.seed + 1000, 1 if self.config.eval_async else "auto"),
             self.policy_model,
             n_steps=self.config.train_rollout_steps, # TODO: reward window / 10
@@ -283,3 +283,29 @@ class BaseAgent(pl.LightningModule):
         print(json.dumps(stats, indent=2))        
         episode_frames = group_frames_by_episodes(trajectories)
         return render_episode_frames(episode_frames, out_dir="./tmp", grid=(2, 2), text_color=(0, 0, 0)) # TODO: review if eval collector should be deterministic or not
+    
+    def __str__(self) -> str:
+        """Return a human-readable string representation of the agent."""
+        agent_name = self.__class__.__name__
+        lines = [f"{agent_name} Agent", "=" * (len(agent_name) + 6), ""]
+        
+        # Configuration section
+        lines.append(str(self.config))
+        
+        # Training state section
+        training_time = 0.0
+        if self.training_start_time: training_time = time.time() - self.training_start_time
+        lines.extend([
+            "TRAINING STATE:",
+            f"  Current Epoch: {getattr(self, 'current_epoch', 'Not started')}",
+            f"  Total Steps Consumed: {self.total_steps:,}",
+            f"  Training Time: {training_time:.1f}s ({training_time/60:.1f}m)",
+            f"  Training Active: {'Yes' if self.training else 'No'}",
+            ""
+        ])
+        
+        if hasattr(self, 'train_collector'): lines.append(str(self.train_collector)) 
+        if hasattr(self, 'eval_collector'): lines.append(str(self.eval_collector)) 
+            
+        return "\n".join(lines)
+

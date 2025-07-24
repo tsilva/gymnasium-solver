@@ -2,21 +2,36 @@
 # Reference: https://github.com/DLR-RM/rl-baselines3-zoo/tree/master/hyperparams
 
 default:
-  eval_reward_threshold: 475
-  train_rollout_interval: 1
-  train_rollout_steps: 6000
-  train_batch_size: 500
-  eval_rollout_interval: 10
-  eval_rollout_episodes: 10
-  hidden_dims: [64, 64]
-  gamma: 1.0
-  entropy_coef: 0.0 
+  hidden_dims: [64, 64]                # Sufficient capacity for CartPole
+  policy_lr: 3e-3                      # Default policy LR (overridden per algo below)
+  value_lr: 1e-3                       # Default value LR (overridden per algo below)
+  entropy_coef: 0.01                   # Small entropy for minimal exploration (CartPole is easy to solve)
+
+  max_epochs: 200                      # Limit training to 200 epochs for efficiency
+  train_rollout_interval: 1            # Frequent rollouts for fast feedback
+  train_rollout_steps: 2048            # Standard rollout size for CartPole, balances speed and stability
+  train_reward_threshold: null         # Not used for CartPole
+  train_batch_size: 64                 # Smaller batch for more frequent updates, helps with fast learning
+  gamma: 0.99                          # Slight discount to improve stability (gamma=1.0 can cause instability)
+  gae_lambda: 0.95                     # Standard GAE lambda for bias/variance tradeoff
+  clip_epsilon: 0.2                    # Standard PPO clipping
+
+  eval_rollout_interval: 10            # Evaluate every 10 epochs
+  eval_rollout_episodes: 10            # Standard number for stable evaluation
+  eval_reward_threshold: 475           # Environment is considered solved at 475
+
+  normalize_obs: true                  # Normalize observations for better learning
+  normalize_reward: false              # Reward normalization not needed for CartPole
+
+  mean_reward_window: 100              # Standard window for reward smoothing
 
 reinforce:
-  policy_lr: 1e-3
+  policy_lr: 1e-3                      # Standard learning rate for REINFORCE
+  entropy_coef: 0.02                   # Slightly higher entropy for more exploration
 
 ppo:
-  policy_lr: 3e-3
-  value_lr: 3e-3
-  clip_epsilon: 0.2
-  gae_lambda: 0.95
+  policy_lr: 3e-3                      # Higher LR for faster convergence with PPO
+  value_lr: 1e-3                       # Standard value network LR
+  clip_epsilon: 0.2                    # Standard PPO clipping
+  gae_lambda: 0.95                     # Standard GAE lambda for bias/variance tradeoff
+  entropy_coef: 0.01                   # Small entropy for PPO, CartPole doesn't need much exploration

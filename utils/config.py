@@ -25,36 +25,36 @@ class RLConfig:
     # Environment
     env_id: str  # Environment ID string (e.g., 'CartPole-v1')
     algo_id: str  # Algorithm ID string (e.g., 'ppo', 'dqn')
-    env_spec: Dict[str, Any] = None  # Environment specification dictionary
-    seed: int = 42  # Random seed for reproducibility
+    env_spec: Dict[str, Any]  # Environment specification dictionary
+    seed: int  # Random seed for reproducibility
 
     # Networks
-    hidden_dims: Union[int, Tuple[int, ...]] = 64  # Hidden layer dimensions for neural networks
-    policy_lr: float = 3e-4  # Learning rate for the policy network
-    value_lr: float = 1e-3  # Learning rate for the value network
-    entropy_coef: float = 0.01  # Entropy coefficient for exploration
+    hidden_dims: Union[int, Tuple[int, ...]]  # Hidden layer dimensions for neural networks
+    policy_lr: float  # Learning rate for the policy network
+    value_lr: float  # Learning rate for the value network
+    entropy_coef: float  # Entropy coefficient for exploration
 
     # Training
-    max_epochs: int = -1  # Maximum number of training epochs (-1 for unlimited)
-    train_rollout_interval: int = 10  # Interval (in epochs) between training rollouts
-    train_rollout_steps: int = 2048  # Number of steps per training rollout
-    train_reward_threshold: float = None  # Reward threshold to stop training early
-    train_batch_size: int = 64  # Batch size for training updates
-    gamma: float = 0.99  # Discount factor for future rewards
-    gae_lambda: float = 0.95  # Lambda for Generalized Advantage Estimation (GAE)
-    clip_epsilon: float = 0.2  # Clipping epsilon for PPO or similar algorithms
+    max_epochs: int  # Maximum number of training epochs
+    train_rollout_interval: int  # Interval (in epochs) between training rollouts
+    train_rollout_steps: int  # Number of steps per training rollout
+    train_reward_threshold: float  # Reward threshold to stop training early
+    train_batch_size: int  # Batch size for training updates
+    gamma: float  # Discount factor for future rewards
+    gae_lambda: float  # Lambda for Generalized Advantage Estimation (GAE)
+    clip_epsilon: float  # Clipping epsilon for PPO or similar algorithms
 
     # Evaluation
-    eval_rollout_interval: int = 10  # Interval (in epochs) between evaluation rollouts
-    eval_rollout_episodes: int = 32  # Number of episodes per evaluation rollout
-    eval_reward_threshold: float = None  # Reward threshold for evaluation
+    eval_rollout_interval: int  # Interval (in epochs) between evaluation rollouts
+    eval_rollout_episodes: int  # Number of episodes per evaluation rollout
+    eval_reward_threshold: float  # Reward threshold for evaluation
 
     # Normalization
-    normalize_obs: bool = False  # Whether to normalize observations
-    normalize_reward: bool = False  # Whether to normalize rewards
+    normalize_obs: bool  # Whether to normalize observations
+    normalize_reward: bool  # Whether to normalize rewards
 
     # Miscellaneous
-    mean_reward_window: int = 100  # Window size for calculating mean reward
+    mean_reward_window: int  # Window size for calculating mean reward
     
     @classmethod
     def load_from_yaml(cls, env_id: str, algo_id: str, config_dir: str = "configs") -> 'RLConfig':

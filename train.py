@@ -1,13 +1,9 @@
 import argparse
-import sys
-import os
+import debugpy
 
 def is_debugger_attached():
-    return (
-        sys.gettrace() is not None or
-        os.environ.get("PYCHARM_HOSTED") == "1" or
-        os.environ.get("VSCODE_PID") is not None
-    )
+    return debugpy.is_client_connected()
+
 def main():
     parser = argparse.ArgumentParser(description="Train RL agent.")
     parser.add_argument("--agent", type=str, default="ppo", help="Agent type (default: ppo)")

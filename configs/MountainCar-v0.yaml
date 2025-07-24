@@ -9,7 +9,6 @@ default:
   value_lr: 1e-3                      # Default value LR (overridden per algo below)
   entropy_coef: 0.15                  # Encourage exploration for sparse reward
 
-  max_epochs: 500                     # Limit training to 500 epochs for efficiency
   train_rollout_interval: 1           # Frequent rollouts help with sparse rewards
   train_rollout_steps: 10000          # Longer rollouts help with sparse rewards
   train_reward_threshold: null        # Not used for MountainCar

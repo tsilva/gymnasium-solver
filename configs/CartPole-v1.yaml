@@ -9,7 +9,6 @@ default:
   value_lr: 1e-3                       # Default value LR (overridden per algo below)
   entropy_coef: 0.01                   # Small entropy for minimal exploration (CartPole is easy to solve)
 
-  max_epochs: 200                      # Limit training to 200 epochs for efficiency
   train_rollout_interval: 1            # Frequent rollouts for fast feedback
   train_rollout_steps: 2048            # Standard rollout size for CartPole, balances speed and stability
   train_reward_threshold: null         # Not used for CartPole

@@ -140,6 +140,7 @@ def _collect_rollouts(
         # 3.1 Collect one rollout -------------------------------------
         # --------------------------------------------------------------
         with inference_ctx(policy_model, value_model):
+            rollout_start = time.time()
             while True:
                 # ▸ Policy step — note: **no value call here** ----------------
                 action_np, action_logp_np = _infer_policy(obs)
@@ -268,11 +269,12 @@ def _collect_rollouts(
             )
 
             # Only calculate mean values when window is full
-            calc_full_deque_mean = lambda deq: float(np.mean(deq)) if len(deq) == deq.maxlen else 0.0 # TODO: extract to util
-            mean_ep_reward = calc_full_deque_mean(episode_reward_deque)
-            mean_ep_length = calc_full_deque_mean(episode_length_deque)
+            mean_ep_reward = float(np.mean(episode_reward_deque)) if episode_reward_deque else 0.0
+            mean_ep_length = float(np.mean(episode_length_deque)) if episode_length_deque else 0.0
 
             total_rollout_count += 1
+            rollout_elapsed = time.time() - rollout_start
+            rollout_durations.append(rollout_elapsed)
             mean_rollout_duration = np.mean(rollout_durations)
             
             stats = {
@@ -287,8 +289,8 @@ def _collect_rollouts(
         yield trajectories, stats
 
 class SyncRolloutCollector():
-    def __init__(self, build_env_fn, policy_model, value_model=None, deterministic=False, n_steps=None, n_episodes=None, **kwargs):
-        self.env = build_env_fn()
+    def __init__(self, env, policy_model, value_model=None, deterministic=False, n_steps=None, n_episodes=None, **kwargs):
+        self.env = env
         self.policy_model = policy_model
         self.value_model = value_model
         self.deterministic = deterministic

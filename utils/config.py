@@ -102,15 +102,66 @@ class RLConfig:
         env_spec = get_env_spec(env)
         final_config['env_spec'] = env_spec
         
-        return cls(**final_config)
-    
+        instance = cls(**final_config)
+        instance.validate()
+        return instance
+        
 
     def rollout_collector_hyperparams(self) -> Dict[str, Any]:
         return {
             'gamma': self.gamma,
             'gae_lambda': self.gae_lambda
         }
+    
+    def validate(self) -> None:
+        """Validate that all configuration values are valid."""
+        # Environment
+        if not self.env_id:
+            raise ValueError("env_id must be a non-empty string.")
+        if not self.algo_id:
+            raise ValueError("algo_id must be a non-empty string.")
+        if self.env_spec is None:
+            raise ValueError("env_spec must not be None.")
+        if self.seed < 0:
+            raise ValueError("seed must be a non-negative integer.")
 
+        # Networks
+        if isinstance(self.hidden_dims, tuple) and not all(isinstance(x, int) for x in self.hidden_dims):
+            raise ValueError("All elements of hidden_dims tuple must be ints.")
+        if self.policy_lr <= 0:
+            raise ValueError("policy_lr must be a positive float.")
+        if self.value_lr <= 0:
+            raise ValueError("value_lr must be a positive float.")
+        if self.entropy_coef < 0:
+            raise ValueError("entropy_coef must be a non-negative float.")
+
+        # Training
+        if self.train_rollout_interval <= 0:
+            raise ValueError("train_rollout_interval must be a positive integer.")
+        if self.train_rollout_steps <= 0:
+            raise ValueError("train_rollout_steps must be a positive integer.")
+        if self.train_reward_threshold is not None and not isinstance(self.train_reward_threshold, (float, int)):
+            raise ValueError("train_reward_threshold must be None or a number.")
+        if self.train_batch_size <= 0:
+            raise ValueError("train_batch_size must be a positive integer.")
+        if not (0 < self.gamma <= 1):
+            raise ValueError("gamma must be in (0, 1].")
+        if not (0 <= self.gae_lambda <= 1):
+            raise ValueError("gae_lambda must be in [0, 1].")
+        if not (0 < self.clip_epsilon < 1):
+            raise ValueError("clip_epsilon must be in (0, 1).")
+
+        # Evaluation
+        if self.eval_rollout_interval <= 0:
+            raise ValueError("eval_rollout_interval must be a positive integer.")
+        if self.eval_rollout_episodes <= 0:
+            raise ValueError("eval_rollout_episodes must be a positive integer.")
+        if self.eval_reward_threshold is not None and not isinstance(self.eval_reward_threshold, (float, int)):
+            raise ValueError("eval_reward_threshold must be None or a number.")
+
+        # Miscellaneous
+        if self.mean_reward_window <= 0:
+            raise ValueError("mean_reward_window must be a positive integer.")
 
 def load_config(env_id: str, algo_id: str, config_dir: str = "configs") -> RLConfig:
     """Convenience function to load configuration."""

@@ -116,7 +116,8 @@ class BaseAgent(pl.LightningModule):
 
         loss_results = self.compute_loss(batch)
         # TODO: log this here?
-        self.log_metrics(loss_results, on_step=True, on_epoch=True, prog_bar=True, prefix="train")
+        # TODO: why am I seeing _step suffixes?
+        self.log_metrics(loss_results, on_step=True, prog_bar=False, prefix="train")
 
         self.optimize_models(loss_results)
 
@@ -196,9 +197,12 @@ class BaseAgent(pl.LightningModule):
     
     # TODO: run eval during training loops?
     def __eval_collector_loop(self):
-        while not self._eval_collector_thread_stop.is_set(): 
-            self.eval_collector.collect()
-            time.sleep(1) # TODO: necessary?
+        try:
+            while not self._eval_collector_thread_stop.is_set(): 
+                self.eval_collector.collect()
+                if not self._eval_collector_thread_stop.wait(timeout=1.0): continue  # Timeout occurred, check stop condition again
+        except Exception as e:
+            print(f"Error in eval collector thread: {e}")
 
     def _stop_collectors(self):
         self._stop_collectors__train()
@@ -209,8 +213,8 @@ class BaseAgent(pl.LightningModule):
         del self.train_rollout_dataset
 
     def _stop_collectors__eval(self):
-        self._eval_thread_stop.set()
-        self._eval_thread.join()
+        self._eval_collector_thread_stop.set()
+        self._eval_collector_thread.join()
         del self.eval_collector
         del self._eval_collector_thread
 

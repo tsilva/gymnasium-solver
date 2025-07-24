@@ -263,8 +263,12 @@ def _collect_rollouts(
                 returns,
                 frames_env_major,
             )
-            mean_ep_reward = float(np.mean(episode_reward_deque)) if len(episode_reward_deque) == mean_reward_window else 0.0
-            mean_ep_length = float(np.mean(episode_length_deque)) if len(episode_length_deque) == mean_length_window else 0.0
+
+            # Only calculate mean values when window is full
+            calc_full_deque_mean = lambda deq: float(np.mean(deq)) if len(deq) == deq.maxlen else 0.0 # TODO: extract to util
+            mean_ep_reward = calc_full_deque_mean(episode_reward_deque)
+            mean_ep_length = calc_full_deque_mean(episode_length_deque)
+            
             stats = {
                 "n_episodes": total_episode_count,
                 "n_steps": total_step_count,

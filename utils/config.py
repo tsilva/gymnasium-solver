@@ -35,18 +35,20 @@ class RLConfig:
     entropy_coef: float = 0.01  # Default: 0.01
 
     # Training
+    # TODO: make max_epochas = None
     max_epochs: int = -1  # Default: -1
     train_rollout_interval: int = 1  # Default: 1
-    train_rollout_steps: int = 128  # Default: 128
+    train_rollout_steps: int
     train_reward_threshold: float = None  # No default
-    train_batch_size: int = 64  # Default: 64
+    train_batch_size: int
     gamma: float = 0.99  # Default: 0.99
     gae_lambda: float = 0.95  # Default: 0.95
     clip_epsilon: float = 0.2  # Default: 0.2
 
     # Evaluation
-    eval_rollout_interval: int = 10  # Default: 10
-    eval_rollout_episodes: int = 32  # Default: 32
+    eval_rollout_interval: int = 1  # Default: 10
+    eval_rollout_episodes: int
+    eval_rollout_steps: int
     eval_reward_threshold: float = None  # No default
 
     # Normalization

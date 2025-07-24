@@ -1,3 +1,6 @@
+
+- run eval in background thread (always)
+
 - Get reward threshold from env specs (harcoded)
 - BUG: eval is being calculated before window is full, consider evaling frequently by n_steps instead of n_episodes
 - Add max_grad_norm support (0.5 for cartpole)
@@ -26,7 +29,6 @@
 - log results to huggingface?
 - TODO: make evaluation run in background and keep a mean reward window, it picks up the model params set up in it, runs N envs in sequence with N workers and 
 - Write wandb diagnostics script, use claude desktop to debug
-- run eval in background thread (always)
 - run eval in background thread (always)
 - add environment normalization support
 - benchmark against rlzoo with same hyperparameters

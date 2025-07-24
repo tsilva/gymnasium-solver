@@ -96,6 +96,8 @@ class BaseAgent(pl.LightningModule):
             **self.config.rollout_collector_hyperparams()
         )
 
+        # TODO: single thread
+        # TODO: run subproc vector env with single env, keep perf stats for rollouts
         self.eval_rollout_collector = SyncRolloutCollector(
             lambda: self.build_env_fn(random.randint(0, 10000)),  # Random seed for eval
             self.policy_model,
@@ -109,9 +111,8 @@ class BaseAgent(pl.LightningModule):
 
     def train_dataloader(self):
         # Collect rollout and update dataset
-        trajectories, stats = self.train_rollout_collector.collect()
+        trajectories = self.train_rollout_collector.collect()
         self.train_rollout_dataset.update(*trajectories)
-        self._train_rollout_stats = stats
         
         # NOTE: 
         # - dataloader is created each epoch to mitigate issues with changing dataset data between epochs
@@ -131,26 +132,28 @@ class BaseAgent(pl.LightningModule):
         self.total_steps += batch_size
 
         loss_results = self.compute_loss(batch)
-
-        self._train_rollout_stats = {**(self._train_rollout_stats or {}), **loss_results}
+        self.log_metrics(loss_results, on_step=True, on_epoch=True, prog_bar=True, prefix="train")
 
         self.optimize_models(loss_results)
 
     def on_train_epoch_end(self):
-        if self._train_rollout_stats: # TODO: still need this?
-            mean_ep_reward = self._train_rollout_stats["mean_ep_reward"]
-            self.log_metrics(self._train_rollout_stats, prog_bar=["mean_ep_reward"], prefix="train")
-            self._train_rollout_stats = None  # Reset stats after logging
+        # TODO: encapsulate
+        train_rollout_stats = self.train_rollout_collector.get_stats()
+        self.log_metrics(train_rollout_stats, prog_bar=["mean_ep_reward"], prefix="train")
 
-            if self.config.train_reward_threshold and mean_ep_reward >= self.config.train_reward_threshold:
-                print(f"Early stopping at epoch {self.current_epoch} with train mean reward {mean_ep_reward:.2f} >= threshold {self.config.train_reward_threshold}")
-                self.trainer.should_stop = True
+        # TODO: encapsulate
+        mean_ep_reward = train_rollout_stats["mean_ep_reward"]
+        if self.config.train_reward_threshold and mean_ep_reward >= self.config.train_reward_threshold:
+            print(f"Early stopping at epoch {self.current_epoch} with train mean reward {mean_ep_reward:.2f} >= threshold {self.config.train_reward_threshold}")
+            self.trainer.should_stop = True
 
         if (self.current_epoch + 1) % self.config.eval_rollout_interval == 0: 
-            _, stats = self.eval_rollout_collector.collect() # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
-         
+            # TODO: encapsulate
+            self.eval_rollout_collector.collect() # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
+            stats = self.eval_rollout_collector.get_stats()
             self.log_metrics(stats, prog_bar=["mean_ep_reward"], prefix="eval")
-            
+
+            # TODO: encapsulate
             mean_ep_reward = stats['mean_ep_reward']
             if self.config.eval_reward_threshold and mean_ep_reward >= self.config.eval_reward_threshold:
                 print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {mean_ep_reward:.2f} >= threshold {self.config.eval_reward_threshold}")

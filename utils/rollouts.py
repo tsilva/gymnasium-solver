@@ -3,6 +3,7 @@ from collections import deque
 from contextlib import contextmanager
 from typing import Optional, Sequence, Tuple
 
+import time
 import numpy as np
 import torch
 from torch.distributions import Categorical
@@ -92,9 +93,11 @@ def _collect_rollouts(
     env_reward = np.zeros(n_envs, dtype=np.float32)
     env_length = np.zeros(n_envs, dtype=np.int32)
 
+    rollout_durations: deque[float] = deque(maxlen=100)  # Store last 100 rollout durations
     episode_reward_deque: deque[float] = deque(maxlen=mean_reward_window)
     episode_length_deque: deque[int] = deque(maxlen=mean_length_window)
-
+    
+    total_rollout_count: int = 0
     # First observation ------------------------------------------------------
     obs = env.reset()
 
@@ -268,8 +271,13 @@ def _collect_rollouts(
             calc_full_deque_mean = lambda deq: float(np.mean(deq)) if len(deq) == deq.maxlen else 0.0 # TODO: extract to util
             mean_ep_reward = calc_full_deque_mean(episode_reward_deque)
             mean_ep_length = calc_full_deque_mean(episode_length_deque)
+
+            total_rollout_count += 1
+            mean_rollout_duration = np.mean(rollout_durations)
             
             stats = {
+                "n_rollouts" : total_rollout_count,
+                "mean_rollout_duration": mean_rollout_duration,
                 "n_episodes": total_episode_count,
                 "n_steps": total_step_count,
                 "mean_ep_reward": mean_ep_reward,
@@ -287,13 +295,19 @@ class SyncRolloutCollector():
         self.n_steps = n_steps
         self.n_episodes = n_episodes
         self._generator = None
+        self.stats = {}
         self.kwargs = kwargs
 
+    # TODO: just return trajectories here?
     # TODO: is this dataset/dataloader update strategy correct?
     def collect(self, *args, **kwargs):
         generator = self._ensure_generator(*args, **kwargs)
         trajectories, stats = next(generator)
-        return trajectories, stats
+        self.stats = stats
+        return trajectories
+    
+    def get_stats(self):
+        return self.stats
     
     def _ensure_generator(self, n_episodes=None, n_steps=None, deterministic=None, collect_frames=False):
         if self._generator: return self._generator

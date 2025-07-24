@@ -1,10 +1,13 @@
 - Review CartPole-v1 hyperparams from https://github.com/DLR-RM/rl-baselines3-zoo/blob/master/hyperparams/ppo.yml
+- FEAT: log steps/episodes to progress bar
 - FEAT: n_envs should be in hyperparams because some envs won't do well with too much parallelism
-- REFACTOR: call train_rollout_steps -> n_steps and use same for eval (rollout size = n_steps * n_envs)
 - FEAT: add config __repr__ support
 - FEAT: add agent __repr__ support
 - FEAT: add collector __repr__ support
+- REFACTOR: call train_rollout_steps -> n_steps and use same for eval (rollout size = n_steps * n_envs)
+- REFACTOR: move reward threshold detection to rollout collector
 - FEAT: Log config into wandb experiment
+- BUG: async collection
 - BUG: REINFORCE is calculating returns using value model?
 - BUG: eval is being calculated before window is full, consider evaling frequently by n_steps instead of n_episodes
 - BUG: fix thread safety issues with async eval collector (copy model weights with lock)
@@ -13,32 +16,10 @@
 - FEAT: support for softcoding activations
 - FEAT: train for convergence without deterministic policy
 - FEAT: add shared backbone support
-- REFACTOR: move reward threshold detection to rollout collector
-- Add max_grad_norm support (0.5 for cartpole)
-- Add value baseline support for reinforce
-- train_rollout_steps_per_env
-- Match sb3rlzoo metric names
-- Match sb3rlzoo performance
-- Add support for softcoding activations
-- Add support for different rollout collecotrs for different envs (for multitask learning)
-- When I group by episodes I discard data from that rollout that won't be included in the next sequence of trajectories, so I need to make sure I don't lose data
-- Log "n_steps" and "n_episodes" in the metric tracker
-- FEAT: add alert support to metric tracker (algo dependent)
-- make best model be saved to wandb
-- log results to huggingface?
-- TODO: make evaluation run in background and keep a mean reward window, it picks up the model params set up in it, runs N envs in sequence with N workers and 
-- Write wandb diagnostics script, use claude desktop to debug
-- run eval in background thread (always)
-- add environment normalization support
-- benchmark against rlzoo with same hyperparameters
-- add support for plotting charts as text and feeding to llm, check how end of training does it
-- track environment stats, observarion stats, reward distributions, etc
-- change api to match sb3
 - FEAT: add baseline subtraction to A2C
 - FEAT: a2c (only after reinforce/ppo is stable)
 - FEAT: add normalization support
-- normalization support through our own env wrapper
-- track selected action distribution
+- FEAT: track output distribution
 - FEAT: support continuous environments
 - FEAT: support for multi-env rollout collectors
 - FEAT: add multitask heads support (eg: Atari, Sega Genesis) -- consider large output space
@@ -46,3 +27,19 @@
 - CHECK: run rollout through dataloader process, do we always get n_batches?
 - CHECK: assert that dataloader is always going through all expected batches
 - TODO: solve Pong-RAM with PPO
+- Add max_grad_norm support (0.5 for cartpole)
+- Add value baseline support for reinforce
+- Match sb3rlzoo metric names
+- Match sb3rlzoo performance
+- When I group by episodes I discard data from that rollout that won't be included in the next sequence of trajectories, so I need to make sure I don't lose data
+- Log "n_steps" and "n_episodes" in the metric tracker
+- FEAT: add alert support to metric tracker (algo dependent)
+- make best model be saved to wandb
+- log results to huggingface?
+- TODO: make evaluation run in background and keep a mean reward window, it picks up the model params set up in it, runs N envs in sequence with N workers and 
+- Write wandb diagnostics script, use claude desktop to debug
+- add environment normalization support
+- benchmark against rlzoo with same hyperparameters
+- add support for plotting charts as text and feeding to llm, check how end of training does it
+- track environment stats, observarion stats, reward distributions, etc
+- change api to match sb3

@@ -28,8 +28,8 @@ reinforce:
   entropy_coef: 0.02                   # Slightly higher entropy for more exploration
 
 ppo:
-  policy_lr: 1e-3                      # Higher LR for faster convergence with PPO
-  value_lr: 1e-3                       # Standard value network LR
+  policy_lr: 3e-4                      # Higher LR for faster convergence with PPO
+  value_lr: 3e-4                       # Standard value network LR
   clip_epsilon: 0.2                    # Standard PPO clipping
   gae_lambda: 0.95                     # Standard GAE lambda for bias/variance tradeoff
   entropy_coef: 0.00                   # Small entropy for PPO, CartPole doesn't need much exploration

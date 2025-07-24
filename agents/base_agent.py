@@ -6,7 +6,7 @@ from dataclasses import  asdict
 import pytorch_lightning as pl
 from torch.utils.data import Dataset as TorchDataset
 from torch.utils.data import DataLoader
-from utils.rollouts import SyncRolloutCollector
+from utils.rollouts import RolloutCollector
 from utils.config import load_config
 
 # TODO: add test script for collection using dataset/dataloader
@@ -87,54 +87,14 @@ class BaseAgent(pl.LightningModule):
         self.total_steps = 0  # Reset step counter
         print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-        # Common RL components
-        # TODO: create this only for training? create on_fit_start() and destroy with on_fit_end()?
-        self.train_rollout_dataset = RolloutDataset()
-        self.train_rollout_collector = SyncRolloutCollector(
-            self.build_env_fn(self.config.seed, max(1, multiprocessing.cpu_count() - 1)),
-            self.policy_model,
-            value_model=self.value_model,
-            n_steps=self.config.train_rollout_steps,
-            **self.config.rollout_collector_hyperparams()
-        )
-
-        # TODO: single thread
-        # TODO: run subproc vector env with single env, keep perf stats for rollouts
-        # TODO: run with subprovenv
-
-        self._eval_stats = None
-        self._eval_thread_stop = threading.Event()
-        self._eval_thread = threading.Thread(target=self._eval_loop, daemon=True)
-        self._eval_thread.start()
-        # TODO: stop thread on fit end or on crash
-    
-    # TODO: run eval during training loops?
-    def _eval_loop(self):
-        try: 
-            eval_rollout_collector = SyncRolloutCollector(
-                self.build_env_fn(self.config.seed + 1000, 1),  # Random seed for eval
-                self.policy_model,
-                n_episodes=10, # TODO: reward window / 10
-                deterministic=True,
-                **self.config.rollout_collector_hyperparams()
-            )
-
-            while not self._eval_thread_stop.is_set():
-                eval_rollout_collector.collect()
-                stats = eval_rollout_collector.get_stats()
-                print(json.dumps(stats, indent=2))
-                self._eval_stats = stats
-                # Sleep for a bit to avoid hammering the env
-                time.sleep(1)
-        finally:
-            del eval_rollout_collector
+        self._start_collectors()
 
     def on_train_epoch_start(self):
         pass
 
     def train_dataloader(self):
         # Collect rollout and update dataset
-        trajectories = self.train_rollout_collector.collect()
+        trajectories = self.train_collector.collect()
         self.train_rollout_dataset.update(*trajectories)
         
         # NOTE: 
@@ -155,55 +115,24 @@ class BaseAgent(pl.LightningModule):
         self.total_steps += batch_size
 
         loss_results = self.compute_loss(batch)
+        # TODO: log this here?
         self.log_metrics(loss_results, on_step=True, on_epoch=True, prog_bar=True, prefix="train")
 
         self.optimize_models(loss_results)
 
     def on_train_epoch_end(self):
-        # TODO: encapsulate
-        train_rollout_stats = self.train_rollout_collector.get_stats()
-        self.log_metrics(train_rollout_stats, prog_bar=["mean_ep_reward"], prefix="train")
-
-        # TODO: encapsulate
-        train_mean_ep_reward = train_rollout_stats["mean_ep_reward"]
-        if self.config.train_reward_threshold and train_mean_ep_reward >= self.config.train_reward_threshold:
-            print(f"Early stopping at epoch {self.current_epoch} with train mean reward {train_mean_ep_reward:.2f} >= threshold {self.config.train_reward_threshold}")
-            self.trainer.should_stop = True
-
-        if self._eval_stats:
-            eval_mean_ep_reward = self._eval_stats.get("mean_ep_reward")
-            print(json.dumps(self._eval_stats, indent=2))
-            self.log_metrics(self._eval_stats, prog_bar=["mean_ep_reward"], prefix="eval")
-
-            # TODO: encapsulate
-            # TODO: only stop if n_episodes
-            if self.config.eval_reward_threshold and eval_mean_ep_reward >= self.config.eval_reward_threshold:
-                print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {eval_mean_ep_reward:.2f} >= threshold {self.config.eval_reward_threshold}")
-                self.trainer.should_stop = True
+        self._check_early_stop()
+        self._log_stats()
 
     def on_fit_end(self):
         total_time = time.time() - self.training_start_time
         print(f"Training completed in {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
 
-        self._eval_thread_stop.set()
-        self._eval_thread.join()
-
-        # TODO: are these set to None?
-        del self.train_rollout_collector  # Clean up collector
-        del self.train_rollout_dataset  # Clean up dataset
-        #del self.eval_rollout_collector  # Clean up collector
+        self._stop_collectors()
 
     # TODO: when does this run? should I run eval_rollout_collector here?
     #def validation_step(self, *args, **kwargs):
     #    return super().validation_step(*args, **kwargs)
-    
-    def log_metrics(self, metrics, *, on_epoch=None, on_step=None, prog_bar=None, prefix=None):
-        for key, value in metrics.items():
-            _on_epoch = True if on_epoch is True or key in (on_epoch or []) else None
-            _on_step =  True if on_step is True or key in (on_step or []) else None
-            _prog_bar = True if prog_bar is True or key in (prog_bar or []) else None
-            _key = f"{prefix}/{key}" if prefix else key
-            self.log(_key, value, on_epoch=_on_epoch, on_step=_on_step, prog_bar=_prog_bar)
 
     def train(self):
         from pytorch_lightning.loggers import WandbLogger
@@ -228,6 +157,106 @@ class BaseAgent(pl.LightningModule):
         )
         trainer.fit(self)
 
+    def log_metrics(self, metrics, *, on_epoch=None, on_step=None, prog_bar=None, prefix=None):
+        for key, value in metrics.items():
+            _on_epoch = True if on_epoch is True or key in (on_epoch or []) else None
+            _on_step =  True if on_step is True or key in (on_step or []) else None
+            _prog_bar = True if prog_bar is True or key in (prog_bar or []) else None
+            _key = f"{prefix}/{key}" if prefix else key
+            self.log(_key, value, on_epoch=_on_epoch, on_step=_on_step, prog_bar=_prog_bar)
+
+    def _start_collectors(self):
+        self._start_train_collector()
+        self._start_eval_collector()
+
+    def _start_train_collector(self):
+        # Common RL components
+        # TODO: create this only for training? create on_fit_start() and destroy with on_fit_end()?
+        self.train_rollout_dataset = RolloutDataset()
+        self.train_collector = RolloutCollector(
+            self.build_env_fn(self.config.seed, max(1, multiprocessing.cpu_count() - 1)),
+            self.policy_model,
+            value_model=self.value_model,
+            n_steps=self.config.train_rollout_steps,
+            **self.config.rollout_collector_hyperparams()
+        )
+
+    def _start_eval_collector(self):
+        self._eval_collector_stats = None
+        self._eval_collector_thread_stop = threading.Event()
+        self._eval_collector_thread = threading.Thread(target=self.__eval_collector_loop, daemon=True) # TODO: what is daemon, how is thread accessing members
+        self._eval_collector_thread.start() # TODO: make sure thread stops on crash
+    
+    # TODO: run eval during training loops?
+    def __eval_collector_loop(self):
+        try: 
+            # TODO: assert running with subprocenv +single env
+            eval_collector = RolloutCollector( # TODO: what if I stored collecotr and accessed stats that way
+                self.build_env_fn(self.config.seed + 1000, 1),  # Random seed for eval
+                self.policy_model,
+                n_episodes=10, # TODO: reward window / 10
+                deterministic=True,
+                **self.config.rollout_collector_hyperparams()
+            )
+
+            while not self._eval_collector_thread_stop.is_set():
+                eval_collector.collect()
+                self._eval_rollout_stats = eval_collector.get_stats()
+                print(json.dumps(self._eval_rollout_stats, indent=2))
+                # Sleep for a bit to avoid hammering the env
+                time.sleep(1)
+        finally:
+            del eval_collector
+
+    def _stop_collectors(self):
+        self._stop_collectors__train()
+        self._stop_collectors__eval()
+
+    def _stop_collectors__train(self):
+        del self.train_collector
+        del self.train_rollout_dataset
+
+    def _stop_collectors__eval(self):
+        self._eval_thread_stop.set()
+        self._eval_thread.join()
+        del self._eval_collector_thread
+        del self._eval_collector_stats
+
+    def _check_early_stop(self):
+        self._check_early_stop__train()
+        self._check_early_stop__eval()
+
+    def _check_early_stop__train(self):
+        train_rollout_stats = self.train_collector.get_stats()
+        if not self.config.train_reward_threshold: return
+        if not train_rollout_stats: return
+        mean_ep_reward = train_rollout_stats.get("mean_ep_reward")
+        if mean_ep_reward < self.config.train_reward_threshold: return
+        # TODO: only stop if n_episodes
+        print(f"Early stopping at epoch {self.current_epoch} with train mean reward {mean_ep_reward:.2f} >= threshold {self.config.train_reward_threshold}")
+        self.trainer.should_stop = True
+       
+    def _check_early_stop__eval(self): # TODO: generalize common
+        if not self.config.eval_reward_threshold: return
+        if not hasattr(self, "_eval_rollout_stats"): return False
+        eval_mean_ep_reward = self._eval_rollout_stats.get("mean_ep_reward")
+        if eval_mean_ep_reward < self.config.eval_reward_threshold: return
+        # TODO: only stop if n_episodes
+        print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {eval_mean_ep_reward:.2f} >= threshold {self.config.eval_reward_threshold}")
+        self.trainer.should_stop = True
+
+    def _log_stats(self):
+        self._log_stats__train()
+        self._log_stats__eval()
+
+    def _log_stats__train(self):
+        train_rollout_stats = self.train_collector.get_stats()
+        self.log_metrics(train_rollout_stats, prog_bar=["mean_ep_reward"], prefix="train")
+
+    def _log_stats__eval(self):
+        if not hasattr(self, "_eval_rollout_stats"): return
+        self.log_metrics(self._eval_rollout_stats, prog_bar=["mean_ep_reward"], prefix="eval") # TODO: thread safe?
+
     # TODO: softcode this further
     def eval_and_render(self):
         # TODO: softcode this
@@ -235,15 +264,15 @@ class BaseAgent(pl.LightningModule):
       
         from utils.environment import group_frames_by_episodes, render_episode_frames
         # TODO: make sure this is not calculating advantages
-        eval_rollout_collector = SyncRolloutCollector(
+        eval_collector = RolloutCollector(
             self.build_env_fn(self.config.seed + 1000),  # Random seed for eval
             self.policy_model,
             n_episodes=self.config.eval_rollout_episodes,
             deterministic=True,
             **self.config.rollout_collector_hyperparams()
         )
-        try: trajectories, stats = eval_rollout_collector.collect(collect_frames=True) # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
-        finally: del eval_rollout_collector
+        try: trajectories, stats = eval_collector.collect(collect_frames=True) # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
+        finally: del eval_collector
         print(json.dumps(stats, indent=2))        
         episode_frames = group_frames_by_episodes(trajectories)
         return render_episode_frames(episode_frames, out_dir="./tmp", grid=(2, 2), text_color=(0, 0, 0)) # TODO: review if eval collector should be deterministic or not

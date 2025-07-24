@@ -288,7 +288,7 @@ def _collect_rollouts(
 
         yield trajectories, stats
 
-class SyncRolloutCollector():
+class RolloutCollector():
     def __init__(self, env, policy_model, value_model=None, deterministic=False, n_steps=None, n_episodes=None, **kwargs):
         self.env = env
         self.policy_model = policy_model

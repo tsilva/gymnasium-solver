@@ -40,14 +40,15 @@ class PPO(BaseAgent):
         approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
         explained_var = 1 - torch.var(returns - value_pred.detach()) / torch.var(returns)
 
+        # TODO: separate concerns... I want to log, but still need to pass loss in order to run backward pass...
         result = {
-            'policy_loss': policy_loss.detach().item(),
-            'value_loss': value_loss.detach().item(),
-            'entropy': entropy.detach().item(),
-            'clip_fraction': clip_fraction.detach().item(),
-            'kl_div': kl_div.detach().item(),
-            'approx_kl': approx_kl.detach().item(),
-            'explained_var': explained_var.detach().item()
+            'policy_loss': policy_loss,
+            'value_loss': value_loss,
+            'entropy': entropy.detach(),
+            'clip_fraction': clip_fraction.detach(),
+            'kl_div': kl_div.detach(),
+            'approx_kl': approx_kl.detach(),
+            'explained_var': explained_var.detach()
         }
         
         return result

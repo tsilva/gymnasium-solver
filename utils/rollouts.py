@@ -300,8 +300,6 @@ class RolloutCollector():
         self.stats = {}
         self.kwargs = kwargs
 
-    # TODO: just return trajectories here?
-    # TODO: is this dataset/dataloader update strategy correct?
     def collect(self, *args, **kwargs):
         generator = self._ensure_generator(*args, **kwargs)
         trajectories, stats = next(generator)

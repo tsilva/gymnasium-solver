@@ -17,7 +17,7 @@ default:
   gae_lambda: 0.95                     # Standard GAE lambda for bias/variance tradeoff
   clip_epsilon: 0.2                    # Standard PPO clipping
 
-  normalize_obs: true                  # Normalize observations for better learning
+  normalize_obs: false                  # Normalize observations for better learning
   normalize_reward: false              # Reward normalization not needed for CartPole
 
   mean_reward_window: 100              # Standard window for reward smoothing

@@ -9,9 +9,10 @@ class PPO(BaseAgent):
         input_dim = self.config.env_spec['input_dim']
         output_dim = self.config.env_spec['output_dim']
         self.policy_model = PolicyNet(input_dim, output_dim, self.config.hidden_dims)
-        self.value_model  = ValueNet(input_dim, self.config.hidden_dims)
+        self.value_model = ValueNet(input_dim, self.config.hidden_dims)
 
     def compute_loss(self, batch):
+        # use type for this? check sb3
         states, actions, rewards, dones, old_logprobs, values, advantages, returns, frames = batch
         
         clip_epsilon = self.config.clip_epsilon
@@ -32,8 +33,12 @@ class PPO(BaseAgent):
         
         # Value loss
         # TODO: softcode value scaling coefficient
-        value_loss = 0.5 * ((returns - value_pred) ** 2).mean()
+        #value_loss = 0.5 * ((returns - value_pred) ** 2).mean()
+        # TODO: can I use pytoirch util for this?
+        value_loss = ((returns - value_pred) ** 2).mean()
         
+        # TODO: detach everything post loss calculation?
+
         # Metrics (detached for logging)
         clip_fraction = ((ratio < 1.0 - clip_epsilon) | (ratio > 1.0 + clip_epsilon)).float().mean()
         kl_div = (old_logprobs - new_logps).mean()

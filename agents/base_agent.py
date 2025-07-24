@@ -92,6 +92,7 @@ class BaseAgent(pl.LightningModule):
     def on_train_epoch_start(self):
         pass
 
+    # TODO: assert this is being called every epoch
     def train_dataloader(self):
         # Collect rollout and update dataset
         trajectories = self.train_collector.collect()
@@ -122,13 +123,13 @@ class BaseAgent(pl.LightningModule):
         self.optimize_models(loss_results)
 
     def on_train_epoch_end(self):
+        self._collect_sync_eval_rollout()
         self._check_early_stop()
         self._log_stats()
 
     def on_fit_end(self):
         total_time = time.time() - self.training_start_time
         print(f"Training completed in {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
-
         self._stop_collectors()
 
     # TODO: when does this run? should I run eval_rollout_collector here?
@@ -175,7 +176,7 @@ class BaseAgent(pl.LightningModule):
         # TODO: create this only for training? create on_fit_start() and destroy with on_fit_end()?
         self.train_rollout_dataset = RolloutDataset()
         self.train_collector = RolloutCollector(
-            self.build_env_fn(self.config.seed, max(1, multiprocessing.cpu_count() - 1)),
+            self.build_env_fn(self.config.seed, max(1, multiprocessing.cpu_count() - 1) if self.config.eval_async else "auto"),
             self.policy_model,
             value_model=self.value_model,
             n_steps=self.config.train_rollout_steps,
@@ -184,16 +185,20 @@ class BaseAgent(pl.LightningModule):
 
     def _start_eval_collector(self):
         # TODO: assert running with subprocenv +single env
-        self.eval_collector = RolloutCollector( # TODO: what if I stored collecotr and accessed stats that way
-            self.build_env_fn(self.config.seed + 1000, 1),  # Random seed for eval
+        self.eval_collector = RolloutCollector(
+            self.build_env_fn(self.config.seed + 1000, 1 if self.config.eval_async else "auto"),
             self.policy_model,
-            n_episodes=10, # TODO: reward window / 10
+            n_steps=self.config.train_rollout_steps, # TODO: reward window / 10
             deterministic=True,
             **self.config.rollout_collector_hyperparams()
         )
-        self._eval_collector_thread_stop = threading.Event()
-        self._eval_collector_thread = threading.Thread(target=self.__eval_collector_loop, daemon=True) # TODO: what is daemon, how is thread accessing members
-        self._eval_collector_thread.start() # TODO: make sure thread stops on crash
+        if self.config.eval_async:
+            self._eval_collector_thread_stop = threading.Event()
+            self._eval_collector_thread = threading.Thread(target=self.__eval_collector_loop, daemon=True) # TODO: what is daemon, how is thread accessing members
+            self._eval_collector_thread.start() # TODO: make sure thread stops on crash
+        else:
+            self._eval_collector_thread_stop = None
+            self._eval_collector_thread = None
     
     # TODO: run eval during training loops?
     def __eval_collector_loop(self):
@@ -213,20 +218,26 @@ class BaseAgent(pl.LightningModule):
         del self.train_rollout_dataset
 
     def _stop_collectors__eval(self):
-        self._eval_collector_thread_stop.set()
-        self._eval_collector_thread.join()
+        if self._eval_collector_thread_stop is not None:
+            self._eval_collector_thread_stop.set()
+            self._eval_collector_thread.join()
+            del self._eval_collector_thread
         del self.eval_collector
-        del self._eval_collector_thread
-
+        
+    def _collect_sync_eval_rollout(self):
+        if self.config.eval_async: return
+        if not self.config.eval_rollout_interval: return
+        if self.current_epoch % self.config.eval_rollout_interval != 0: return
+        self.eval_collector.collect()
+        
     def _check_early_stop(self):
         self._check_early_stop__train()
         self._check_early_stop__eval()
 
     def _check_early_stop__train(self):
-        train_rollout_stats = self.train_collector.get_stats()
+        stats = self.train_collector.get_stats()
         if not self.config.train_reward_threshold: return
-        if not train_rollout_stats: return
-        mean_ep_reward = train_rollout_stats.get("mean_ep_reward")
+        mean_ep_reward = stats.get("mean_ep_reward")
         if mean_ep_reward < self.config.train_reward_threshold: return
         # TODO: only stop if n_episodes
         print(f"Early stopping at epoch {self.current_epoch} with train mean reward {mean_ep_reward:.2f} >= threshold {self.config.train_reward_threshold}")

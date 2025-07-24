@@ -1,30 +1,26 @@
-
-- run eval in background thread (always)
-
-- Get reward threshold from env specs (harcoded)
+- FEAT: add config __repr__ support
+- FEAT: add agent __repr__ support
+- FEAT: add collector __repr__ support
+- FEAT: Log config into wandb experiment
 - BUG: eval is being calculated before window is full, consider evaling frequently by n_steps instead of n_episodes
+- BUG: fix thread safety issues with async eval collector (copy model weights with lock)
+- FEAT: get reward threshold from env specs (hardcoded)
+- FEAT: use torch.inference_mode() where applicable
+- FEAT: support for softcoding activations
+- FEAT: train for convergence without deterministic policy
+- FEAT: add shared backbone support
+- REFACTOR: move reward threshold detection to rollout collector
 - Add max_grad_norm support (0.5 for cartpole)
 - Add value baseline support for reinforce
 - train_rollout_steps_per_env
+- Match sb3rlzoo metric names
 - Match sb3rlzoo performance
 - Add support for softcoding activations
-- Match sb3rlzoo metric names
 - Fix reinforce algo
-- Benchmark rollout collector, improve speed
-- Run training from notebook again and make sure eval/rendering works
-- use torch.inference_mode() where applicable
 - Add support for different rollout collecotrs for different envs (for multitask learning)
-- Add support for multitask heads based on envid and/or controller type
-- Make sure rollout evals are closed
 - When I group by episodes I discard data from that rollout that won't be included in the next sequence of trajectories, so I need to make sure I don't lose data
-- Log config into wandb experiment
 - Log "n_steps" and "n_episodes" in the metric tracker
-- BUG: async mode is no longer working, it is not collecting rollouts
-- BUG: early stopping at epoch 39 with eval mean reward 721.80 (wrong)
-- fix duplicate metric logging bug
-- add alert support to metric tracker
-- train for convergence without deterministic policy
-- add support for non subprocenv
+- FEAT: add alert support to metric tracker (algo dependent)
 - make best model be saved to wandb
 - log results to huggingface?
 - TODO: make evaluation run in background and keep a mean reward window, it picks up the model params set up in it, runs N envs in sequence with N workers and 
@@ -34,12 +30,16 @@
 - benchmark against rlzoo with same hyperparameters
 - add support for plotting charts as text and feeding to llm, check how end of training does it
 - track environment stats, observarion stats, reward distributions, etc
-- shared backbone support is showing parts has being in evaluation mode during training, fix it
 - change api to match sb3
-- add a2c support
+- FEAT: add baseline subtraction to A2C
+- FEAT: a2c (only after reinforce/ppo is stable)
+- FEAT: add normalization support
 - normalization support through our own env wrapper
 - track selected action distribution
-- add support for conitnous environments
-- align rollout collector with sb3
-- training not working with data loader n_workers > 1
-- Early stopping at epoch 39 with eval mean reward 807.80 >= threshold 475
+- FEAT: support continuous environments
+- FEAT: support for multi-env rollout collectors
+- FEAT: add multitask heads support (eg: Atari, Sega Genesis) -- consider large output space
+- FEAT: add support for N PPO updates per rollout
+- CHECK: run rollout through dataloader process, do we always get n_batches?
+- CHECK: assert that dataloader is always going through all expected batches
+- TODO: solve Pong-RAM with PPO

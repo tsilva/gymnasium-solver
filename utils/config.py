@@ -43,16 +43,19 @@ class RLConfig:
     # TODO: make max_epochas = None
     max_epochs: int = -1  # Default: -1
     train_rollout_interval: int = 1  # Default: 1
+    # TODO: this should be early_stop_on_reward_threshold, threshold should be on env spec
     train_reward_threshold: float = None  # No default
     gamma: float = 0.99  # Default: 0.99
     gae_lambda: float = 0.95  # Default: 0.95
     clip_epsilon: float = 0.2  # Default: 0.2
 
     # Evaluation
-    eval_rollout_interval: int = 1  # Default: 10
+    eval_rollout_interval: int = 10  # Default: 10
+    # TODO: this should be early_stop_on_reward_threshold, threshold should be on env spec
     eval_reward_threshold: float = None  # No default
     eval_rollout_episodes: int = None
     eval_rollout_steps: int = None
+    eval_async: bool = False  # Default: true (async evaluation)
 
 
     # Normalization

@@ -2,7 +2,7 @@
 
 import yaml
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, MISSING
 from typing import Union, Tuple, Dict, Any
 
 
@@ -30,9 +30,6 @@ class RLConfig:
     # Training (required fields first)
     train_rollout_steps: int
     train_batch_size: int
-    eval_rollout_episodes: int
-    eval_rollout_steps: int
-
     # Optional fields with defaults
     seed: int = 42  # Default: 42
 
@@ -54,6 +51,9 @@ class RLConfig:
     # Evaluation
     eval_rollout_interval: int = 1  # Default: 10
     eval_reward_threshold: float = None  # No default
+    eval_rollout_episodes: int = None
+    eval_rollout_steps: int = None
+
 
     # Normalization
     normalize_obs: bool = False  # Default: false
@@ -75,7 +75,12 @@ class RLConfig:
         config_path = project_root / config_dir
 
         # Start with class defaults
-        final_config = {field.name: getattr(cls, field.name) for field in cls.__dataclass_fields__.values()}
+        final_config = {}
+        for field in cls.__dataclass_fields__.values():
+            if field.default is not MISSING:
+                final_config[field.name] = field.default
+            elif field.default_factory is not MISSING:  # type: ignore
+                final_config[field.name] = field.default_factory()      # type: ignore
 
         # Load environment-specific configuration
         env_config_path = config_path / f"{env_id}.yaml"
@@ -105,10 +110,9 @@ class RLConfig:
         # If eval_rollout_interval is set but eval_rollout_episodes and eval_rollout_steps are missing,
         # set eval_rollout_steps to train_rollout_steps
         if (
-            'eval_rollout_interval' in final_config
-            and 'eval_rollout_episodes' not in final_config
-            and 'eval_rollout_steps' not in final_config
-            and 'train_rollout_steps' in final_config
+            final_config.get('eval_rollout_interval', None) is not None and
+            final_config.get('eval_rollout_episodes', None) is None and
+            final_config.get('eval_rollout_steps', None) is None
         ):
             final_config['eval_rollout_steps'] = final_config['train_rollout_steps']
 
@@ -170,7 +174,7 @@ class RLConfig:
         # Evaluation
         if self.eval_rollout_interval <= 0:
             raise ValueError("eval_rollout_interval must be a positive integer.")
-        if self.eval_rollout_episodes <= 0:
+        if self.eval_rollout_episodes is not None and self.eval_rollout_episodes <= 0:
             raise ValueError("eval_rollout_episodes must be a positive integer.")
         if self.eval_reward_threshold is not None and not isinstance(self.eval_reward_threshold, (float, int)):
             raise ValueError("eval_reward_threshold must be None or a number.")

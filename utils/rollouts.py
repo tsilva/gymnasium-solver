@@ -60,8 +60,8 @@ def _collect_rollouts(
     n_steps: Optional[int] = None,
     n_episodes: Optional[int] = None,
     deterministic: bool = False,
-    gamma: float = 0.99,
-    gae_lambda: float = 0.95,
+    gamma: float = 0.99, # TODO: make sure these are passed correctly
+    gae_lambda: float = 0.95, # TODO: make sure these are passed correctly
     normalize_advantage: bool = True,
     advantages_norm_eps: float = 1e-8,
     collect_frames: bool = False,
@@ -71,7 +71,7 @@ def _collect_rollouts(
     # ------------------------------------------------------------------
     assert (n_steps is not None and n_steps > 0) or (
         n_episodes is not None and n_episodes > 0
-    ), "Provide *n_steps*, *n_episodes*, or both (> 0)."
+    ), "Provide *n_steps*, *n_episodes*, or both (> 0)."
 
     policy_device = _device_of(policy_model)
     assert policy_device.type != 'cpu', "Policy model must be on GPU or MPS, not CPU."
@@ -90,6 +90,7 @@ def _collect_rollouts(
     env_reward = np.zeros(n_envs, dtype=np.float32)
     env_length = np.zeros(n_envs, dtype=np.int32)
 
+    # TODO: softcode length
     episode_reward_deque: deque[float] = deque(maxlen=100)
     episode_length_deque: deque[int] = deque(maxlen=100)
 
@@ -147,8 +148,10 @@ def _collect_rollouts(
                     env_reward[i] += r
                     env_length[i] += 1
                     if done[i]:
-                        episode_reward_deque.append(float(env_reward[i]))
-                        episode_length_deque.append(int(env_length[i]))
+                        _env_reward = float(env_reward[i])
+                        _env_length = int(env_length[i])
+                        episode_reward_deque.append(_env_reward)
+                        episode_length_deque.append(_env_length)
                         env_reward[i] = 0.0
                         env_length[i] = 0
 

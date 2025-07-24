@@ -230,8 +230,8 @@ class BaseAgent(pl.LightningModule):
        
     def _check_early_stop__eval(self): # TODO: generalize common
         if not self.config.eval_reward_threshold: return
-        if not hasattr(self, "_eval_rollout_stats"): return False
-        eval_mean_ep_reward = self._eval_rollout_stats.get("mean_ep_reward")
+        stats = self.eval_collector.get_stats()
+        eval_mean_ep_reward = stats.get("mean_ep_reward")
         if eval_mean_ep_reward < self.config.eval_reward_threshold: return
         # TODO: only stop if n_episodes
         print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {eval_mean_ep_reward:.2f} >= threshold {self.config.eval_reward_threshold}")

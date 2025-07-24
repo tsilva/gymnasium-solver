@@ -99,7 +99,7 @@ class BaseAgent(pl.LightningModule):
         self.eval_rollout_collector = SyncRolloutCollector(
             lambda: self.build_env_fn(random.randint(0, 10000)),  # Random seed for eval
             self.policy_model,
-            n_episodes=self.config.eval_rollout_episodes,
+            n_steps=self.config.eval_rollout_steps,
             deterministic=True,
             **self.config.rollout_collector_hyperparams()
         )
@@ -118,12 +118,12 @@ class BaseAgent(pl.LightningModule):
         # - multiple workers is not faster because of worker spin up time
         # - peristent workers mitigates worker spin up time, but since dataset data is updated each epoch, workers don't see the updates
         # - therefore, we create a new dataloader each epoch
-        import multiprocessing
+        #import multiprocessing
         return DataLoader(
             self.train_rollout_dataset,
             batch_size=self.config.train_batch_size,
-            shuffle=True,
-            num_workers=multiprocessing.cpu_count() // 2,  # Use half of available CPU cores
+            shuffle=True#,
+            #num_workers=multiprocessing.cpu_count() // 2,  # Use half of available CPU cores
         )
 
     def training_step(self, batch, batch_idx):
@@ -137,7 +137,7 @@ class BaseAgent(pl.LightningModule):
         self.optimize_models(loss_results)
 
     def on_train_epoch_end(self):
-        if self._train_rollout_stats:
+        if self._train_rollout_stats: # TODO: still need this?
             mean_ep_reward = self._train_rollout_stats["mean_ep_reward"]
             self.log_metrics(self._train_rollout_stats, prog_bar=["mean_ep_reward"], prefix="train")
             self._train_rollout_stats = None  # Reset stats after logging
@@ -147,11 +147,8 @@ class BaseAgent(pl.LightningModule):
                 self.trainer.should_stop = True
 
         if (self.current_epoch + 1) % self.config.eval_rollout_interval == 0: 
-            # TODO: reuse this with eval()
-           
-            _, stats = eval_rollout_collector.collect() # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
-            del eval_rollout_collector  # Clean up collector
-
+            _, stats = self.eval_rollout_collector.collect() # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
+         
             self.log_metrics(stats, prog_bar=["mean_ep_reward"], prefix="eval")
             
             mean_ep_reward = stats['mean_ep_reward']
@@ -166,6 +163,7 @@ class BaseAgent(pl.LightningModule):
         # TODO: are these set to None?
         del self.train_rollout_collector  # Clean up collector
         del self.train_rollout_dataset  # Clean up dataset
+        del self.eval_rollout_collector  # Clean up collector
 
     # TODO: when does this run? should I run eval_rollout_collector here?
     #def validation_step(self, *args, **kwargs):

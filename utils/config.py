@@ -26,6 +26,14 @@ class RLConfig:
     env_id: str  # Environment ID string (e.g., 'CartPole-v1')
     algo_id: str  # Algorithm ID string (e.g., 'ppo', 'dqn')
     env_spec: Dict[str, Any]  # Environment specification dictionary
+
+    # Training (required fields first)
+    train_rollout_steps: int
+    train_batch_size: int
+    eval_rollout_episodes: int
+    eval_rollout_steps: int
+
+    # Optional fields with defaults
     seed: int = 42  # Default: 42
 
     # Networks
@@ -38,17 +46,13 @@ class RLConfig:
     # TODO: make max_epochas = None
     max_epochs: int = -1  # Default: -1
     train_rollout_interval: int = 1  # Default: 1
-    train_rollout_steps: int
     train_reward_threshold: float = None  # No default
-    train_batch_size: int
     gamma: float = 0.99  # Default: 0.99
     gae_lambda: float = 0.95  # Default: 0.95
     clip_epsilon: float = 0.2  # Default: 0.2
 
     # Evaluation
     eval_rollout_interval: int = 1  # Default: 10
-    eval_rollout_episodes: int
-    eval_rollout_steps: int
     eval_reward_threshold: float = None  # No default
 
     # Normalization
@@ -97,6 +101,16 @@ class RLConfig:
         # Convert list values to tuples for hidden_dims
         if 'hidden_dims' in final_config and isinstance(final_config['hidden_dims'], list):
             final_config['hidden_dims'] = tuple(final_config['hidden_dims'])
+
+        # If eval_rollout_interval is set but eval_rollout_episodes and eval_rollout_steps are missing,
+        # set eval_rollout_steps to train_rollout_steps
+        if (
+            'eval_rollout_interval' in final_config
+            and 'eval_rollout_episodes' not in final_config
+            and 'eval_rollout_steps' not in final_config
+            and 'train_rollout_steps' in final_config
+        ):
+            final_config['eval_rollout_steps'] = final_config['train_rollout_steps']
 
         # TODO: better way to do this?
         from utils.environment import build_env, get_env_spec

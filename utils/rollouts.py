@@ -65,6 +65,8 @@ def _collect_rollouts(
     normalize_advantage: bool = True,
     advantages_norm_eps: float = 1e-8,
     collect_frames: bool = False,
+    mean_reward_window: int = 100, # TODO: make sure these are passed correctly
+    mean_length_window: int = 100# TODO: make sure these are passed correctly
 ):
     # ------------------------------------------------------------------
     # 0. Sanity checks --------------------------------------------------
@@ -90,9 +92,8 @@ def _collect_rollouts(
     env_reward = np.zeros(n_envs, dtype=np.float32)
     env_length = np.zeros(n_envs, dtype=np.int32)
 
-    # TODO: softcode length
-    episode_reward_deque: deque[float] = deque(maxlen=100)
-    episode_length_deque: deque[int] = deque(maxlen=100)
+    episode_reward_deque: deque[float] = deque(maxlen=mean_reward_window)
+    episode_length_deque: deque[int] = deque(maxlen=mean_length_window)
 
     # First observation ------------------------------------------------------
     obs = env.reset()
@@ -262,15 +263,13 @@ def _collect_rollouts(
                 returns,
                 frames_env_major,
             )
+            mean_ep_reward = float(np.mean(episode_reward_deque)) if len(episode_reward_deque) == mean_reward_window else 0.0
+            mean_ep_length = float(np.mean(episode_length_deque)) if len(episode_length_deque) == mean_length_window else 0.0
             stats = {
                 "n_episodes": total_episode_count,
                 "n_steps": total_step_count,
-                "mean_ep_reward": float(np.mean(episode_reward_deque))
-                if episode_reward_deque
-                else 0.0,
-                "mean_ep_length": float(np.mean(episode_length_deque))
-                if episode_length_deque
-                else 0.0,
+                "mean_ep_reward": mean_ep_reward,
+                "mean_ep_length": mean_ep_length
             }
 
         yield trajectories, stats

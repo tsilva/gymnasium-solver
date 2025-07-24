@@ -182,31 +182,23 @@ class BaseAgent(pl.LightningModule):
         )
 
     def _start_eval_collector(self):
-        self._eval_collector_stats = None
+        # TODO: assert running with subprocenv +single env
+        self.eval_collector = RolloutCollector( # TODO: what if I stored collecotr and accessed stats that way
+            self.build_env_fn(self.config.seed + 1000, 1),  # Random seed for eval
+            self.policy_model,
+            n_episodes=10, # TODO: reward window / 10
+            deterministic=True,
+            **self.config.rollout_collector_hyperparams()
+        )
         self._eval_collector_thread_stop = threading.Event()
         self._eval_collector_thread = threading.Thread(target=self.__eval_collector_loop, daemon=True) # TODO: what is daemon, how is thread accessing members
         self._eval_collector_thread.start() # TODO: make sure thread stops on crash
     
     # TODO: run eval during training loops?
     def __eval_collector_loop(self):
-        try: 
-            # TODO: assert running with subprocenv +single env
-            eval_collector = RolloutCollector( # TODO: what if I stored collecotr and accessed stats that way
-                self.build_env_fn(self.config.seed + 1000, 1),  # Random seed for eval
-                self.policy_model,
-                n_episodes=10, # TODO: reward window / 10
-                deterministic=True,
-                **self.config.rollout_collector_hyperparams()
-            )
-
-            while not self._eval_collector_thread_stop.is_set():
-                eval_collector.collect()
-                self._eval_rollout_stats = eval_collector.get_stats()
-                print(json.dumps(self._eval_rollout_stats, indent=2))
-                # Sleep for a bit to avoid hammering the env
-                time.sleep(1)
-        finally:
-            del eval_collector
+        while not self._eval_collector_thread_stop.is_set(): 
+            self.eval_collector.collect()
+            time.sleep(1) # TODO: necessary?
 
     def _stop_collectors(self):
         self._stop_collectors__train()
@@ -219,8 +211,8 @@ class BaseAgent(pl.LightningModule):
     def _stop_collectors__eval(self):
         self._eval_thread_stop.set()
         self._eval_thread.join()
+        del self.eval_collector
         del self._eval_collector_thread
-        del self._eval_collector_stats
 
     def _check_early_stop(self):
         self._check_early_stop__train()
@@ -254,8 +246,8 @@ class BaseAgent(pl.LightningModule):
         self.log_metrics(train_rollout_stats, prog_bar=["mean_ep_reward"], prefix="train")
 
     def _log_stats__eval(self):
-        if not hasattr(self, "_eval_rollout_stats"): return
-        self.log_metrics(self._eval_rollout_stats, prog_bar=["mean_ep_reward"], prefix="eval") # TODO: thread safe?
+        stats = self.eval_collector.get_stats()
+        self.log_metrics(stats, prog_bar=["mean_ep_reward"], prefix="eval") # TODO: thread safe?
 
     # TODO: softcode this further
     def eval_and_render(self):

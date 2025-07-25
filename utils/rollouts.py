@@ -230,9 +230,9 @@ def _collect_rollouts(
             elapsed_mean = float(np.mean(rollout_durations))
             
             stats = {
-                "total_rollouts" : total_rollouts,
-                "total_episodes": total_episodes,
                 "total_timesteps": total_steps,
+                "total_episodes": total_episodes,
+                "total_rollouts" : total_rollouts,
                 "steps": rollout_steps,
                 "episodes": rollout_episodes,
                 "elapsed_mean": elapsed_mean,
@@ -272,9 +272,9 @@ class RolloutCollector():
         self.n_episodes = n_episodes
         self.stats_window_size = stats_window_size
         self.dataset = RolloutDataset()
-        self._generator = None
-        self.stats = {}
         self.trajectories = None
+        self._generator = None
+        self._metrics = {}
         self.kwargs = kwargs
 
     def collect(self, *args, **kwargs):
@@ -292,25 +292,27 @@ class RolloutCollector():
         # - therefore, we create a new dataloader each epoch
         return DataLoader(self.dataset, *args, **kwargs)
 
-    def get_stats(self):
-        return self.stats
+    def get_metrics(self):
+        return self._metrics
     
     def get_reward_threshold(self):
         from utils.environment import get_env_reward_threshold
         reward_threshold = get_env_reward_threshold(self.env)
         return reward_threshold
     
-    def get_mean_ep_reward(self):
-        return self.stats.get('mean_ep_reward', 0.0)
+    def get_total_timesteps(self):
+        return self.stats.get('total_timesteps', 0)
+    def get_ep_rew_mean(self):
+        return self._metrics.get('ep_rew_mean', 0.0)
     
     def get_total_episodes(self):
-        return self.stats.get('total_episodes', 0)
+        return self._metrics.get('total_episodes', 0)
     
     def is_reward_threshold_reached(self):
         reward_threshold = self.get_reward_threshold()
-        mean_ep_reward = self.get_mean_ep_reward()
+        ep_rew_mean = self.get_ep_rew_mean()
         total_episodes = self.get_total_episodes()
-        reached = total_episodes >= self.stats_window_size and mean_ep_reward >= reward_threshold
+        reached = total_episodes >= self.stats_window_size and ep_rew_mean >= reward_threshold
         return reached
     
     def _ensure_generator(self, n_episodes=None, n_steps=None, deterministic=None, collect_frames=False):

@@ -1,3 +1,4 @@
+import sys
 import time
 import json
 import gymnasium
@@ -38,7 +39,7 @@ class BaseAgent(pl.LightningModule):
         )
 
         # Training state
-        self.training_start_time = None
+        self.start_time = None
         self.total_steps = 0  # Track total training steps consumed
         self._epoch_metrics = {}
         # TODO: move this to on_fit_start()?
@@ -60,7 +61,7 @@ class BaseAgent(pl.LightningModule):
         from stable_baselines3.common.utils import set_random_seed
         set_random_seed(self.config.seed)
 
-        self.training_start_time = time.time()
+        self.start_time = time.time_ns()
         self.total_steps = 0  # Reset step counter
         print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
@@ -81,9 +82,17 @@ class BaseAgent(pl.LightningModule):
     def on_train_epoch_end(self):
         self._check_early_stop()
 
-        train_rollout_stats = self.train_collector.get_stats()
-        metrics = prefix_dict_keys(train_rollout_stats, "rollout")
-        self.log_metrics(metrics, prog_bar=["rollout/ep_rew_mean"])
+        rollout_metrics = self.train_collector.get_metrics()
+        self.log_metrics(prefix_dict_keys(rollout_metrics, "rollout"), prog_bar=["rollout/ep_rew_mean"]) # TODO: move prefix inside
+
+        total_timesteps = self.train_collector.get_total_timesteps()
+        time_elapsed = max((time.time_ns() - self.start_time) / 1e9, sys.float_info.epsilon)
+        fps = int(total_timesteps / time_elapsed)
+        self.log_metrics({
+            "time/total_timesteps": total_timesteps,
+            "time/time_elapsed" : int(time_elapsed),
+            "time/fps": int(fps)
+        }, on_epoch=True) # TODO: on_epoch?
 
         print_namespaced_dict(self._epoch_metrics)
 
@@ -143,9 +152,9 @@ class BaseAgent(pl.LightningModule):
 
     def _check_early_stop(self):
         if not self.train_collector.is_reward_threshold_reached(): return
-        mean_ep_reward = self.train_collector.get_mean_ep_reward()
+        ep_rew_mean = self.train_collector.get_ep_rew_mean()
         reward_threshold = self.train_collector.get_reward_threshold()
-        print(f"Early stopping at epoch {self.current_epoch} with train mean reward {mean_ep_reward:.2f} >= threshold {reward_threshold}")
+        print(f"Early stopping at epoch {self.current_epoch} with train mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
         self.trainer.should_stop = True
 
     # TODO: softcode this further
@@ -164,7 +173,7 @@ class BaseAgent(pl.LightningModule):
         )
         try: eval_collector.collect(collect_frames=True) # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
         finally: del eval_collector
-        print(json.dumps(eval_collector.get_stats(), indent=2))        
+        print(json.dumps(eval_collector.get_metrics(), indent=2))        
         episode_frames = group_frames_by_episodes(eval_collector.trajectories)
         return render_episode_frames(episode_frames, out_dir="./tmp", grid=(2, 2), text_color=(0, 0, 0)) # TODO: review if eval collector should be deterministic or not
     

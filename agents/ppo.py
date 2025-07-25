@@ -48,7 +48,7 @@ class PPO(BaseAgent):
         # TODO: detach everything post loss calculation?
         #th.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm) (do this in optimization step, check how lightning does it)
         # TODO: use single actor critic model
-        value_coef = 1.0
+        value_coef = 0.5 # TODO: softcode this
         loss = policy_loss + value_coef * value_loss - ent_coef * entropy_loss
 
         # Metrics (detached for logging)

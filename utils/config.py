@@ -32,6 +32,7 @@ class RLConfig:
     train_batch_size: int
     # Optional fields with defaults
     seed: int = 42  # Default: 42
+    n_envs: int = 1  # Number of parallel environments (default: 1)
 
     # Networks
     hidden_dims: Union[int, Tuple[int, ...]] = (64,)  # Default: [64]

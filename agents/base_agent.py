@@ -30,7 +30,7 @@ class RolloutDataset(TorchDataset):
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class BaseAgent(pl.LightningModule):
     
-    def __init__(self, env_id: str, *, n_envs = "auto"): # TODO: restore n_envs flag
+    def __init__(self, env_id: str):
         super().__init__()
         
         self.save_hyperparameters()
@@ -42,13 +42,13 @@ class BaseAgent(pl.LightningModule):
 
         # Create environment builder
         from utils.environment import build_env
-        self.build_env_fn = lambda seed, n_envs: build_env(
+        self.build_env_fn = lambda seed: build_env(
             config.env_id,
             seed=seed,
             norm_obs=config.normalize_obs,
             norm_reward=config.normalize_reward,
-            n_envs=n_envs,
-            vec_env_cls="SubProcVecEnv"
+            n_envs=config.n_envs,
+            vec_env_cls="DummyVecEnv"
         )
 
         # Training state
@@ -175,7 +175,7 @@ class BaseAgent(pl.LightningModule):
         self.train_rollout_dataset = RolloutDataset()
         self.train_collector = RolloutCollector(
             'train',
-            self.build_env_fn(self.config.seed, max(1, multiprocessing.cpu_count() - 1) if self.config.eval_async else "auto"),
+            self.build_env_fn(self.config.seed),
             self.policy_model,
             value_model=self.value_model,
             n_steps=self.config.train_rollout_steps,
@@ -187,7 +187,7 @@ class BaseAgent(pl.LightningModule):
         # TODO: assert running with subprocenv +single env
         self.eval_collector = RolloutCollector(
             'eval',
-            self.build_env_fn(self.config.seed + 1000, 1 if self.config.eval_async else "auto"),
+            self.build_env_fn(self.config.seed + 1000),
             self.policy_model,
             n_steps=self.config.train_rollout_steps, # TODO: reward window / 10
             deterministic=True,

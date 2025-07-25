@@ -3,6 +3,7 @@
 
 default:
 
+  n_envs: 8
   eval_reward_threshold: 475           # Environment is considered solved at 475
 
   hidden_dims: [64, 64]                # Sufficient capacity for CartPole
@@ -36,7 +37,6 @@ ppo:
 
 
   # TODO: use cpu
-  #n_envs: 8
   #n_timesteps: !!float 1e5
   #policy: 'MlpPolicy'
   #n_steps: 32

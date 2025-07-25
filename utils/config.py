@@ -45,6 +45,9 @@ class Config:
     # Normalization
     normalize_obs: bool = False  # Default: false
     normalize_reward: bool = False  # Default: false
+    
+    # Reward Shaping (for environments like MountainCar)
+    reward_shaping: Union[bool, Dict[str, Any]] = False  # Default: false
 
     @classmethod
     def load_from_yaml(cls, env_id: str, algo_id: str, config_dir: str = "configs") -> 'Config':

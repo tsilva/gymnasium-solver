@@ -13,13 +13,37 @@ import gymnasium
 import shutil
 from collections.abc import Sequence
 
-def build_env(env_id, n_envs=1, seed=None, norm_obs=False, norm_reward=False, vec_env_cls=None):
+def build_env(env_id, n_envs=1, seed=None, norm_obs=False, norm_reward=False, vec_env_cls=None, reward_shaping=None):
     from stable_baselines3.common.env_util import make_vec_env
     from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
+    
     if vec_env_cls == "SubProcVecEnv": vec_env_cls = SubprocVecEnv
     elif vec_env_cls == "DummyVecEnv": vec_env_cls = DummyVecEnv
-    env = make_vec_env(env_id, n_envs=n_envs, seed=seed, vec_env_cls=vec_env_cls)
-    if norm_obs or norm_reward: env = VecNormalize(env, norm_obs=norm_obs, norm_reward=norm_reward)
+    
+    # Create env_fn with reward shaping for MountainCar
+    def env_fn():
+        if env_id == "MountainCar-v0" and reward_shaping:
+            from utils.wrappers import create_mountain_car_env
+            return create_mountain_car_env(
+                env_id=env_id,
+                reward_shaping=True,
+                normalize_obs=norm_obs,  # Use wrapper normalization instead of VecNormalize for MountainCar
+                **reward_shaping if isinstance(reward_shaping, dict) else {}
+            )
+        else:
+            import gymnasium as gym
+            return gym.make(env_id)
+    
+    if env_id == "MountainCar-v0" and reward_shaping:
+        # For MountainCar with reward shaping, use our custom env_fn
+        env = make_vec_env(env_fn, n_envs=n_envs, seed=seed, vec_env_cls=vec_env_cls)
+        # Only apply VecNormalize for reward normalization, not obs (handled by wrapper)
+        if norm_reward: env = VecNormalize(env, norm_obs=False, norm_reward=norm_reward)
+    else:
+        # Standard environment creation
+        env = make_vec_env(env_id, n_envs=n_envs, seed=seed, vec_env_cls=vec_env_cls)
+        if norm_obs or norm_reward: env = VecNormalize(env, norm_obs=norm_obs, norm_reward=norm_reward)
+    
     return env
 
 def get_env_spec(env: gymnasium.Env | str) -> Dict[str, Any]:

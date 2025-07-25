@@ -35,7 +35,8 @@ class BaseAgent(pl.LightningModule):
             norm_obs=config.normalize_obs,
             norm_reward=config.normalize_reward,
             n_envs=config.n_envs,
-            vec_env_cls="DummyVecEnv"
+            vec_env_cls="DummyVecEnv",
+            reward_shaping=config.reward_shaping
         )
 
         # Training state

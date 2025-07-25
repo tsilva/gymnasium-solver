@@ -1,11 +1,25 @@
 ppo:
-  #normalize: true
+  # Environment settings
   n_envs: 16
-  #n_timesteps: !!float 1e6
-  #policy: 'MlpPolicy'
-  n_steps: 16
-  batch_size: 64
-  gae_lambda: 0.98
-  gamma: 0.99
-  n_epochs: 4
-  ent_coef: 0.2
+  normalize_obs: true              # Normalize observations for better learning
+  normalize_reward: false          # Keep original reward structure
+  reward_shaping:                  # Enable dense reward shaping
+    position_reward_scale: 100.0   # Reward for position progress toward goal
+    velocity_reward_scale: 10.0    # Reward for positive velocity
+    height_reward_scale: 50.0      # Reward for gaining height on mountain
+  
+  # Training hyperparameters
+  n_steps: 128                     # Longer rollouts for MountainCar
+  batch_size: 128                  # Larger batches for stability
+  n_epochs: 10                     # More epochs per update
+  gae_lambda: 0.95                 # Standard GAE parameter
+  gamma: 0.999                     # High discount for sparse rewards
+  ent_coef: 0.01                   # Encourage exploration
+  clip_range: 0.2                  # Standard PPO clipping
+  
+  # Network architecture
+  hidden_dims: [256, 256]          # Larger network for complex dynamics
+  policy_lr: 3e-4                  # Conservative learning rate
+  
+  # Training limits
+  max_epochs: 1000                 # Allow longer training

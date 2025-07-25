@@ -252,23 +252,23 @@ def _collect_rollouts(
             )
 
             # Only calculate mean values when window is full
-            mean_ep_reward = float(np.mean(episode_reward_deque)) if episode_reward_deque else 0.0
-            mean_ep_length = float(np.mean(episode_length_deque)) if episode_length_deque else 0.0
+            ep_rew_mean = float(np.mean(episode_reward_deque)) if episode_reward_deque else 0.0
+            ep_len_mean = int(np.mean(episode_length_deque)) if episode_length_deque else 0.0
             
             total_rollouts += 1
             rollout_elapsed = time.time() - rollout_start
             rollout_durations.append(rollout_elapsed)
-            rollout_mean_duration = np.mean(rollout_durations)
+            elapsed_mean = float(np.mean(rollout_durations))
             
             stats = {
                 "total_rollouts" : total_rollouts,
                 "total_episodes": total_episodes,
                 "total_timesteps": total_steps,
-                "rollout_step_count": rollout_steps,
-                "rollout_episode_count": rollout_episodes,
-                "rollout_mean_duration": rollout_mean_duration,
-                "mean_ep_reward": mean_ep_reward,
-                "mean_ep_length": mean_ep_length
+                "steps": rollout_steps,
+                "episodes": rollout_episodes,
+                "elapsed_mean": elapsed_mean,
+                "ep_rew_mean": ep_rew_mean,
+                "ep_len_mean": ep_len_mean
             }
 
         yield trajectories, stats

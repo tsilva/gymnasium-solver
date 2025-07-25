@@ -55,7 +55,7 @@ class BaseAgent(pl.LightningModule):
         self.automatic_optimization = False
         self.training_start_time = None
         self.total_steps = 0  # Track total training steps consumed
-
+        self._epoch_metrics = {}
         # TODO: move this to on_fit_start()?
         self.policy_model = None
         self.create_models()
@@ -112,17 +112,22 @@ class BaseAgent(pl.LightningModule):
         batch_size = batch[0].size(0)
         self.total_steps += batch_size
 
+        # TODO: call this something else
         loss_results = self.compute_loss(batch)
-        # TODO: log this here?
-        # TODO: why am I seeing _step suffixes?
-        self.log_metrics(loss_results, on_step=True, prog_bar=False, prefix="train")
+
+        metrics = prefix_dict_keys(loss_results, "train")
+        self.log_metrics(metrics, on_step=True, prog_bar=False)
 
         self.optimize_models(loss_results)
 
     def on_train_epoch_end(self):
-        self._collect_sync_eval_rollout()
         self._check_early_stop()
-        self._log_stats()
+
+        train_rollout_stats = self.train_collector.get_stats()
+        metrics = prefix_dict_keys(train_rollout_stats, "rollout")
+        self.log_metrics(metrics, prog_bar=["rollout/ep_rew_mean"])
+
+        print_namespaced_dict(self._epoch_metrics)
 
     def on_fit_end(self):
         total_time = time.time() - self.training_start_time
@@ -146,30 +151,26 @@ class BaseAgent(pl.LightningModule):
         
         trainer = pl.Trainer(
             logger=wandb_logger,
+            # TODO: softcode this
             log_every_n_steps=1, # TODO: softcode this
             max_epochs=self.config.max_epochs,
             enable_progress_bar=True,
             enable_checkpointing=False,  # Disable checkpointing for speed
-            accelerator="cpu",  # Use CPU for training
+            accelerator="cpu",  # Use CPU for training # TODO: softcode this
             reload_dataloaders_every_n_epochs=self.config.train_rollout_interval
             #callbacks=[WandbCleanup()]
         )
         trainer.fit(self)
 
-    def log_metrics(self, metrics, *, on_epoch=None, on_step=None, prog_bar=None, prefix=None):
+    def log_metrics(self, metrics, *, on_epoch=None, on_step=None, prog_bar=None):
+        self._epoch_metrics = {**self._epoch_metrics, **metrics}
         for key, value in metrics.items():
             _on_epoch = True if on_epoch is True or key in (on_epoch or []) else None
             _on_step =  True if on_step is True or key in (on_step or []) else None
             _prog_bar = True if prog_bar is True or key in (prog_bar or []) else None
-            _key = f"{prefix}/{key}" if prefix else key
-            self.log(_key, value, on_epoch=_on_epoch, on_step=_on_step, prog_bar=_prog_bar)
+            self.log(key, value, on_epoch=_on_epoch, on_step=_on_step, prog_bar=_prog_bar)
 
     def _start_collectors(self):
-        self._start_train_collector()
-        self._start_eval_collector()
-
-    def _start_train_collector(self):
-        # Common RL components
         # TODO: create this only for training? create on_fit_start() and destroy with on_fit_end()?
         self.train_rollout_dataset = RolloutDataset()
         self.train_collector = RolloutCollector(
@@ -181,83 +182,16 @@ class BaseAgent(pl.LightningModule):
         )
         print(str(self.train_collector))
 
-    def _start_eval_collector(self):
-        # TODO: assert running with subprocenv +single env
-        self.eval_collector = RolloutCollector(
-            'eval',
-            self.build_env_fn(self.config.seed + 1000),
-            self.policy_model,
-            n_steps=self.config.n_steps, # TODO: reward window / 10
-            deterministic=True,
-            **self.config.rollout_collector_hyperparams()
-        )
-        if self.config.eval_async:
-            self._eval_collector_thread_stop = threading.Event()
-            self._eval_collector_thread = threading.Thread(target=self.__eval_collector_loop, daemon=True) # TODO: what is daemon, how is thread accessing members
-            self._eval_collector_thread.start() # TODO: make sure thread stops on crash
-        else:
-            self._eval_collector_thread_stop = None
-            self._eval_collector_thread = None
-    
-    # TODO: run eval during training loops?
-    def __eval_collector_loop(self):
-        try:
-            while not self._eval_collector_thread_stop.is_set(): 
-                self.eval_collector.collect()
-                if not self._eval_collector_thread_stop.wait(timeout=1.0): continue  # Timeout occurred, check stop condition again
-        except Exception as e:
-            print(f"Error in eval collector thread: {e}")
-
     def _stop_collectors(self):
-        self._stop_collectors__train()
-        self._stop_collectors__eval()
-
-    def _stop_collectors__train(self):
         del self.train_collector
         del self.train_rollout_dataset
 
-    def _stop_collectors__eval(self):
-        if self._eval_collector_thread_stop is not None:
-            self._eval_collector_thread_stop.set()
-            self._eval_collector_thread.join()
-            del self._eval_collector_thread
-        del self.eval_collector
-        
-    def _collect_sync_eval_rollout(self):
-        if self.config.eval_async: return
-        if not self.config.eval_rollout_interval: return
-        if self.current_epoch % self.config.eval_rollout_interval != 0: return
-        self.eval_collector.collect()
-        
     def _check_early_stop(self):
-        self._check_early_stop__train()
-        self._check_early_stop__eval()
-
-    def _check_early_stop__train(self):
         if not self.train_collector.is_reward_threshold_reached(): return
         mean_ep_reward = self.train_collector.get_mean_ep_reward()
         reward_threshold = self.train_collector.get_reward_threshold()
         print(f"Early stopping at epoch {self.current_epoch} with train mean reward {mean_ep_reward:.2f} >= threshold {reward_threshold}")
         self.trainer.should_stop = True
-       
-    def _check_early_stop__eval(self): # TODO: generalize common
-        if not self.eval_collector.is_reward_threshold_reached(): return
-        mean_ep_reward = self.eval_collector.get_mean_ep_reward()
-        reward_threshold = self.eval_collector.get_reward_threshold()
-        print(f"Early stopping at epoch {self.current_epoch} with train mean reward {mean_ep_reward:.2f} >= threshold {reward_threshold}")
-        self.trainer.should_stop = True
-
-    def _log_stats(self):
-        self._log_stats__train()
-        self._log_stats__eval()
-
-    def _log_stats__train(self):
-        train_rollout_stats = self.train_collector.get_stats()
-        self.log_metrics(train_rollout_stats, prog_bar=["mean_ep_reward"], prefix="train")
-
-    def _log_stats__eval(self):
-        stats = self.eval_collector.get_stats()
-        self.log_metrics(stats, prog_bar=["mean_ep_reward"], prefix="eval") # TODO: thread safe?
 
     # TODO: softcode this further
     def eval_and_render(self):
@@ -304,3 +238,41 @@ class BaseAgent(pl.LightningModule):
             
         return "\n".join(lines)
 
+def prefix_dict_keys(data: dict, prefix: str) -> dict:
+    return {f"{prefix}/{key}" if prefix else key: value for key, value in data.items()}
+
+def print_namespaced_dict(data: dict) -> None:
+    """
+    Prints a dictionary with namespaced keys (e.g., 'rollout/ep_len_mean')
+    in a formatted ASCII table grouped by namespaces.
+    Floats are formatted to 2 decimal places.
+    """
+    # Group keys by their namespace prefix
+    grouped = {}
+    for key, value in data.items():
+        if "/" in key:
+            namespace, subkey = key.split("/", 1)
+        else:
+            namespace, subkey = key, ""
+        grouped.setdefault(namespace, {})[subkey] = value
+
+    # Format values first (floats to 2 decimals)
+    formatted_grouped = {}
+    for ns, subdict in grouped.items():
+        formatted_grouped[ns] = {
+            subkey: str(val)
+            for subkey, val in subdict.items()
+        }
+
+    # Determine column widths
+    max_key_len = max(len(subkey) for ns in formatted_grouped for subkey in formatted_grouped[ns]) + 4
+    max_val_len = max(len(val) for ns in formatted_grouped for val in formatted_grouped[ns].values()) + 2
+
+    # Print table
+    border = "-" * (max_key_len + max_val_len + 5)
+    print(border)
+    for ns, subdict in formatted_grouped.items():
+        print(f"| {ns + '/':<{max_key_len}} |")
+        for subkey, val in subdict.items():
+            print(f"|    {subkey:<{max_key_len-4}} | {val:<{max_val_len}}|")
+    print(border)

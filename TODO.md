@@ -1,3 +1,4 @@
+- check how many updates per rollout does rlzoo do (n_updates)
 - log stats like rlzoo
 - mimick rlzoo hyperparam config structure
 - Review CartPole-v1 hyperparams from https://github.com/DLR-RM/rl-baselines3-zoo/blob/master/hyperparams/ppo.yml

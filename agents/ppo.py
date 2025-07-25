@@ -65,11 +65,11 @@ class PPO(BaseAgent):
             #'policy_loss': policy_loss,
             #'entropy_loss': entropy_loss, # train
             #'value_loss': value_loss, # train
-            'entropy': entropy.detach(), # train
-            'clip_fraction': clip_fraction.detach(), # train
-            'kl_div': kl_div.detach(), # train
-            'approx_kl': approx_kl.detach(), # train
-            'explained_variance': explained_var.detach() # train
+            'entropy': entropy.detach().item(), # train
+            'clip_fraction': clip_fraction.detach().item(), # train
+            'kl_div': kl_div.detach().item(), # train
+            'approx_kl': approx_kl.detach().item(), # train
+            'explained_variance': explained_var.detach().item() # train
         }
         
         return result

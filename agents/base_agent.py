@@ -80,7 +80,7 @@ class BaseAgent(pl.LightningModule):
 
     # TODO: assert this is being called every epoch
     def train_dataloader(self):
-        self.train_collector.collect()
+        self.train_collector.collect() # TODO: make this return dataloader with new dataset
         return self.train_collector.create_dataloader(batch_size=self.config.batch_size)
     
     def on_train_epoch_end(self):
@@ -122,7 +122,7 @@ class BaseAgent(pl.LightningModule):
             enable_progress_bar=True,
             enable_checkpointing=False,  # Disable checkpointing for speed
             accelerator="cpu",  # Use CPU for training # TODO: softcode this
-            reload_dataloaders_every_n_epochs=self.config.train_rollout_interval
+            reload_dataloaders_every_n_epochs=self.config.n_epochs
             #callbacks=[WandbCleanup()]
         )
         trainer.fit(self)

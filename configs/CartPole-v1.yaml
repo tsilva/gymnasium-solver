@@ -2,11 +2,11 @@ ppo:
   n_envs: 8
   #n_timesteps: !!float 1e5
   #policy: 'MlpPolicy'
+  n_epochs: 20
   n_steps: 32
   batch_size: 256
   gae_lambda: 0.8
   gamma: 0.98
-  #n_epochs: 20
   ent_coef: 0.0
   #learning_rate: lin_0.001
   clip_range: 0.2
@@ -18,6 +18,5 @@ ppo:
   hidden_dims: [64, 64]                # Sufficient capacity for CartPole
   policy_lr: 1e-3                      # Default policy LR (overridden per algo below)
   value_lr: 1e-3                       # Default value LR (overridden per algo below)
-  train_rollout_interval: 1            # Frequent rollouts for fast feedback
   normalize_obs: false                 # Normalize observations for better learning
   normalize_reward: false              # Reward normalization not needed for CartPole

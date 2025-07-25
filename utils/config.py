@@ -15,6 +15,7 @@ class Config:
     # Training (required fields first)
     n_steps: int
     batch_size: int
+    n_epochs: int
     # Optional fields with defaults
     seed: int = 42  # Default: 42
     n_envs: int = 1  # Number of parallel environments (default: 1)
@@ -28,7 +29,6 @@ class Config:
 
     # Training
     max_epochs: int = None  # Default: -1
-    train_rollout_interval: int = 1  # Default: 1
     gamma: float = 0.99  # Default: 0.99
     gae_lambda: float = 0.95  # Default: 0.95
     clip_range: float = 0.2  # Default: 0.2
@@ -121,8 +121,8 @@ class Config:
             raise ValueError("ent_coef must be a non-negative float.")
 
         # Training
-        if self.train_rollout_interval <= 0:
-            raise ValueError("train_rollout_interval must be a positive integer.")
+        if self.n_epochs <= 0:
+            raise ValueError("n_epochs must be a positive integer.")
         if self.n_steps <= 0:
             raise ValueError("n_steps must be a positive integer.")
         if self.batch_size <= 0:

@@ -1,13 +1,11 @@
 import time
 import json
-import threading
-import multiprocessing
-from dataclasses import  asdict
 import pytorch_lightning as pl
 from torch.utils.data import Dataset as TorchDataset
 from torch.utils.data import DataLoader
 from utils.rollouts import RolloutCollector
 from utils.config import load_config
+from utils.misc import prefix_dict_keys, print_namespaced_dict
 
 # TODO: add test script for collection using dataset/dataloader
 # TODO: should dataloader move to gpu?
@@ -52,7 +50,6 @@ class BaseAgent(pl.LightningModule):
         )
 
         # Training state
-        self.automatic_optimization = False
         self.training_start_time = None
         self.total_steps = 0  # Track total training steps consumed
         self._epoch_metrics = {}
@@ -60,20 +57,9 @@ class BaseAgent(pl.LightningModule):
         self.policy_model = None
         self.create_models()
         
-    def forward(self, x):
-        return self.policy_model(x)
-    
     def create_models(self):
         """Override in subclass to create algorithm-specific models"""
         raise NotImplementedError("Subclass must implement create_models()")
-    
-    def compute_loss(self, batch):
-        """Override in subclass to compute algorithm-specific loss"""
-        raise NotImplementedError("Subclass must implement compute_loss()")
-        
-    def optimize_models(self, loss_results):
-        """Override in subclass to implement algorithm-specific optimization"""
-        raise NotImplementedError("Subclass must implement optimize_models()")
 
     def on_fit_start(self):
         # TODO: should I set this before training starts? think deeply to where this should be set
@@ -111,14 +97,6 @@ class BaseAgent(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         batch_size = batch[0].size(0)
         self.total_steps += batch_size
-
-        # TODO: call this something else
-        loss_results = self.compute_loss(batch)
-
-        metrics = prefix_dict_keys(loss_results, "train")
-        self.log_metrics(metrics, on_step=True, prog_bar=False)
-
-        self.optimize_models(loss_results)
 
     def on_train_epoch_end(self):
         self._check_early_stop()
@@ -237,42 +215,3 @@ class BaseAgent(pl.LightningModule):
         if hasattr(self, 'eval_collector'): lines.append(str(self.eval_collector)) 
             
         return "\n".join(lines)
-
-def prefix_dict_keys(data: dict, prefix: str) -> dict:
-    return {f"{prefix}/{key}" if prefix else key: value for key, value in data.items()}
-
-def print_namespaced_dict(data: dict) -> None:
-    """
-    Prints a dictionary with namespaced keys (e.g., 'rollout/ep_len_mean')
-    in a formatted ASCII table grouped by namespaces.
-    Floats are formatted to 2 decimal places.
-    """
-    # Group keys by their namespace prefix
-    grouped = {}
-    for key, value in data.items():
-        if "/" in key:
-            namespace, subkey = key.split("/", 1)
-        else:
-            namespace, subkey = key, ""
-        grouped.setdefault(namespace, {})[subkey] = value
-
-    # Format values first (floats to 2 decimals)
-    formatted_grouped = {}
-    for ns, subdict in grouped.items():
-        formatted_grouped[ns] = {
-            subkey: str(val)
-            for subkey, val in subdict.items()
-        }
-
-    # Determine column widths
-    max_key_len = max(len(subkey) for ns in formatted_grouped for subkey in formatted_grouped[ns]) + 4
-    max_val_len = max(len(val) for ns in formatted_grouped for val in formatted_grouped[ns].values()) + 2
-
-    # Print table
-    border = "-" * (max_key_len + max_val_len + 5)
-    print(border)
-    for ns, subdict in formatted_grouped.items():
-        print(f"| {ns + '/':<{max_key_len}} |")
-        for subkey, val in subdict.items():
-            print(f"|    {subkey:<{max_key_len-4}} | {val:<{max_val_len}}|")
-    print(border)

@@ -15,13 +15,13 @@ class ActorCritic(nn.Module):
     def __init__(self, state_dim: int, action_dim: int, hidden=(64, 64)):
         super().__init__()
         self.backbone = mlp(state_dim, hidden, nn.Tanh)
-        self.pi = nn.Linear(hidden[-1], action_dim)
-        self.v  = nn.Linear(hidden[-1], 1)
+        self.policy_head = nn.Linear(hidden[-1], action_dim)
+        self.value_head  = nn.Linear(hidden[-1], 1)
 
     def forward(self, obs: torch.Tensor):
         x = self.backbone(obs)
-        dist = Categorical(logits=self.pi(x))
-        value = self.v(x).squeeze(-1)
+        dist = Categorical(logits=self.policy_head(x))
+        value = self.value_head(x).squeeze(-1)
         return dist, value
 
     @torch.no_grad()

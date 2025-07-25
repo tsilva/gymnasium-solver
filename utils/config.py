@@ -39,6 +39,7 @@ class RLConfig:
     policy_lr: float = 0.0003  # Default: 0.0003
     value_lr: float = 0.001  # Default: 0.001
     ent_coef: float = 0.01  # Default: 0.01
+    val_coef: float = 0.5  # Default: 0.5 (for PPO)
 
     # Training
     # TODO: make max_epochas = None

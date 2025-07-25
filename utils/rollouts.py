@@ -275,7 +275,7 @@ def _collect_rollouts(
             # Only calculate mean values when window is full
             mean_ep_reward = float(np.mean(episode_reward_deque)) if episode_reward_deque else 0.0
             mean_ep_length = float(np.mean(episode_length_deque)) if episode_length_deque else 0.0
-
+            
             total_rollouts += 1
             rollout_elapsed = time.time() - rollout_start
             rollout_durations.append(rollout_elapsed)
@@ -317,6 +317,28 @@ class RolloutCollector():
     def get_stats(self):
         return self.stats
     
+    def get_reward_threshold(self):
+        from utils.environment import get_env_reward_threshold
+        reward_threshold = get_env_reward_threshold(self.env)
+        return reward_threshold
+    
+    def get_mean_ep_reward(self):
+        return self.stats.get('mean_ep_reward', 0.0)
+    
+    def get_total_episodes(self):
+        return self.stats.get('total_episodes', 0)
+    
+    def get_mean_reward_window(self):
+        return 100 # TODO: softcode
+    
+    def is_reward_threshold_reached(self):
+        reward_threshold = self.get_reward_threshold()
+        mean_ep_reward = self.get_mean_ep_reward()
+        mean_reward_window = self.get_mean_reward_window()
+        total_episodes = self.get_total_episodes()
+        reached = total_episodes >= mean_reward_window and mean_ep_reward >= reward_threshold
+        return reached
+    
     def _ensure_generator(self, n_episodes=None, n_steps=None, deterministic=None, collect_frames=False):
         if self._generator: return self._generator
 
@@ -334,12 +356,13 @@ class RolloutCollector():
             **self.kwargs
         )
         return self._generator
-
+    
     def __del__(self):
         if self._generator is None: return 
         self._generator.close()
         self.env.close()
 
+    # TODO: add env spec details
     def __str__(self) -> str:
         """Return a human-readable string representation of the rollout collector."""
         lines = [f"RolloutCollector '{self._id}'", "=" * (len(f"RolloutCollector '{self._id}'")), ""]

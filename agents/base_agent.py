@@ -236,21 +236,17 @@ class BaseAgent(pl.LightningModule):
         self._check_early_stop__eval()
 
     def _check_early_stop__train(self):
-        stats = self.train_collector.get_stats()
-        if not self.config.train_reward_threshold: return
-        mean_ep_reward = stats.get("mean_ep_reward")
-        if mean_ep_reward < self.config.train_reward_threshold: return
-        # TODO: only stop if n_episodes
-        print(f"Early stopping at epoch {self.current_epoch} with train mean reward {mean_ep_reward:.2f} >= threshold {self.config.train_reward_threshold}")
+        if not self.train_collector.is_reward_threshold_reached(): return
+        mean_ep_reward = self.train_collector.get_mean_ep_reward()
+        reward_threshold = self.train_collector.get_reward_threshold()
+        print(f"Early stopping at epoch {self.current_epoch} with train mean reward {mean_ep_reward:.2f} >= threshold {reward_threshold}")
         self.trainer.should_stop = True
        
     def _check_early_stop__eval(self): # TODO: generalize common
-        if not self.config.eval_reward_threshold: return
-        stats = self.eval_collector.get_stats()
-        eval_mean_ep_reward = stats.get("mean_ep_reward")
-        if eval_mean_ep_reward < self.config.eval_reward_threshold: return
-        # TODO: only stop if n_episodes
-        print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {eval_mean_ep_reward:.2f} >= threshold {self.config.eval_reward_threshold}")
+        if not self.eval_collector.is_reward_threshold_reached(): return
+        mean_ep_reward = self.eval_collector.get_mean_ep_reward()
+        reward_threshold = self.eval_collector.get_reward_threshold()
+        print(f"Early stopping at epoch {self.current_epoch} with train mean reward {mean_ep_reward:.2f} >= threshold {reward_threshold}")
         self.trainer.should_stop = True
 
     def _log_stats(self):

@@ -1,7 +1,5 @@
 """Environment setup utilities."""
 
-import multiprocessing
-
 def build_env(env_id, n_envs=1, seed=None, norm_obs=False, norm_reward=False, vec_env_cls=None):
     from stable_baselines3.common.env_util import make_vec_env
     from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
@@ -10,6 +8,17 @@ def build_env(env_id, n_envs=1, seed=None, norm_obs=False, norm_reward=False, ve
     env = make_vec_env(env_id, n_envs=n_envs, seed=seed, vec_env_cls=vec_env_cls)
     if norm_obs or norm_reward: env = VecNormalize(env, norm_obs=norm_obs, norm_reward=norm_reward)
     return env
+
+def get_env_spec(env):
+    return env.envs[0].spec
+
+def get_env_reward_threshold(env):
+    import gymnasium
+    spec = get_env_spec(env)
+    env_id = spec['env_id']
+    spec = gymnasium.spec(env_id)
+    return spec.reward_threshold
+
 
 def _old_log_env_info(env) -> None:
     """Print key attributes of an environment or a vec-env.

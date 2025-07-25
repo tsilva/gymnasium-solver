@@ -44,8 +44,6 @@ class RLConfig:
     # TODO: make max_epochas = None
     max_epochs: int = -1  # Default: -1
     train_rollout_interval: int = 1  # Default: 1
-    # TODO: this should be early_stop_on_reward_threshold, threshold should be on env spec
-    train_reward_threshold: float = None  # No default
     gamma: float = 0.99  # Default: 0.99
     gae_lambda: float = 0.95  # Default: 0.95
     clip_epsilon: float = 0.2  # Default: 0.2
@@ -53,7 +51,6 @@ class RLConfig:
     # Evaluation
     eval_rollout_interval: int = 10  # Default: 10
     # TODO: this should be early_stop_on_reward_threshold, threshold should be on env spec
-    eval_reward_threshold: float = None  # No default
     eval_rollout_episodes: int = None
     eval_rollout_steps: int = None
     eval_async: bool = False  # Default: true (async evaluation)
@@ -155,8 +152,6 @@ class RLConfig:
             raise ValueError("train_rollout_interval must be a positive integer.")
         if self.n_steps <= 0:
             raise ValueError("n_steps must be a positive integer.")
-        if self.train_reward_threshold is not None and not isinstance(self.train_reward_threshold, (float, int)):
-            raise ValueError("train_reward_threshold must be None or a number.")
         if self.batch_size <= 0:
             raise ValueError("batch_size must be a positive integer.")
         if not (0 < self.gamma <= 1):
@@ -171,8 +166,6 @@ class RLConfig:
             raise ValueError("eval_rollout_interval must be a positive integer.")
         if self.eval_rollout_episodes is not None and self.eval_rollout_episodes <= 0:
             raise ValueError("eval_rollout_episodes must be a positive integer.")
-        if self.eval_reward_threshold is not None and not isinstance(self.eval_reward_threshold, (float, int)):
-            raise ValueError("eval_reward_threshold must be None or a number.")
 
         # Miscellaneous
         if self.mean_reward_window <= 0:
@@ -210,7 +203,6 @@ class RLConfig:
         ])
         
         # Training section
-        train_reward_str = "None" if self.train_reward_threshold is None else str(self.train_reward_threshold)
         lines.extend([
             "TRAINING:",
             f"  n_steps: {self.n_steps}",
@@ -219,8 +211,6 @@ class RLConfig:
             f"    → Batch size for training updates",
             f"  train_rollout_interval: {self.train_rollout_interval}",
             f"    → Number of epochs between training rollouts",
-            f"  train_reward_threshold: {train_reward_str}",
-            f"    → Early stopping threshold for training reward",
             f"  max_epochs: {self.max_epochs}",
             f"    → Maximum training epochs (-1 for unlimited)",
             f"  gamma: {self.gamma}",
@@ -233,7 +223,6 @@ class RLConfig:
         ])
         
         # Evaluation section
-        eval_reward_str = "None" if self.eval_reward_threshold is None else str(self.eval_reward_threshold)
         eval_episodes_str = "None" if self.eval_rollout_episodes is None else str(self.eval_rollout_episodes)
         eval_steps_str = "None" if self.eval_rollout_steps is None else str(self.eval_rollout_steps)
         lines.extend([
@@ -244,8 +233,6 @@ class RLConfig:
             f"    → Number of episodes per evaluation (None = use steps)",
             f"  eval_rollout_steps: {eval_steps_str}",
             f"    → Number of steps per evaluation (None = use episodes)",
-            f"  eval_reward_threshold: {eval_reward_str}",
-            f"    → Early stopping threshold for evaluation reward",
             f"  eval_async: {self.eval_async}",
             f"    → Whether to run evaluation asynchronously",
             ""

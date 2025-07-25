@@ -82,8 +82,7 @@ class BaseAgent(pl.LightningModule):
 
     # TODO: assert this is being called every epoch
     def train_dataloader(self):
-        self.train_collector.collect() # TODO: make this return dataloader with new dataset
-        return self.train_collector.create_dataloader(batch_size=self.config.batch_size)
+        return self.train_collector.collect(batch_size=self.config.batch_size, shuffle=True)
     
     def training_step(self, batch, batch_idx):
         import torch
@@ -101,7 +100,7 @@ class BaseAgent(pl.LightningModule):
                 torch.nn.utils.clip_grad_norm_(self.policy_model.parameters(), max_grad_norm)
                 optimizer.step()
 
-        self._n_updates += 1
+            self._n_updates += 1
         self.log_metrics({"train/n_updates": self._n_updates})
 
     def on_train_epoch_end(self):

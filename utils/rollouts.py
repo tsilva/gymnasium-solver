@@ -242,15 +242,11 @@ def _collect_rollouts(
 
         yield trajectories, stats
 
-
 # TODO: add test script for collection using dataset/dataloader
 # TODO: should dataloader move to gpu?
 # TODO: would converting trajectories to tuples in advance be faster?
 class RolloutDataset(TorchDataset):
-    def __init__(self):
-        self.trajectories = None 
-
-    def update(self, *trajectories):
+    def __init__(self, *trajectories): # TODO: make sure dataset is not being tampered with during collection
         self.trajectories = trajectories
 
     def __len__(self):
@@ -261,7 +257,6 @@ class RolloutDataset(TorchDataset):
         item = tuple(t[idx] for t in self.trajectories)
         return item
     
-
 class RolloutCollector():
     # TODO: how do they perform eval, at which cadence?
     def __init__(self, env, policy_model, deterministic=False, n_steps=None, n_episodes=None, stats_window_size=100, **kwargs):
@@ -271,26 +266,25 @@ class RolloutCollector():
         self.n_steps = n_steps
         self.n_episodes = n_episodes
         self.stats_window_size = stats_window_size
-        self.dataset = RolloutDataset()
         self.trajectories = None
         self._generator = None
         self._metrics = {}
         self.kwargs = kwargs
 
-    def collect(self, *args, **kwargs):
+    def collect(self, *args, batch_size=64, shuffle=False, **kwargs):
         generator = self._ensure_generator(*args, **kwargs)
         trajectories, metrics = next(generator)
         self._metrics = metrics
-        self.trajectories = trajectories
-        self.dataset.update(*trajectories) # TODO: move this inside the collector
-    
-    def create_dataloader(self, *args, **kwargs):
         # NOTE: 
         # - dataloader is created each epoch to mitigate issues with changing dataset data between epochs
         # - multiple workers is not faster because of worker spin up time
         # - peristent workers mitigates worker spin up time, but since dataset data is updated each epoch, workers don't see the updates
         # - therefore, we create a new dataloader each epoch
-        return DataLoader(self.dataset, *args, **kwargs)
+        return DataLoader(
+            RolloutDataset(*trajectories), # TODO: crashes without the *, figure out why
+            batch_size=batch_size, 
+            shuffle=shuffle
+        )
 
     def get_metrics(self):
         return self._metrics
@@ -300,6 +294,7 @@ class RolloutCollector():
         reward_threshold = get_env_reward_threshold(self.env)
         return reward_threshold
     
+    # TODO: merge into get_metric(metric_name)?
     def get_total_timesteps(self):
         return self._metrics.get('total_timesteps', 0)
     
@@ -336,5 +331,5 @@ class RolloutCollector():
     
     def __del__(self):
         if self._generator is None: return 
-        self._generator.close()
-        self.env.close()
+        self._generator.close() # TODO: drop generator pattern, merge code into class
+        self.env.close() # TODO: is this the responsibility of rollout collector or whoever created it?

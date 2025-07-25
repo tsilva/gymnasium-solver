@@ -264,8 +264,7 @@ class RolloutDataset(TorchDataset):
 
 class RolloutCollector():
     # TODO: how do they perform eval, at which cadence?
-    def __init__(self, _id, env, policy_model, deterministic=False, n_steps=None, n_episodes=None, stats_window_size=100, **kwargs):
-        self._id = _id
+    def __init__(self, env, policy_model, deterministic=False, n_steps=None, n_episodes=None, stats_window_size=100, **kwargs):
         self.env = env
         self.policy_model = policy_model
         self.deterministic = deterministic

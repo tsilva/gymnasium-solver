@@ -2,11 +2,9 @@ import time
 import json
 import gymnasium
 import pytorch_lightning as pl
-from torch.utils.data import DataLoader
 from utils.rollouts import RolloutCollector
 from utils.config import load_config
 from utils.misc import prefix_dict_keys, print_namespaced_dict
-
 
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class BaseAgent(pl.LightningModule):
@@ -133,7 +131,6 @@ class BaseAgent(pl.LightningModule):
     def _start_collectors(self):
         # TODO: create this only for training? create on_fit_start() and destroy with on_fit_end()?
         self.train_collector = RolloutCollector(
-            'train',
             self.build_env_fn(self.config.seed),
             self.policy_model,
             n_steps=self.config.n_steps,

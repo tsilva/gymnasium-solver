@@ -21,5 +21,3 @@ ppo:
   train_rollout_interval: 1            # Frequent rollouts for fast feedback
   normalize_obs: false                 # Normalize observations for better learning
   normalize_reward: false              # Reward normalization not needed for CartPole
-  mean_reward_window: 100              # Standard window for reward smoothing
- 

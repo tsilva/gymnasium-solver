@@ -41,8 +41,6 @@ def inference_ctx(*modules):
 def _device_of(module: torch.nn.Module) -> torch.device:
     return next(module.parameters()).device
 
-
-# TODO: close envs in the end
 # TODO: make rollout collector use its own buffer
 # TODO: add # env.normalize_obs() support
 # TODO: add # env.normalize_rewards() support
@@ -52,6 +50,7 @@ def _device_of(module: torch.nn.Module) -> torch.device:
 # TODO: rename var names
 # TODO: look for bugs
 # TODO: empirically torch.inference_mode() is not faster than torch.no_grad() for this use case, retest for other envs
+# TODO: move to class
 @torch.no_grad()
 def _collect_rollouts(
     env,
@@ -65,8 +64,7 @@ def _collect_rollouts(
     normalize_advantage: bool = True,
     advantages_norm_eps: float = 1e-8,
     collect_frames: bool = False,
-    mean_reward_window: int = 100, # TODO: make sure these are passed correctly
-    mean_length_window: int = 100# TODO: make sure these are passed correctly
+    stats_window_size: int = 100,
 ):
     # ------------------------------------------------------------------
     # 0. Sanity checks --------------------------------------------------
@@ -86,9 +84,9 @@ def _collect_rollouts(
     env_reward = np.zeros(n_envs, dtype=np.float32)
     env_length = np.zeros(n_envs, dtype=np.int32)
 
-    rollout_durations: deque[float] = deque(maxlen=100)  # Store last 100 rollout durations
-    episode_reward_deque: deque[float] = deque(maxlen=mean_reward_window)
-    episode_length_deque: deque[int] = deque(maxlen=mean_length_window)
+    rollout_durations: deque[float] = deque(maxlen=stats_window_size)  # Store last 100 rollout durations
+    episode_reward_deque: deque[float] = deque(maxlen=stats_window_size)
+    episode_length_deque: deque[int] = deque(maxlen=stats_window_size)
     
     total_rollouts: int = 0
     # First observation ------------------------------------------------------
@@ -100,11 +98,6 @@ def _collect_rollouts(
     def _bootstrap_value(obs_np: np.ndarray) -> np.ndarray: # TODO: is rlzoo rollout collector infering values during rollouts?
         obs_t = torch.as_tensor(obs_np, dtype=torch.float32, device=device)
         return policy_model.v(obs_t).squeeze(-1).cpu().numpy()
-
-    def _infer_policy(obs_np: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        obs_t = torch.as_tensor(obs_np, dtype=torch.float32, device=device)
-        action_t, logp_t, value_t = policy_model.act(obs_t)
-        return action_t.cpu().numpy(), logp_t.cpu().numpy(), value_t.cpu().numpy()
 
     # ------------------------------------------------------------------
     # 3. Main generator loop -------------------------------------------
@@ -133,7 +126,11 @@ def _collect_rollouts(
             rollout_start = time.time()
             while True:
                 # ▸ Policy step — note: **no value call here** ----------------
-                action_np, action_logp_np, value_np = _infer_policy(obs)
+                obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device)
+                action_t, logp_t, value_t = policy_model.act(obs_t)
+                action_np = action_t.cpu().numpy()
+                action_logp_np = logp_t.cpu().numpy()
+                value_np = value_t.cpu().numpy()
 
                 # Environment step ----------------------------------------
                 next_obs, reward, done, _ = env.step(action_np)
@@ -241,6 +238,7 @@ def _collect_rollouts(
                 frames_env_major = [0] * (n_envs * T)
 
             # 3.2.6  Yield -------------------------------------------------
+            # TODO: yield named tuple
             trajectories = (
                 states,
                 actions,
@@ -277,13 +275,14 @@ def _collect_rollouts(
 
 class RolloutCollector():
     # TODO: how do they perform eval, at which cadence?
-    def __init__(self, _id, env, policy_model, deterministic=False, n_steps=None, n_episodes=None, **kwargs):
+    def __init__(self, _id, env, policy_model, deterministic=False, n_steps=None, n_episodes=None, stats_window_size=100, **kwargs):
         self._id = _id
         self.env = env
         self.policy_model = policy_model
         self.deterministic = deterministic
         self.n_steps = n_steps
         self.n_episodes = n_episodes
+        self.stats_window_size = stats_window_size
         self._generator = None
         self.stats = {}
         self.kwargs = kwargs
@@ -308,15 +307,11 @@ class RolloutCollector():
     def get_total_episodes(self):
         return self.stats.get('total_episodes', 0)
     
-    def get_mean_reward_window(self):
-        return 100 # TODO: softcode
-    
     def is_reward_threshold_reached(self):
         reward_threshold = self.get_reward_threshold()
         mean_ep_reward = self.get_mean_ep_reward()
-        mean_reward_window = self.get_mean_reward_window()
         total_episodes = self.get_total_episodes()
-        reached = total_episodes >= mean_reward_window and mean_ep_reward >= reward_threshold
+        reached = total_episodes >= self.stats_window_size and mean_ep_reward >= reward_threshold
         return reached
     
     def _ensure_generator(self, n_episodes=None, n_steps=None, deterministic=None, collect_frames=False):
@@ -331,6 +326,7 @@ class RolloutCollector():
             n_steps=n_steps,
             n_episodes=n_episodes,
             deterministic=deterministic,
+            stats_window_size=self.stats_window_size,
             collect_frames=collect_frames,
             **self.kwargs
         )

@@ -60,9 +60,6 @@ class RLConfig:
     normalize_obs: bool = False  # Default: false
     normalize_reward: bool = False  # Default: false
 
-    # Miscellaneous
-    mean_reward_window: int = 100  # Default: 100
-    
     @classmethod
     def load_from_yaml(cls, env_id: str, algo_id: str, config_dir: str = "configs") -> 'RLConfig':
         """
@@ -167,10 +164,6 @@ class RLConfig:
         if self.eval_rollout_episodes is not None and self.eval_rollout_episodes <= 0:
             raise ValueError("eval_rollout_episodes must be a positive integer.")
 
-        # Miscellaneous
-        if self.mean_reward_window <= 0:
-            raise ValueError("mean_reward_window must be a positive integer.")
-
     def __str__(self) -> str:
         """Return a human-readable string representation of the configuration."""
         lines = ["Configuration", "=" * 40, ""]
@@ -248,13 +241,7 @@ class RLConfig:
             ""
         ])
         
-        # Miscellaneous section
-        lines.extend([
-            "MISCELLANEOUS:",
-            f"  mean_reward_window: {self.mean_reward_window}",
-            f"    → Window size for computing rolling mean reward",
-        ])
-        
+
         return "\n".join(lines)
 
 def load_config(env_id: str, algo_id: str, config_dir: str = "configs") -> RLConfig:

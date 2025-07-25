@@ -41,6 +41,7 @@ class BaseAgent(pl.LightningModule):
         # Training state
         self.start_time = None
         self._n_updates = 0
+        self._iterations = 0
         self._epoch_metrics = {}
         # TODO: move this to on_fit_start()?
         self.policy_model = None
@@ -101,16 +102,23 @@ class BaseAgent(pl.LightningModule):
                 optimizer.step()
 
             self._n_updates += 1
-        self.log_metrics({"train/n_updates": self._n_updates})
-
+            
+    # TODO: aggregate logging
     def on_train_epoch_end(self):
+        self._iterations += 1
+        
+        self.log_metrics({"train/n_updates": self._n_updates})
+        self.log_metrics({"time/iterations": self._iterations})
+
         rollout_metrics = self.train_collector.get_metrics()
         self.log_metrics(prefix_dict_keys(rollout_metrics, "rollout"), prog_bar=["rollout/ep_rew_mean"], on_epoch=True) # TODO: move prefix inside
 
         time_metrics = self._get_time_metrics()
         self.log_metrics(prefix_dict_keys(time_metrics, "time"), on_epoch=True) # TODO: on_epoch?
         
-        print_namespaced_dict(self._epoch_metrics)
+        # TODO: softcode this
+        if self.current_epoch % 10 == 0:
+            print_namespaced_dict(self._epoch_metrics)
 
         self._check_early_stop()
 
@@ -147,13 +155,15 @@ class BaseAgent(pl.LightningModule):
         )
         trainer.fit(self)
 
+    # TODO: self.log is a gigantic bottleneck, currently halving performance;
+    # expected performance is >6000 FPS on Macbook Pro M1; must fix this bug while retaining FPS
     def log_metrics(self, metrics, *, on_epoch=None, on_step=None, prog_bar=None):
         for key, value in metrics.items():
             _on_epoch = True if on_epoch is True or key in (on_epoch or []) else None
             _on_step =  True if on_step is True or key in (on_step or []) else None
             _prog_bar = True if prog_bar is True or key in (prog_bar or []) else None
             if _on_epoch is not False: self._epoch_metrics[key] = value
-            self.log(key, value, on_epoch=_on_epoch, on_step=_on_step, prog_bar=_prog_bar)
+            #self.log(key, value, on_epoch=_on_epoch, on_step=_on_step, prog_bar=_prog_bar)
     
     def _get_time_metrics(self):
         total_timesteps = self.train_collector.get_total_timesteps()

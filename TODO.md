@@ -1,4 +1,4 @@
-- BUG: double the FPS/timesteps as rlzoo (seems like a bug)
+- BUG: RLZoo is doing 2x the FPS of this implementation, investigate
 - Add max_grad_norm support (0.5 for cartpole)
 - log stats like rlzoo
 - mimick rlzoo hyperparam config structure

@@ -16,6 +16,7 @@ def print_namespaced_dict(data: dict) -> None:
     in a formatted ASCII table grouped by namespaces.
     Floats are formatted to 2 decimal places.
     """
+    if not data: return
     # Group keys by their namespace prefix
     grouped = {}
     for key, value in data.items():

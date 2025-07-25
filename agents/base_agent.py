@@ -2,30 +2,12 @@ import time
 import json
 import gymnasium
 import pytorch_lightning as pl
-from torch.utils.data import Dataset as TorchDataset
 from torch.utils.data import DataLoader
 from utils.rollouts import RolloutCollector
 from utils.config import load_config
 from utils.misc import prefix_dict_keys, print_namespaced_dict
 
-# TODO: add test script for collection using dataset/dataloader
-# TODO: should dataloader move to gpu?
-# TODO: would converting trajectories to tuples in advance be faster?
-class RolloutDataset(TorchDataset):
-    def __init__(self):
-        self.trajectories = None 
 
-    def update(self, *trajectories):
-        self.trajectories = trajectories
-
-    def __len__(self):
-        length = len(self.trajectories[0])
-        return length
-
-    def __getitem__(self, idx):
-        item = tuple(t[idx] for t in self.trajectories)
-        return item
-    
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class BaseAgent(pl.LightningModule):
     
@@ -91,22 +73,8 @@ class BaseAgent(pl.LightningModule):
 
     # TODO: assert this is being called every epoch
     def train_dataloader(self):
-        # Collect rollout and update dataset
-        trajectories = self.train_collector.collect()
-        self.train_rollout_dataset.update(*trajectories) # TODO: move this inside the collector
-        
-        # NOTE: 
-        # - dataloader is created each epoch to mitigate issues with changing dataset data between epochs
-        # - multiple workers is not faster because of worker spin up time
-        # - peristent workers mitigates worker spin up time, but since dataset data is updated each epoch, workers don't see the updates
-        # - therefore, we create a new dataloader each epoch
-        #import multiprocessing
-        return DataLoader(
-            self.train_rollout_dataset,
-            batch_size=self.config.batch_size,
-            shuffle=True#,
-            #num_workers=multiprocessing.cpu_count() // 2,  # Use half of available CPU cores
-        )
+        self.train_collector.collect()
+        return self.train_collector.create_dataloader(batch_size=self.config.batch_size)
 
     def training_step(self, batch, batch_idx):
         batch_size = batch[0].size(0)
@@ -164,7 +132,6 @@ class BaseAgent(pl.LightningModule):
 
     def _start_collectors(self):
         # TODO: create this only for training? create on_fit_start() and destroy with on_fit_end()?
-        self.train_rollout_dataset = RolloutDataset()
         self.train_collector = RolloutCollector(
             'train',
             self.build_env_fn(self.config.seed),
@@ -176,7 +143,6 @@ class BaseAgent(pl.LightningModule):
 
     def _stop_collectors(self):
         del self.train_collector
-        del self.train_rollout_dataset
 
     def _check_early_stop(self):
         if not self.train_collector.is_reward_threshold_reached(): return
@@ -199,9 +165,9 @@ class BaseAgent(pl.LightningModule):
             deterministic=True,
             **self.config.rollout_collector_hyperparams()
         )
-        try: trajectories, stats = eval_collector.collect(collect_frames=True) # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
+        try: eval_collector.collect(collect_frames=True) # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
         finally: del eval_collector
-        print(json.dumps(stats, indent=2))        
-        episode_frames = group_frames_by_episodes(trajectories)
+        print(json.dumps(eval_collector.get_stats(), indent=2))        
+        episode_frames = group_frames_by_episodes(eval_collector.trajectories)
         return render_episode_frames(episode_frames, out_dir="./tmp", grid=(2, 2), text_color=(0, 0, 0)) # TODO: review if eval collector should be deterministic or not
     

@@ -4,6 +4,8 @@ from typing import Optional, Sequence
 import time
 import numpy as np
 import torch
+from torch.utils.data import DataLoader
+from torch.utils.data import Dataset as TorchDataset
 
 from utils.misc import inference_ctx, _device_of
 
@@ -240,6 +242,26 @@ def _collect_rollouts(
 
         yield trajectories, stats
 
+
+# TODO: add test script for collection using dataset/dataloader
+# TODO: should dataloader move to gpu?
+# TODO: would converting trajectories to tuples in advance be faster?
+class RolloutDataset(TorchDataset):
+    def __init__(self):
+        self.trajectories = None 
+
+    def update(self, *trajectories):
+        self.trajectories = trajectories
+
+    def __len__(self):
+        length = len(self.trajectories[0])
+        return length
+
+    def __getitem__(self, idx):
+        item = tuple(t[idx] for t in self.trajectories)
+        return item
+    
+
 class RolloutCollector():
     # TODO: how do they perform eval, at which cadence?
     def __init__(self, _id, env, policy_model, deterministic=False, n_steps=None, n_episodes=None, stats_window_size=100, **kwargs):
@@ -250,16 +272,27 @@ class RolloutCollector():
         self.n_steps = n_steps
         self.n_episodes = n_episodes
         self.stats_window_size = stats_window_size
+        self.dataset = RolloutDataset()
         self._generator = None
         self.stats = {}
+        self.trajectories = None
         self.kwargs = kwargs
 
     def collect(self, *args, **kwargs):
         generator = self._ensure_generator(*args, **kwargs)
         trajectories, stats = next(generator)
         self.stats = stats
-        return trajectories
+        self.trajectories = trajectories
+        self.dataset.update(*trajectories) # TODO: move this inside the collector
     
+    def create_dataloader(self, *args, **kwargs):
+        # NOTE: 
+        # - dataloader is created each epoch to mitigate issues with changing dataset data between epochs
+        # - multiple workers is not faster because of worker spin up time
+        # - peristent workers mitigates worker spin up time, but since dataset data is updated each epoch, workers don't see the updates
+        # - therefore, we create a new dataloader each epoch
+        return DataLoader(self.dataset, *args, **kwargs)
+
     def get_stats(self):
         return self.stats
     

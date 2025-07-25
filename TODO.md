@@ -1,3 +1,4 @@
+- mimick rlzoo hyperparam config structure
 - Review CartPole-v1 hyperparams from https://github.com/DLR-RM/rl-baselines3-zoo/blob/master/hyperparams/ppo.yml
 - FEAT: log steps/episodes to progress bar
 - FEAT: n_envs should be in hyperparams because some envs won't do well with too much parallelism

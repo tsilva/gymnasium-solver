@@ -15,8 +15,8 @@ class PPO(BaseAgent):
         # use type for this? check sb3
         states, actions, rewards, dones, old_logprobs, values, advantages, returns, frames = batch
         
-        clip_epsilon = self.config.clip_epsilon
-        entropy_coef = self.config.entropy_coef
+        clip_range = self.config.clip_range
+        ent_coef = self.config.ent_coef
 
         logits = self.policy_model(states)
         value_pred = self.value_model(states).squeeze()
@@ -26,7 +26,7 @@ class PPO(BaseAgent):
 
         ratio = torch.exp(new_logps - old_logprobs)
         policy_loss_surrogate_1 = advantages * ratio
-        policy_loss_surrogate_2 = advantages * torch.clamp(ratio, 1.0 - clip_epsilon, 1.0 + clip_epsilon) # TODO: rename clip_epsilon to clip_range?
+        policy_loss_surrogate_2 = advantages * torch.clamp(ratio, 1.0 - clip_range, 1.0 + clip_range) # TODO: rename clip_range to clip_range?
         policy_loss = -torch.min(policy_loss_surrogate_1, policy_loss_surrogate_2).mean()
         
         # TODO; what is policy gradient loss to them?
@@ -46,11 +46,11 @@ class PPO(BaseAgent):
         #th.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm) (do this in optimization step, check how lightning does it)
         # TODO: use single actor critic model
         #value_coef = 1.0
-        #loss = policy_loss + value_coef * value_loss - entropy_coef * entropy
+        #loss = policy_loss + value_coef * value_loss - ent_coef * entropy
 
         # Metrics (detached for logging)
         #clip_fraction = th.mean((th.abs(ratio - 1) > clip_range).float()).item()
-        clip_fraction = ((ratio < 1.0 - clip_epsilon) | (ratio > 1.0 + clip_epsilon)).float().mean()
+        clip_fraction = ((ratio < 1.0 - clip_range) | (ratio > 1.0 + clip_range)).float().mean()
         kl_div = (old_logprobs - new_logps).mean()
         approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
         explained_var = 1 - torch.var(returns - value_pred.detach()) / torch.var(returns)

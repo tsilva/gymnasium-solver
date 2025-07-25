@@ -21,7 +21,7 @@ class REINFORCE(BaseAgent):
         entropy = dist.entropy().mean()
 
         # REINFORCE loss: -log_prob * return (negative because we want to maximize)
-        policy_loss = -(log_probs * returns).mean() - self.config.entropy_coef * entropy
+        policy_loss = -(log_probs * returns).mean() - self.config.ent_coef * entropy
         
         # Metrics (detached for logging)
         return {

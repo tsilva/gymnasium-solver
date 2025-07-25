@@ -38,7 +38,7 @@ class RLConfig:
     hidden_dims: Union[int, Tuple[int, ...]] = (64,)  # Default: [64]
     policy_lr: float = 0.0003  # Default: 0.0003
     value_lr: float = 0.001  # Default: 0.001
-    entropy_coef: float = 0.01  # Default: 0.01
+    ent_coef: float = 0.01  # Default: 0.01
 
     # Training
     # TODO: make max_epochas = None
@@ -46,10 +46,10 @@ class RLConfig:
     train_rollout_interval: int = 1  # Default: 1
     gamma: float = 0.99  # Default: 0.99
     gae_lambda: float = 0.95  # Default: 0.95
-    clip_epsilon: float = 0.2  # Default: 0.2
+    clip_range: float = 0.2  # Default: 0.2
 
     # Evaluation
-    eval_rollout_interval: int = 10  # Default: 10
+    eval_rollout_interval: int = None  # Default: 10
     # TODO: this should be early_stop_on_reward_threshold, threshold should be on env spec
     eval_rollout_episodes: int = None
     eval_rollout_steps: int = None
@@ -144,8 +144,8 @@ class RLConfig:
             raise ValueError("policy_lr must be a positive float.")
         if self.value_lr <= 0:
             raise ValueError("value_lr must be a positive float.")
-        if self.entropy_coef < 0:
-            raise ValueError("entropy_coef must be a non-negative float.")
+        if self.ent_coef < 0:
+            raise ValueError("ent_coef must be a non-negative float.")
 
         # Training
         if self.train_rollout_interval <= 0:
@@ -158,11 +158,11 @@ class RLConfig:
             raise ValueError("gamma must be in (0, 1].")
         if not (0 <= self.gae_lambda <= 1):
             raise ValueError("gae_lambda must be in [0, 1].")
-        if not (0 < self.clip_epsilon < 1):
-            raise ValueError("clip_epsilon must be in (0, 1).")
+        if not (0 < self.clip_range < 1):
+            raise ValueError("clip_range must be in (0, 1).")
 
         # Evaluation
-        if self.eval_rollout_interval <= 0:
+        if self.eval_rollout_interval is not None and self.eval_rollout_interval <= 0:
             raise ValueError("eval_rollout_interval must be a positive integer.")
         if self.eval_rollout_episodes is not None and self.eval_rollout_episodes <= 0:
             raise ValueError("eval_rollout_episodes must be a positive integer.")
@@ -197,7 +197,7 @@ class RLConfig:
             f"    → Learning rate for policy network optimizer",
             f"  value_lr: {self.value_lr}",
             f"    → Learning rate for value network optimizer",
-            f"  entropy_coef: {self.entropy_coef}",
+            f"  ent_coef: {self.ent_coef}",
             f"    → Entropy regularization coefficient for exploration",
             ""
         ])
@@ -217,7 +217,7 @@ class RLConfig:
             f"    → Discount factor for future rewards",
             f"  gae_lambda: {self.gae_lambda}",
             f"    → GAE lambda parameter for advantage estimation",
-            f"  clip_epsilon: {self.clip_epsilon}",
+            f"  clip_range: {self.clip_range}",
             f"    → PPO clipping parameter for policy updates",
             ""
         ])

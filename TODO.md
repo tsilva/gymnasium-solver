@@ -1,3 +1,4 @@
+- log stats like rlzoo
 - mimick rlzoo hyperparam config structure
 - Review CartPole-v1 hyperparams from https://github.com/DLR-RM/rl-baselines3-zoo/blob/master/hyperparams/ppo.yml
 - FEAT: log steps/episodes to progress bar
@@ -15,7 +16,6 @@
 - FEAT: use torch.inference_mode() where applicable
 - FEAT: support for softcoding activations
 - FEAT: train for convergence without deterministic policy
-- FEAT: add shared backbone support
 - FEAT: add baseline subtraction to A2C
 - FEAT: a2c (only after reinforce/ppo is stable)
 - FEAT: add normalization support

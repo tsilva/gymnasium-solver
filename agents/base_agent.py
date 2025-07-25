@@ -58,7 +58,6 @@ class BaseAgent(pl.LightningModule):
 
         # TODO: move this to on_fit_start()?
         self.policy_model = None
-        self.value_model = None
         self.create_models()
         
     def forward(self, x):
@@ -177,7 +176,6 @@ class BaseAgent(pl.LightningModule):
             'train',
             self.build_env_fn(self.config.seed),
             self.policy_model,
-            value_model=self.value_model,
             n_steps=self.config.n_steps,
             **self.config.rollout_collector_hyperparams()
         )

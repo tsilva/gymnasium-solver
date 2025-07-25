@@ -57,10 +57,9 @@ def _collect_rollouts(
     env,
     policy_model: torch.nn.Module,
     *,
-    value_model: Optional[torch.nn.Module] = None,
     n_steps: Optional[int] = None,
     n_episodes: Optional[int] = None,
-    deterministic: bool = False,
+    deterministic: bool = False, # TODO: is this still needed? check how rlzoo/sb3 does it
     gamma: float = 0.99, # TODO: make sure these are passed correctly
     gae_lambda: float = 0.95, # TODO: make sure these are passed correctly
     normalize_advantage: bool = True,
@@ -77,12 +76,6 @@ def _collect_rollouts(
     ), "Provide *n_steps*, *n_episodes*, or both (> 0)."
 
     policy_device = _device_of(policy_model)
-    #assert policy_device.type != 'cpu', "Policy model must be on GPU or MPS, not CPU."
-    if value_model is not None:
-        value_device = _device_of(value_model)
-        assert (
-            policy_device == value_device
-        ), "Policy and value models must be on the same device."
 
     device: torch.device = policy_device
     n_envs: int = env.num_envs
@@ -104,19 +97,14 @@ def _collect_rollouts(
     # ------------------------------------------------------------------
     # 2. Helper fns ----------------------------------------------------
     # ------------------------------------------------------------------
-    def _bootstrap_value(obs_np: np.ndarray) -> np.ndarray:
-        if value_model is None:
-            return np.zeros((n_envs,), dtype=np.float32)
+    def _bootstrap_value(obs_np: np.ndarray) -> np.ndarray: # TODO: is rlzoo rollout collector infering values during rollouts?
         obs_t = torch.as_tensor(obs_np, dtype=torch.float32, device=device)
-        return value_model(obs_t).squeeze(-1).cpu().numpy()
+        return policy_model.v(obs_t).squeeze(-1).cpu().numpy()
 
     def _infer_policy(obs_np: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         obs_t = torch.as_tensor(obs_np, dtype=torch.float32, device=device)
-        logits = policy_model(obs_t)
-        dist = Categorical(logits=logits)
-        action_t = logits.argmax(-1) if deterministic else dist.sample()
-        logp_t = dist.log_prob(action_t)
-        return action_t.cpu().numpy(), logp_t.cpu().numpy()
+        action_t, logp_t, value_t = policy_model.act(obs_t)
+        return action_t.cpu().numpy(), logp_t.cpu().numpy(), value_t.cpu().numpy()
 
     # ------------------------------------------------------------------
     # 3. Main generator loop -------------------------------------------
@@ -129,6 +117,7 @@ def _collect_rollouts(
         obs_buf: list[np.ndarray] = []
         actions_buf: list[np.ndarray] = []
         rewards_buf: list[np.ndarray] = []
+        values_buf: list[np.ndarray] = []
         done_buf: list[np.ndarray] = []
         logprobs_buf: list[np.ndarray] = []
         frame_buf: list[Sequence[np.ndarray]] = []
@@ -140,11 +129,11 @@ def _collect_rollouts(
         # --------------------------------------------------------------
         # 3.1 Collect one rollout -------------------------------------
         # --------------------------------------------------------------
-        with inference_ctx(policy_model, value_model):
+        with inference_ctx(policy_model):
             rollout_start = time.time()
             while True:
                 # ▸ Policy step — note: **no value call here** ----------------
-                action_np, action_logp_np = _infer_policy(obs)
+                action_np, action_logp_np, value_np = _infer_policy(obs)
 
                 # Environment step ----------------------------------------
                 next_obs, reward, done, _ = env.step(action_np)
@@ -168,6 +157,7 @@ def _collect_rollouts(
                 actions_buf.append(action_np)
                 logprobs_buf.append(action_logp_np)
                 rewards_buf.append(reward)
+                values_buf.append(value_np)
                 done_buf.append(done)
                 if collect_frames:
                     frame_buf.append(env.get_images())
@@ -195,23 +185,14 @@ def _collect_rollouts(
             actions_arr = np.stack(actions_buf)  # (T, E)
             logprobs_arr = np.stack(logprobs_buf)
             rewards_arr = np.stack(rewards_buf)
+            values_arr = np.stack(values_buf)
             dones_arr = np.stack(done_buf)
             T = obs_arr.shape[0]
 
-            # 3.2.2  **Batched value inference** --------------------------
-            if value_model is None:
-                values_arr = np.zeros((T, n_envs), dtype=np.float32)
-            else:
-                obs_flat_t = torch.as_tensor(
-                    obs_arr.reshape(T * n_envs, -1),
-                    dtype=torch.float32,
-                    device=device,
-                )
-                values_flat = value_model(obs_flat_t).squeeze(-1).cpu().numpy()
-                values_arr = values_flat.reshape(T, n_envs)
-
             # Bootstrap value for the *next* state ------------------------
-            next_value = _bootstrap_value(obs)  # shape: (E,)
+            next_value = values_arr[-1]
+            # TODO: restore bootstrapping
+            #next_value = _bootstrap_value(obs)  # shape: (E,)
 
             # 3.2.3  GAE‑λ advantages & returns ---------------------------
             advantages_arr = np.zeros_like(rewards_arr, dtype=np.float32)
@@ -296,11 +277,10 @@ def _collect_rollouts(
 
 class RolloutCollector():
     # TODO: how do they perform eval, at which cadence?
-    def __init__(self, _id, env, policy_model, value_model=None, deterministic=False, n_steps=None, n_episodes=None, **kwargs):
+    def __init__(self, _id, env, policy_model, deterministic=False, n_steps=None, n_episodes=None, **kwargs):
         self._id = _id
         self.env = env
         self.policy_model = policy_model
-        self.value_model = value_model
         self.deterministic = deterministic
         self.n_steps = n_steps
         self.n_episodes = n_episodes
@@ -348,7 +328,6 @@ class RolloutCollector():
         self._generator = _collect_rollouts( # TODO: don't return tensors, return numpy arrays?
             self.env,
             self.policy_model,
-            value_model=self.value_model,
             n_steps=n_steps,
             n_episodes=n_episodes,
             deterministic=deterministic,
@@ -372,7 +351,6 @@ class RolloutCollector():
             "CONFIGURATION:",
             f"  Environment: {getattr(self.env, 'spec', 'Unknown')} ({self.env.num_envs} parallel envs)",
             f"  Policy Model: {self.policy_model.__class__.__name__}",
-            f"  Value Model: {self.value_model.__class__.__name__ if self.value_model else 'None'}",
             f"  Mode: {'Deterministic' if self.deterministic else 'Stochastic'}",
             f"  Collection: {self.n_steps or 'None'} steps, {self.n_episodes or 'None'} episodes",
             f"  Generator Active: {'Yes' if self._generator else 'No'}",

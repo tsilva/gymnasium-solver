@@ -25,35 +25,47 @@ class PPO(BaseAgent):
         new_logps = dist.log_prob(actions)
 
         ratio = torch.exp(new_logps - old_logprobs)
-        surr1 = ratio * advantages
-        surr2 = torch.clamp(ratio, 1.0 - clip_epsilon, 1.0 + clip_epsilon) * advantages
-        entropy = dist.entropy().mean()
+        policy_loss_surrogate_1 = advantages * ratio
+        policy_loss_surrogate_2 = advantages * torch.clamp(ratio, 1.0 - clip_epsilon, 1.0 + clip_epsilon) # TODO: rename clip_epsilon to clip_range?
+        policy_loss = -torch.min(policy_loss_surrogate_1, policy_loss_surrogate_2).mean()
         
-        policy_loss = -torch.min(surr1, surr2).mean() - entropy_coef * entropy
+        # TODO; what is policy gradient loss to them?
+        entropy = dist.entropy().mean()
+        entropy_loss = -entropy # TODO: is this entropy loss to them?
+        
         
         # Value loss
         # TODO: softcode value scaling coefficient
         #value_loss = 0.5 * ((returns - value_pred) ** 2).mean()
         # TODO: can I use pytoirch util for this?
+        # TODO: sb3 is clipping value function as well
+        #value_loss = F.mse_loss(rollout_data.returns, values_pred)
         value_loss = ((returns - value_pred) ** 2).mean()
         
         # TODO: detach everything post loss calculation?
+        #th.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm) (do this in optimization step, check how lightning does it)
+        # TODO: use single actor critic model
+        #value_coef = 1.0
+        #loss = policy_loss + value_coef * value_loss - entropy_coef * entropy
 
         # Metrics (detached for logging)
+        #clip_fraction = th.mean((th.abs(ratio - 1) > clip_range).float()).item()
         clip_fraction = ((ratio < 1.0 - clip_epsilon) | (ratio > 1.0 + clip_epsilon)).float().mean()
         kl_div = (old_logprobs - new_logps).mean()
         approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
         explained_var = 1 - torch.var(returns - value_pred.detach()) / torch.var(returns)
 
         # TODO: separate concerns... I want to log, but still need to pass loss in order to run backward pass...
+        # TODO: log all these stats as /train
         result = {
             'policy_loss': policy_loss,
-            'value_loss': value_loss,
-            'entropy': entropy.detach(),
-            'clip_fraction': clip_fraction.detach(),
-            'kl_div': kl_div.detach(),
-            'approx_kl': approx_kl.detach(),
-            'explained_var': explained_var.detach()
+            'entropy_loss': entropy_loss, # train
+            'value_loss': value_loss, # train
+            'entropy': entropy.detach(), # train
+            'clip_fraction': clip_fraction.detach(), # train
+            'kl_div': kl_div.detach(), # train
+            'approx_kl': approx_kl.detach(), # train
+            'explained_variance': explained_var.detach() # train
         }
         
         return result

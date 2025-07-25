@@ -1,18 +1,13 @@
 - BUG: double the FPS/timesteps as rlzoo (seems like a bug)
-- BUG: clip fraction = 0 all the time
-- BUG: not early stopping training
-- check how many updates per rollout does rlzoo do (n_updates)
+- Add max_grad_norm support (0.5 for cartpole)
 - log stats like rlzoo
 - mimick rlzoo hyperparam config structure
 - Review CartPole-v1 hyperparams from https://github.com/DLR-RM/rl-baselines3-zoo/blob/master/hyperparams/ppo.yml
 - FEAT: log steps/episodes to progress bar
-- FEAT: n_envs should be in hyperparams because some envs won't do well with too much parallelism
-- FEAT: add config __repr__ support
-- FEAT: add agent __repr__ support
-- FEAT: add collector __repr__ support
+- FEAT: log experiment data at start of training
 - REFACTOR: move reward threshold detection to rollout collector
 - FEAT: Log config into wandb experiment
-- BUG: async collection
+- FEAT: eval model on every n steps
 - BUG: REINFORCE is calculating returns using value model?
 - BUG: eval is being calculated before window is full, consider evaling frequently by n_steps instead of n_episodes
 - BUG: fix thread safety issues with async eval collector (copy model weights with lock)
@@ -31,7 +26,6 @@
 - CHECK: run rollout through dataloader process, do we always get n_batches?
 - CHECK: assert that dataloader is always going through all expected batches
 - TODO: solve Pong-RAM with PPO
-- Add max_grad_norm support (0.5 for cartpole)
 - Add value baseline support for reinforce
 - Match sb3rlzoo metric names
 - Match sb3rlzoo performance

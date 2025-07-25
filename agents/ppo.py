@@ -14,7 +14,7 @@ class PPO(BaseAgent):
             hidden=self.config.hidden_dims
         )
     
-    def training_step(self, batch, batch_idx):
+    def train_on_batch(self, batch, batch_idx):
         # use type for this? check sb3
         states, actions, rewards, dones, old_logprobs, values, advantages, returns, frames = batch
         

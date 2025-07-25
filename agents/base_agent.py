@@ -40,19 +40,21 @@ class BaseAgent(pl.LightningModule):
 
         # Training state
         self.start_time = None
+        self._n_updates = 0
         self._epoch_metrics = {}
         # TODO: move this to on_fit_start()?
         self.policy_model = None
         self.create_models()
     
     def create_models(self):
-        """Override in subclass to create algorithm-specific models"""
         raise NotImplementedError("Subclass must implement create_models()")
     
     def training_step(self, batch, batch_idx):
-        """Override in subclass to implement training step logic"""
         raise NotImplementedError("Subclass must implement training_step()")
 
+    def train_on_batch(self, batch, batch_idx):
+        raise NotImplementedError("Subclass must implement train_on_batch()")
+    
     def get_env_spec(self):
         """Get environment specification."""
         from utils.environment import get_env_spec
@@ -83,13 +85,32 @@ class BaseAgent(pl.LightningModule):
         self.train_collector.collect() # TODO: make this return dataloader with new dataset
         return self.train_collector.create_dataloader(batch_size=self.config.batch_size)
     
+    def training_step(self, batch, batch_idx):
+        import torch
+        for _ in range(self.config.n_epochs): 
+            losses = self.train_on_batch(batch, batch_idx)
+            optimizers = self.optimizers()
+            if not type(losses) in (list, tuple): losses = [losses]
+            if not type(optimizers) in (list, tuple): optimizers = [optimizers]
+            for idx, optimizer in enumerate(optimizers):
+                loss = losses[idx]
+                optimizer.zero_grad()
+                loss.backward()
+                # Clip grad norm
+                max_grad_norm = 0.5
+                torch.nn.utils.clip_grad_norm_(self.policy_model.parameters(), max_grad_norm)
+                optimizer.step()
+
+        self._n_updates += 1
+        self.log_metrics({"train/n_updates": self._n_updates})
+
     def on_train_epoch_end(self):
         rollout_metrics = self.train_collector.get_metrics()
         self.log_metrics(prefix_dict_keys(rollout_metrics, "rollout"), prog_bar=["rollout/ep_rew_mean"], on_epoch=True) # TODO: move prefix inside
 
         time_metrics = self._get_time_metrics()
         self.log_metrics(prefix_dict_keys(time_metrics, "time"), on_epoch=True) # TODO: on_epoch?
-
+        
         print_namespaced_dict(self._epoch_metrics)
 
         self._check_early_stop()
@@ -122,7 +143,7 @@ class BaseAgent(pl.LightningModule):
             enable_progress_bar=True,
             enable_checkpointing=False,  # Disable checkpointing for speed
             accelerator="cpu",  # Use CPU for training # TODO: softcode this
-            reload_dataloaders_every_n_epochs=self.config.n_epochs
+            reload_dataloaders_every_n_epochs=1#self.config.n_epochs
             #callbacks=[WandbCleanup()]
         )
         trainer.fit(self)

@@ -104,7 +104,7 @@ class BaseAgent(pl.LightningModule):
         #import multiprocessing
         return DataLoader(
             self.train_rollout_dataset,
-            batch_size=self.config.train_batch_size,
+            batch_size=self.config.batch_size,
             shuffle=True#,
             #num_workers=multiprocessing.cpu_count() // 2,  # Use half of available CPU cores
         )
@@ -151,7 +151,7 @@ class BaseAgent(pl.LightningModule):
             max_epochs=self.config.max_epochs,
             enable_progress_bar=True,
             enable_checkpointing=False,  # Disable checkpointing for speed
-            accelerator="auto",
+            accelerator="cpu",  # Use CPU for training
             reload_dataloaders_every_n_epochs=self.config.train_rollout_interval
             #callbacks=[WandbCleanup()]
         )
@@ -178,7 +178,7 @@ class BaseAgent(pl.LightningModule):
             self.build_env_fn(self.config.seed),
             self.policy_model,
             value_model=self.value_model,
-            n_steps=self.config.train_rollout_steps,
+            n_steps=self.config.n_steps,
             **self.config.rollout_collector_hyperparams()
         )
         print(str(self.train_collector))
@@ -189,7 +189,7 @@ class BaseAgent(pl.LightningModule):
             'eval',
             self.build_env_fn(self.config.seed + 1000),
             self.policy_model,
-            n_steps=self.config.train_rollout_steps, # TODO: reward window / 10
+            n_steps=self.config.n_steps, # TODO: reward window / 10
             deterministic=True,
             **self.config.rollout_collector_hyperparams()
         )

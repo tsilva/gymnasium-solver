@@ -28,8 +28,8 @@ class RLConfig:
     env_spec: Dict[str, Any]  # Environment specification dictionary
 
     # Training (required fields first)
-    train_rollout_steps: int
-    train_batch_size: int
+    n_steps: int
+    batch_size: int
     # Optional fields with defaults
     seed: int = 42  # Default: 42
     n_envs: int = 1  # Number of parallel environments (default: 1)
@@ -111,15 +111,6 @@ class RLConfig:
         if 'hidden_dims' in final_config and isinstance(final_config['hidden_dims'], list):
             final_config['hidden_dims'] = tuple(final_config['hidden_dims'])
 
-        # If eval_rollout_interval is set but eval_rollout_episodes and eval_rollout_steps are missing,
-        # set eval_rollout_steps to train_rollout_steps
-        if (
-            final_config.get('eval_rollout_interval', None) is not None and
-            final_config.get('eval_rollout_episodes', None) is None and
-            final_config.get('eval_rollout_steps', None) is None
-        ):
-            final_config['eval_rollout_steps'] = final_config['train_rollout_steps']
-
         # TODO: better way to do this?
         from utils.environment import build_env, get_env_spec
         env = build_env(env_id)
@@ -162,12 +153,12 @@ class RLConfig:
         # Training
         if self.train_rollout_interval <= 0:
             raise ValueError("train_rollout_interval must be a positive integer.")
-        if self.train_rollout_steps <= 0:
-            raise ValueError("train_rollout_steps must be a positive integer.")
+        if self.n_steps <= 0:
+            raise ValueError("n_steps must be a positive integer.")
         if self.train_reward_threshold is not None and not isinstance(self.train_reward_threshold, (float, int)):
             raise ValueError("train_reward_threshold must be None or a number.")
-        if self.train_batch_size <= 0:
-            raise ValueError("train_batch_size must be a positive integer.")
+        if self.batch_size <= 0:
+            raise ValueError("batch_size must be a positive integer.")
         if not (0 < self.gamma <= 1):
             raise ValueError("gamma must be in (0, 1].")
         if not (0 <= self.gae_lambda <= 1):
@@ -222,9 +213,9 @@ class RLConfig:
         train_reward_str = "None" if self.train_reward_threshold is None else str(self.train_reward_threshold)
         lines.extend([
             "TRAINING:",
-            f"  train_rollout_steps: {self.train_rollout_steps}",
+            f"  n_steps: {self.n_steps}",
             f"    → Number of environment steps per training rollout",
-            f"  train_batch_size: {self.train_batch_size}",
+            f"  batch_size: {self.batch_size}",
             f"    → Batch size for training updates",
             f"  train_rollout_interval: {self.train_rollout_interval}",
             f"    → Number of epochs between training rollouts",

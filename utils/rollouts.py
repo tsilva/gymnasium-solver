@@ -77,7 +77,7 @@ def _collect_rollouts(
     ), "Provide *n_steps*, *n_episodes*, or both (> 0)."
 
     policy_device = _device_of(policy_model)
-    assert policy_device.type != 'cpu', "Policy model must be on GPU or MPS, not CPU."
+    #assert policy_device.type != 'cpu', "Policy model must be on GPU or MPS, not CPU."
     if value_model is not None:
         value_device = _device_of(value_model)
         assert (
@@ -97,7 +97,7 @@ def _collect_rollouts(
     episode_reward_deque: deque[float] = deque(maxlen=mean_reward_window)
     episode_length_deque: deque[int] = deque(maxlen=mean_length_window)
     
-    total_rollout_count: int = 0
+    total_rollouts: int = 0
     # First observation ------------------------------------------------------
     obs = env.reset()
 
@@ -121,8 +121,8 @@ def _collect_rollouts(
     # ------------------------------------------------------------------
     # 3. Main generator loop -------------------------------------------
     # ------------------------------------------------------------------
-    total_step_count = 0
-    total_episode_count = 0
+    total_steps = 0
+    total_episodes = 0
 
     while True:
         # Reset the rollout buffers -----------------------------------
@@ -133,8 +133,9 @@ def _collect_rollouts(
         logprobs_buf: list[np.ndarray] = []
         frame_buf: list[Sequence[np.ndarray]] = []
 
-        rollout_step_count = 0
-        rollout_episode_count = 0
+        env_step_calls = 0
+        rollout_steps = 0
+        rollout_episodes = 0
 
         # --------------------------------------------------------------
         # 3.1 Collect one rollout -------------------------------------
@@ -160,6 +161,8 @@ def _collect_rollouts(
                         env_reward[i] = 0.0
                         env_length[i] = 0
 
+                # TODO: assert values len matches n_envs
+                
                 # Buffer write -------------------------------------------
                 obs_buf.append(obs.copy())  # defensive copy — some envs mutate obs
                 actions_buf.append(action_np)
@@ -171,17 +174,18 @@ def _collect_rollouts(
 
                 # Advance --------------------------------------------------
                 obs = next_obs
-                rollout_step_count += n_envs
-                rollout_episode_count += done.sum().item()
+                env_step_calls += 1
+                rollout_steps += n_envs
+                rollout_episodes += done.sum().item()
 
                 # Stop condition ------------------------------------------
-                if n_steps is not None and rollout_step_count >= n_steps:
+                if n_steps is not None and env_step_calls >= n_steps:
                     break
-                if n_episodes is not None and rollout_episode_count >= n_episodes:
+                if n_episodes is not None and rollout_episodes >= n_episodes:
                     break
 
-            total_step_count += rollout_step_count
-            total_episode_count += rollout_episode_count
+            total_steps += rollout_steps
+            total_episodes += rollout_episodes
 
             # --------------------------------------------------------------
             # 3.2 End‑of‑rollout processing -------------------------------
@@ -272,16 +276,18 @@ def _collect_rollouts(
             mean_ep_reward = float(np.mean(episode_reward_deque)) if episode_reward_deque else 0.0
             mean_ep_length = float(np.mean(episode_length_deque)) if episode_length_deque else 0.0
 
-            total_rollout_count += 1
+            total_rollouts += 1
             rollout_elapsed = time.time() - rollout_start
             rollout_durations.append(rollout_elapsed)
-            mean_rollout_duration = np.mean(rollout_durations)
+            rollout_mean_duration = np.mean(rollout_durations)
             
             stats = {
-                "n_rollouts" : total_rollout_count,
-                "mean_rollout_duration": mean_rollout_duration,
-                "n_episodes": total_episode_count,
-                "n_steps": total_step_count,
+                "total_rollouts" : total_rollouts,
+                "total_episodes": total_episodes,
+                "total_timesteps": total_steps,
+                "rollout_step_count": rollout_steps,
+                "rollout_episode_count": rollout_episodes,
+                "rollout_mean_duration": rollout_mean_duration,
                 "mean_ep_reward": mean_ep_reward,
                 "mean_ep_length": mean_ep_length
             }
@@ -289,6 +295,7 @@ def _collect_rollouts(
         yield trajectories, stats
 
 class RolloutCollector():
+    # TODO: how do they perform eval, at which cadence?
     def __init__(self, _id, env, policy_model, value_model=None, deterministic=False, n_steps=None, n_episodes=None, **kwargs):
         self._id = _id
         self.env = env

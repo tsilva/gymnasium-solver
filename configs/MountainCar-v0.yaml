@@ -10,9 +10,9 @@ default:
   entropy_coef: 0.15                  # Encourage exploration for sparse reward
 
   train_rollout_interval: 1           # Frequent rollouts help with sparse rewards
-  train_rollout_steps: 10000          # Longer rollouts help with sparse rewards
+  n_steps: 10000          # Longer rollouts help with sparse rewards
   train_reward_threshold: null        # Not used for MountainCar
-  train_batch_size: 1000              # Large batch for stable updates in sparse reward env
+  batch_size: 1000              # Large batch for stable updates in sparse reward env
   gamma: 0.99                         # Slight discount to avoid instability from infinite horizon
   gae_lambda: 0.95                    # Standard GAE lambda for bias/variance tradeoff
   clip_epsilon: 0.2                   # Standard PPO clipping

@@ -10,9 +10,9 @@ default:
   entropy_coef: 0.01                   # Small entropy for exploration
 
   train_rollout_interval: 1            # Frequent rollouts for fast feedback
-  train_rollout_steps: 2048            # Standard rollout size for stability
+  n_steps: 2048            # Standard rollout size for stability
   train_reward_threshold: null         # Not used for Acrobot
-  train_batch_size: 64                 # Smaller batch for more frequent updates
+  batch_size: 64                 # Smaller batch for more frequent updates
   gamma: 0.99                          # Slight discount for stability (gamma=1.0 can cause instability)
   gae_lambda: 0.95                     # Standard GAE lambda for bias/variance tradeoff
   clip_epsilon: 0.2                    # Standard PPO clipping

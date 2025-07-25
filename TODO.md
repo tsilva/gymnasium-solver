@@ -4,7 +4,6 @@
 - FEAT: add config __repr__ support
 - FEAT: add agent __repr__ support
 - FEAT: add collector __repr__ support
-- REFACTOR: call train_rollout_steps -> n_steps and use same for eval (rollout size = n_steps * n_envs)
 - REFACTOR: move reward threshold detection to rollout collector
 - FEAT: Log config into wandb experiment
 - BUG: async collection

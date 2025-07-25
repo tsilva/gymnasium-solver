@@ -27,8 +27,7 @@ class Config:
     val_coef: float = 0.5  # Default: 0.5 (for PPO)
 
     # Training
-    # TODO: make max_epochas = None
-    max_epochs: int = -1  # Default: -1
+    max_epochs: int = None  # Default: -1
     train_rollout_interval: int = 1  # Default: 1
     gamma: float = 0.99  # Default: 0.99
     gae_lambda: float = 0.95  # Default: 0.95

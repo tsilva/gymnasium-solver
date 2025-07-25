@@ -15,8 +15,6 @@ class PPO(BaseAgent):
         )
     
     def training_step(self, batch, batch_idx):
-        super().training_step(batch, batch_idx)
-
         # use type for this? check sb3
         states, actions, rewards, dones, old_logprobs, values, advantages, returns, frames = batch
         

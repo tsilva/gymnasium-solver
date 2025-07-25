@@ -12,8 +12,6 @@ class REINFORCE(BaseAgent):
         self.policy_model = PolicyNet(input_dim, output_dim, self.config.hidden_dims)
 
     def training_step(self, batch, batch_idx):
-        super().training_step(batch, batch_idx)
-
         states, actions, rewards, dones, old_logps, values, advantages, returns, frames = batch
         
         ent_coef = self.config.ent_coef

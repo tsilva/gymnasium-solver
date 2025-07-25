@@ -40,32 +40,40 @@ class BaseAgent(pl.LightningModule):
 
         # Training state
         self.start_time = None
-        self.total_steps = 0  # Track total training steps consumed
         self._epoch_metrics = {}
         # TODO: move this to on_fit_start()?
         self.policy_model = None
         self.create_models()
     
+    def create_models(self):
+        """Override in subclass to create algorithm-specific models"""
+        raise NotImplementedError("Subclass must implement create_models()")
+    
+    def training_step(self, batch, batch_idx):
+        """Override in subclass to implement training step logic"""
+        raise NotImplementedError("Subclass must implement training_step()")
+
     def get_env_spec(self):
         """Get environment specification."""
         from utils.environment import get_env_spec
         env = self.build_env_fn(self.config.seed)
         return get_env_spec(env)
     
-    def create_models(self):
-        """Override in subclass to create algorithm-specific models"""
-        raise NotImplementedError("Subclass must implement create_models()")
-
     def on_fit_start(self):
         # TODO: should I set this before training starts? think deeply to where this should be set
         from stable_baselines3.common.utils import set_random_seed
         set_random_seed(self.config.seed)
 
         self.start_time = time.time_ns()
-        self.total_steps = 0  # Reset step counter
         print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-        self._start_collectors()
+        # TODO: create this only for training? create on_fit_start() and destroy with on_fit_end()?
+        self.train_collector = RolloutCollector(
+            self.build_env_fn(self.config.seed),
+            self.policy_model,
+            n_steps=self.config.n_steps,
+            **self.config.rollout_collector_hyperparams()
+        )
 
     def on_train_epoch_start(self):
         pass
@@ -74,32 +82,22 @@ class BaseAgent(pl.LightningModule):
     def train_dataloader(self):
         self.train_collector.collect()
         return self.train_collector.create_dataloader(batch_size=self.config.batch_size)
-
-    def training_step(self, batch, batch_idx):
-        batch_size = batch[0].size(0)
-        self.total_steps += batch_size
-
+    
     def on_train_epoch_end(self):
-        self._check_early_stop()
-
         rollout_metrics = self.train_collector.get_metrics()
-        self.log_metrics(prefix_dict_keys(rollout_metrics, "rollout"), prog_bar=["rollout/ep_rew_mean"]) # TODO: move prefix inside
+        self.log_metrics(prefix_dict_keys(rollout_metrics, "rollout"), prog_bar=["rollout/ep_rew_mean"], on_epoch=True) # TODO: move prefix inside
 
-        total_timesteps = self.train_collector.get_total_timesteps()
-        time_elapsed = max((time.time_ns() - self.start_time) / 1e9, sys.float_info.epsilon)
-        fps = int(total_timesteps / time_elapsed)
-        self.log_metrics({
-            "time/total_timesteps": total_timesteps,
-            "time/time_elapsed" : int(time_elapsed),
-            "time/fps": int(fps)
-        }, on_epoch=True) # TODO: on_epoch?
+        time_metrics = self._get_time_metrics()
+        self.log_metrics(prefix_dict_keys(time_metrics, "time"), on_epoch=True) # TODO: on_epoch?
 
         print_namespaced_dict(self._epoch_metrics)
 
+        self._check_early_stop()
+
     def on_fit_end(self):
-        total_time = time.time() - self.training_start_time
-        print(f"Training completed in {total_time:.2f} seconds ({total_time/60:.2f} minutes)")
-        self._stop_collectors()
+        time_elapsed = self._get_time_metrics()["time_elapsed"]
+        print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
+        del self.train_collector
 
     # TODO: when does this run? should I run eval_rollout_collector here?
     #def validation_step(self, *args, **kwargs):
@@ -107,7 +105,7 @@ class BaseAgent(pl.LightningModule):
 
     def train(self):
         from pytorch_lightning.loggers import WandbLogger
-        from tsilva_notebook_utils.colab import load_secrets_into_env
+        from tsilva_notebook_utils.colab import load_secrets_into_env # TODO: get rid of all references to this project
 
         _ = load_secrets_into_env(['WANDB_API_KEY'])
         wandb_logger = WandbLogger(
@@ -120,7 +118,7 @@ class BaseAgent(pl.LightningModule):
             logger=wandb_logger,
             # TODO: softcode this
             log_every_n_steps=1, # TODO: softcode this
-            max_epochs=self.config.max_epochs,
+            max_epochs=self.config.max_epochs if self.config.max_epochs is not None else -1,
             enable_progress_bar=True,
             enable_checkpointing=False,  # Disable checkpointing for speed
             accelerator="cpu",  # Use CPU for training # TODO: softcode this
@@ -130,26 +128,23 @@ class BaseAgent(pl.LightningModule):
         trainer.fit(self)
 
     def log_metrics(self, metrics, *, on_epoch=None, on_step=None, prog_bar=None):
-        self._epoch_metrics = {**self._epoch_metrics, **metrics}
         for key, value in metrics.items():
             _on_epoch = True if on_epoch is True or key in (on_epoch or []) else None
             _on_step =  True if on_step is True or key in (on_step or []) else None
             _prog_bar = True if prog_bar is True or key in (prog_bar or []) else None
+            if _on_epoch is not False: self._epoch_metrics[key] = value
             self.log(key, value, on_epoch=_on_epoch, on_step=_on_step, prog_bar=_prog_bar)
-
-    def _start_collectors(self):
-        # TODO: create this only for training? create on_fit_start() and destroy with on_fit_end()?
-        self.train_collector = RolloutCollector(
-            self.build_env_fn(self.config.seed),
-            self.policy_model,
-            n_steps=self.config.n_steps,
-            **self.config.rollout_collector_hyperparams()
-        )
-        print(str(self.train_collector))
-
-    def _stop_collectors(self):
-        del self.train_collector
-
+    
+    def _get_time_metrics(self):
+        total_timesteps = self.train_collector.get_total_timesteps()
+        time_elapsed = max((time.time_ns() - self.start_time) / 1e9, sys.float_info.epsilon)
+        fps = total_timesteps / time_elapsed
+        return {
+            "total_timesteps": total_timesteps,
+            "time_elapsed": int(time_elapsed),
+            "fps": int(fps)
+        }
+    
     def _check_early_stop(self):
         if not self.train_collector.is_reward_threshold_reached(): return
         ep_rew_mean = self.train_collector.get_ep_rew_mean()
@@ -168,7 +163,7 @@ class BaseAgent(pl.LightningModule):
             self.build_env_fn(self.config.seed + 1000),  # Random seed for eval
             self.policy_model,
             n_episodes=self.config.eval_rollout_episodes,
-            deterministic=True,
+            deterministic=True, # TODO: this is currently not implemented
             **self.config.rollout_collector_hyperparams()
         )
         try: eval_collector.collect(collect_frames=True) # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env

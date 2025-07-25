@@ -279,8 +279,8 @@ class RolloutCollector():
 
     def collect(self, *args, **kwargs):
         generator = self._ensure_generator(*args, **kwargs)
-        trajectories, stats = next(generator)
-        self.stats = stats
+        trajectories, metrics = next(generator)
+        self._metrics = metrics
         self.trajectories = trajectories
         self.dataset.update(*trajectories) # TODO: move this inside the collector
     
@@ -301,7 +301,8 @@ class RolloutCollector():
         return reward_threshold
     
     def get_total_timesteps(self):
-        return self.stats.get('total_timesteps', 0)
+        return self._metrics.get('total_timesteps', 0)
+    
     def get_ep_rew_mean(self):
         return self._metrics.get('ep_rew_mean', 0.0)
     

@@ -22,8 +22,9 @@ class Config:
 
     # Networks
     hidden_dims: Union[int, Tuple[int, ...]] = (64,)  # Default: [64]
+    # TODO: default learning rates should be in algo classes
     policy_lr: float = 0.0003  # Default: 0.0003
-    value_lr: float = 0.001  # Default: 0.001
+    #value_lr: float = 0.001  # Default: 0.001
     ent_coef: float = 0.01  # Default: 0.01
     val_coef: float = 0.5  # Default: 0.5 (for PPO)
 
@@ -115,8 +116,6 @@ class Config:
             raise ValueError("All elements of hidden_dims tuple must be ints.")
         if self.policy_lr <= 0:
             raise ValueError("policy_lr must be a positive float.")
-        if self.value_lr <= 0:
-            raise ValueError("value_lr must be a positive float.")
         if self.ent_coef < 0:
             raise ValueError("ent_coef must be a non-negative float.")
 

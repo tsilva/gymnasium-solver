@@ -7,13 +7,10 @@ from utils.misc import prefix_dict_keys
 class PPO(BaseAgent):
 
     def create_models(self):
-        input_dim = self.config.env_spec['input_dim'] # TODO: stop using this env_spec
-        output_dim = self.config.env_spec['output_dim']
-
         # TODO: should I call this policy model?
         self.policy_model = ActorCritic(
-            input_dim,
-            output_dim,
+            self.input_dim,
+            self.output_dim, # TODO: should be called obs_dim and act_dim?
             hidden=self.config.hidden_dims
         )
     

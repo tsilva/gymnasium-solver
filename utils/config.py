@@ -4,28 +4,13 @@ import yaml
 from pathlib import Path
 from dataclasses import dataclass, MISSING
 from typing import Union, Tuple, Dict, Any
-
-
-def _convert_numeric_strings(config_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """Convert string representations of numbers back to numeric types."""
-    for key, value in config_dict.items():
-        if isinstance(value, str):
-            # Try to convert scientific notation strings to float
-            if 'e' in value.lower() or 'E' in value:
-                try:
-                    config_dict[key] = float(value)
-                except ValueError:
-                    pass  # Keep as string if conversion fails
-    return config_dict
+from utils.misc import _convert_numeric_strings
 
 @dataclass
-class RLConfig:
-    """Reinforcement Learning Configuration."""
-    
+class Config:
     # Environment
     env_id: str  # Environment ID string (e.g., 'CartPole-v1')
     algo_id: str  # Algorithm ID string (e.g., 'ppo', 'dqn')
-    env_spec: Dict[str, Any]  # Environment specification dictionary
 
     # Training (required fields first)
     n_steps: int
@@ -62,7 +47,7 @@ class RLConfig:
     normalize_reward: bool = False  # Default: false
 
     @classmethod
-    def load_from_yaml(cls, env_id: str, algo_id: str, config_dir: str = "configs") -> 'RLConfig':
+    def load_from_yaml(cls, env_id: str, algo_id: str, config_dir: str = "configs") -> 'Config':
         """
         Load configuration from YAML files with hierarchical overrides:
         1. Start with RLConfig class defaults
@@ -106,17 +91,10 @@ class RLConfig:
         if 'hidden_dims' in final_config and isinstance(final_config['hidden_dims'], list):
             final_config['hidden_dims'] = tuple(final_config['hidden_dims'])
 
-        # TODO: better way to do this?
-        from utils.environment import build_env, get_env_spec
-        env = build_env(env_id)
-        env_spec = get_env_spec(env)
-        final_config['env_spec'] = env_spec
-
         instance = cls(**final_config)
         instance.validate()
         return instance
         
-
     def rollout_collector_hyperparams(self) -> Dict[str, Any]:
         return {
             'gamma': self.gamma,
@@ -130,8 +108,6 @@ class RLConfig:
             raise ValueError("env_id must be a non-empty string.")
         if not self.algo_id:
             raise ValueError("algo_id must be a non-empty string.")
-        if self.env_spec is None:
-            raise ValueError("env_spec must not be None.")
         if self.seed < 0:
             raise ValueError("seed must be a non-negative integer.")
 
@@ -165,86 +141,6 @@ class RLConfig:
         if self.eval_rollout_episodes is not None and self.eval_rollout_episodes <= 0:
             raise ValueError("eval_rollout_episodes must be a positive integer.")
 
-    def __str__(self) -> str:
-        """Return a human-readable string representation of the configuration."""
-        lines = ["Configuration", "=" * 40, ""]
-        
-        # Environment section
-        lines.extend([
-            "ENVIRONMENT:",
-            f"  env_id: {self.env_id}",
-            f"    → Gymnasium environment identifier",
-            f"  algo_id: {self.algo_id}",
-            f"    → Reinforcement learning algorithm to use",
-            f"  seed: {self.seed}",
-            f"    → Random seed for reproducibility",
-            ""
-        ])
-        
-        # Networks section
-        hidden_dims_str = str(self.hidden_dims) if isinstance(self.hidden_dims, tuple) else f"({self.hidden_dims},)"
-        lines.extend([
-            "NEURAL NETWORKS:",
-            f"  hidden_dims: {hidden_dims_str}",
-            f"    → Hidden layer dimensions for policy and value networks",
-            f"  policy_lr: {self.policy_lr}",
-            f"    → Learning rate for policy network optimizer",
-            f"  value_lr: {self.value_lr}",
-            f"    → Learning rate for value network optimizer",
-            f"  ent_coef: {self.ent_coef}",
-            f"    → Entropy regularization coefficient for exploration",
-            ""
-        ])
-        
-        # Training section
-        lines.extend([
-            "TRAINING:",
-            f"  n_steps: {self.n_steps}",
-            f"    → Number of environment steps per training rollout",
-            f"  batch_size: {self.batch_size}",
-            f"    → Batch size for training updates",
-            f"  train_rollout_interval: {self.train_rollout_interval}",
-            f"    → Number of epochs between training rollouts",
-            f"  max_epochs: {self.max_epochs}",
-            f"    → Maximum training epochs (-1 for unlimited)",
-            f"  gamma: {self.gamma}",
-            f"    → Discount factor for future rewards",
-            f"  gae_lambda: {self.gae_lambda}",
-            f"    → GAE lambda parameter for advantage estimation",
-            f"  clip_range: {self.clip_range}",
-            f"    → PPO clipping parameter for policy updates",
-            ""
-        ])
-        
-        # Evaluation section
-        eval_episodes_str = "None" if self.eval_rollout_episodes is None else str(self.eval_rollout_episodes)
-        eval_steps_str = "None" if self.eval_rollout_steps is None else str(self.eval_rollout_steps)
-        lines.extend([
-            "EVALUATION:",
-            f"  eval_rollout_interval: {self.eval_rollout_interval}",
-            f"    → Number of epochs between evaluation runs",
-            f"  eval_rollout_episodes: {eval_episodes_str}",
-            f"    → Number of episodes per evaluation (None = use steps)",
-            f"  eval_rollout_steps: {eval_steps_str}",
-            f"    → Number of steps per evaluation (None = use episodes)",
-            f"  eval_async: {self.eval_async}",
-            f"    → Whether to run evaluation asynchronously",
-            ""
-        ])
-        
-        # Normalization section
-        lines.extend([
-            "NORMALIZATION:",
-            f"  normalize_obs: {self.normalize_obs}",
-            f"    → Whether to normalize observations",
-            f"  normalize_reward: {self.normalize_reward}",
-            f"    → Whether to normalize rewards",
-            ""
-        ])
-        
-
-        return "\n".join(lines)
-
-def load_config(env_id: str, algo_id: str, config_dir: str = "configs") -> RLConfig:
+def load_config(env_id: str, algo_id: str, config_dir: str = "configs") -> Config:
     """Convenience function to load configuration."""
-    return RLConfig.load_from_yaml(env_id, algo_id, config_dir)
+    return Config.load_from_yaml(env_id, algo_id, config_dir)

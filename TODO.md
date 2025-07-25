@@ -1,3 +1,5 @@
+- BUG: clip fraction = 0 all the time
+- BUG: not early stopping training
 - check how many updates per rollout does rlzoo do (n_updates)
 - log stats like rlzoo
 - mimick rlzoo hyperparam config structure

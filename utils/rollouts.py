@@ -1,45 +1,11 @@
-import itertools
 from collections import deque
-from contextlib import contextmanager
-from typing import Optional, Sequence, Tuple
+from typing import Optional, Sequence
 
 import time
 import numpy as np
 import torch
-from torch.distributions import Categorical
 
-# TODO: move this somewhere else?
-@contextmanager
-def inference_ctx(*modules):
-    """
-    Temporarily puts all passed nn.Module objects in eval mode and
-    disables grad-tracking. Restores their original training flag
-    afterwards.
-
-    Usage:
-        with inference_ctx(actor, critic):
-            ... collect trajectories ...
-    """
-    # Filter out Nones and flatten (in case you pass lists/tuples)
-    flat = [m for m in itertools.chain.from_iterable(
-            (m if isinstance(m, (list, tuple)) else (m,)) for m in modules)
-            if m is not None]
-
-    # Remember original .training flags
-    was_training = [m.training for m in flat]
-    try:
-        for m in flat:
-            m.eval()
-        with torch.inference_mode():
-            yield
-    finally:
-        for m, flag in zip(flat, was_training):
-            if flag:   # only restore if it *was* in train mode
-                m.train()
-
-# TODO: move this somewhere else?
-def _device_of(module: torch.nn.Module) -> torch.device:
-    return next(module.parameters()).device
+from utils.misc import inference_ctx, _device_of
 
 # TODO: make rollout collector use its own buffer
 # TODO: add # env.normalize_obs() support
@@ -187,6 +153,7 @@ def _collect_rollouts(
             T = obs_arr.shape[0]
 
             # Bootstrap value for the *next* state ------------------------
+            # TODO: beware of boostrapping for terminal states
             next_value = values_arr[-1]
             # TODO: restore bootstrapping
             #next_value = _bootstrap_value(obs)  # shape: (E,)
@@ -336,49 +303,3 @@ class RolloutCollector():
         if self._generator is None: return 
         self._generator.close()
         self.env.close()
-
-    # TODO: add env spec details
-    def __str__(self) -> str:
-        """Return a human-readable string representation of the rollout collector."""
-        lines = [f"RolloutCollector '{self._id}'", "=" * (len(f"RolloutCollector '{self._id}'")), ""]
-        
-        # Configuration section
-        lines.extend([
-            "CONFIGURATION:",
-            f"  Environment: {getattr(self.env, 'spec', 'Unknown')} ({self.env.num_envs} parallel envs)",
-            f"  Policy Model: {self.policy_model.__class__.__name__}",
-            f"  Mode: {'Deterministic' if self.deterministic else 'Stochastic'}",
-            f"  Collection: {self.n_steps or 'None'} steps, {self.n_episodes or 'None'} episodes",
-            f"  Generator Active: {'Yes' if self._generator else 'No'}",
-            ""
-        ])
-        
-        # Statistics section
-        if self.stats:
-            lines.extend([
-                "CURRENT STATISTICS:",
-                f"  Total Rollouts: {self.stats.get('n_rollouts', 0)}",
-                f"  Total Episodes: {self.stats.get('n_episodes', 0)}",
-                f"  Total Steps: {self.stats.get('n_steps', 0)}",
-                f"  Mean Episode Reward: {self.stats.get('mean_ep_reward', 0.0):.3f}",
-                f"  Mean Episode Length: {self.stats.get('mean_ep_length', 0.0):.1f}",
-                f"  Mean Rollout Duration: {self.stats.get('mean_rollout_duration', 0.0):.3f}s",
-                ""
-            ])
-            
-            # Performance metrics
-            steps_per_second = self.stats.get('n_steps', 0) / max(self.stats.get('mean_rollout_duration', 1e-6), 1e-6)
-            episodes_per_rollout = self.stats.get('n_episodes', 0) / max(self.stats.get('n_rollouts', 1), 1)
-            
-            lines.extend([
-                "PERFORMANCE METRICS:",
-                f"  Steps per Second: {steps_per_second:.1f}",
-                f"  Episodes per Rollout: {episodes_per_rollout:.1f}",
-            ])
-        else:
-            lines.extend([
-                "CURRENT STATISTICS:",
-                "  No rollouts collected yet",
-            ])
-        
-        return "\n".join(lines)

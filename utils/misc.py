@@ -1,3 +1,11 @@
+import torch
+import itertools
+from typing import Dict, Any
+from collections import deque
+from contextlib import contextmanager
+from torch.distributions import Categorical
+from typing import Optional, Sequence, Tuple
+
 
 def prefix_dict_keys(data: dict, prefix: str) -> dict:
     return {f"{prefix}/{key}" if prefix else key: value for key, value in data.items()}
@@ -37,3 +45,49 @@ def print_namespaced_dict(data: dict) -> None:
         for subkey, val in subdict.items():
             print(f"|    {subkey:<{max_key_len-4}} | {val:<{max_val_len}}|")
     print(border)
+
+def _convert_numeric_strings(config_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert string representations of numbers back to numeric types."""
+    for key, value in config_dict.items():
+        if isinstance(value, str):
+            # Try to convert scientific notation strings to float
+            if 'e' in value.lower() or 'E' in value:
+                try:
+                    config_dict[key] = float(value)
+                except ValueError:
+                    pass  # Keep as string if conversion fails
+    return config_dict
+
+
+# TODO: move this somewhere else?
+@contextmanager
+def inference_ctx(*modules):
+    """
+    Temporarily puts all passed nn.Module objects in eval mode and
+    disables grad-tracking. Restores their original training flag
+    afterwards.
+
+    Usage:
+        with inference_ctx(actor, critic):
+            ... collect trajectories ...
+    """
+    # Filter out Nones and flatten (in case you pass lists/tuples)
+    flat = [m for m in itertools.chain.from_iterable(
+            (m if isinstance(m, (list, tuple)) else (m,)) for m in modules)
+            if m is not None]
+
+    # Remember original .training flags
+    was_training = [m.training for m in flat]
+    try:
+        for m in flat:
+            m.eval()
+        with torch.inference_mode():
+            yield
+    finally:
+        for m, flag in zip(flat, was_training):
+            if flag:   # only restore if it *was* in train mode
+                m.train()
+
+# TODO: move this somewhere else?
+def _device_of(module: torch.nn.Module) -> torch.device:
+    return next(module.parameters()).device

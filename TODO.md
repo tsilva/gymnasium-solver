@@ -1,3 +1,16 @@
+solve mountaincar with framestacking
+how do advnatges make it into final calc
+rlzoo save model, run it in my model and compare rollout results (set seed and 1 env)
+measure obs mean/var
+make sure training uses same collecotrs so thry calc mean reward through their reward window, make sure it inits through config
+expected steps to solve cartpole wirh reinforce, match that first
+record videos in bg with model copy
+check if rlzoo solves mountaincar
+rlzoo better due to missing param support like decay
+- save best model/agent checkpoints (use trainer) / background tasks records video 
+- BUG: REINFORCE not working
+- Try solving MountainCar-v0 with PPO + frame stacking (no reward shaping)
+- Solve PongRAM-v0 with PPO
 - BUG: RLZoo is doing 2x the FPS of this implementation, investigate
 - Add max_grad_norm support (0.5 for cartpole)
 - log stats like rlzoo
@@ -41,3 +54,5 @@
 - add support for plotting charts as text and feeding to llm, check how end of training does it
 - track environment stats, observarion stats, reward distributions, etc
 - change api to match sb3
+- https://cs.stanford.edu/people/karpathy/reinforcejs/index.html
+- https://alazareva.github.io/rl_playground/

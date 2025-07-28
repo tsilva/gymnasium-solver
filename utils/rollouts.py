@@ -60,13 +60,7 @@ def _collect_rollouts(
     # First observation ------------------------------------------------------
     obs = env.reset()
 
-    # ------------------------------------------------------------------
-    # 2. Helper fns ----------------------------------------------------
-    # ------------------------------------------------------------------
-    def _bootstrap_value(obs_np: np.ndarray) -> np.ndarray: # TODO: is rlzoo rollout collector infering values during rollouts?
-        obs_t = torch.as_tensor(obs_np, dtype=torch.float32, device=device)
-        return policy_model.v(obs_t).squeeze(-1).cpu().numpy()
-
+ 
     # ------------------------------------------------------------------
     # 3. Main generator loop -------------------------------------------
     # ------------------------------------------------------------------
@@ -101,13 +95,27 @@ def _collect_rollouts(
                 value_np = value_t.cpu().numpy()
 
                 # Environment step ----------------------------------------
-                next_obs, reward, done, _ = env.step(action_np)
+                next_obs, rewards, dones, infos = env.step(action_np)
+
+                # Handle timeout by bootstrapping with value function
+                # see GitHub issue #633
+                for idx, done in enumerate(dones):
+                    if (
+                        done
+                        and infos[idx].get("terminal_observation") is not None
+                        and infos[idx].get("TimeLimit.truncated", False)
+                    ):
+                        terminal_obs_np = infos[idx]["terminal_observation"]
+                        terminal_obs_t = torch.as_tensor(terminal_obs_np, dtype=torch.float32, device=device)
+                        with torch.no_grad():
+                            terminal_value = policy_model.predict_values(terminal_obs_t)
+                        rewards[idx] += gamma * terminal_value
 
                 # Per‑env episodic bookkeeping ----------------------------
-                for i, r in enumerate(reward):
+                for i, r in enumerate(rewards):
                     env_reward[i] += r
                     env_length[i] += 1
-                    if done[i]:
+                    if dones[i]:
                         _env_reward = float(env_reward[i])
                         _env_length = int(env_length[i])
                         episode_reward_deque.append(_env_reward)
@@ -121,9 +129,9 @@ def _collect_rollouts(
                 obs_buf.append(obs.copy())  # defensive copy — some envs mutate obs
                 actions_buf.append(action_np)
                 logprobs_buf.append(action_logp_np)
-                rewards_buf.append(reward)
+                rewards_buf.append(rewards)
                 values_buf.append(value_np)
-                done_buf.append(done)
+                done_buf.append(dones)
                 if collect_frames:
                     frame_buf.append(env.get_images())
 
@@ -131,7 +139,7 @@ def _collect_rollouts(
                 obs = next_obs
                 env_step_calls += 1
                 rollout_steps += n_envs
-                rollout_episodes += done.sum().item()
+                rollout_episodes += dones.sum().item()
 
                 # Stop condition ------------------------------------------
                 if n_steps is not None and env_step_calls >= n_steps:
@@ -156,9 +164,9 @@ def _collect_rollouts(
 
             # Bootstrap value for the *next* state ------------------------
             # TODO: beware of boostrapping for terminal states
-            next_value = values_arr[-1]
-            # TODO: restore bootstrapping
-            #next_value = _bootstrap_value(obs)  # shape: (E,)
+            #next_value = values_arr[-1]
+            obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device)
+            next_value = policy_model.predict_values(obs_t).detach().cpu().numpy()
 
             # 3.2.3  GAE‑λ advantages & returns ---------------------------
             advantages_arr = np.zeros_like(rewards_arr, dtype=np.float32)
@@ -175,6 +183,7 @@ def _collect_rollouts(
 
             returns_arr = advantages_arr + values_arr
 
+            # TODO: I think they are normalizing in batch
             if normalize_advantage:
                 adv_flat = advantages_arr.reshape(-1)
                 advantages_arr = (advantages_arr - adv_flat.mean()) / (
@@ -274,6 +283,7 @@ class RolloutCollector():
     def collect(self, *args, batch_size=64, shuffle=False, **kwargs):
         generator = self._ensure_generator(*args, **kwargs)
         trajectories, metrics = next(generator)
+
         self._metrics = metrics
         # NOTE: 
         # - dataloader is created each epoch to mitigate issues with changing dataset data between epochs

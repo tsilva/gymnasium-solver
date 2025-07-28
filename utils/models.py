@@ -33,4 +33,9 @@ class ActorCritic(nn.Module):
     def evaluate_actions(self, obs: torch.Tensor, actions: torch.Tensor):
         dist, v = self.forward(obs)
         return dist.log_prob(actions), dist.entropy(), v
-        
+    
+    def predict_values(self, obs):
+        x = self.backbone(obs)
+        value = self.value_head(x).squeeze(-1)
+        return value
+

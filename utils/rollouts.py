@@ -27,6 +27,7 @@ import numpy as np
 import torch
 
 
+# TODO: move to class
 @torch.no_grad()
 def _collect_rollouts(
     env,
@@ -38,7 +39,7 @@ def _collect_rollouts(
     gae_lambda: float = 0.95,
     normalize_advantage: bool = True,
     advantages_norm_eps: float = 1e-8,
-    stats_window_size: int = 100,
+    stats_window_size: int = 100
 ):
     assert (n_steps is not None and n_steps > 0) or (
         n_episodes is not None and n_episodes > 0
@@ -199,6 +200,7 @@ def _collect_rollouts(
                 adv_flat = advantages_arr.reshape(-1)
                 advantages_arr = (advantages_arr - adv_flat.mean()) / (adv_flat.std() + advantages_norm_eps)
 
+            # TODO: get rid of this code?
             # ----- Env-major flattening -----
             # Keep this robust to arbitrary obs shapes
             obs_env_major = np.swapaxes(obs_arr, 0, 1)  # (E, T, ...)
@@ -331,7 +333,7 @@ class RolloutCollector():
             self.policy_model,
             n_steps=n_steps,
             n_episodes=n_episodes,
-            stats_window_size=self.stats_window_size
+            stats_window_size=self.stats_window_size,
             **self.kwargs
         )
         return self._generator

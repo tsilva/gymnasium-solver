@@ -46,6 +46,9 @@ class Config:
     normalize_obs: bool = False  # Default: false
     normalize_reward: bool = False  # Default: false
     
+    # Frame stacking
+    frame_stack: int = 1  # Default: 1 (no frame stacking)
+    
     # Reward Shaping (for environments like MountainCar)
     reward_shaping: Union[bool, Dict[str, Any]] = False  # Default: false
 

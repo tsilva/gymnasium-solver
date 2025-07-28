@@ -13,16 +13,16 @@ import gymnasium
 import shutil
 from collections.abc import Sequence
 
-def build_env(env_id, n_envs=1, seed=None, norm_obs=False, norm_reward=False, vec_env_cls=None, reward_shaping=None):
+def build_env(env_id, n_envs=1, seed=None, norm_obs=False, norm_reward=False, vec_env_cls=None, reward_shaping=None, frame_stack=None):
     from stable_baselines3.common.env_util import make_vec_env
-    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize
+    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize, VecFrameStack
     
     if vec_env_cls == "SubProcVecEnv": vec_env_cls = SubprocVecEnv
     elif vec_env_cls == "DummyVecEnv": vec_env_cls = DummyVecEnv
     
     # Create env_fn with reward shaping for MountainCar
     def env_fn():
-        if env_id == "MountainCar-v0" and reward_shaping:
+        if env_id == "MountainCar-v0":# and reward_shaping:
             from utils.wrappers import create_mountain_car_env
             return create_mountain_car_env(
                 env_id=env_id,
@@ -43,6 +43,10 @@ def build_env(env_id, n_envs=1, seed=None, norm_obs=False, norm_reward=False, ve
         # Standard environment creation
         env = make_vec_env(env_id, n_envs=n_envs, seed=seed, vec_env_cls=vec_env_cls)
         if norm_obs or norm_reward: env = VecNormalize(env, norm_obs=norm_obs, norm_reward=norm_reward)
+    
+    # Apply frame stacking if specified
+    if frame_stack and frame_stack > 1:
+        env = VecFrameStack(env, n_stack=frame_stack)
     
     return env
 

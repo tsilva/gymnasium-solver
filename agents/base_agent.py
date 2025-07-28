@@ -18,7 +18,9 @@ class BaseAgent(pl.LightningModule):
 
         # TODO: these spec inspects should be centralized somewhere
         _env = gymnasium.make(config.env_id)
-        self.input_dim = _env.observation_space.shape[0]
+        base_input_dim = _env.observation_space.shape[0]
+        # Account for frame stacking - multiply by number of frames
+        self.input_dim = base_input_dim * config.frame_stack
         self.output_dim = _env.action_space.n
 
         # Store core attributes
@@ -33,7 +35,8 @@ class BaseAgent(pl.LightningModule):
             norm_reward=config.normalize_reward,
             n_envs=config.n_envs,
             vec_env_cls="DummyVecEnv",
-            reward_shaping=config.reward_shaping
+            reward_shaping=config.reward_shaping,
+            frame_stack=config.frame_stack
         )
 
         # Training state

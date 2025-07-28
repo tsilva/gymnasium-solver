@@ -280,8 +280,8 @@ v.addEventListener('dblclick', () => {{
     return HTML(html)
 
 def group_frames_by_episodes(trajectories):
-    dones = trajectories[3]
-    frames = trajectories[8]
+    dones = trajectories.dones
+    frames = trajectories[8]  # frames is still accessed by index since it's not part of the named tuple
     assert len(dones) == len(frames), "Dones and frames must have the same length"
 
     episodes = []

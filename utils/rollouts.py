@@ -1,5 +1,5 @@
 from collections import deque
-from typing import Optional, Sequence
+from typing import Optional, Sequence, NamedTuple
 
 import time
 import numpy as np
@@ -8,6 +8,17 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset as TorchDataset
 
 from utils.misc import inference_ctx, _device_of
+
+
+class RolloutTrajectory(NamedTuple):
+    observations: torch.Tensor
+    actions: torch.Tensor
+    rewards: torch.Tensor
+    dones: torch.Tensor
+    old_log_prob: torch.Tensor
+    old_values: torch.Tensor
+    advantages: torch.Tensor
+    returns: torch.Tensor
 
 # TODO: make rollout collector use its own buffer
 # TODO: add # env.normalize_obs() support
@@ -202,15 +213,15 @@ def _collect_rollouts(
             returns = _flat_env_major(returns_buf, torch.float32)
 
             # ----- Yield -----
-            trajectories = (
-                states,
-                actions,
-                rewards,
-                dones,
-                logps,
-                values,
-                advantages,
-                returns
+            trajectories = RolloutTrajectory(
+                observations=states,
+                actions=actions,
+                rewards=rewards,
+                dones=dones,
+                old_log_prob=logps,
+                old_values=values,
+                advantages=advantages,
+                returns=returns
             )
 
             # Running means (windowed)
@@ -239,16 +250,24 @@ def _collect_rollouts(
 # TODO: should dataloader move to gpu?
 # TODO: would converting trajectories to tuples in advance be faster?
 class RolloutDataset(TorchDataset):
-    def __init__(self, *trajectories): # TODO: make sure dataset is not being tampered with during collection
+    def __init__(self, trajectories): # TODO: make sure dataset is not being tampered with during collection
         self.trajectories = trajectories
 
     def __len__(self):
-        length = len(self.trajectories[0])
+        length = len(self.trajectories.observations)
         return length
 
     def __getitem__(self, idx):
-        item = tuple(t[idx] for t in self.trajectories)
-        return item
+        return RolloutTrajectory(
+            observations=self.trajectories.observations[idx],
+            actions=self.trajectories.actions[idx],
+            rewards=self.trajectories.rewards[idx],
+            dones=self.trajectories.dones[idx],
+            old_log_prob=self.trajectories.old_log_prob[idx],
+            old_values=self.trajectories.old_values[idx],
+            advantages=self.trajectories.advantages[idx],
+            returns=self.trajectories.returns[idx]
+        )
     
 class RolloutCollector():
     # TODO: how do they perform eval, at which cadence?
@@ -273,7 +292,7 @@ class RolloutCollector():
         # - peristent workers mitigates worker spin up time, but since dataset data is updated each epoch, workers don't see the updates
         # - therefore, we create a new dataloader each epoch
         return DataLoader(
-            RolloutDataset(*trajectories), # TODO: crashes without the *, figure out why
+            RolloutDataset(trajectories), # Now passing the named tuple directly
             batch_size=batch_size, 
             shuffle=shuffle
         )

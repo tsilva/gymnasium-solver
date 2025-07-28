@@ -16,7 +16,11 @@ class PPO(BaseAgent):
     
     def train_on_batch(self, batch, batch_idx):
         # use type for this? check sb3
-        states, actions, rewards, dones, old_logprobs, values, advantages, returns = batch
+        states = batch.observations
+        actions = batch.actions
+        old_logprobs = batch.old_log_prob
+        advantages = batch.advantages
+        returns = batch.returns
         
         # Normalization does not make sense if mini batchsize == 1, see GH issue #325
         #if self.normalize_advantage and len(advantages) > 1:

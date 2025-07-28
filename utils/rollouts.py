@@ -19,6 +19,14 @@ from utils.misc import inference_ctx, _device_of
 # TODO: look for bugs
 # TODO: empirically torch.inference_mode() is not faster than torch.no_grad() for this use case, retest for other envs
 # TODO: move to class
+import time
+from collections import deque
+from typing import Optional, Sequence, Deque
+
+import numpy as np
+import torch
+
+
 @torch.no_grad()
 def _collect_rollouts(
     env,
@@ -26,182 +34,199 @@ def _collect_rollouts(
     *,
     n_steps: Optional[int] = None,
     n_episodes: Optional[int] = None,
-    deterministic: bool = False, # TODO: is this still needed? check how rlzoo/sb3 does it
-    gamma: float = 0.99, # TODO: make sure these are passed correctly
-    gae_lambda: float = 0.95, # TODO: make sure these are passed correctly
+    deterministic: bool = False,  # kept for compatibility
+    gamma: float = 0.99,
+    gae_lambda: float = 0.95,
     normalize_advantage: bool = True,
     advantages_norm_eps: float = 1e-8,
     collect_frames: bool = False,
     stats_window_size: int = 100,
 ):
-    # ------------------------------------------------------------------
-    # 0. Sanity checks --------------------------------------------------
-    # ------------------------------------------------------------------
+    """
+    Vector-env rollout collector with correct value bootstrapping for time-limit truncations.
+
+    Expects `policy_model.act(obs_t)` -> (action_t, logp_t, value_t)
+            `policy_model.predict_values(obs_t)` -> value_t
+    and an env compatible with Gym/Gymnasium vector API:
+        - reset() -> obs (E, ...)
+        - step(actions) -> (next_obs, rewards, dones, infos)
+        - infos[i] may contain:
+            * 'TimeLimit.truncated' (Gym) or 'truncated' (Gymnasium)
+            * 'terminal_observation' (Gym) or 'final_observation' (Gymnasium) at truncation
+    """
     assert (n_steps is not None and n_steps > 0) or (
         n_episodes is not None and n_episodes > 0
     ), "Provide *n_steps*, *n_episodes*, or both (> 0)."
 
-    policy_device = _device_of(policy_model)
+    device = _device_of(policy_model)
+    #device: torch.device = policy_device
 
-    device: torch.device = policy_device
     n_envs: int = env.num_envs
 
-    # ------------------------------------------------------------------
-    # 1. Per‑env running stats -----------------------------------------
-    # ------------------------------------------------------------------
+    # Per-env episodic stats (running)
     env_reward = np.zeros(n_envs, dtype=np.float32)
     env_length = np.zeros(n_envs, dtype=np.int32)
 
-    rollout_durations: deque[float] = deque(maxlen=stats_window_size)  # Store last 100 rollout durations
-    episode_reward_deque: deque[float] = deque(maxlen=stats_window_size)
-    episode_length_deque: deque[int] = deque(maxlen=stats_window_size)
-    
+    # Running average stats (windowed)
+    rollout_durations: Deque[float] = deque(maxlen=stats_window_size)
+    episode_reward_deque: Deque[float] = deque(maxlen=stats_window_size)
+    episode_length_deque: Deque[int] = deque(maxlen=stats_window_size)
+
     total_rollouts: int = 0
-    # First observation ------------------------------------------------------
+    total_steps: int = 0
+    total_episodes: int = 0
+
+    # Reset environment and retrieve initial observations
     obs = env.reset()
 
- 
-    # ------------------------------------------------------------------
-    # 3. Main generator loop -------------------------------------------
-    # ------------------------------------------------------------------
-    total_steps = 0
-    total_episodes = 0
-
     while True:
-        # Reset the rollout buffers -----------------------------------
+        # --------------------------------------------------------------
+        # Reset rollout buffers for one collection window
+        # --------------------------------------------------------------
         obs_buf: list[np.ndarray] = []
         actions_buf: list[np.ndarray] = []
         rewards_buf: list[np.ndarray] = []
         values_buf: list[np.ndarray] = []
         done_buf: list[np.ndarray] = []
         logprobs_buf: list[np.ndarray] = []
-        frame_buf: list[Sequence[np.ndarray]] = []
+        frames_buf: list[Sequence[np.ndarray]] = []
+        # NEW: per-step truncation + bootstrap targets
+        timeouts_buf: list[np.ndarray] = []
+        bootstrapped_values_buf: list[np.ndarray] = []
 
         env_step_calls = 0
         rollout_steps = 0
         rollout_episodes = 0
 
         # --------------------------------------------------------------
-        # 3.1 Collect one rollout -------------------------------------
+        # Collect one rollout
         # --------------------------------------------------------------
         with inference_ctx(policy_model):
             rollout_start = time.time()
             while True:
-                # ▸ Policy step — note: **no value call here** ----------------
+                # Determine next actions using the policy model
                 obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device)
-                action_t, logp_t, value_t = policy_model.act(obs_t)
-                action_np = action_t.cpu().numpy()
-                action_logp_np = logp_t.cpu().numpy()
-                value_np = value_t.cpu().numpy()
+                actions_t, logps_t, values_t = policy_model.act(obs_t)
+                actions_np = actions_t.detach().cpu().numpy()
+                action_logp_np = logps_t.detach().cpu().numpy()
+                value_np = values_t.detach().cpu().numpy()
 
-                # Environment step ----------------------------------------
-                next_obs, rewards, dones, infos = env.step(action_np)
+                # Perform next actions on environment
+                next_obs, rewards, dones, infos = env.step(actions_np)
 
-                # Handle timeout by bootstrapping with value function
-                # see GitHub issue #633
-                # TODO: this improvement was picked out from SB3RLZOO, need to understand its importance
+                timeouts = np.zeros(n_envs, dtype=bool)
+                bootstrapped_values = np.zeros(n_envs, dtype=np.float32)
                 for idx, done in enumerate(dones):
-                    if (
-                        done
-                        and infos[idx].get("terminal_observation") is not None
-                        and infos[idx].get("TimeLimit.truncated", False)
-                    ):
-                        terminal_obs_np = infos[idx]["terminal_observation"]
-                        terminal_obs_t = torch.as_tensor(terminal_obs_np, dtype=torch.float32, device=device)
-                        with torch.no_grad():
-                            terminal_value = policy_model.predict_values(terminal_obs_t)
-                        rewards[idx] += gamma * terminal_value
+                    if not done: continue
 
-                # Per‑env episodic bookkeeping ----------------------------
-                for i, r in enumerate(rewards):
-                    env_reward[i] += r
-                    env_length[i] += 1
-                    if dones[i]:
-                        _env_reward = float(env_reward[i])
-                        _env_length = int(env_length[i])
-                        episode_reward_deque.append(_env_reward)
-                        episode_length_deque.append(_env_length)
-                        env_reward[i] = 0.0
-                        env_length[i] = 0
+                    info = infos[idx]
+                    truncated = info.get("TimeLimit.truncated")
+                    if not truncated: continue
 
-                # TODO: assert values len matches n_envs
-                
-                # Buffer write -------------------------------------------
+                    timeouts[idx] = True
+                    term_obs = info["terminal_observation"]
+                    term_obs_t = torch.as_tensor(term_obs, dtype=torch.float32, device=device)
+                    if term_obs_t.ndim == obs_t.ndim - 1: term_obs_t = term_obs_t.unsqueeze(0)  # ensure batch dim
+                    bootstrapped_values[idx] = (
+                        policy_model.predict_values(term_obs_t)
+                        .detach()
+                        .cpu()
+                        .numpy()
+                        .squeeze()
+                        .astype(np.float32)
+                    )
+
+                # Per-env episodic bookkeeping
+                for idx, r in enumerate(rewards):
+                    env_reward[idx] += r
+                    env_length[idx] += 1
+                    if not dones[idx]: continue
+                    episode_reward_deque.append(float(env_reward[idx]))
+                    episode_length_deque.append(int(env_length[idx]))
+                    env_reward[idx] = 0.0
+                    env_length[idx] = 0
+
+                # Buffer writes
                 obs_buf.append(obs.copy())  # defensive copy — some envs mutate obs
-                actions_buf.append(action_np)
+                actions_buf.append(actions_np)
                 logprobs_buf.append(action_logp_np)
                 rewards_buf.append(rewards)
                 values_buf.append(value_np)
                 done_buf.append(dones)
-                if collect_frames:
-                    frame_buf.append(env.get_images())
+                timeouts_buf.append(timeouts)
+                bootstrapped_values_buf.append(bootstrapped_values)
+                if collect_frames: frames_buf.append(env.get_images())
 
-                # Advance --------------------------------------------------
+                # Advance
                 obs = next_obs
                 env_step_calls += 1
                 rollout_steps += n_envs
-                rollout_episodes += dones.sum().item()
+                rollout_episodes += int(dones.sum())
 
-                # Stop condition ------------------------------------------
-                if n_steps is not None and env_step_calls >= n_steps:
-                    break
-                if n_episodes is not None and rollout_episodes >= n_episodes:
-                    break
+                # Stop conditions
+                if n_steps is not None and env_step_calls >= n_steps: break
+                if n_episodes is not None and rollout_episodes >= n_episodes: break
 
+            last_obs = next_obs
             total_steps += rollout_steps
             total_episodes += rollout_episodes
 
-            # --------------------------------------------------------------
-            # 3.2 End‑of‑rollout processing -------------------------------
-            # --------------------------------------------------------------
-            # 3.2.1  Stack buffers ----------------------------------------
-            obs_arr = np.stack(obs_buf)          # (T, E, obs_dim)
-            actions_arr = np.stack(actions_buf)  # (T, E)
-            logprobs_arr = np.stack(logprobs_buf)
-            rewards_arr = np.stack(rewards_buf)
-            values_arr = np.stack(values_buf)
-            dones_arr = np.stack(done_buf)
+            # ----- stack arrays -----
+            obs_arr = np.stack(obs_buf)            # (T, E, ...)
+            actions_arr = np.stack(actions_buf)    # (T, E, ...) or (T, E)
+            logprobs_arr = np.stack(logprobs_buf)  # (T, E)
+            rewards_arr = np.stack(rewards_buf)    # (T, E)
+            values_arr = np.stack(values_buf)      # (T, E)
+            dones_arr = np.stack(done_buf)         # (T, E)
+            timeouts_arr = np.stack(timeouts_buf)  # (T, E) bool
+            bootstrap_values_arr = np.stack(bootstrapped_values_buf)  # (T, E) float32
             T = obs_arr.shape[0]
 
-            # Bootstrap value for the *next* state ------------------------
-            # TODO: beware of boostrapping for terminal states
-            #next_value = values_arr[-1]
-            obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device)
-            next_value = policy_model.predict_values(obs_t).detach().cpu().numpy()
+            # ----- build per-step next_values -----
+            # shift critic values for V(s_{t+1}) where available
+            next_values_arr = np.zeros_like(values_arr, dtype=np.float32)
+            next_values_arr[:-1] = values_arr[1:]
 
-            # 3.2.3  GAE‑λ advantages & returns ---------------------------
+            # last step uses V(last_obs) after the final env.step
+            last_obs_t = torch.as_tensor(last_obs, dtype=torch.float32, device=device)
+            last_values = policy_model.predict_values(last_obs_t).detach().cpu().numpy().squeeze()
+            next_values_arr[-1] = last_values.astype(np.float32)
+
+            # override with critic(terminal_observation) where the episode was truncated
+            next_values_arr = np.where(timeouts_arr, bootstrap_values_arr, next_values_arr)
+
+            # ----- non-terminal mask: treat truncations as non-terminal -----
+            # real terminal if done and not truncated
+            real_terminal = np.logical_and(dones_arr.astype(bool), ~timeouts_arr)
+            non_terminal = (~real_terminal).astype(np.float32)  # 1 for continue/timeout, 0 for real terminal
+
+            # ----- GAE(λ) with correct per-step next_values/non_terminal -----
             advantages_arr = np.zeros_like(rewards_arr, dtype=np.float32)
             gae = np.zeros(n_envs, dtype=np.float32)
-            non_terminal = 1.0 - dones_arr.astype(np.float32)
-            next_non_terminal = non_terminal[-1]
-
             for t in reversed(range(T)):
-                delta = rewards_arr[t] + gamma * next_value * next_non_terminal - values_arr[t]
-                gae = delta + gamma * gae_lambda * gae * next_non_terminal
+                delta = rewards_arr[t] + gamma * next_values_arr[t] * non_terminal[t] - values_arr[t]
+                gae = delta + gamma * gae_lambda * gae * non_terminal[t]
                 advantages_arr[t] = gae
-                next_value = values_arr[t]
-                next_non_terminal = non_terminal[t]
 
             returns_arr = advantages_arr + values_arr
 
-            # NOTE: this seems to work better than batch level advantage normalization
-            # TODO: I think they are normalizing in batch
+            # ----- Advantage normalization (optional) -----
             if normalize_advantage:
                 adv_flat = advantages_arr.reshape(-1)
-                advantages_arr = (advantages_arr - adv_flat.mean()) / (
-                    adv_flat.std() + advantages_norm_eps
-                )
+                advantages_arr = (advantages_arr - adv_flat.mean()) / (adv_flat.std() + advantages_norm_eps)
 
-            # 3.2.4  Env‑major flattening --------------------------------
-            obs_env_major = obs_arr.transpose(1, 0, 2)  # (E, T, obs_dim)
+            # ----- Env-major flattening -----
+            # Keep this robust to arbitrary obs shapes
+            obs_env_major = np.swapaxes(obs_arr, 0, 1)  # (E, T, ...)
             states = torch.as_tensor(
                 obs_env_major.reshape(n_envs * T, -1), dtype=torch.float32
             )
 
             def _flat_env_major(arr: np.ndarray, dtype: torch.dtype):
+                # for (T, E) arrays
                 return torch.as_tensor(arr.transpose(1, 0).reshape(-1), dtype=dtype)
 
-            actions = _flat_env_major(actions_arr, torch.int64)
+            actions = _flat_env_major(actions_arr, torch.int64)       # adjust dtype if using continuous actions
             rewards = _flat_env_major(rewards_arr, torch.float32)
             dones = _flat_env_major(dones_arr, torch.bool)
             logps = _flat_env_major(logprobs_arr, torch.float32)
@@ -209,16 +234,15 @@ def _collect_rollouts(
             advantages = _flat_env_major(advantages_arr, torch.float32)
             returns = _flat_env_major(returns_arr, torch.float32)
 
-            # 3.2.5  Frames (optional) ------------------------------------
+            # ----- Frames (optional) -----
             if collect_frames:
                 frames_env_major: list[np.ndarray] = [
-                    frame_buf[t][e] for e in range(n_envs) for t in range(T)
+                    frames_buf[t][e] for e in range(n_envs) for t in range(T)
                 ]
             else:
                 frames_env_major = [0] * (n_envs * T)
 
-            # 3.2.6  Yield -------------------------------------------------
-            # TODO: yield named tuple
+            # ----- Yield -----
             trajectories = (
                 states,
                 actions,
@@ -231,24 +255,24 @@ def _collect_rollouts(
                 frames_env_major,
             )
 
-            # Only calculate mean values when window is full
+            # Running means (windowed)
             ep_rew_mean = float(np.mean(episode_reward_deque)) if episode_reward_deque else 0.0
-            ep_len_mean = int(np.mean(episode_length_deque)) if episode_length_deque else 0.0
-            
+            ep_len_mean = int(np.mean(episode_length_deque)) if episode_length_deque else 0
+
             total_rollouts += 1
             rollout_elapsed = time.time() - rollout_start
             rollout_durations.append(rollout_elapsed)
             elapsed_mean = float(np.mean(rollout_durations))
-            
+
             stats = {
                 "total_timesteps": total_steps,
                 "total_episodes": total_episodes,
-                "total_rollouts" : total_rollouts,
+                "total_rollouts": total_rollouts,
                 "steps": rollout_steps,
                 "episodes": rollout_episodes,
                 "elapsed_mean": elapsed_mean,
                 "ep_rew_mean": ep_rew_mean,
-                "ep_len_mean": ep_len_mean
+                "ep_len_mean": ep_len_mean,
             }
 
         yield trajectories, stats

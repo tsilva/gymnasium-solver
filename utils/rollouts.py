@@ -34,7 +34,6 @@ def _collect_rollouts(
     *,
     n_steps: Optional[int] = None,
     n_episodes: Optional[int] = None,
-    deterministic: bool = False,  # kept for compatibility
     gamma: float = 0.99,
     gae_lambda: float = 0.95,
     normalize_advantage: bool = True,
@@ -42,18 +41,6 @@ def _collect_rollouts(
     collect_frames: bool = False,
     stats_window_size: int = 100,
 ):
-    """
-    Vector-env rollout collector with correct value bootstrapping for time-limit truncations.
-
-    Expects `policy_model.act(obs_t)` -> (action_t, logp_t, value_t)
-            `policy_model.predict_values(obs_t)` -> value_t
-    and an env compatible with Gym/Gymnasium vector API:
-        - reset() -> obs (E, ...)
-        - step(actions) -> (next_obs, rewards, dones, infos)
-        - infos[i] may contain:
-            * 'TimeLimit.truncated' (Gym) or 'truncated' (Gymnasium)
-            * 'terminal_observation' (Gym) or 'final_observation' (Gymnasium) at truncation
-    """
     assert (n_steps is not None and n_steps > 0) or (
         n_episodes is not None and n_episodes > 0
     ), "Provide *n_steps*, *n_episodes*, or both (> 0)."
@@ -135,7 +122,9 @@ def _collect_rollouts(
                         .squeeze()
                         .astype(np.float32)
                     )
-
+                
+                # TODO: use r, l, t from info instead?
+                # TODO: can be merged with loop above
                 # Per-env episodic bookkeeping
                 for idx, r in enumerate(rewards):
                     env_reward[idx] += r
@@ -171,6 +160,7 @@ def _collect_rollouts(
             total_steps += rollout_steps
             total_episodes += rollout_episodes
 
+            # TODO: can I operate directly on numpy arrays?
             # ----- stack arrays -----
             obs_arr = np.stack(obs_buf)            # (T, E, ...)
             actions_arr = np.stack(actions_buf)    # (T, E, ...) or (T, E)
@@ -182,35 +172,45 @@ def _collect_rollouts(
             bootstrap_values_arr = np.stack(bootstrapped_values_buf)  # (T, E) float32
             T = obs_arr.shape[0]
 
-            # ----- build per-step next_values -----
-            # shift critic values for V(s_{t+1}) where available
+            # TODO: consider just replacing the terminal states in last obs
+            # Create a next values array to use for GAE(λ), by shifting the critic 
+            # values on steps (discards first value estimation, which is not used), 
+            # and estimating the last value using the value model)
             next_values_arr = np.zeros_like(values_arr, dtype=np.float32)
             next_values_arr[:-1] = values_arr[1:]
-
-            # last step uses V(last_obs) after the final env.step
             last_obs_t = torch.as_tensor(last_obs, dtype=torch.float32, device=device)
             last_values = policy_model.predict_values(last_obs_t).detach().cpu().numpy().squeeze()
             next_values_arr[-1] = last_values.astype(np.float32)
 
-            # override with critic(terminal_observation) where the episode was truncated
+            # Override next values array with boostrapped values from terminal states for truncated episodes
+            # - by default last obs is next state from unfinished episode
+            # - if episode is done and truncated, value will be replaced by value from terminal observation (as last obs here will be the next states' first observation)
+            # - if episode is done but not truncated, value will later be ignored in GAE calculation by this being considered a terminal state
             next_values_arr = np.where(timeouts_arr, bootstrap_values_arr, next_values_arr)
 
-            # ----- non-terminal mask: treat truncations as non-terminal -----
-            # real terminal if done and not truncated
+            # Real terminal states are only the dones where environment finished but not due to a timeout
+            # (for timeout we must estimate next state value as if episode continued)
             real_terminal = np.logical_and(dones_arr.astype(bool), ~timeouts_arr)
-            non_terminal = (~real_terminal).astype(np.float32)  # 1 for continue/timeout, 0 for real terminal
+            non_terminal = (~real_terminal).astype(np.float32)
 
-            # ----- GAE(λ) with correct per-step next_values/non_terminal -----
+            # Calculate the advantages using GAE(λ):
             advantages_arr = np.zeros_like(rewards_arr, dtype=np.float32)
             gae = np.zeros(n_envs, dtype=np.float32)
             for t in reversed(range(T)):
+                # Calculate the Temporal Difference (TD) residual (the error 
+                # between the predicted value of a state and a better estimate of it)
                 delta = rewards_arr[t] + gamma * next_values_arr[t] * non_terminal[t] - values_arr[t]
+
+                # The TD residual is a 1-step advantage estimate, by taking future advantage 
+                # estimates into account the advantage estimate becomes more stable
                 gae = delta + gamma * gae_lambda * gae * non_terminal[t]
                 advantages_arr[t] = gae
-
+            
+            # TODO: consider calculating in loop and then asserting same
             returns_arr = advantages_arr + values_arr
 
-            # ----- Advantage normalization (optional) -----
+            # Normalize advantages across rollout (we could normalize across training batches 
+            # later on, but in some situations normalizing across rollouts provides better numerical stability)
             if normalize_advantage:
                 adv_flat = advantages_arr.reshape(-1)
                 advantages_arr = (advantages_arr - adv_flat.mean()) / (adv_flat.std() + advantages_norm_eps)

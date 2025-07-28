@@ -18,6 +18,11 @@ class PPO(BaseAgent):
         # use type for this? check sb3
         states, actions, rewards, dones, old_logprobs, values, advantages, returns, frames = batch
         
+        # Normalization does not make sense if mini batchsize == 1, see GH issue #325
+        #if self.normalize_advantage and len(advantages) > 1:
+        #advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+
+
         clip_range = self.config.clip_range
         ent_coef = self.config.ent_coef
         val_coef = self.config.val_coef

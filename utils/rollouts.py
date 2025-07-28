@@ -99,6 +99,7 @@ def _collect_rollouts(
 
                 # Handle timeout by bootstrapping with value function
                 # see GitHub issue #633
+                # TODO: this improvement was picked out from SB3RLZOO, need to understand its importance
                 for idx, done in enumerate(dones):
                     if (
                         done
@@ -183,6 +184,7 @@ def _collect_rollouts(
 
             returns_arr = advantages_arr + values_arr
 
+            # NOTE: this seems to work better than batch level advantage normalization
             # TODO: I think they are normalizing in batch
             if normalize_advantage:
                 adv_flat = advantages_arr.reshape(-1)

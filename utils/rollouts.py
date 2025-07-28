@@ -22,8 +22,6 @@ class RolloutTrajectory(NamedTuple):
 class RolloutSample(RolloutTrajectory):
     pass
 
-# TODO: empirically torch.inference_mode() is not faster than torch.no_grad() for this use case, retest for other envs
-# TODO: would converting trajectories to tuples in advance be faster?
 class RolloutDataset(TorchDataset):
     def __init__(self, trajectories): # TODO: make sure dataset is not being tampered with during collection
         self.trajectories = trajectories
@@ -44,6 +42,7 @@ class RolloutDataset(TorchDataset):
             returns=self.trajectories.returns[idx]
         )
     
+# NOTE: Don't perform changes that result in CartPole-v1 with PPO being solvable in more than 100096 steps (around 16 secs)
 class RolloutCollector():
     def __init__(self, env, policy_model, n_steps, stats_window_size=100, 
                  gamma: float = 0.99, gae_lambda: float = 0.95, 
@@ -76,7 +75,7 @@ class RolloutCollector():
         self.obs = None
         self._metrics = {}
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def _collect_single_rollout(self):
         """Collect a single rollout and return trajectories and stats."""
         # Initialize environment if needed

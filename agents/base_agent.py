@@ -4,27 +4,24 @@ import json
 import gymnasium
 import pytorch_lightning as pl
 from utils.rollouts import RolloutCollector
-from utils.config import load_config
 from utils.misc import prefix_dict_keys, print_namespaced_dict
 
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class BaseAgent(pl.LightningModule):
     
-    def __init__(self, env_id: str):
+    def __init__(self, config):
         super().__init__()
         
         self.save_hyperparameters()
 
-        self.env_id = env_id
+        self.config = config
 
         # TODO: these spec inspects should be centralized somewhere
-        _env = gymnasium.make(env_id)
+        _env = gymnasium.make(config.env_id)
         self.input_dim = _env.observation_space.shape[0]
         self.output_dim = _env.action_space.n
 
         # Store core attributes
-        algo_id = self.__class__.__name__.lower()
-        config = load_config(env_id, algo_id)
         self.config = config
 
         # Create environment builder
@@ -44,6 +41,7 @@ class BaseAgent(pl.LightningModule):
         self._epoch_metrics = {}
         self._n_updates = 0
         self._iterations = 0
+
         # TODO: move this to on_fit_start()?
         self.policy_model = None
         self.create_models()
@@ -64,10 +62,6 @@ class BaseAgent(pl.LightningModule):
         return get_env_spec(env)
     
     def on_fit_start(self):
-        # TODO: should I set this before training starts? think deeply to where this should be set
-        from stable_baselines3.common.utils import set_random_seed
-        set_random_seed(self.config.seed)
-
         self.start_time = time.time_ns()
         print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
@@ -98,7 +92,7 @@ class BaseAgent(pl.LightningModule):
                 optimizer.zero_grad()
                 loss.backward()
                 # Clip grad norm
-                max_grad_norm = 0.5
+                max_grad_norm = 0.5 # TODO: softcode this
                 torch.nn.utils.clip_grad_norm_(self.policy_model.parameters(), max_grad_norm)
                 optimizer.step()
 

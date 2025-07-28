@@ -38,7 +38,6 @@ def _collect_rollouts(
     gae_lambda: float = 0.95,
     normalize_advantage: bool = True,
     advantages_norm_eps: float = 1e-8,
-    collect_frames: bool = False,
     stats_window_size: int = 100,
 ):
     assert (n_steps is not None and n_steps > 0) or (
@@ -72,8 +71,6 @@ def _collect_rollouts(
         values_buf: list[np.ndarray] = []
         done_buf: list[np.ndarray] = []
         logprobs_buf: list[np.ndarray] = []
-        frames_buf: list[Sequence[np.ndarray]] = []
-        # NEW: per-step truncation + bootstrap targets
         timeouts_buf: list[np.ndarray] = []
         bootstrapped_values_buf: list[np.ndarray] = []
 
@@ -132,7 +129,6 @@ def _collect_rollouts(
                 done_buf.append(dones)
                 timeouts_buf.append(timeouts)
                 bootstrapped_values_buf.append(bootstrapped_values)
-                if collect_frames: frames_buf.append(env.get_images())
 
                 # Advance
                 obs = next_obs
@@ -222,14 +218,6 @@ def _collect_rollouts(
             advantages = _flat_env_major(advantages_arr, torch.float32)
             returns = _flat_env_major(returns_arr, torch.float32)
 
-            # ----- Frames (optional) -----
-            if collect_frames:
-                frames_env_major: list[np.ndarray] = [
-                    frames_buf[t][e] for e in range(n_envs) for t in range(T)
-                ]
-            else:
-                frames_env_major = [0] * (n_envs * T)
-
             # ----- Yield -----
             trajectories = (
                 states,
@@ -239,8 +227,7 @@ def _collect_rollouts(
                 logps,
                 values,
                 advantages,
-                returns,
-                frames_env_major,
+                returns
             )
 
             # Running means (windowed)
@@ -334,7 +321,7 @@ class RolloutCollector():
         reached = total_episodes >= self.stats_window_size and ep_rew_mean >= reward_threshold
         return reached
     
-    def _ensure_generator(self, n_episodes=None, n_steps=None, collect_frames=False):
+    def _ensure_generator(self, n_episodes=None, n_steps=None):
         if self._generator: return self._generator
 
         n_episodes = n_episodes if n_episodes is not None else self.n_episodes
@@ -344,8 +331,7 @@ class RolloutCollector():
             self.policy_model,
             n_steps=n_steps,
             n_episodes=n_episodes,
-            stats_window_size=self.stats_window_size,
-            collect_frames=collect_frames,
+            stats_window_size=self.stats_window_size
             **self.kwargs
         )
         return self._generator

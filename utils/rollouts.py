@@ -97,6 +97,9 @@ class RolloutCollector():
         logprobs_buf = np.zeros((buffer_size, self.n_envs), dtype=np.float32)
         timeouts_buf = np.zeros((buffer_size, self.n_envs), dtype=bool)
         bootstrapped_values_buf = np.zeros((buffer_size, self.n_envs), dtype=np.float32)
+        
+        # Collect terminal observations for later batch processing
+        terminal_obs_info = []  # List of (step_idx, env_idx, terminal_obs)
 
         env_step_calls = 0
         rollout_steps = 0
@@ -119,31 +122,24 @@ class RolloutCollector():
                 # Perform next actions on environment
                 next_obs, rewards, dones, infos = self.env.step(actions_np)
 
+                # Fast episode info processing - just collect data, delay computation
                 timeouts = np.zeros(self.n_envs, dtype=bool)
-                bootstrapped_values = np.zeros(self.n_envs, dtype=np.float32)
-                for idx, done in enumerate(dones):
-                    if not done: continue
-
-                    info = infos[idx]
-                    episode = info['episode']
-                    self.episode_reward_deque.append(episode['r'])
-                    self.episode_length_deque.append(episode['l'])
-
-                    truncated = info.get("TimeLimit.truncated")
-                    if not truncated: continue
-
-                    timeouts[idx] = True
-                    term_obs = info["terminal_observation"]
-                    term_obs_t = torch.as_tensor(term_obs, dtype=torch.float32, device=self.device)
-                    if term_obs_t.ndim == obs_t.ndim - 1: term_obs_t = term_obs_t.unsqueeze(0)  # ensure batch dim
-                    bootstrapped_values[idx] = (
-                        self.policy_model.predict_values(term_obs_t)
-                        .detach()
-                        .cpu()
-                        .numpy()
-                        .squeeze()
-                        .astype(np.float32)
-                    )
+                
+                # Find all done environments at once
+                done_indices = np.where(dones)[0]
+                
+                if len(done_indices) > 0:
+                    # Collect episode stats for all done environments
+                    for idx in done_indices:
+                        info = infos[idx]
+                        episode = info['episode']
+                        self.episode_reward_deque.append(episode['r'])
+                        self.episode_length_deque.append(episode['l'])
+                        
+                        # Just mark timeouts and collect terminal obs for later processing
+                        if info.get("TimeLimit.truncated"):
+                            timeouts[idx] = True
+                            terminal_obs_info.append((step_idx, idx, info["terminal_observation"]))
 
                 # Direct buffer writes
                 obs_buf[step_idx] = self.obs.copy()  # defensive copy — some envs mutate obs
@@ -153,7 +149,7 @@ class RolloutCollector():
                 values_buf[step_idx] = value_np
                 dones_buf[step_idx] = dones
                 timeouts_buf[step_idx] = timeouts
-                bootstrapped_values_buf[step_idx] = bootstrapped_values
+                # bootstrapped_values_buf will be filled after rollout collection
 
                 # Advance
                 self.obs = next_obs
@@ -171,6 +167,30 @@ class RolloutCollector():
 
             # Use buffers directly since they're pre-allocated to exact size
             T = step_idx
+
+            # Batch process all terminal observations at once (major performance improvement)
+            if terminal_obs_info:
+                terminal_observations = [info[2] for info in terminal_obs_info]
+                term_obs_batch = np.stack(terminal_observations)
+                term_obs_t = torch.as_tensor(term_obs_batch, dtype=torch.float32, device=self.device)
+                
+                # Single batch prediction for all terminal observations
+                batch_values = (
+                    self.policy_model.predict_values(term_obs_t)
+                    .detach()
+                    .cpu()
+                    .numpy()
+                    .squeeze()
+                    .astype(np.float32)
+                )
+                
+                # Handle single vs multiple predictions
+                if len(terminal_obs_info) == 1:
+                    batch_values = [batch_values]
+                
+                # Assign batch results back to correct buffer positions
+                for i, (step_idx_term, env_idx, _) in enumerate(terminal_obs_info):
+                    bootstrapped_values_buf[step_idx_term, env_idx] = batch_values[i]
 
             # TODO: consider just replacing the terminal states in last obs
             # Create a next values array to use for GAE(λ), by shifting the critic 

@@ -192,7 +192,6 @@ class BaseAgent(pl.LightningModule):
             self.build_env_fn(self.config.seed + 1000),  # Random seed for eval
             self.policy_model,
             n_episodes=self.config.eval_rollout_episodes,
-            deterministic=True, # TODO: this is currently not implemented
             **self.config.rollout_collector_hyperparams()
         )
         try: eval_collector.collect(collect_frames=True) # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env

@@ -50,10 +50,6 @@ def _collect_rollouts(
 
     n_envs: int = env.num_envs
 
-    # Per-env episodic stats (running)
-    env_reward = np.zeros(n_envs, dtype=np.float32)
-    env_length = np.zeros(n_envs, dtype=np.int32)
-
     # Running average stats (windowed)
     rollout_durations: Deque[float] = deque(maxlen=stats_window_size)
     episode_reward_deque: Deque[float] = deque(maxlen=stats_window_size)
@@ -107,6 +103,10 @@ def _collect_rollouts(
                     if not done: continue
 
                     info = infos[idx]
+                    episode = info['episode']
+                    episode_reward_deque.append(episode['r'])
+                    episode_length_deque.append(episode['l'])
+
                     truncated = info.get("TimeLimit.truncated")
                     if not truncated: continue
 
@@ -122,18 +122,6 @@ def _collect_rollouts(
                         .squeeze()
                         .astype(np.float32)
                     )
-                
-                # TODO: use r, l, t from info instead?
-                # TODO: can be merged with loop above
-                # Per-env episodic bookkeeping
-                for idx, r in enumerate(rewards):
-                    env_reward[idx] += r
-                    env_length[idx] += 1
-                    if not dones[idx]: continue
-                    episode_reward_deque.append(float(env_reward[idx]))
-                    episode_length_deque.append(int(env_length[idx]))
-                    env_reward[idx] = 0.0
-                    env_length[idx] = 0
 
                 # Buffer writes
                 obs_buf.append(obs.copy())  # defensive copy — some envs mutate obs
@@ -294,10 +282,9 @@ class RolloutDataset(TorchDataset):
     
 class RolloutCollector():
     # TODO: how do they perform eval, at which cadence?
-    def __init__(self, env, policy_model, deterministic=False, n_steps=None, n_episodes=None, stats_window_size=100, **kwargs):
+    def __init__(self, env, policy_model, n_steps=None, n_episodes=None, stats_window_size=100, **kwargs):
         self.env = env
         self.policy_model = policy_model
-        self.deterministic = deterministic
         self.n_steps = n_steps
         self.n_episodes = n_episodes
         self.stats_window_size = stats_window_size
@@ -347,18 +334,16 @@ class RolloutCollector():
         reached = total_episodes >= self.stats_window_size and ep_rew_mean >= reward_threshold
         return reached
     
-    def _ensure_generator(self, n_episodes=None, n_steps=None, deterministic=None, collect_frames=False):
+    def _ensure_generator(self, n_episodes=None, n_steps=None, collect_frames=False):
         if self._generator: return self._generator
 
         n_episodes = n_episodes if n_episodes is not None else self.n_episodes
         n_steps = n_steps if n_steps is not None else self.n_steps
-        deterministic = deterministic if deterministic is not None else self.deterministic
         self._generator = _collect_rollouts( # TODO: don't return tensors, return numpy arrays?
             self.env,
             self.policy_model,
             n_steps=n_steps,
             n_episodes=n_episodes,
-            deterministic=deterministic,
             stats_window_size=self.stats_window_size,
             collect_frames=collect_frames,
             **self.kwargs

@@ -32,22 +32,15 @@ import torch
 def _collect_rollouts(
     env,
     policy_model: torch.nn.Module,
+    n_steps,
     *,
-    n_steps: Optional[int] = None,
-    n_episodes: Optional[int] = None,
     gamma: float = 0.99,
     gae_lambda: float = 0.95,
     normalize_advantage: bool = True,
     advantages_norm_eps: float = 1e-8,
     stats_window_size: int = 100
 ):
-    assert (n_steps is not None and n_steps > 0) or (
-        n_episodes is not None and n_episodes > 0
-    ), "Provide *n_steps*, *n_episodes*, or both (> 0)."
-
     device = _device_of(policy_model)
-    #device: torch.device = policy_device
-
     n_envs: int = env.num_envs
 
     # Running average stats (windowed)
@@ -64,16 +57,20 @@ def _collect_rollouts(
 
     while True:
         # --------------------------------------------------------------
-        # Reset rollout buffers for one collection window
+        # Pre-allocate rollout buffers for one collection window
         # --------------------------------------------------------------
-        obs_buf: list[np.ndarray] = []
-        actions_buf: list[np.ndarray] = []
-        rewards_buf: list[np.ndarray] = []
-        values_buf: list[np.ndarray] = []
-        done_buf: list[np.ndarray] = []
-        logprobs_buf: list[np.ndarray] = []
-        timeouts_buf: list[np.ndarray] = []
-        bootstrapped_values_buf: list[np.ndarray] = []
+        # Estimate buffer size - use n_steps if available, otherwise use a reasonable default
+        buffer_size = n_steps
+        obs_shape = obs.shape[1:] if obs.ndim > 1 else (obs.shape[0],)
+        
+        obs_buf = np.zeros((buffer_size, n_envs, *obs_shape), dtype=obs.dtype)
+        actions_buf = np.zeros((buffer_size, n_envs), dtype=np.int64)
+        rewards_buf = np.zeros((buffer_size, n_envs), dtype=np.float32)
+        values_buf = np.zeros((buffer_size, n_envs), dtype=np.float32)
+        dones_buf = np.zeros((buffer_size, n_envs), dtype=bool)
+        logprobs_buf = np.zeros((buffer_size, n_envs), dtype=np.float32)
+        timeouts_buf = np.zeros((buffer_size, n_envs), dtype=bool)
+        bootstrapped_values_buf = np.zeros((buffer_size, n_envs), dtype=np.float32)
 
         env_step_calls = 0
         rollout_steps = 0
@@ -84,6 +81,7 @@ def _collect_rollouts(
         # --------------------------------------------------------------
         with inference_ctx(policy_model):
             rollout_start = time.time()
+            step_idx = 0
             while True:
                 # Determine next actions using the policy model
                 obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device)
@@ -121,96 +119,87 @@ def _collect_rollouts(
                         .astype(np.float32)
                     )
 
-                # Buffer writes
-                obs_buf.append(obs.copy())  # defensive copy — some envs mutate obs
-                actions_buf.append(actions_np)
-                logprobs_buf.append(action_logp_np)
-                rewards_buf.append(rewards)
-                values_buf.append(value_np)
-                done_buf.append(dones)
-                timeouts_buf.append(timeouts)
-                bootstrapped_values_buf.append(bootstrapped_values)
+                # Direct buffer writes
+                obs_buf[step_idx] = obs.copy()  # defensive copy — some envs mutate obs
+                actions_buf[step_idx] = actions_np
+                logprobs_buf[step_idx] = action_logp_np
+                rewards_buf[step_idx] = rewards
+                values_buf[step_idx] = value_np
+                dones_buf[step_idx] = dones
+                timeouts_buf[step_idx] = timeouts
+                bootstrapped_values_buf[step_idx] = bootstrapped_values
 
                 # Advance
                 obs = next_obs
                 env_step_calls += 1
                 rollout_steps += n_envs
                 rollout_episodes += int(dones.sum())
+                step_idx += 1
 
                 # Stop conditions
                 if n_steps is not None and env_step_calls >= n_steps: break
-                if n_episodes is not None and rollout_episodes >= n_episodes: break
 
             last_obs = next_obs
             total_steps += rollout_steps
             total_episodes += rollout_episodes
 
-            # TODO: can I operate directly on numpy arrays?
-            # ----- stack arrays -----
-            obs_arr = np.stack(obs_buf)            # (T, E, ...)
-            actions_arr = np.stack(actions_buf)    # (T, E, ...) or (T, E)
-            logprobs_arr = np.stack(logprobs_buf)  # (T, E)
-            rewards_arr = np.stack(rewards_buf)    # (T, E)
-            values_arr = np.stack(values_buf)      # (T, E)
-            dones_arr = np.stack(done_buf)         # (T, E)
-            timeouts_arr = np.stack(timeouts_buf)  # (T, E) bool
-            bootstrap_values_arr = np.stack(bootstrapped_values_buf)  # (T, E) float32
-            T = obs_arr.shape[0]
+            # Use buffers directly since they're pre-allocated to exact size
+            T = step_idx
 
             # TODO: consider just replacing the terminal states in last obs
             # Create a next values array to use for GAE(λ), by shifting the critic 
             # values on steps (discards first value estimation, which is not used), 
             # and estimating the last value using the value model)
-            next_values_arr = np.zeros_like(values_arr, dtype=np.float32)
-            next_values_arr[:-1] = values_arr[1:]
+            next_values_buf = np.zeros_like(values_buf, dtype=np.float32)
+            next_values_buf[:-1] = values_buf[1:]
             last_obs_t = torch.as_tensor(last_obs, dtype=torch.float32, device=device)
             last_values = policy_model.predict_values(last_obs_t).detach().cpu().numpy().squeeze()
-            next_values_arr[-1] = last_values.astype(np.float32)
+            next_values_buf[-1] = last_values.astype(np.float32)
 
             # Override next values array with boostrapped values from terminal states for truncated episodes
             # - by default last obs is next state from unfinished episode
             # - if episode is done and truncated, value will be replaced by value from terminal observation (as last obs here will be the next states' first observation)
             # - if episode is done but not truncated, value will later be ignored in GAE calculation by this being considered a terminal state
-            next_values_arr = np.where(timeouts_arr, bootstrap_values_arr, next_values_arr)
+            next_values_buf = np.where(timeouts_buf, bootstrapped_values_buf, next_values_buf)
 
             # Real terminal states are only the dones where environment finished but not due to a timeout
             # (for timeout we must estimate next state value as if episode continued)
-            real_terminal = np.logical_and(dones_arr.astype(bool), ~timeouts_arr)
+            real_terminal = np.logical_and(dones_buf.astype(bool), ~timeouts_buf)
             non_terminal = (~real_terminal).astype(np.float32)
 
             # Calculate the advantages using GAE(λ):
-            advantages_arr = np.zeros_like(rewards_arr, dtype=np.float32)
+            advantages_buf = np.zeros_like(rewards_buf, dtype=np.float32)
             gae = np.zeros(n_envs, dtype=np.float32)
             for t in reversed(range(T)):
                 # Calculate the Temporal Difference (TD) residual (the error 
                 # between the predicted value of a state and a better estimate of it)
-                delta = rewards_arr[t] + gamma * next_values_arr[t] * non_terminal[t] - values_arr[t]
+                delta = rewards_buf[t] + gamma * next_values_buf[t] * non_terminal[t] - values_buf[t]
 
                 # The TD residual is a 1-step advantage estimate, by taking future advantage 
                 # estimates into account the advantage estimate becomes more stable
                 gae = delta + gamma * gae_lambda * gae * non_terminal[t]
-                advantages_arr[t] = gae
+                advantages_buf[t] = gae
             
             # TODO: consider calculating in loop and then asserting same
-            returns_arr = advantages_arr + values_arr
+            returns_buf = advantages_buf + values_buf
 
             # Normalize advantages across rollout (we could normalize across training batches 
             # later on, but in some situations normalizing across rollouts provides better numerical stability)
             if normalize_advantage:
-                adv_flat = advantages_arr.reshape(-1)
-                advantages_arr = (advantages_arr - adv_flat.mean()) / (adv_flat.std() + advantages_norm_eps)
+                adv_flat = advantages_buf.reshape(-1)
+                advantages_buf = (advantages_buf - adv_flat.mean()) / (adv_flat.std() + advantages_norm_eps)
 
             # TODO: get rid of this code if possible
-            obs_env_major = np.swapaxes(obs_arr, 0, 1)
+            obs_env_major = np.swapaxes(obs_buf, 0, 1)
             states = torch.as_tensor(obs_env_major.reshape(n_envs * T, -1), dtype=torch.float32)
             def _flat_env_major(arr: np.ndarray, dtype: torch.dtype): return torch.as_tensor(arr.transpose(1, 0).reshape(-1), dtype=dtype)
-            actions = _flat_env_major(actions_arr, torch.int64)
-            rewards = _flat_env_major(rewards_arr, torch.float32)
-            dones = _flat_env_major(dones_arr, torch.bool)
-            logps = _flat_env_major(logprobs_arr, torch.float32)
-            values = _flat_env_major(values_arr, torch.float32)
-            advantages = _flat_env_major(advantages_arr, torch.float32)
-            returns = _flat_env_major(returns_arr, torch.float32)
+            actions = _flat_env_major(actions_buf, torch.int64)
+            rewards = _flat_env_major(rewards_buf, torch.float32)
+            dones = _flat_env_major(dones_buf, torch.bool)
+            logps = _flat_env_major(logprobs_buf, torch.float32)
+            values = _flat_env_major(values_buf, torch.float32)
+            advantages = _flat_env_major(advantages_buf, torch.float32)
+            returns = _flat_env_major(returns_buf, torch.float32)
 
             # ----- Yield -----
             trajectories = (
@@ -263,11 +252,10 @@ class RolloutDataset(TorchDataset):
     
 class RolloutCollector():
     # TODO: how do they perform eval, at which cadence?
-    def __init__(self, env, policy_model, n_steps=None, n_episodes=None, stats_window_size=100, **kwargs):
+    def __init__(self, env, policy_model, n_steps, stats_window_size=100, **kwargs):
         self.env = env
         self.policy_model = policy_model
         self.n_steps = n_steps
-        self.n_episodes = n_episodes
         self.stats_window_size = stats_window_size
         self.trajectories = None
         self._generator = None
@@ -315,16 +303,12 @@ class RolloutCollector():
         reached = total_episodes >= self.stats_window_size and ep_rew_mean >= reward_threshold
         return reached
     
-    def _ensure_generator(self, n_episodes=None, n_steps=None):
+    def _ensure_generator(self):
         if self._generator: return self._generator
-
-        n_episodes = n_episodes if n_episodes is not None else self.n_episodes
-        n_steps = n_steps if n_steps is not None else self.n_steps
         self._generator = _collect_rollouts( # TODO: don't return tensors, return numpy arrays?
             self.env,
             self.policy_model,
-            n_steps=n_steps,
-            n_episodes=n_episodes,
+            n_steps=self.n_steps,
             stats_window_size=self.stats_window_size,
             **self.kwargs
         )

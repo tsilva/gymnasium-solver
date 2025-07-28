@@ -200,19 +200,11 @@ def _collect_rollouts(
                 adv_flat = advantages_arr.reshape(-1)
                 advantages_arr = (advantages_arr - adv_flat.mean()) / (adv_flat.std() + advantages_norm_eps)
 
-            # TODO: get rid of this code?
-            # ----- Env-major flattening -----
-            # Keep this robust to arbitrary obs shapes
-            obs_env_major = np.swapaxes(obs_arr, 0, 1)  # (E, T, ...)
-            states = torch.as_tensor(
-                obs_env_major.reshape(n_envs * T, -1), dtype=torch.float32
-            )
-
-            def _flat_env_major(arr: np.ndarray, dtype: torch.dtype):
-                # for (T, E) arrays
-                return torch.as_tensor(arr.transpose(1, 0).reshape(-1), dtype=dtype)
-
-            actions = _flat_env_major(actions_arr, torch.int64)       # adjust dtype if using continuous actions
+            # TODO: get rid of this code if possible
+            obs_env_major = np.swapaxes(obs_arr, 0, 1)
+            states = torch.as_tensor(obs_env_major.reshape(n_envs * T, -1), dtype=torch.float32)
+            def _flat_env_major(arr: np.ndarray, dtype: torch.dtype): return torch.as_tensor(arr.transpose(1, 0).reshape(-1), dtype=dtype)
+            actions = _flat_env_major(actions_arr, torch.int64)
             rewards = _flat_env_major(rewards_arr, torch.float32)
             dones = _flat_env_major(dones_arr, torch.bool)
             logps = _flat_env_major(logprobs_arr, torch.float32)

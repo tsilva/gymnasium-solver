@@ -97,6 +97,12 @@ class RolloutCollector():
         timeouts_buf = np.zeros((buffer_size, self.n_envs), dtype=bool)
         bootstrapped_values_buf = np.zeros((buffer_size, self.n_envs), dtype=np.float32)
         
+        # Pre-allocate GPU tensors to minimize transfers
+        obs_tensor_buf = torch.zeros((buffer_size, self.n_envs, *obs_shape), dtype=torch.float32, device=self.device)
+        actions_tensor_buf = torch.zeros((buffer_size, self.n_envs), dtype=torch.int64, device=self.device)
+        logprobs_tensor_buf = torch.zeros((buffer_size, self.n_envs), dtype=torch.float32, device=self.device)
+        values_tensor_buf = torch.zeros((buffer_size, self.n_envs), dtype=torch.float32, device=self.device)
+        
         # Collect terminal observations for later batch processing
         terminal_obs_info = []  # List of (step_idx, env_idx, terminal_obs)
 
@@ -111,12 +117,19 @@ class RolloutCollector():
             rollout_start = time.time()
             step_idx = 0
             while True:
-                # Determine next actions using the policy model
-                obs_t = torch.as_tensor(self.obs, dtype=torch.float32, device=self.device)
-                actions_t, logps_t, values_t = self.policy_model.act(obs_t)
+                # Store observations directly in GPU tensor buffer
+                obs_tensor_buf[step_idx] = torch.as_tensor(self.obs, dtype=torch.float32, device=self.device)
+                
+                # Determine next actions using the policy model (already on GPU)
+                actions_t, logps_t, values_t = self.policy_model.act(obs_tensor_buf[step_idx])
+                
+                # Store GPU tensors directly in pre-allocated buffers
+                actions_tensor_buf[step_idx] = actions_t
+                logprobs_tensor_buf[step_idx] = logps_t  
+                values_tensor_buf[step_idx] = values_t
+                
+                # Only transfer actions to CPU for environment step
                 actions_np = actions_t.detach().cpu().numpy()
-                action_logp_np = logps_t.detach().cpu().numpy()
-                value_np = values_t.detach().cpu().numpy()
 
                 # Perform next actions on environment
                 next_obs, rewards, dones, infos = self.env.step(actions_np)
@@ -143,11 +156,10 @@ class RolloutCollector():
                 # Direct buffer writes
                 obs_buf[step_idx] = self.obs.copy()  # defensive copy — some envs mutate obs
                 actions_buf[step_idx] = actions_np
-                logprobs_buf[step_idx] = action_logp_np
                 rewards_buf[step_idx] = rewards
-                values_buf[step_idx] = value_np
                 dones_buf[step_idx] = dones
                 timeouts_buf[step_idx] = timeouts
+                # Note: logprobs_buf and values_buf will be filled from GPU tensors later
                 # bootstrapped_values_buf will be filled after rollout collection
 
                 # Advance
@@ -166,6 +178,10 @@ class RolloutCollector():
 
             # Use buffers directly since they're pre-allocated to exact size
             T = step_idx
+            
+            # Single batch transfer of GPU tensors to CPU after rollout collection
+            logprobs_buf[:T] = logprobs_tensor_buf[:T].detach().cpu().numpy()
+            values_buf[:T] = values_tensor_buf[:T].detach().cpu().numpy()
 
             # Batch process all terminal observations at once (major performance improvement)
             if terminal_obs_info:
@@ -174,14 +190,7 @@ class RolloutCollector():
                 term_obs_t = torch.as_tensor(term_obs_batch, dtype=torch.float32, device=self.device)
                 
                 # Single batch prediction for all terminal observations
-                batch_values = (
-                    self.policy_model.predict_values(term_obs_t)
-                    .detach()
-                    .cpu()
-                    .numpy()
-                    .squeeze()
-                    .astype(np.float32)
-                )
+                batch_values = self.policy_model.predict_values(term_obs_t).detach().cpu().numpy().squeeze().astype(np.float32)
                 
                 # Handle single vs multiple predictions
                 if len(terminal_obs_info) == 1:
@@ -191,15 +200,14 @@ class RolloutCollector():
                 for i, (step_idx_term, env_idx, _) in enumerate(terminal_obs_info):
                     bootstrapped_values_buf[step_idx_term, env_idx] = batch_values[i]
 
-            # TODO: consider just replacing the terminal states in last obs
             # Create a next values array to use for GAE(λ), by shifting the critic 
             # values on steps (discards first value estimation, which is not used), 
             # and estimating the last value using the value model)
             next_values_buf = np.zeros_like(values_buf, dtype=np.float32)
             next_values_buf[:-1] = values_buf[1:]
             last_obs_t = torch.as_tensor(last_obs, dtype=torch.float32, device=self.device)
-            last_values = self.policy_model.predict_values(last_obs_t).detach().cpu().numpy().squeeze()
-            next_values_buf[-1] = last_values.astype(np.float32)
+            last_values = self.policy_model.predict_values(last_obs_t).detach().cpu().numpy().squeeze().astype(np.float32)
+            next_values_buf[-1] = last_values
 
             # Override next values array with boostrapped values from terminal states for truncated episodes
             # - by default last obs is next state from unfinished episode
@@ -234,17 +242,26 @@ class RolloutCollector():
                 adv_flat = advantages_buf.reshape(-1)
                 advantages_buf = (advantages_buf - adv_flat.mean()) / (adv_flat.std() + self.advantages_norm_eps)
 
-            # TODO: get rid of this code if possible
-            obs_env_major = np.swapaxes(obs_buf, 0, 1)
-            states = torch.as_tensor(obs_env_major.reshape(self.n_envs * T, -1), dtype=torch.float32)
-            def _flat_env_major(arr: np.ndarray, dtype: torch.dtype): return torch.as_tensor(arr.transpose(1, 0).reshape(-1), dtype=dtype)
-            actions = _flat_env_major(actions_buf, torch.int64)
-            rewards = _flat_env_major(rewards_buf, torch.float32)
-            dones = _flat_env_major(dones_buf, torch.bool)
-            logps = _flat_env_major(logprobs_buf, torch.float32)
-            values = _flat_env_major(values_buf, torch.float32)
-            advantages = _flat_env_major(advantages_buf, torch.float32)
-            returns = _flat_env_major(returns_buf, torch.float32)
+            # Create final tensors for training - minimize CPU-GPU transfers
+            # Use pre-allocated GPU buffers and reshape efficiently
+            obs_env_major = obs_tensor_buf[:T].transpose(0, 1).reshape(self.n_envs * T, -1)
+            states = obs_env_major  # Already on GPU as float32
+            
+            def _flat_env_major_gpu(tensor_buf: torch.Tensor, T: int, dtype: torch.dtype) -> torch.Tensor:
+                return tensor_buf[:T].transpose(0, 1).reshape(-1).to(dtype)
+            
+            actions = _flat_env_major_gpu(actions_tensor_buf, T, torch.int64)
+            logps = _flat_env_major_gpu(logprobs_tensor_buf, T, torch.float32)
+            values = _flat_env_major_gpu(values_tensor_buf, T, torch.float32)
+            
+            # For CPU-computed arrays, do single batch transfers
+            def _flat_env_major_cpu(arr: np.ndarray, dtype: torch.dtype) -> torch.Tensor:
+                return torch.as_tensor(arr[:T].transpose(1, 0).reshape(-1), dtype=dtype, device=self.device)
+            
+            rewards = _flat_env_major_cpu(rewards_buf, torch.float32)
+            dones = _flat_env_major_cpu(dones_buf, torch.bool)
+            advantages = _flat_env_major_cpu(advantages_buf, torch.float32)
+            returns = _flat_env_major_cpu(returns_buf, torch.float32)
 
             # Create trajectories
             trajectories = RolloutTrajectory(

@@ -19,6 +19,9 @@ class RolloutTrajectory(NamedTuple):
     advantages: torch.Tensor
     returns: torch.Tensor
 
+class RolloutSample(RolloutTrajectory):
+    pass
+
 # TODO: empirically torch.inference_mode() is not faster than torch.no_grad() for this use case, retest for other envs
 # TODO: would converting trajectories to tuples in advance be faster?
 class RolloutDataset(TorchDataset):
@@ -30,7 +33,7 @@ class RolloutDataset(TorchDataset):
         return length
 
     def __getitem__(self, idx):
-        return RolloutTrajectory(
+        return RolloutSample(
             observations=self.trajectories.observations[idx],
             actions=self.trajectories.actions[idx],
             rewards=self.trajectories.rewards[idx],

@@ -83,7 +83,12 @@ class BaseAgent(pl.LightningModule):
 
     # TODO: assert this is being called every epoch
     def train_dataloader(self):
-        return self.train_collector.collect(batch_size=self.config.batch_size, shuffle=True)
+        self.train_collector.collect()
+        dataloader = self.train_collector.create_dataloader(
+            batch_size=self.config.batch_size,
+            shuffle=True
+        )
+        return dataloader
     
     def training_step(self, batch, batch_idx):
         import torch
@@ -164,7 +169,7 @@ class BaseAgent(pl.LightningModule):
         trainer.fit(self)
     
     def _get_time_metrics(self):
-        total_timesteps = self.train_collector.get_total_timesteps()
+        total_timesteps = self.train_collector.get_metrics()["total_timesteps"]
         time_elapsed = max((time.time_ns() - self.start_time) / 1e9, sys.float_info.epsilon)
         fps = total_timesteps / time_elapsed
         return {
@@ -183,7 +188,7 @@ class BaseAgent(pl.LightningModule):
         if self._iterations % 100 != 0: return # TODO: softcode frequency
         info = self.eval()
         reward_threshold = self.get_reward_threshold()
-        ep_rew_mean = info["ep_mean_rew"] # TODO: wrong key?
+        ep_rew_mean = info["ep_rew_mean"]
         if ep_rew_mean < reward_threshold: return
         print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
         self.trainer.should_stop = True
@@ -205,7 +210,7 @@ class BaseAgent(pl.LightningModule):
             **self.config.rollout_collector_hyperparams() # TODO: do we need to pass this?
         )
         n_episodes = self.eval_env.num_envs * 2 # TODO: softcode this
-        _, info = collector.collect_episodes(n_episodes, batch_size=self.config.batch_size, shuffle=True)#self.config.eval_rollout_episodes)
+        info = collector.collect_episodes(n_episodes)
         print(json.dumps(info, indent=2))        
         return info
        

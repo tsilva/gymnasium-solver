@@ -1,7 +1,5 @@
 import sys
 import time
-import json
-import gymnasium
 import pytorch_lightning as pl
 from utils.rollouts import RolloutCollector
 from utils.misc import prefix_dict_keys, print_namespaced_dict
@@ -221,6 +219,7 @@ class BaseAgent(pl.LightningModule):
     # TODO: check how sb3 does eval_async
     # TODO: upload video to wandb
     # TODO: add more stats to video (eg: episode, step, current reward, etc)
+    # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
     def eval(self):
         import wandb
         # TODO: close env?

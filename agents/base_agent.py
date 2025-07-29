@@ -38,8 +38,9 @@ class BaseAgent(pl.LightningModule):
         self.eval_env = self.build_env_fn(config.seed + 1000, record_video=True)
 
         # TODO: these spec inspects should be centralized somewhere
-        base_input_dim = self.train_env.observation_space.shape[0]
-        self.input_dim = base_input_dim * config.frame_stack
+        # Note: frame_stack is already applied in build_env, so observation_space.shape[0] 
+        # already includes the frame stacking multiplication
+        self.input_dim = self.train_env.observation_space.shape[0]
         self.output_dim = self.train_env.action_space.n
        
         # Training state

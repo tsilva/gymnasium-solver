@@ -47,9 +47,9 @@ class Config:
     policy_kwargs: str = None  # Policy kwargs as string
 
     # Evaluation
-    eval_rollout_interval: int = None  # Default: 10
+    eval_freq: int = None  # Default: 10
     # TODO: this should be early_stop_on_reward_threshold, threshold should be on env spec
-    eval_rollout_episodes: int = None
+    eval_episodes: int = None
     eval_rollout_steps: int = None
     eval_async: bool = False  # Default: true (async evaluation)
 
@@ -170,10 +170,10 @@ class Config:
             raise ValueError("clip_range must be in (0, 1).")
 
         # Evaluation
-        if self.eval_rollout_interval is not None and self.eval_rollout_interval <= 0:
-            raise ValueError("eval_rollout_interval must be a positive integer.")
-        if self.eval_rollout_episodes is not None and self.eval_rollout_episodes <= 0:
-            raise ValueError("eval_rollout_episodes must be a positive integer.")
+        if self.eval_freq is not None and self.eval_freq <= 0:
+            raise ValueError("eval_freq must be a positive integer.")
+        if self.eval_episodes is not None and self.eval_episodes <= 0:
+            raise ValueError("eval_episodes must be a positive integer.")
 
 def load_config(env_id: str, algo_id: str, config_dir: str = "hyperparams") -> Config:
     """Convenience function to load configuration."""

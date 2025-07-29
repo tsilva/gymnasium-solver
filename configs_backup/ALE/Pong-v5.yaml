@@ -22,8 +22,8 @@ ppo:
   frame_stack: 1
   
   # Evaluation settings
-  eval_rollout_interval: 50        # Evaluate every 50 training episodes
-  eval_rollout_episodes: 10        # Number of episodes for evaluation
+  eval_freq: 50        # Evaluate every 50 training episodes
+  eval_episodes: 10        # Number of episodes for evaluation
   eval_async: true                 # Async evaluation
 
 # Alternative RGB configuration (commented out)

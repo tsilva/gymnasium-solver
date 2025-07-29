@@ -1,9 +1,9 @@
 - add n_timesteps support
 - add ability to hardcode reward threshold
 - check that were are matching rlzoo stop criteria
-solve mountaincar with framestacking
-how do advnatges make it into final calc
-rlzoo save model, run it in my model and compare rollout results (set seed and 1 env)
+- solve mountaincar with framestacking
+- how do advnatges make it into final calc
+- rlzoo save model, run it in my model and compare rollout results (set seed and 1 env)
 measure obs mean/var
 make sure training uses same collecotrs so thry calc mean reward through their reward window, make sure it inits through config
 expected steps to solve cartpole wirh reinforce, match that first

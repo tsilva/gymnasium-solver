@@ -133,7 +133,7 @@ class RolloutCollector():
 
                 # Perform next actions on environment
                 next_obs, rewards, dones, infos = self.env.step(actions_np)
-
+                
                 # Fast episode info processing - just collect data, delay computation
                 timeouts = np.zeros(self.n_envs, dtype=bool)
                 

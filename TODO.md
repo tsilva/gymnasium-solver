@@ -1,5 +1,5 @@
+- add n_timesteps support
 - check that were are matching rlzoo stop criteria
-- BUG: rollouts are not deterministic despite seed setting
 solve mountaincar with framestacking
 how do advnatges make it into final calc
 rlzoo save model, run it in my model and compare rollout results (set seed and 1 env)

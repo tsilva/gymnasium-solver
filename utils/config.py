@@ -47,11 +47,10 @@ class Config:
     policy_kwargs: str = None  # Policy kwargs as string
 
     # Evaluation
-    eval_freq: int = None  # Default: 10
-    # TODO: this should be early_stop_on_reward_threshold, threshold should be on env spec
-    eval_episodes: int = None
-    eval_rollout_steps: int = None
+    eval_freq: int = 10000
+    eval_episodes: int = 10
     eval_async: bool = False  # Default: true (async evaluation)
+    eval_deterministic: bool = True  # Default: true (deterministic evaluation)
 
 
     # Normalization

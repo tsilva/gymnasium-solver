@@ -344,7 +344,7 @@ class RolloutCollector():
         n_episodes: int,
         deterministic=False
     ):
-        if n_episodes % self.n_envs != 0:
+        if n_episodes % self.env.num_envs != 0:
             raise ValueError(
                 f"n_episodes={n_episodes} must be a multiple of num_envs={self.n_envs} to avoid sampling bias."
             )

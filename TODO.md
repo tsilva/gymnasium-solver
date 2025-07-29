@@ -1,5 +1,4 @@
 - add support for premature early stop if train_mean_reward is above threshold
-- ✅ mimick rlzoo hyperparm config (COMPLETED - migrated to hyperparams/{algo}.yaml structure)
 - confirm that buffer growth is under control
 - FEAT: get reward threshold from env specs (hardcoded)
 - add n_timesteps support

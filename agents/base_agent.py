@@ -45,6 +45,7 @@ class BaseAgent(pl.LightningModule):
        
         # Training state
         self.start_time = None
+        self.total_timesteps = 0
         self._epoch_metrics = {}
         self._n_updates = 0
         self._iterations = 0
@@ -120,6 +121,8 @@ class BaseAgent(pl.LightningModule):
         self._iterations += 1
 
         rollout_metrics = self.train_collector.get_metrics()
+        self.total_timesteps = rollout_metrics["total_timesteps"]
+
         time_metrics = self._get_time_metrics()
         self.log_metrics({
             "train/n_updates": self._n_updates,
@@ -201,11 +204,16 @@ class BaseAgent(pl.LightningModule):
         return reward_threshold
     
     def _check_early_stop(self):
-        if self._iterations % 100 != 0: return # TODO: softcode frequency
+        # Return in case it's not time to run evaluation yet
+        env_timesteps = self.total_timesteps // self.train_env.num_envs
+        if env_timesteps % self.config.eval_freq != 0: return
+
+        # In case reward threshold hasn't been reached yet then 
         info = self.eval()
         reward_threshold = self.get_reward_threshold()
         ep_rew_mean = info["ep_rew_mean"]
         if ep_rew_mean < reward_threshold: return
+
         print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
         self.trainer.should_stop = True
 
@@ -215,12 +223,26 @@ class BaseAgent(pl.LightningModule):
         # TODO: render to video
         collector = RolloutCollector(
             self.eval_env,
-            self.policy_model, # TODO: add eval freq (by steps)
+            self.policy_model,
             n_steps=self.config.n_steps,
             **self.rollout_collector_hyperparams()
         )
-        n_episodes = self.eval_env.num_envs * 2 # TODO: softcode this
-        info = collector.collect_episodes(n_episodes, deterministic=True) # TODO: softcode to deterministic_eval flag
+
+        # Consider the eval episodes in the config to be 
+        # the minimum required and find a multiple of 
+        # num_envs that is above that minimum    
+        eval_episodes = 0
+        while eval_episodes < self.config.eval_episodes: eval_episodes += self.eval_env.num_envs
+
+        info = collector.collect_episodes(
+            eval_episodes, 
+            deterministic=self.config.eval_deterministic
+        )
+
+        self.log_metrics({
+            **prefix_dict_keys(info, "eval")
+        })
+        
         print(json.dumps(info, indent=2))        
         return info
        

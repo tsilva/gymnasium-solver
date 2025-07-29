@@ -14,6 +14,7 @@ CartPole-v1:
   normalize_obs: false
   normalize_reward: false
   frame_stack: 1
+  eval_freq: 1000
 
 Acrobot-v1:
   normalize: true

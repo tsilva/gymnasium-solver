@@ -23,10 +23,6 @@ def main():
     print("Starting training...")
     agent.train()
     print("Training completed.")
-
-    print("Starting evaluation...")
-    agent.eval()
-    print("Evaluation completed.")
     
 if __name__ == "__main__":
     main()

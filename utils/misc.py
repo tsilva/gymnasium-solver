@@ -1,10 +1,7 @@
 import torch
 import itertools
 from typing import Dict, Any
-from collections import deque
 from contextlib import contextmanager
-from torch.distributions import Categorical
-from typing import Optional, Sequence, Tuple
 
 
 def prefix_dict_keys(data: dict, prefix: str) -> dict:

@@ -194,20 +194,13 @@ class BaseAgent(pl.LightningModule):
 
     # TODO: consider recording single video with all episodes in sequence
     def eval(self):
-        # TODO: currently only supports single environment evaluation because we need to 
-        # be able to calculate mean episode reward using only completed episodes
-        # TODO: if we add more envs we also need to make sure that each env collects N episodes, because if 
-        # one env collects more episodes than others, the results will be biased
-
-        # TODO: add create data loader method
         # TODO: make sure this is not calculating advantages
-        # TODO: make sure policy is executed deterministically
         # TODO: render to video
         collector = RolloutCollector(
             self.eval_env,
             self.policy_model, # TODO: add eval freq (by steps)
             n_steps=self.config.n_steps,
-            **self.config.rollout_collector_hyperparams() # TODO: do we need to pass this?
+            **self.config.rollout_collector_hyperparams()
         )
         n_episodes = self.eval_env.num_envs * 2 # TODO: softcode this
         info = collector.collect_episodes(n_episodes, deterministic=True)

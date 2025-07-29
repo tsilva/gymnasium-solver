@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Environment for gymnasium-solver (uv/jupyter kernel)"
 requires-python = ">=3.9"
 dependencies = [
-    "gymnasium[classic-control,atari,other]",
+    "gymnasium[classic-control,atari,box2d,other]",
     "ale-py",
     "torch",
     "numpy",

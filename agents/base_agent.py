@@ -22,7 +22,7 @@ class BaseAgent(pl.LightningModule):
 
         # Create environment builder
         from utils.environment import build_env
-        self.build_env_fn = lambda seed, n_envs=config.n_envs, record_video=False: build_env(
+        self.build_env_fn = lambda seed, n_envs=config.n_envs, **kwargs: build_env(
             config.env_id,
             seed=seed,
             norm_obs=config.normalize_obs,
@@ -31,11 +31,10 @@ class BaseAgent(pl.LightningModule):
             vec_env_cls="DummyVecEnv",
             reward_shaping=config.reward_shaping,
             frame_stack=config.frame_stack,
-            record_video=record_video,
-            obs_type=config.obs_type
+            obs_type=config.obs_type,
+            **kwargs
         )
         self.train_env = self.build_env_fn(config.seed)
-        self.eval_env = self.build_env_fn(config.seed + 1000, record_video=True)
 
         # TODO: these spec inspects should be centralized somewhere
         # Note: frame_stack is already applied in build_env, so observation_space.shape[0] 
@@ -142,13 +141,13 @@ class BaseAgent(pl.LightningModule):
         # TODO: self.log is a gigantic bottleneck, currently halving performance;
         # ; must fix this bug while retaining FPS
         self.log_dict(self._epoch_metrics)
-        if self.current_epoch % 10 == 0: print_namespaced_dict(self._epoch_metrics) # TODO: softcode this
+        print_namespaced_dict(self._epoch_metrics)
         self._epoch_metrics = {}
 
     def on_fit_end(self):
         time_elapsed = self._get_time_metrics()["time_elapsed"]
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
-        del self.train_collector
+        print_namespaced_dict(self._epoch_metrics)
 
     # TODO: when does this run? should I run eval_rollout_collector here?
     #def validation_step(self, *args, **kwargs):
@@ -165,11 +164,11 @@ class BaseAgent(pl.LightningModule):
         config_dict = asdict(self.config)
         
         # Sanitize project name for wandb (replace invalid characters)
-        project_name = self.config.env_id.replace("/", "-").replace("\\", "-")
-        
+        project_name = self.config.env_id.replace("/", "-").replace("\\", "-") # TODO: softcode this
+        experiment_name = f"{self.config.algo_id}-{self.config.seed}" # TODO: softcode this
         wandb_logger = WandbLogger(
             project=project_name,
-            name=f"{self.config.algo_id}-{self.config.seed}",
+            name=experiment_name,
             log_model=True,
             config=config_dict
         )
@@ -218,11 +217,23 @@ class BaseAgent(pl.LightningModule):
         self.trainer.should_stop = True
 
     # TODO: consider recording single video with all episodes in sequence
+    # TODO: consider moving to validation_step()
     def eval(self):
+        # TODO: close env?
+        eval_seed = self.config.seed + 1000  # Use a different seed for evaluation
+        eval_env = self.build_env_fn(
+            eval_seed,
+            record_video=True,
+            record_video_kwargs={
+                "video_folder": f"videos/{self.config.env_id}/{self.config.algo_id}/{eval_seed}/",
+                "name_prefix": f"eval-{int(time.time())}",
+            }
+        )
+
         # TODO: make sure this is not calculating advantages
         # TODO: render to video
         collector = RolloutCollector(
-            self.eval_env,
+            eval_env,
             self.policy_model,
             n_steps=self.config.n_steps,
             **self.rollout_collector_hyperparams()
@@ -232,8 +243,9 @@ class BaseAgent(pl.LightningModule):
         # the minimum required and find a multiple of 
         # num_envs that is above that minimum    
         eval_episodes = 0
-        while eval_episodes < self.config.eval_episodes: eval_episodes += self.eval_env.num_envs
+        while eval_episodes < self.config.eval_episodes: eval_episodes += eval_env.num_envs
 
+        # TODO: review collect_episodes internals
         info = collector.collect_episodes(
             eval_episodes, 
             deterministic=self.config.eval_deterministic
@@ -242,7 +254,6 @@ class BaseAgent(pl.LightningModule):
         self.log_metrics({
             **prefix_dict_keys(info, "eval")
         })
-        
-        print(json.dumps(info, indent=2))        
+ 
         return info
        

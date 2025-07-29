@@ -173,16 +173,17 @@ def is_atari_env_id(env_id: str) -> bool:
     return env_id.startswith("ALE/") or env_id in ["Pong-v5", "Breakout-v5", "SpaceInvaders-v5"]
 
 def build_env(
-        env_id, 
-        n_envs=1, 
-        seed=None, 
-        norm_obs=False, 
-        norm_reward=False, 
-        vec_env_cls=None, 
-        reward_shaping=None, 
-        frame_stack=None, 
-        record_video=False, 
-        obs_type=None
+    env_id, 
+    n_envs=1, 
+    seed=None, 
+    norm_obs=False, 
+    norm_reward=False, 
+    vec_env_cls=None, 
+    reward_shaping=None, 
+    frame_stack=None, 
+    obs_type=None,
+    record_video=False, 
+    record_video_kwargs={}
 ):
     import gymnasium as gym
     from stable_baselines3.common.env_util import make_vec_env
@@ -219,8 +220,11 @@ def build_env(
         from stable_baselines3.common.vec_env import VecVideoRecorder
         env = VecVideoRecorder(
             env,
-            video_folder="videos",
-            record_video_trigger=lambda step: step == 0,  # start immediately
+            **{
+                "record_video_trigger": lambda step: step == 0,  # start immediately
+                "video_folder": "videos",
+                **record_video_kwargs
+            }
         )
 
     return env

@@ -1,0 +1,81 @@
+CartPole-v1:
+  n_envs: 8
+  n_timesteps: !!float 1e5
+  policy: 'MlpPolicy'
+  n_steps: 32
+  batch_size: 256
+  gae_lambda: 0.8
+  gamma: 0.98
+  ent_coef: 0.0
+  n_epochs: 20
+  learning_rate: 1e-3
+  clip_range: 0.2
+  hidden_dims: [64]
+  normalize_obs: false
+  normalize_reward: false
+  frame_stack: 1
+
+Acrobot-v1:
+  normalize: true
+  n_envs: 16
+  n_timesteps: !!float 1e6
+  policy: 'MlpPolicy'
+  batch_size: 64
+  n_steps: 256
+  gae_lambda: 0.94
+  gamma: 0.99
+  n_epochs: 4
+  ent_coef: 0.0
+
+LunarLander-v3:
+  n_envs: 16
+  n_timesteps: !!float 1e6
+  policy: 'MlpPolicy'
+  n_steps: 1024
+  batch_size: 64
+  gae_lambda: 0.98
+  gamma: 0.999
+  n_epochs: 4
+  ent_coef: 0.01
+
+MountainCar-v0:
+  normalize: true
+  n_envs: 16
+  n_timesteps: !!float 1e6
+  policy: 'MlpPolicy'
+  n_steps: 128
+  batch_size: 128
+  gae_lambda: 0.95
+  gamma: 0.999
+  n_epochs: 10
+  ent_coef: 0.01
+  clip_range: 0.2
+  learning_rate: 3e-4
+  hidden_dims: [256, 256]
+  frame_stack: 3
+  max_epochs: 1000
+  reward_shaping:
+    position_reward_scale: 100.0
+    velocity_reward_scale: 10.0
+    height_reward_scale: 50.0
+
+ALE/Pong-v5:
+  n_envs: 8
+  n_timesteps: !!float 1e6
+  policy: 'MlpPolicy'
+  n_steps: 256
+  batch_size: 64
+  n_epochs: 4
+  gae_lambda: 0.95
+  gamma: 0.99
+  ent_coef: 0.01
+  clip_range: 0.2
+  learning_rate: 0.00025
+  obs_type: "ram"
+  normalize_obs: true
+  normalize_reward: false
+  hidden_dims: [256, 256]
+  frame_stack: 1
+  eval_rollout_interval: 50
+  eval_rollout_episodes: 10
+  eval_async: true

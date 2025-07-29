@@ -1,0 +1,12 @@
+CartPole-v1:
+  n_envs: 8
+  n_epochs: 1
+  n_steps: 512
+  batch_size: 64
+  gamma: 0.99
+  ent_coef: 0.01
+  learning_rate: 5e-4
+  normalize_obs: false
+  normalize_reward: false
+  hidden_dims: [64]
+  frame_stack: 3

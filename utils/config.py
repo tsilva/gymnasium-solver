@@ -19,14 +19,18 @@ class Config:
     # Optional fields with defaults
     seed: int = 42  # Default: 42
     n_envs: int = 1  # Number of parallel environments (default: 1)
+    n_timesteps: float = None  # Total timesteps for training (RLZOO format)
+    policy: str = 'MlpPolicy'  # Policy type (RLZOO format)
 
     # Networks
     hidden_dims: Union[int, Tuple[int, ...]] = (64,)  # Default: [64]
     # TODO: default learning rates should be in algo classes
     policy_lr: float = 0.0003  # Default: 0.0003
+    learning_rate: float = None  # RLZOO format learning rate (overrides policy_lr if set)
     #value_lr: float = 0.001  # Default: 0.001
     ent_coef: float = 0.01  # Default: 0.01
     val_coef: float = 0.5  # Default: 0.5 (for PPO)
+    vf_coef: float = None  # RLZOO format value function coefficient
 
     max_grad_norm: float = 0.5  # Default: 0.5 (for gradient clipping)
     
@@ -35,6 +39,12 @@ class Config:
     gamma: float = 0.99  # Default: 0.99
     gae_lambda: float = 0.95  # Default: 0.95
     clip_range: float = 0.2  # Default: 0.2
+
+    # Additional RLZOO format parameters
+    normalize: bool = None  # RLZOO format normalization flag
+    use_sde: bool = False  # Use State Dependent Exploration
+    sde_sample_freq: int = -1  # SDE sample frequency
+    policy_kwargs: str = None  # Policy kwargs as string
 
     # Evaluation
     eval_rollout_interval: int = None  # Default: 10
@@ -59,12 +69,12 @@ class Config:
     reward_shaping: Union[bool, Dict[str, Any]] = False  # Default: false
 
     @classmethod
-    def load_from_yaml(cls, env_id: str, algo_id: str, config_dir: str = "configs") -> 'Config':
+    def load_from_yaml(cls, env_id: str, algo_id: str, config_dir: str = "hyperparams") -> 'Config':
         """
-        Load configuration from YAML files with hierarchical overrides:
+        Load configuration from YAML files in RLZOO SB3 format:
         1. Start with RLConfig class defaults
-        2. Apply environment-specific config (env_id.yaml -> default section)
-        3. Apply algorithm-specific config (env_id.yaml -> algorithm section)
+        2. Load algorithm-specific file (hyperparams/{algo_id}.yaml)
+        3. Apply environment-specific config from that file
         """
         # Get the project root directory
         project_root = Path(__file__).parent.parent
@@ -78,26 +88,40 @@ class Config:
             elif field.default_factory is not MISSING:  # type: ignore
                 final_config[field.name] = field.default_factory()      # type: ignore
 
-        # Load environment-specific configuration
-        env_config_path = config_path / f"{env_id}.yaml"
-        with open(env_config_path, 'r') as f:
-            env_config = yaml.safe_load(f)
+        # Load algorithm-specific configuration file
+        algo_config_path = config_path / f"{algo_id.lower()}.yaml"
+        if not algo_config_path.exists():
+            raise FileNotFoundError(f"Algorithm config file not found: {algo_config_path}")
+        
+        with open(algo_config_path, 'r') as f:
+            algo_config = yaml.safe_load(f)
 
         # Set env_id and algo_id
         final_config['env_id'] = env_id
         final_config['algo_id'] = algo_id
 
-        # Apply environment default config
-        if 'default' in env_config:
-            final_config.update(env_config['default'])
-
-        # Apply algorithm-specific config
-        algo_id_lower = algo_id.lower()
-        if algo_id_lower in env_config:
-            final_config.update(env_config[algo_id_lower])
+        # Apply environment-specific config from algorithm file
+        if env_id in algo_config:
+            final_config.update(algo_config[env_id])
+        else:
+            raise ValueError(f"Environment '{env_id}' not found in {algo_config_path}")
 
         # Convert any numeric strings (like scientific notation)
         final_config = _convert_numeric_strings(final_config)
+
+        # Handle RLZOO format compatibility
+        # Use learning_rate if set, otherwise use policy_lr
+        if 'learning_rate' in final_config and final_config['learning_rate'] is not None:
+            final_config['policy_lr'] = final_config['learning_rate']
+        
+        # Handle normalize flag (RLZOO format) -> normalize_obs
+        if 'normalize' in final_config and final_config['normalize'] is not None:
+            final_config['normalize_obs'] = final_config['normalize']
+            final_config['normalize_reward'] = final_config['normalize']
+        
+        # Handle vf_coef -> val_coef
+        if 'vf_coef' in final_config and final_config['vf_coef'] is not None:
+            final_config['val_coef'] = final_config['vf_coef']
 
         # Convert list values to tuples for hidden_dims
         if 'hidden_dims' in final_config and isinstance(final_config['hidden_dims'], list):
@@ -151,6 +175,6 @@ class Config:
         if self.eval_rollout_episodes is not None and self.eval_rollout_episodes <= 0:
             raise ValueError("eval_rollout_episodes must be a positive integer.")
 
-def load_config(env_id: str, algo_id: str, config_dir: str = "configs") -> Config:
+def load_config(env_id: str, algo_id: str, config_dir: str = "hyperparams") -> Config:
     """Convenience function to load configuration."""
     return Config.load_from_yaml(env_id, algo_id, config_dir)

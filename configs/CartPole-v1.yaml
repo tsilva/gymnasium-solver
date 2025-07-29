@@ -17,7 +17,7 @@ ppo:
   frame_stack: 1                       # Stack 2 frames for temporal information
 
   # TODO: deprecate these, follow rlzoo style
-  hidden_dims: [64, 64]                # Sufficient capacity for CartPole
+  hidden_dims: [64]                # Sufficient capacity for CartPole
   policy_lr: 1e-3                      # Default policy LR (overridden per algo below)
   normalize_obs: false                 # Normalize observations for better learning
   normalize_reward: false              # Reward normalization not needed for CartPole

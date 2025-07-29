@@ -27,7 +27,7 @@ class ActorCritic(nn.Module):
     @torch.inference_mode()
     def act(self, obs: torch.Tensor, deterministic=False):
         dist, v = self.forward(obs)
-        a = dist.sample() if not deterministic else dist.mode() # TODO: review if this is correct
+        a = dist.sample() if not deterministic else dist.mode
         return a, dist.log_prob(a), v
 
     def evaluate_actions(self, obs: torch.Tensor, actions: torch.Tensor):

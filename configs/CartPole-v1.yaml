@@ -1,3 +1,16 @@
+reinforce:
+  n_envs: 8
+  n_epochs: 1                 # Don't reuse data!
+  n_steps: 512                # Collect full episodes if possible
+  batch_size: 64              # Smaller for high-variance gradient
+  gamma: 0.99                 # Less discounting
+  ent_coef: 0.01              # Encourage exploration
+  policy_lr: 5e-4             # Lower LR for stability
+  normalize_obs: false
+  normalize_reward: false      # Normalize to stabilize learning
+  hidden_dims: [64]
+  frame_stack: 3
+
 ppo:
   n_envs: 8
   #n_timesteps: !!float 1e5

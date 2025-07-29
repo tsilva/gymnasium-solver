@@ -1,32 +1,33 @@
 import torch
 from torch.distributions import Categorical
 from .base_agent import BaseAgent
-from utils.models import PolicyNet
+from utils.models import ActorCritic
 from utils.misc import prefix_dict_keys
 
 class REINFORCE(BaseAgent):
-
+    
+    # TODO: add support for policy only model
     def create_models(self):
-        input_dim = self.config.env_spec['input_dim']
-        output_dim = self.config.env_spec['output_dim']
-        self.policy_model = PolicyNet(input_dim, output_dim, self.config.hidden_dims)
-
+        self.policy_model = ActorCritic(
+            self.input_dim,
+            self.output_dim, # TODO: should be called obs_dim and act_dim?
+            hidden=self.config.hidden_dims
+        )
+    
     def train_on_batch(self, batch, batch_idx):
-        states, actions, rewards, dones, old_logps, values, advantages, returns, frames = batch
+        states = batch.observations
+        actions = batch.actions
+        returns = batch.returns
         
         ent_coef = self.config.ent_coef
 
-        # REINFORCE uses Monte Carlo returns dir
-        # Policy loss using REINFORCE (policy gradient with Monte Carlo returns)
-        logits = self.policy_model(states)
-        dist = Categorical(logits=logits)
+        dist, _ = self.policy_model(states)
         log_probs = dist.log_prob(actions)
-
+      
         policy_loss = -(log_probs * returns).mean()
 
-        # TODO; what is policy gradient loss to them?
         entropy = dist.entropy().mean()
-        entropy_loss = -entropy # TODO: is this entropy loss to them?
+        entropy_loss = -entropy
         
         loss = policy_loss + (ent_coef * entropy_loss)
         

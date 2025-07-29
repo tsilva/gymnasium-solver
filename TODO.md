@@ -2,6 +2,7 @@
 - BUG: REINFORCE is calculating returns using value model?
 - how do advnatges make it into final calc
 
+- mimick rlzoo hyperparm config
 - confirm that buffer growth is under control
 - FEAT: get reward threshold from env specs (hardcoded)
 - add n_timesteps support
@@ -10,7 +11,7 @@
 - solve mountaincar with framestacking
 - rlzoo save model, run it in my model and compare rollout results (set seed and 1 env)
 - measure obs mean/var
-- make sure training uses same collecotrs so thry calc mean reward through their reward window, make sure it inits through config
+- measure reward mean/var
 - record videos in bg with model copy
 - check if rlzoo solves mountaincar
 - rlzoo better due to missing param support like decay

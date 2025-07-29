@@ -102,9 +102,7 @@ class BaseAgent(pl.LightningModule):
                 loss = losses[idx]
                 optimizer.zero_grad()
                 loss.backward()
-                # Clip grad norm
-                max_grad_norm = 0.5 # TODO: softcode this
-                torch.nn.utils.clip_grad_norm_(self.policy_model.parameters(), max_grad_norm)
+                torch.nn.utils.clip_grad_norm_(self.policy_model.parameters(), self.config.max_grad_norm) # TODO: review impact, figure out why
                 optimizer.step()
 
             self._n_updates += 1

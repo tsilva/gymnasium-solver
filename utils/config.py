@@ -28,6 +28,8 @@ class Config:
     ent_coef: float = 0.01  # Default: 0.01
     val_coef: float = 0.5  # Default: 0.5 (for PPO)
 
+    max_grad_norm: float = 0.5  # Default: 0.5 (for gradient clipping)
+    
     # Training
     max_epochs: int = None  # Default: -1
     gamma: float = 0.99  # Default: 0.99

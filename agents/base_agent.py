@@ -40,7 +40,7 @@ class BaseAgent(pl.LightningModule):
         )
         self.train_env = self.build_env_fn(config.seed)
         self.eval_env = self.build_env_fn(config.seed + 1000)
-        
+
         # Training state
         self.start_time = None
         self._epoch_metrics = {}
@@ -173,11 +173,19 @@ class BaseAgent(pl.LightningModule):
             "fps": int(fps)
         }
     
+    # TODO: softcode this
+    def get_reward_threshold(self):
+        from utils.environment import get_env_reward_threshold
+        reward_threshold = get_env_reward_threshold(self.train_env)
+        return reward_threshold
+    
     def _check_early_stop(self):
-        if not self.train_collector.is_reward_threshold_reached(): return
-        ep_rew_mean = self.train_collector.get_ep_rew_mean()
-        reward_threshold = self.train_collector.get_reward_threshold()
-        print(f"Early stopping at epoch {self.current_epoch} with train mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
+        if self._iterations % 100 != 0: return # TODO: softcode frequency
+        info = self.eval()
+        reward_threshold = self.get_reward_threshold()
+        ep_rew_mean = info["ep_mean_rew"] # TODO: wrong key?
+        if ep_rew_mean < reward_threshold: return
+        print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
         self.trainer.should_stop = True
 
     def eval(self):
@@ -188,6 +196,8 @@ class BaseAgent(pl.LightningModule):
 
         # TODO: add create data loader method
         # TODO: make sure this is not calculating advantages
+        # TODO: make sure policy is executed deterministically
+        # TODO: render to video
         collector = RolloutCollector(
             self.eval_env,
             self.policy_model, # TODO: add eval freq (by steps)
@@ -197,4 +207,5 @@ class BaseAgent(pl.LightningModule):
         n_episodes = self.eval_env.num_envs * 2 # TODO: softcode this
         _, info = collector.collect_episodes(n_episodes, batch_size=self.config.batch_size, shuffle=True)#self.config.eval_rollout_episodes)
         print(json.dumps(info, indent=2))        
+        return info
        

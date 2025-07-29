@@ -216,7 +216,7 @@ class BaseAgent(pl.LightningModule):
             **self.rollout_collector_hyperparams()
         )
         n_episodes = self.eval_env.num_envs * 2 # TODO: softcode this
-        info = collector.collect_episodes(n_episodes, deterministic=True)
+        info = collector.collect_episodes(n_episodes, deterministic=True) # TODO: softcode to deterministic_eval flag
         print(json.dumps(info, indent=2))        
         return info
        

@@ -16,12 +16,21 @@ class BaseAgent(pl.LightningModule):
 
         self.config = config
 
+        # Register ALE environments if available
+        try:
+            import ale_py
+            import gymnasium
+            gymnasium.register_envs(ale_py)
+        except ImportError:
+            pass  # ALE not available
+
         # TODO: these spec inspects should be centralized somewhere
-        _env = gymnasium.make(config.env_id)
+        _env = gymnasium.make(config.env_id, obs_type=getattr(config, 'obs_type', 'rgb'))
         base_input_dim = _env.observation_space.shape[0]
         # Account for frame stacking - multiply by number of frames
         self.input_dim = base_input_dim * config.frame_stack
         self.output_dim = _env.action_space.n
+        _env.close()  # Close temporary environment
 
         # Store core attributes
         self.config = config
@@ -37,7 +46,8 @@ class BaseAgent(pl.LightningModule):
             vec_env_cls="DummyVecEnv",
             reward_shaping=config.reward_shaping,
             frame_stack=config.frame_stack,
-            record_video=record_video
+            record_video=record_video,
+            obs_type=config.obs_type
         )
         self.train_env = self.build_env_fn(config.seed)
         self.eval_env = self.build_env_fn(config.seed + 1000, record_video=True)
@@ -160,8 +170,11 @@ class BaseAgent(pl.LightningModule):
         # Convert config to dictionary for logging
         config_dict = asdict(self.config)
         
+        # Sanitize project name for wandb (replace invalid characters)
+        project_name = self.config.env_id.replace("/", "-").replace("\\", "-")
+        
         wandb_logger = WandbLogger(
-            project=self.config.env_id,
+            project=project_name,
             name=f"{self.config.algo_id}-{self.config.seed}",
             log_model=True,
             config=config_dict

@@ -51,6 +51,9 @@ class Config:
     # Frame stacking
     frame_stack: int = 1  # Default: 1 (no frame stacking)
     
+    # Atari-specific settings
+    obs_type: str = "rgb"  # Default: "rgb" (other options: "ram", "grayscale")
+    
     # Reward Shaping (for environments like MountainCar)
     reward_shaping: Union[bool, Dict[str, Any]] = False  # Default: false
 

@@ -12,8 +12,8 @@
 - check if rlzoo solves mountaincar
 - rlzoo better due to missing param support like decay
 - save best model/agent checkpoints (use trainer) / background tasks records video 
+- ✅ DONE: upload recorded eval videos to wandb logger
 - Try solving MountainCar-v0 with PPO + frame stacking (no reward shaping)
-- Solve PongRAM-v0 with PPO
 - FEAT: log steps/episodes to progress bar
 - BUG: eval is being calculated before window is full, consider evaling frequently by n_steps instead of n_episodes
 - BUG: fix thread safety issues with async eval collector (copy model weights with lock)

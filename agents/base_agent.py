@@ -221,18 +221,26 @@ class BaseAgent(pl.LightningModule):
     # TODO: consider recording single video with all episodes in sequence
     # TODO: consider moving to validation_step()
     # TODO: check how sb3 does eval_async
-    # TODO: upload video to wandb
     # TODO: add more stats to video (eg: episode, step, current reward, etc)
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
     def eval(self):
         import wandb
+        import os
+        import glob
         # TODO: close env?
         eval_seed = self.config.seed + 1000  # Use a different seed for evaluation
+        
+        # Define video folder path
+        video_folder = f"videos/eval/{self.config.env_id}/{self.config.algo_id}/{wandb.run.id}/"
+        
+        # Get list of existing videos before evaluation to identify new ones
+        existing_videos = set(glob.glob(os.path.join(video_folder, "*.mp4")))
+        
         eval_env = self.build_env_fn(
             eval_seed,
             record_video=True,
             record_video_kwargs={
-                "video_folder": f"videos/eval/{self.config.env_id}/{self.config.algo_id}/{wandb.run.id}/",
+                "video_folder": video_folder,
                 "name_prefix": f"{int(time.time())}",
             }
         )
@@ -258,9 +266,34 @@ class BaseAgent(pl.LightningModule):
             deterministic=self.config.eval_deterministic
         )
 
-        self.log_metrics({
-            **prefix_dict_keys(info, "eval")
-        })
+        # Find newly created videos and upload to wandb
+        new_videos = set(glob.glob(os.path.join(video_folder, "*.mp4"))) - existing_videos
+        
+        eval_metrics = prefix_dict_keys(info, "eval")
+        
+        # Upload videos to wandb if any were created
+        if new_videos:
+            # Sort videos by creation time to get consistent ordering
+            video_files = sorted(list(new_videos), key=os.path.getctime)
+            
+            # Upload videos to wandb directly (not through PyTorch Lightning logging)
+            video_logs = {}
+            for i, video_path in enumerate(video_files):
+                # Create a meaningful caption with evaluation metrics
+                caption = f"Eval Episode {i+1} - Mean Reward: {info.get('ep_rew_mean', 0):.2f} - Mean Length: {info.get('ep_len_mean', 0)}"
+                
+                try:
+                    # Create wandb Video object and log directly to wandb
+                    wandb_video = wandb.Video(video_path, caption=caption, format="mp4")
+                    video_logs[f"eval/video_{i+1}"] = wandb_video
+                except Exception as e:
+                    print(f"Warning: Failed to upload video {video_path} to wandb: {e}")
+            
+            # Log videos directly to wandb (bypassing PyTorch Lightning)
+            if video_logs:
+                wandb.log(video_logs)
+
+        self.log_metrics(eval_metrics)
  
         return info
        

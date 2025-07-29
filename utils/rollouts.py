@@ -66,6 +66,8 @@ class RolloutCollector():
         self.rollout_durations: Deque[float] = deque(maxlen=stats_window_size)
         self.episode_reward_deque: Deque[float] = deque(maxlen=stats_window_size)
         self.episode_length_deque: Deque[int] = deque(maxlen=stats_window_size)
+        self.env_episode_reward_deques = [deque(maxlen=stats_window_size) for _ in range(self.n_envs)]
+        self.env_episode_length_deques = [deque(maxlen=stats_window_size) for _ in range(self.n_envs)]
         
         self.total_rollouts: int = 0
         self.total_steps: int = 0
@@ -147,7 +149,9 @@ class RolloutCollector():
                         episode = info['episode']
                         self.episode_reward_deque.append(episode['r'])
                         self.episode_length_deque.append(episode['l'])
-                        
+                        self.env_episode_reward_deques[idx].append(episode['r'])
+                        self.env_episode_length_deques[idx].append(episode['l'])
+                               
                         # Just mark timeouts and collect terminal obs for later processing
                         if info.get("TimeLimit.truncated"):
                             timeouts[idx] = True
@@ -284,6 +288,7 @@ class RolloutCollector():
             self.rollout_durations.append(rollout_elapsed)
             elapsed_mean = float(np.mean(self.rollout_durations))
 
+            # TODO: calc stats on the fly?
             stats = {
                 "total_timesteps": self.total_steps,
                 "total_episodes": self.total_episodes,
@@ -292,13 +297,17 @@ class RolloutCollector():
                 "episodes": rollout_episodes,
                 "elapsed_mean": elapsed_mean,
                 "ep_rew_mean": ep_rew_mean,
-                "ep_len_mean": ep_len_mean,
+                "ep_len_mean": ep_len_mean
             }
 
         return trajectories, stats
 
-    def collect(self, *args, batch_size=64, shuffle=False, **kwargs):
+    def collect(self, *args, batch_size=None, shuffle=None, **kwargs):
         """Collect a rollout and return a DataLoader for training."""
+
+        assert batch_size is not None, "batch_size must be specified for collect"
+        assert shuffle is not None, "shuffle must be specified for collect"
+
         trajectories, metrics = self._collect_single_rollout()
         
         self._metrics = metrics
@@ -337,6 +346,58 @@ class RolloutCollector():
         total_episodes = self.get_total_episodes()
         reached = total_episodes >= self.stats_window_size and ep_rew_mean >= reward_threshold
         return reached
-    
-    def __del__(self):
-        self.env.close() # TODO: is this the responsibility of rollout collector or whoever created it?
+        
+    def _concat_trajectories(self, trajs):
+        def cat(name):
+            return torch.cat([getattr(t, name) for t in trajs], dim=0)
+        return RolloutTrajectory(
+            observations=cat("observations"),
+            actions=cat("actions"),
+            rewards=cat("rewards"),
+            dones=cat("dones"),
+            old_log_prob=cat("old_log_prob"),
+            old_values=cat("old_values"),
+            advantages=cat("advantages"),
+            returns=cat("returns"),
+        )
+
+    # TODO: make sure we pass batch size and suffle to collect (add asserts)
+    # TODO: this method makes me think that we shouldn't store stats in self._metrics
+    # TODO: this will still collect trajectories from envs that reached quota
+    def collect_episodes(
+        self,
+        n_episodes: int,
+        batch_size: int = None,
+        shuffle: bool = None,
+    ):
+        assert batch_size is not None, "batch_size must be specified for collect_episodes"
+        assert shuffle is not None, "shuffle must be specified for collect_episodes"
+
+        if n_episodes % self.n_envs != 0:
+            raise ValueError(
+                f"n_episodes={n_episodes} must be a multiple of num_envs={self.n_envs} to avoid sampling bias."
+            )
+
+        target_episodes_per_env = n_episodes // self.n_envs
+        parts = []        
+        while True:
+            traj, _ = self._collect_single_rollout()
+            parts.append(traj)
+            reached = [len(deque) >= target_episodes_per_env for deque in self.env_episode_reward_deques]
+            if np.all(reached): break
+
+        env_episode_reward_deques = [list(deque)[:target_episodes_per_env] for deque in self.env_episode_reward_deques]
+        env_episode_reward_means = [float(np.mean(deque)) if deque else 0.0 for deque in env_episode_reward_deques]
+        ep_mean_rew = np.mean(env_episode_reward_means)
+        env_episode_length_deques = [list(deque)[:target_episodes_per_env] for deque in self.env_episode_length_deques]
+        env_episode_length_means = [float(np.mean(deque)) if deque else 0.0 for deque in env_episode_length_deques]
+        ep_mean_len = np.mean(env_episode_length_means)
+
+        final_traj = self._concat_trajectories(parts)
+
+        info = {
+            "ep_mean_rew": ep_mean_rew,
+            "ep_mean_len": ep_mean_len,
+        }
+
+        return DataLoader(RolloutDataset(final_traj), batch_size=batch_size, shuffle=shuffle), info

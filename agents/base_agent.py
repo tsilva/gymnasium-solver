@@ -28,17 +28,19 @@ class BaseAgent(pl.LightningModule):
 
         # Create environment builder
         from utils.environment import build_env
-        self.build_env_fn = lambda seed: build_env(
+        self.build_env_fn = lambda seed, n_envs=config.n_envs: build_env(
             config.env_id,
             seed=seed,
             norm_obs=config.normalize_obs,
             norm_reward=config.normalize_reward,
-            n_envs=config.n_envs,
+            n_envs=n_envs,
             vec_env_cls="DummyVecEnv",
             reward_shaping=config.reward_shaping,
             frame_stack=config.frame_stack
         )
-
+        self.train_env = self.build_env_fn(config.seed)
+        self.eval_env = self.build_env_fn(config.seed + 1000)
+        
         # Training state
         self.start_time = None
         self._epoch_metrics = {}
@@ -70,7 +72,7 @@ class BaseAgent(pl.LightningModule):
 
         # TODO: create this only for training? create on_fit_start() and destroy with on_fit_end()?
         self.train_collector = RolloutCollector(
-            self.build_env_fn(self.config.seed),
+            self.train_env,
             self.policy_model,
             n_steps=self.config.n_steps,
             **self.config.rollout_collector_hyperparams()
@@ -178,22 +180,21 @@ class BaseAgent(pl.LightningModule):
         print(f"Early stopping at epoch {self.current_epoch} with train mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
         self.trainer.should_stop = True
 
-    # TODO: softcode this further
-    def eval_and_render(self):
-        # TODO: softcode this
-        self.to("mps")
-      
-        from utils.environment import group_frames_by_episodes, render_episode_frames
+    def eval(self):
+        # TODO: currently only supports single environment evaluation because we need to 
+        # be able to calculate mean episode reward using only completed episodes
+        # TODO: if we add more envs we also need to make sure that each env collects N episodes, because if 
+        # one env collects more episodes than others, the results will be biased
+
+        # TODO: add create data loader method
         # TODO: make sure this is not calculating advantages
-        eval_collector = RolloutCollector(
-            self.build_env_fn(self.config.seed + 1000),  # Random seed for eval
-            self.policy_model,
-            n_episodes=self.config.eval_rollout_episodes,
-            **self.config.rollout_collector_hyperparams()
+        collector = RolloutCollector(
+            self.eval_env,
+            self.policy_model, # TODO: add eval freq (by steps)
+            n_steps=self.config.n_steps,
+            **self.config.rollout_collector_hyperparams() # TODO: do we need to pass this?
         )
-        try: eval_collector.collect(collect_frames=True) # TODO: is this collecting expected number of episodes? assert mean reward is not greater than allowed by env
-        finally: del eval_collector
-        print(json.dumps(eval_collector.get_metrics(), indent=2))        
-        episode_frames = group_frames_by_episodes(eval_collector.trajectories)
-        return render_episode_frames(episode_frames, out_dir="./tmp", grid=(2, 2), text_color=(0, 0, 0)) # TODO: review if eval collector should be deterministic or not
-    
+        n_episodes = self.eval_env.num_envs * 2 # TODO: softcode this
+        _, info = collector.collect_episodes(n_episodes, batch_size=self.config.batch_size, shuffle=True)#self.config.eval_rollout_episodes)
+        print(json.dumps(info, indent=2))        
+       

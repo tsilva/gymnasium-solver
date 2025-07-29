@@ -1,4 +1,5 @@
 - add n_timesteps support
+- add ability to hardcode reward threshold
 - check that were are matching rlzoo stop criteria
 solve mountaincar with framestacking
 how do advnatges make it into final calc

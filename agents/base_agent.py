@@ -28,7 +28,7 @@ class BaseAgent(pl.LightningModule):
 
         # Create environment builder
         from utils.environment import build_env
-        self.build_env_fn = lambda seed, n_envs=config.n_envs: build_env(
+        self.build_env_fn = lambda seed, n_envs=config.n_envs, record_video=False: build_env(
             config.env_id,
             seed=seed,
             norm_obs=config.normalize_obs,
@@ -36,10 +36,11 @@ class BaseAgent(pl.LightningModule):
             n_envs=n_envs,
             vec_env_cls="DummyVecEnv",
             reward_shaping=config.reward_shaping,
-            frame_stack=config.frame_stack
+            frame_stack=config.frame_stack,
+            record_video=record_video
         )
         self.train_env = self.build_env_fn(config.seed)
-        self.eval_env = self.build_env_fn(config.seed + 1000)
+        self.eval_env = self.build_env_fn(config.seed + 1000, record_video=True)
 
         # Training state
         self.start_time = None
@@ -193,6 +194,7 @@ class BaseAgent(pl.LightningModule):
         print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
         self.trainer.should_stop = True
 
+    # TODO: consider recording single video with all episodes in sequence
     def eval(self):
         # TODO: currently only supports single environment evaluation because we need to 
         # be able to calculate mean episode reward using only completed episodes

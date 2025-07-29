@@ -13,7 +13,7 @@ import gymnasium
 import shutil
 from collections.abc import Sequence
 
-def build_env(env_id, n_envs=1, seed=None, norm_obs=False, norm_reward=False, vec_env_cls=None, reward_shaping=None, frame_stack=None):
+def build_env(env_id, n_envs=1, seed=None, norm_obs=False, norm_reward=False, vec_env_cls=None, reward_shaping=None, frame_stack=None, record_video=False):
     from stable_baselines3.common.env_util import make_vec_env
     from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize, VecFrameStack
     
@@ -48,6 +48,14 @@ def build_env(env_id, n_envs=1, seed=None, norm_obs=False, norm_reward=False, ve
     if frame_stack and frame_stack > 1:
         env = VecFrameStack(env, n_stack=frame_stack)
     
+    if record_video:
+        from stable_baselines3.common.vec_env import VecVideoRecorder
+        env = VecVideoRecorder(
+            env,
+            video_folder="videos",
+            record_video_trigger=lambda step: step == 0,  # start immediately
+        )
+
     return env
 
 def get_env_spec(env: gymnasium.Env | str) -> Dict[str, Any]:

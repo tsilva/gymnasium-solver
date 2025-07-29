@@ -82,8 +82,9 @@ class BaseAgent(pl.LightningModule):
     def on_train_epoch_start(self):
         pass
 
-    # TODO: assert this is being called every epoch
     def train_dataloader(self):
+        self._last_train_dataloader_epoch = self.current_epoch
+
         self.train_collector.collect()
         dataloader = self.train_collector.create_dataloader(
             batch_size=self.config.batch_size,
@@ -92,6 +93,8 @@ class BaseAgent(pl.LightningModule):
         return dataloader
     
     def training_step(self, batch, batch_idx):
+        assert self._last_train_dataloader_epoch + 1 == self.current_epoch, "train_dataloader must be called once per epoch"
+        
         import torch
         for _ in range(self.config.n_epochs): 
             losses = self.train_on_batch(batch, batch_idx)

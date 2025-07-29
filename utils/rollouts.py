@@ -50,6 +50,7 @@ class RolloutCollector():
     def __init__(self, env, policy_model, n_steps, stats_window_size=100, 
                  gamma: float = 0.99, gae_lambda: float = 0.95, 
                  normalize_advantage: bool = True, advantages_norm_eps: float = 1e-8, 
+                 use_gae: bool = True,
                  **kwargs):
         self.env = env
         self.policy_model = policy_model
@@ -59,6 +60,7 @@ class RolloutCollector():
         self.gae_lambda = gae_lambda
         self.normalize_advantage = normalize_advantage
         self.advantages_norm_eps = advantages_norm_eps
+        self.use_gae = use_gae
         self.kwargs = kwargs
         
         # State tracking
@@ -230,21 +232,34 @@ class RolloutCollector():
         real_terminal = np.logical_and(dones_buf.astype(bool), ~timeouts_buf)
         non_terminal = (~real_terminal).astype(np.float32)
 
-        # Calculate the advantages using GAE(λ):
-        advantages_buf = np.zeros_like(rewards_buf, dtype=np.float32)
-        gae = np.zeros(self.n_envs, dtype=np.float32)
-        for t in reversed(range(T)):
-            # Calculate the Temporal Difference (TD) residual (the error 
-            # between the predicted value of a state and a better estimate of it)
-            delta = rewards_buf[t] + self.gamma * next_values_buf[t] * non_terminal[t] - values_buf[t]
+        if self.use_gae:
+            # Calculate the advantages using GAE(λ):
+            advantages_buf = np.zeros_like(rewards_buf, dtype=np.float32)
+            gae = np.zeros(self.n_envs, dtype=np.float32)
+            for t in reversed(range(T)):
+                # Calculate the Temporal Difference (TD) residual (the error 
+                # between the predicted value of a state and a better estimate of it)
+                delta = rewards_buf[t] + self.gamma * next_values_buf[t] * non_terminal[t] - values_buf[t]
 
-            # The TD residual is a 1-step advantage estimate, by taking future advantage 
-            # estimates into account the advantage estimate becomes more stable
-            gae = delta + self.gamma * self.gae_lambda * gae * non_terminal[t]
-            advantages_buf[t] = gae
-        
-        # TODO: consider calculating in loop and then asserting same
-        returns_buf = advantages_buf + values_buf
+                # The TD residual is a 1-step advantage estimate, by taking future advantage 
+                # estimates into account the advantage estimate becomes more stable
+                gae = delta + self.gamma * self.gae_lambda * gae * non_terminal[t]
+                advantages_buf[t] = gae
+            
+            # For GAE, returns are advantages + value estimates
+            returns_buf = advantages_buf + values_buf
+        else:
+            # Monte Carlo returns for REINFORCE
+            returns_buf = np.zeros_like(rewards_buf, dtype=np.float32)
+            returns = np.zeros(self.n_envs, dtype=np.float32)
+            
+            for t in reversed(range(T)):
+                # For terminal states, return is just the reward; for non-terminal, accumulate discounted future returns
+                returns = rewards_buf[t] + self.gamma * returns * non_terminal[t]
+                returns_buf[t] = returns
+            
+            # For REINFORCE, advantages are the returns themselves (no baseline subtraction)
+            advantages_buf = returns_buf.copy()
 
         # Normalize advantages across rollout (we could normalize across training batches 
         # later on, but in some situations normalizing across rollouts provides better numerical stability)

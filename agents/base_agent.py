@@ -67,6 +67,10 @@ class BaseAgent(pl.LightningModule):
         env = self.build_env_fn(self.config.seed)
         return get_env_spec(env)
     
+    def rollout_collector_hyperparams(self):
+        """Get hyperparameters for the rollout collector. Can be overridden by subclasses."""
+        return self.config.rollout_collector_hyperparams()
+
     def on_fit_start(self):
         self.start_time = time.time_ns()
         print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -76,7 +80,7 @@ class BaseAgent(pl.LightningModule):
             self.train_env,
             self.policy_model,
             n_steps=self.config.n_steps,
-            **self.config.rollout_collector_hyperparams()
+            **self.rollout_collector_hyperparams()
         )
 
     def on_train_epoch_start(self):
@@ -209,7 +213,7 @@ class BaseAgent(pl.LightningModule):
             self.eval_env,
             self.policy_model, # TODO: add eval freq (by steps)
             n_steps=self.config.n_steps,
-            **self.config.rollout_collector_hyperparams()
+            **self.rollout_collector_hyperparams()
         )
         n_episodes = self.eval_env.num_envs * 2 # TODO: softcode this
         info = collector.collect_episodes(n_episodes, deterministic=True)

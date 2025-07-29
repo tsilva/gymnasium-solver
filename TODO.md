@@ -1,7 +1,4 @@
-- BUG: REINFORCE not working
-- BUG: REINFORCE is calculating returns using value model?
-- how do advnatges make it into final calc
-
+- add support for premature early stop if train_mean_reward is above threshold
 - mimick rlzoo hyperparm config
 - confirm that buffer growth is under control
 - FEAT: get reward threshold from env specs (hardcoded)

@@ -1,18 +1,22 @@
 import torch
-from torch.distributions import Categorical
 from .base_agent import BaseAgent
-from utils.models import ActorCritic
+from utils.models import PolicyOnly
 from utils.misc import prefix_dict_keys
 
 class REINFORCE(BaseAgent):
     
-    # TODO: add support for policy only model
     def create_models(self):
-        self.policy_model = ActorCritic(
+        self.policy_model = PolicyOnly(
             self.input_dim,
-            self.output_dim, # TODO: should be called obs_dim and act_dim?
+            self.output_dim,
             hidden=self.config.hidden_dims
         )
+    
+    def rollout_collector_hyperparams(self):
+        # Override to disable GAE for REINFORCE - use pure Monte Carlo returns
+        base_params = self.config.rollout_collector_hyperparams()
+        base_params['use_gae'] = False
+        return base_params
     
     def train_on_batch(self, batch, batch_idx):
         states = batch.observations
@@ -24,6 +28,7 @@ class REINFORCE(BaseAgent):
         dist, _ = self.policy_model(states)
         log_probs = dist.log_prob(actions)
       
+        # REINFORCE uses Monte Carlo returns directly, not advantages
         policy_loss = -(log_probs * returns).mean()
 
         entropy = dist.entropy().mean()

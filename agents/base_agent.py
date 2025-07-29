@@ -200,10 +200,14 @@ class BaseAgent(pl.LightningModule):
         reward_threshold = get_env_reward_threshold(self.train_env)
         return reward_threshold
     
+    # TODO: should eval freq be based on n_updates?
     def _check_early_stop(self):
         # Return in case it's not time to run evaluation yet
         env_timesteps = self.total_timesteps // self.train_env.num_envs
-        if env_timesteps % self.config.eval_freq != 0: return
+        last_env_timesteps = self._last_env_timesteps if hasattr(self, "_last_env_timesteps") else 0
+        delta = env_timesteps - last_env_timesteps
+        if delta > self.config.eval_freq: return
+        self._last_env_timesteps = env_timesteps
 
         # In case reward threshold hasn't been reached yet then 
         info = self.eval()

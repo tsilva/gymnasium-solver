@@ -1,3 +1,4 @@
+- BUG: eval is not recording full episodes (eg: LunarLander-v3 post-training)
 - add support for premature early stop if train_mean_reward is above threshold
 - confirm that buffer growth is under control
 - FEAT: get reward threshold from env specs (hardcoded)

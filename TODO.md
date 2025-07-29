@@ -2,6 +2,7 @@
 - BUG: REINFORCE is calculating returns using value model?
 - how do advnatges make it into final calc
 
+- confirm that buffer growth is under control
 - FEAT: get reward threshold from env specs (hardcoded)
 - add n_timesteps support
 - add ability to hardcode reward threshold

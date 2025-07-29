@@ -218,15 +218,19 @@ class BaseAgent(pl.LightningModule):
 
     # TODO: consider recording single video with all episodes in sequence
     # TODO: consider moving to validation_step()
+    # TODO: check how sb3 does eval_async
+    # TODO: upload video to wandb
+    # TODO: add more stats to video (eg: episode, step, current reward, etc)
     def eval(self):
+        import wandb
         # TODO: close env?
         eval_seed = self.config.seed + 1000  # Use a different seed for evaluation
         eval_env = self.build_env_fn(
             eval_seed,
             record_video=True,
             record_video_kwargs={
-                "video_folder": f"videos/{self.config.env_id}/{self.config.algo_id}/{eval_seed}/",
-                "name_prefix": f"eval-{int(time.time())}",
+                "video_folder": f"videos/eval/{self.config.env_id}/{self.config.algo_id}/{wandb.run.id}/",
+                "name_prefix": f"{int(time.time())}",
             }
         )
 

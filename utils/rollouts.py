@@ -84,10 +84,11 @@ class RolloutCollector():
         self.obs = None
 
     @torch.inference_mode()
-    def collect(self):
-        with inference_ctx(self.policy_model): return self._collect()
+    def collect(self, *args, **kwargs):
+        with inference_ctx(self.policy_model): 
+            return self._collect(*args, **kwargs)
 
-    def _collect(self):
+    def _collect(self, deterministic=False):
         """Collect a single rollout and return trajectories and stats."""
         # Initialize environment if needed
         if self.obs is None:
@@ -131,7 +132,7 @@ class RolloutCollector():
             obs_tensor_buf[step_idx] = torch.as_tensor(self.obs, dtype=torch.float32, device=self.device)
             
             # Determine next actions using the policy model (already on GPU)
-            actions_t, logps_t, values_t = self.policy_model.act(obs_tensor_buf[step_idx])
+            actions_t, logps_t, values_t = self.policy_model.act(obs_tensor_buf[step_idx], deterministic=deterministic)
             
             # Store GPU tensors directly in pre-allocated buffers
             actions_tensor_buf[step_idx] = actions_t
@@ -321,9 +322,11 @@ class RolloutCollector():
     # TODO: make sure we pass batch size and suffle to collect (add asserts)
     # TODO: this method makes me think that we shouldn't store stats in self._metrics
     # TODO: this will still collect trajectories from envs that reached quota
+    # TODO: don't eval deterministically for atari envs (in SB3 this is done by default)
     def collect_episodes(
         self,
-        n_episodes: int
+        n_episodes: int,
+        deterministic=False
     ):
         if n_episodes % self.n_envs != 0:
             raise ValueError(
@@ -332,7 +335,7 @@ class RolloutCollector():
 
         target_episodes_per_env = n_episodes // self.n_envs
         while True:
-            self.collect()
+            self.collect(deterministic=deterministic)
             reached = [len(deque) >= target_episodes_per_env for deque in self.env_episode_reward_deques]
             if np.all(reached): break
 

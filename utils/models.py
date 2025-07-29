@@ -24,7 +24,7 @@ class ActorCritic(nn.Module):
         value = self.value_head(x).squeeze(-1)
         return dist, value
 
-    @torch.no_grad()
+    @torch.inference_mode()
     def act(self, obs: torch.Tensor, deterministic=False):
         dist, v = self.forward(obs)
         a = dist.sample() if not deterministic else dist.mode() # TODO: review if this is correct

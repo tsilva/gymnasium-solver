@@ -93,7 +93,7 @@ class BaseAgent(pl.LightningModule):
         return dataloader
     
     def training_step(self, batch, batch_idx):
-        assert self._last_train_dataloader_epoch + 1 == self.current_epoch, "train_dataloader must be called once per epoch"
+        assert self._last_train_dataloader_epoch == self.current_epoch, "train_dataloader must be called once per epoch"
         
         import torch
         for _ in range(self.config.n_epochs): 
@@ -149,12 +149,18 @@ class BaseAgent(pl.LightningModule):
     def train(self):
         from pytorch_lightning.loggers import WandbLogger
         from tsilva_notebook_utils.colab import load_secrets_into_env # TODO: get rid of all references to this project
+        from dataclasses import asdict
 
         _ = load_secrets_into_env(['WANDB_API_KEY'])
+        
+        # Convert config to dictionary for logging
+        config_dict = asdict(self.config)
+        
         wandb_logger = WandbLogger(
             project=self.config.env_id,
             name=f"{self.config.algo_id}-{self.config.seed}",
-            log_model=True
+            log_model=True,
+            config=config_dict
         )
         
         trainer = pl.Trainer(

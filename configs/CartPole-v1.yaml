@@ -27,7 +27,8 @@ ppo:
   #clip_range: lin_0.2
 
   # Frame stacking
-  frame_stack: 3                       # Stack 2 frames for temporal information
+  # TODO: this is broken
+  frame_stack: 1                       # Stack 2 frames for temporal information
 
   # TODO: deprecate these, follow rlzoo style
   hidden_dims: [64]                # Sufficient capacity for CartPole

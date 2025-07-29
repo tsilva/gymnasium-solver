@@ -16,21 +16,6 @@ class BaseAgent(pl.LightningModule):
 
         self.config = config
 
-        # Register ALE environments if available
-        try:
-            import ale_py
-            import gymnasium
-            gymnasium.register_envs(ale_py)
-        except ImportError:
-            pass  # ALE not available
-
-        # TODO: these spec inspects should be centralized somewhere
-        _env = gymnasium.make(config.env_id, obs_type=getattr(config, 'obs_type', 'rgb'))
-        base_input_dim = _env.observation_space.shape[0]
-        # Account for frame stacking - multiply by number of frames
-        self.input_dim = base_input_dim * config.frame_stack
-        self.output_dim = _env.action_space.n
-        _env.close()  # Close temporary environment
 
         # Store core attributes
         self.config = config
@@ -52,6 +37,11 @@ class BaseAgent(pl.LightningModule):
         self.train_env = self.build_env_fn(config.seed)
         self.eval_env = self.build_env_fn(config.seed + 1000, record_video=True)
 
+        # TODO: these spec inspects should be centralized somewhere
+        base_input_dim = self.train_env.observation_space.shape[0]
+        self.input_dim = base_input_dim * config.frame_stack
+        self.output_dim = self.train_env.action_space.n
+       
         # Training state
         self.start_time = None
         self._epoch_metrics = {}

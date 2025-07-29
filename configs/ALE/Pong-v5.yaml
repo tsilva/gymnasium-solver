@@ -2,7 +2,7 @@ ppo:
   # Environment settings
   n_envs: 8                        # Parallel environments for faster training
   obs_type: "ram"                  # Use RAM observations (128 bytes) instead of RGB images
-  normalize_obs: false             # Don't normalize RAM observations initially
+  normalize_obs: true             # Don't normalize RAM observations initially
   normalize_reward: false          # Keep original reward structure
   
   # Training hyperparameters tuned for Pong RAM

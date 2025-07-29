@@ -95,7 +95,7 @@ class RolloutCollector():
         # Initialize environment if needed
         if self.obs is None:
             self.obs = self.env.reset()
-        
+
         # --------------------------------------------------------------
         # Pre-allocate rollout buffers for one collection window
         # --------------------------------------------------------------
@@ -131,10 +131,11 @@ class RolloutCollector():
         step_idx = 0
         while env_step_calls < self.n_steps:
             # Store observations directly in GPU tensor buffer
-            obs_tensor_buf[step_idx] = torch.as_tensor(self.obs, dtype=torch.float32, device=self.device)
+            obs_t = torch.as_tensor(self.obs, dtype=torch.float32, device=self.device)
+            obs_tensor_buf[step_idx] = obs_t
             
             # Determine next actions using the policy model (already on GPU)
-            actions_t, logps_t, values_t = self.policy_model.act(obs_tensor_buf[step_idx], deterministic=deterministic)
+            actions_t, logps_t, values_t = self.policy_model.act(obs_t, deterministic=deterministic)
             
             # Store GPU tensors directly in pre-allocated buffers
             actions_tensor_buf[step_idx] = actions_t

@@ -54,6 +54,7 @@ class Config:
     # Atari-specific settings
     obs_type: str = "rgb"  # Default: "rgb" (other options: "ram", "grayscale")
     
+    # TODO: generalize to just add custom wrappers
     # Reward Shaping (for environments like MountainCar)
     reward_shaping: Union[bool, Dict[str, Any]] = False  # Default: false
 

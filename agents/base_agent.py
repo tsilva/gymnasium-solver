@@ -1,5 +1,7 @@
+import os
 import sys
 import time
+import wandb
 import pytorch_lightning as pl
 from utils.rollouts import RolloutCollector
 from utils.misc import prefix_dict_keys, print_namespaced_dict
@@ -207,11 +209,11 @@ class BaseAgent(pl.LightningModule):
     # TODO: should eval freq be based on n_updates?
     def _check_early_stop(self):
         # Return in case it's not time to run evaluation yet
-        env_timesteps = self.total_timesteps // self.train_env.num_envs
-        last_env_timesteps = self._last_env_timesteps if hasattr(self, "_last_env_timesteps") else 0
-        delta = env_timesteps - last_env_timesteps
-        if delta > self.config.eval_freq: return
-        self._last_env_timesteps = env_timesteps
+        last_total_timesteps = self._last_total_timesteps if hasattr(self, "_last_total_timesteps") else 0
+        delta = self.total_timesteps - last_total_timesteps
+        delta_env = delta // self.train_env.num_envs
+        if delta_env < self.config.eval_freq: return
+        self._last_total_timesteps = self.total_timesteps
 
         # In case reward threshold hasn't been reached yet then 
         info = self.eval()
@@ -228,15 +230,11 @@ class BaseAgent(pl.LightningModule):
     # TODO: add more stats to video (eg: episode, step, current reward, etc)
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
     def eval(self):
-        import wandb
-        import os
-        # TODO: close env?
-        eval_seed = self.config.seed + 1000  # Use a different seed for evaluation
-        
         assert wandb.run is not None, "wandb.init() must run before building the env"
         root = os.path.join(wandb.run.dir, "videos", "eval", "episodes")
         os.makedirs(root, exist_ok=True)
-        
+
+        eval_seed = self.config.seed + 1000  # Use a different seed for evaluation
         eval_env = self.build_env_fn(
             eval_seed,
             n_envs=1,
@@ -246,11 +244,13 @@ class BaseAgent(pl.LightningModule):
                 "name_prefix": f"{int(time.time())}",
             }
         )
-
+        try: self._eval(eval_env)
+        finally: eval_env.close()
+    
+    def _eval(self, env):
         # TODO: make sure this is not calculating advantages
-        # TODO: render to video
         collector = RolloutCollector(
-            eval_env,
+            env,
             self.policy_model,
             n_steps=self.config.n_steps,
             **self.rollout_collector_hyperparams()
@@ -260,7 +260,7 @@ class BaseAgent(pl.LightningModule):
         # the minimum required and find a multiple of 
         # num_envs that is above that minimum    
         eval_episodes = 0
-        while eval_episodes < self.config.eval_episodes: eval_episodes += eval_env.num_envs
+        while eval_episodes < self.config.eval_episodes: eval_episodes += env.num_envs
 
         # TODO: review collect_episodes internals
         info = collector.collect_episodes(

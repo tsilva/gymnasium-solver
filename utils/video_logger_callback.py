@@ -171,7 +171,9 @@ class VideoLoggerCallback(pl.Callback):
         self._process(trainer, "train")
 
     def on_validation_epoch_end(self, trainer, *_):
-        self._process(trainer, "eval")
+        # Videos are now processed immediately during validation_step
+        # to ensure correct timestep alignment with eval metrics
+        pass
 
     def teardown(self, *a, **k):
         self._stop_watch()

@@ -132,6 +132,10 @@ class BaseAgent(pl.LightningModule):
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         eval_metrics = self.run_evaluation()
         
+        # Process videos immediately after evaluation, before logging metrics
+        # This ensures videos and metrics are logged at the same timestep
+        self._process_eval_videos()
+        
         self.log_dict(prefix_dict_keys(eval_metrics, "eval")) # TODO: overrrid log_dict and add prefixig support
 
         # Check for early stopping based on reward threshold
@@ -148,6 +152,19 @@ class BaseAgent(pl.LightningModule):
     def on_fit_end(self):
         time_elapsed = self._get_time_metrics()["time_elapsed"]
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
+
+    def _process_eval_videos(self):
+        """Process eval videos immediately to ensure they're logged at the correct timestep."""
+        # Find the video logger callback
+        video_logger = None
+        for callback in self.trainer.callbacks:
+            if isinstance(callback, VideoLoggerCallback):
+                video_logger = callback
+                break
+        
+        if video_logger:
+            # Process eval videos immediately
+            video_logger._process(self.trainer, "eval")
 
     def run_training(self):
         from tsilva_notebook_utils.colab import load_secrets_into_env # TODO: get rid of all references to this project

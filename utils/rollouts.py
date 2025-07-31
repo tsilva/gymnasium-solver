@@ -329,7 +329,7 @@ class RolloutCollector():
             "total_episodes": self.total_episodes,
             "total_rollouts": self.total_rollouts,
             "steps": self.rollout_steps,
-            "episodes": self.rollout_episodes,
+            "episodes_count": self.rollout_episodes,  # Renamed to avoid conflict with video logging
             "elapsed_mean": elapsed_mean, # TODO: better name?
             "ep_rew_mean": ep_rew_mean,
             "ep_len_mean": ep_len_mean

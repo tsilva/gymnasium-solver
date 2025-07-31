@@ -19,6 +19,7 @@
 - FEAT: add support for premature early stop if train_mean_reward is above threshold
 - FEAT: add support for checkpointing models and replaying them locally
 - FEAT: add alert support to metric tracker (algo dependent)
+- FEAT: add interactive mode support
 - rlzoo save model, run it in my model and compare rollout results (set seed and 1 env)
 - rlzoo better due to missing param support like decay
 - save best model/agent checkpoints (use trainer) / background tasks records video 

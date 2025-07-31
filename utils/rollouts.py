@@ -78,6 +78,9 @@ class RolloutCollector():
         self.obs_values_deque: Deque[np.ndarray] = deque(maxlen=stats_window_size)
         self.reward_values_deque: Deque[float] = deque(maxlen=stats_window_size)
         
+        # Action statistics tracking
+        self.action_values_deque: Deque[int] = deque(maxlen=stats_window_size)
+        
         self.total_rollouts: int = 0
         self.total_steps: int = 0
         self.total_episodes: int = 0
@@ -200,10 +203,12 @@ class RolloutCollector():
         # Flatten observations and rewards across time and environments for statistics
         obs_flat = obs_buf[:T].reshape(-1, *obs_buf.shape[2:])  # Shape: (T*n_envs, *obs_shape)
         rewards_flat = rewards_buf[:T].flatten()  # Shape: (T*n_envs,)
+        actions_flat = actions_buf[:T].flatten()  # Shape: (T*n_envs,)
         
-        # Store flattened observations and rewards for windowed statistics
+        # Store flattened observations, rewards, and actions for windowed statistics
         self.obs_values_deque.extend(obs_flat)
         self.reward_values_deque.extend(rewards_flat)
+        self.action_values_deque.extend(actions_flat)
         
         # Single batch transfer of GPU tensors to CPU after rollout collection
         logprobs_buf[:T] = logprobs_tensor_buf[:T].detach().cpu().numpy()
@@ -351,6 +356,16 @@ class RolloutCollector():
             reward_mean = float(np.mean(reward_array))
             reward_std = float(np.std(reward_array))
 
+        # Calculate action statistics
+        action_mean = action_std = 0.0
+        action_distribution = None
+        if self.action_values_deque:
+            action_array = np.array(list(self.action_values_deque))
+            action_mean = float(np.mean(action_array))
+            action_std = float(np.std(action_array))
+            # Store the full action distribution for histogram logging
+            action_distribution = action_array
+
         return {
             "total_timesteps": self.total_steps, # TODO: steps vs timesteps
             "total_episodes": self.total_episodes,
@@ -363,5 +378,8 @@ class RolloutCollector():
             "obs_mean": obs_mean,
             "obs_std": obs_std,
             "reward_mean": reward_mean,
-            "reward_std": reward_std
+            "reward_std": reward_std,
+            "action_mean": action_mean,
+            "action_std": action_std,
+            "action_distribution": action_distribution
         }

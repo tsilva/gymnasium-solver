@@ -114,16 +114,29 @@ class BaseAgent(pl.LightningModule):
 
         rollout_metrics = self.train_collector.get_metrics()
         self.total_timesteps = rollout_metrics["total_timesteps"]
+        
+        # Extract action distribution for histogram logging
+        action_distribution = rollout_metrics.pop("action_distribution", None)
 
         time_metrics = self._get_time_metrics()
-        self.log_dict({
+        metrics_dict = {
             # TODO: is this same as _iterations?
             "train/epoch": self.current_epoch, # TODO: is this the same value as in epoch_start?
             "train/n_updates": self._n_updates,
             "time/iterations": self._iterations,
             **prefix_dict_keys(rollout_metrics, "rollout"),
             **prefix_dict_keys(time_metrics, "time")
-        })
+        }
+        
+        # Log regular metrics
+        self.log_dict(metrics_dict)
+        
+        # Log action distribution as histogram to WandB
+        if action_distribution is not None and len(action_distribution) > 0:
+            if hasattr(self.logger, 'experiment') and self.logger.experiment:
+                self.logger.experiment.log({
+                    "rollout/action_distribution": wandb.Histogram(action_distribution)
+                }, step=self.global_step) # TODO: use global step in videos too
 
     def val_dataloader(self):
         return create_dummy_dataloader()
@@ -134,11 +147,21 @@ class BaseAgent(pl.LightningModule):
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         eval_metrics = self.run_evaluation()
         
+        # Extract action distribution for histogram logging
+        action_distribution = eval_metrics.pop("action_distribution", None)
+        
         # Process videos immediately after evaluation, before logging metrics
         # This ensures videos and metrics are logged at the same timestep
         self._process_eval_videos()
         
         self.log_dict(prefix_dict_keys(eval_metrics, "eval")) # TODO: overrrid log_dict and add prefixig support
+        
+        # Log action distribution as histogram to WandB for evaluation
+        if action_distribution is not None and len(action_distribution) > 0:
+            if hasattr(self.logger, 'experiment') and self.logger.experiment:
+                self.logger.experiment.log({
+                    "eval/action_distribution": wandb.Histogram(action_distribution)
+                }, step=self.global_step)
 
         # Check for early stopping based on reward threshold
         reward_threshold = self.get_reward_threshold()

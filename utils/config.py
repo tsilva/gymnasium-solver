@@ -6,6 +6,7 @@ from dataclasses import dataclass, MISSING
 from typing import Union, Tuple, Dict, Any
 from utils.misc import _convert_numeric_strings
 
+# TODO: review this file again
 @dataclass
 class Config:
     # Environment
@@ -42,6 +43,7 @@ class Config:
 
     # Additional RLZOO format parameters
     normalize: bool = None  # RLZOO format normalization flag
+    # TODO: not supported yet
     use_sde: bool = False  # Use State Dependent Exploration
     sde_sample_freq: int = -1  # SDE sample frequency
     policy_kwargs: str = None  # Policy kwargs as string

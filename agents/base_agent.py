@@ -48,9 +48,8 @@ class BaseAgent(pl.LightningModule):
         self._n_updates = 0
         self._iterations = 0
 
-        # TODO: move this to on_fit_start()?
-        self.policy_model = None
         self.create_models()
+        assert self.policy_model is not None, "Policy model must be created in create_models()"
     
     def create_models(self):
         raise NotImplementedError("Subclass must implement create_models()")
@@ -63,10 +62,6 @@ class BaseAgent(pl.LightningModule):
         from utils.environment import get_env_spec
         env = self.build_env_fn(self.config.seed)
         return get_env_spec(env)
-    
-    def rollout_collector_hyperparams(self):
-        """Get hyperparameters for the rollout collector. Can be overridden by subclasses."""
-        return self.config.rollout_collector_hyperparams()
 
     def on_fit_start(self):
         self.start_time = time.time_ns()
@@ -77,7 +72,7 @@ class BaseAgent(pl.LightningModule):
             self.train_env,
             self.policy_model,
             n_steps=self.config.n_steps,
-            **self.rollout_collector_hyperparams()
+            **self.config.rollout_collector_hyperparams()
         )
 
     def on_train_epoch_start(self):
@@ -137,7 +132,7 @@ class BaseAgent(pl.LightningModule):
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         eval_metrics = self.run_evaluation()
         
-        self.log_dict(prefix_dict_keys(eval_metrics, "eval"))
+        self.log_dict(prefix_dict_keys(eval_metrics, "eval")) # TODO: overrrid log_dict and add prefixig support
 
         # Check for early stopping based on reward threshold
         reward_threshold = self.get_reward_threshold()
@@ -150,16 +145,15 @@ class BaseAgent(pl.LightningModule):
     def on_validation_epoch_end(self):
         pass
 
-
     def on_fit_end(self):
         time_elapsed = self._get_time_metrics()["time_elapsed"]
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
 
     def run_training(self):
-        from pytorch_lightning.loggers import WandbLogger
         from tsilva_notebook_utils.colab import load_secrets_into_env # TODO: get rid of all references to this project
         from dataclasses import asdict
 
+        # TODO: load this in main?
         _ = load_secrets_into_env(['WANDB_API_KEY'])
         
         # Convert config to dictionary for logging
@@ -168,6 +162,8 @@ class BaseAgent(pl.LightningModule):
         # Sanitize project name for wandb (replace invalid characters)
         project_name = self.config.env_id.replace("/", "-").replace("\\", "-") # TODO: softcode this
         experiment_name = f"{self.config.algo_id}-{self.config.seed}" # TODO: softcode this        
+
+        # TODO: clean this up
         wandb_logger = WandbLoggerAutomedia(
             project=project_name,
             name=experiment_name,
@@ -181,6 +177,7 @@ class BaseAgent(pl.LightningModule):
             commit=False                # don't change Lightning's step handling
         )
         
+        # TODO: clean this up
         printer = StdoutMetricsTable(
             every_n_steps=200,   # print every 200 optimizer steps
             every_n_epochs=1,    # and at the end of every epoch
@@ -225,12 +222,13 @@ class BaseAgent(pl.LightningModule):
     def run_evaluation(self):
         # Ensure output video directory exists
         assert wandb.run is not None, "wandb.init() must run before building the env"
+        
+        # TODO: create better recording abstraction
         root = os.path.join(wandb.run.dir, "videos", "eval", "episodes") # TODO: ensure two directories because last two are the key
         os.makedirs(root, exist_ok=True)
 
-        eval_seed = self.config.seed + 1000  # Use a different seed for evaluation
-        eval_env = self.build_env_fn(
-            eval_seed,
+        env = self.build_env_fn(
+            self.config.seed + 1000,
             n_envs=1,
             record_video=True,
             record_video_kwargs={
@@ -238,8 +236,8 @@ class BaseAgent(pl.LightningModule):
                 "name_prefix": f"{int(time.time())}",
             }
         )
-        try: return self._eval(eval_env)
-        finally: eval_env.close()
+        try: return self._eval(env)
+        finally: env.close()
     
     def _eval(self, env):
         assert env.num_envs == 1, "Evaluation should be run with a single environment instance"
@@ -249,7 +247,7 @@ class BaseAgent(pl.LightningModule):
             env,
             self.policy_model,
             n_steps=self.config.n_steps,
-            **self.rollout_collector_hyperparams()
+            **self.config.rollout_collector_hyperparams()
         )
 
         # Collect until we reach the required number of episodes

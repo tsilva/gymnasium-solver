@@ -3,6 +3,7 @@
 - FEAT: track output distribution
 - FEAT: measure obs mean/std
 - FEAT: measure reward mean/std
+- FEAT: add type hints where applicable
 - BUG: eval is only being looged in the end
 - BUG: eval is not recording full episodes (eg: LunarLander-v3 post-training)
 - BUG: confirm that buffer growth is under control

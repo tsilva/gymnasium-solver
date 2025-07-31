@@ -77,8 +77,8 @@ class RolloutCollector():
         self.total_rollouts: int = 0
         self.total_steps: int = 0
         self.total_episodes: int = 0
-        self.rollout_steps = 0
-        self.rollout_episodes = 0
+        self.rollout_steps: int = 0
+        self.rollout_episode: int = 0
         
         self.dataset = RolloutDataset()
 
@@ -325,12 +325,12 @@ class RolloutCollector():
         elapsed_mean = float(np.mean(self.rollout_durations))
 
         return {
-            "total_timesteps": self.total_steps,
+            "total_timesteps": self.total_steps, # TODO: steps vs timesteps
             "total_episodes": self.total_episodes,
             "total_rollouts": self.total_rollouts,
             "steps": self.rollout_steps,
             "episodes": self.rollout_episodes,
-            "elapsed_mean": elapsed_mean,
+            "elapsed_mean": elapsed_mean, # TODO: better name?
             "ep_rew_mean": ep_rew_mean,
             "ep_len_mean": ep_len_mean
         }

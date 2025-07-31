@@ -55,7 +55,7 @@ class BaseAgent(pl.LightningModule):
         raise NotImplementedError("Subclass must implement create_models()")
  
     def train_on_batch(self, batch, batch_idx):
-        raise NotImplementedError("Subclass must implement train_on_batch()")
+        raise NotImplementedError("Subclass must implement train_on_batch()") # TODO: use override_required decorator
     
     def get_env_spec(self):
         """Get environment specification."""
@@ -236,12 +236,15 @@ class BaseAgent(pl.LightningModule):
             record_video=True,
             record_video_kwargs={
                 "video_folder": root,
-                "name_prefix": f"{int(time.time())}",
+                "name_prefix": f"{int(time.time())}", # TODO: this is ensuring multiple videos are created, but we should use a better name
             }
         )
         try: return self._eval(env)
         finally: env.close()
     
+    # TODO: confirm that stats are for average of all episodes
+    # TODO: check when upload is being triggered
+    # TODO: install file watchdog to monitor video directory and upload new videos
     def _eval(self, env):
         assert env.num_envs == 1, "Evaluation should be run with a single environment instance"
 

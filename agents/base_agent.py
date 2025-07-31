@@ -128,7 +128,7 @@ class BaseAgent(pl.LightningModule):
         })
 
         self._flush_metrics()
-        self._check_early_stop()
+        #self._check_early_stop()
 
     def val_dataloader(self):
         """
@@ -161,35 +161,23 @@ class BaseAgent(pl.LightningModule):
         Returns:
             Dict with validation metrics or None
         """
-        # Only run evaluation at the specified frequency
-        if not hasattr(self, '_last_validation_timesteps'):
-            self._last_validation_timesteps = 0
-            
-        delta = self.total_timesteps - self._last_validation_timesteps
-        delta_env = delta // self.train_env.num_envs
+        # Run evaluation episodes
+        eval_info = self.run_evaluation()
         
-        if delta_env >= self.config.eval_freq:
-            self._last_validation_timesteps = self.total_timesteps
-            
-            # Run evaluation episodes
-            eval_info = self.run_evaluation()
-            
-            # Check for early stopping based on reward threshold
-            reward_threshold = self.get_reward_threshold()
-            ep_rew_mean = eval_info["ep_rew_mean"]
-            
-            if ep_rew_mean >= reward_threshold:
-                print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
-                self.trainer.should_stop = True
-            
-            # Return validation metrics for logging
-            return {
-                'val_reward_mean': ep_rew_mean,
-                'val_reward_std': eval_info.get("ep_rew_std", 0.0),
-                'val_ep_len_mean': eval_info.get("ep_len_mean", 0.0)
-            }
+        # Check for early stopping based on reward threshold
+        reward_threshold = self.get_reward_threshold()
+        ep_rew_mean = eval_info["ep_rew_mean"]
         
-        return None
+        if ep_rew_mean >= reward_threshold:
+            print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
+            self.trainer.should_stop = True
+        
+        # Return validation metrics for logging
+        return {
+            'val_reward_mean': ep_rew_mean,
+            'val_reward_std': eval_info.get("ep_rew_std", 0.0),
+            'val_ep_len_mean': eval_info.get("ep_len_mean", 0.0)
+        }
 
     def on_validation_epoch_end(self):
         """Called at the very end of the validation epoch."""
@@ -265,7 +253,7 @@ class BaseAgent(pl.LightningModule):
             enable_checkpointing=False,  # Disable checkpointing for speed
             accelerator="cpu",  # Use CPU for training # TODO: softcode this
             reload_dataloaders_every_n_epochs=1,#self.config.n_epochs
-            check_val_every_n_epoch=1,  # Run validation every epoch
+            check_val_every_n_epoch=self.config.eval_freq_epochs
             #callbacks=[WandbCleanup()]
         )
         trainer.fit(self)

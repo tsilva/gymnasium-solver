@@ -47,7 +47,7 @@ class Config:
     policy_kwargs: str = None  # Policy kwargs as string
 
     # Evaluation
-    eval_freq: int = 10000
+    eval_freq_epochs: int = 10
     eval_episodes: int = 10
     eval_async: bool = False  # Default: true (async evaluation)
     eval_deterministic: bool = True  # Default: true (deterministic evaluation)
@@ -169,8 +169,8 @@ class Config:
             raise ValueError("clip_range must be in (0, 1).")
 
         # Evaluation
-        if self.eval_freq is not None and self.eval_freq <= 0:
-            raise ValueError("eval_freq must be a positive integer.")
+        if self.eval_freq_epochs is not None and self.eval_freq_epochs <= 0:
+            raise ValueError("eval_freq_epochs must be a positive integer.")
         if self.eval_episodes is not None and self.eval_episodes <= 0:
             raise ValueError("eval_episodes must be a positive integer.")
 

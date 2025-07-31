@@ -81,6 +81,7 @@ class VecVideoRecorder(VecEnvWrapper):
         # Episode and step tracking for overlay
         self.current_episode = 0
         self.current_step = 0
+        self.accumulated_reward = 0.0
         
         # Overlay configuration
         self.enable_overlay = enable_overlay
@@ -130,7 +131,7 @@ class VecVideoRecorder(VecEnvWrapper):
             draw = ImageDraw.Draw(pil_image)
             
             # Create overlay text
-            text = f"Episode: {self.current_episode + 1}  Step: {self.current_step + 1}"
+            text = f"Episode: {self.current_episode + 1}  Step: {self.current_step + 1}  Reward: {self.accumulated_reward:.2f}"
             
             # Get font
             font = self._get_font()
@@ -176,6 +177,7 @@ class VecVideoRecorder(VecEnvWrapper):
         # Increment episode counter and reset step counter
         self.current_episode = 0
         self.current_step = 0
+        self.accumulated_reward = 0.0
         
         self._capture_frame()
 
@@ -187,12 +189,19 @@ class VecVideoRecorder(VecEnvWrapper):
         self.step_id += 1 # TODO: should this be incremented ever?
         self.current_step += 1
         
+        # Accumulate reward (for single env, use first reward)
+        if isinstance(rewards, np.ndarray):
+            self.accumulated_reward += rewards[0]
+        else:
+            self.accumulated_reward += rewards
+        
         self._capture_frame()
 
         # Reset step counter if any environment is done
         if np.any(dones):
             self.current_step = 0
             self.current_episode += 1 # TODO: doesnt work for multiple envs
+            self.accumulated_reward = 0.0
 
         return obs, rewards, dones, infos
 

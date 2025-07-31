@@ -2,59 +2,13 @@ import torch
 import itertools
 from typing import Dict, Any
 from contextlib import contextmanager
+import os
+import sys
+from typing import Dict, Any
 
 
 def prefix_dict_keys(data: dict, prefix: str) -> dict:
     return {f"{prefix}/{key}" if prefix else key: value for key, value in data.items()}
-
-def print_namespaced_dict(data: dict) -> None:
-    """
-    Prints a dictionary with namespaced keys (e.g., 'rollout/ep_len_mean')
-    in a formatted ASCII table grouped by namespaces.
-    Floats are formatted to 2 decimal places.
-    """
-    if not data: return
-    # Group keys by their namespace prefix
-    grouped = {}
-    for key, value in data.items():
-        if "/" in key:
-            namespace, subkey = key.split("/", 1)
-        else:
-            namespace, subkey = key, ""
-        grouped.setdefault(namespace, {})[subkey] = value
-
-    # Format values first (floats to 2 decimals)
-    formatted_grouped = {}
-    for ns, subdict in grouped.items():
-        formatted_grouped[ns] = {
-            subkey: str(val)
-            for subkey, val in subdict.items()
-        }
-
-    # Determine column widths
-    max_key_len = max(len(subkey) for ns in formatted_grouped for subkey in formatted_grouped[ns]) + 4
-    max_val_len = max(len(val) for ns in formatted_grouped for val in formatted_grouped[ns].values()) + 2
-
-    # Print table
-    border = "-" * (max_key_len + max_val_len + 5)
-    print(border)
-    for ns, subdict in formatted_grouped.items():
-        print(f"| {ns + '/':<{max_key_len}} |")
-        for subkey, val in subdict.items():
-            print(f"|    {subkey:<{max_key_len-4}} | {val:<{max_val_len}}|")
-    print(border)
-
-def _convert_numeric_strings(config_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """Convert string representations of numbers back to numeric types."""
-    for key, value in config_dict.items():
-        if isinstance(value, str):
-            # Try to convert scientific notation strings to float
-            if 'e' in value.lower() or 'E' in value:
-                try:
-                    config_dict[key] = float(value)
-                except ValueError:
-                    pass  # Keep as string if conversion fails
-    return config_dict
 
 
 # TODO: move this somewhere else?
@@ -89,3 +43,66 @@ def inference_ctx(*modules):
 # TODO: move this somewhere else?
 def _device_of(module: torch.nn.Module) -> torch.device:
     return next(module.parameters()).device
+
+
+
+def print_namespaced_dict(
+    data: Dict[str, Any],
+    inplace: bool = True,
+    float_fmt: str = ".2f",
+    indent: int = 4,
+) -> None:
+    """
+    Prints a dictionary with namespaced keys (e.g., 'rollout/ep_len_mean')
+    as a formatted ASCII table grouped by namespaces.
+
+    - Namespace headers (e.g., 'train/', 'time/', 'rollout/') are flush-left.
+    - Metric rows are indented by `indent` spaces.
+    - Floats are formatted using `float_fmt` (default: '.2f').
+    """
+    if not data:
+        return
+
+    if inplace:
+        os.system('cls' if os.name == 'nt' else 'clear')
+
+    # Group by namespace (preserves insertion order in Python 3.7+)
+    grouped: Dict[str, Dict[str, Any]] = {}
+    for k, v in data.items():
+        ns, sub = k.split("/", 1) if "/" in k else (k, "")
+        grouped.setdefault(ns, {})[sub] = v
+
+    # Formatter
+    def fmt(v: Any) -> str:
+        return format(v, float_fmt) if isinstance(v, float) else str(v)
+
+    # Compute column widths (include headers and all subkeys/values)
+    ns_order = list(grouped.keys())
+    key_candidates = [ns + "/" for ns in ns_order]  # headers
+    val_candidates = []
+    for ns in ns_order:
+        for sub, v in grouped[ns].items():
+            key_candidates.append(sub)
+            val_candidates.append(fmt(v))
+
+    key_width = max(len(k) for k in key_candidates) if key_candidates else 0
+    val_width = max((len(v) for v in val_candidates), default=0)
+
+    # Total width matches the row layout below:
+    # "| " + (key field of width indent+key_width) + " | " + (val field of width val_width) + " |"
+    border_len = 2 + (indent + key_width) + 3 + val_width + 2
+    border = "-" * border_len
+
+    print(border)
+    for ns in ns_order:
+        header = ns + "/"
+        # Header: NO indent visually; we fill the whole key field without the leading indent spaces
+        # but keep the field width equal to (indent + key_width) so the right column aligns.
+        print(f"| {header:<{indent + key_width}} | {'':>{val_width}} |")
+
+        # Metrics: keep indent before subkeys
+        for sub, v in grouped[ns].items():
+            sub_disp = sub  # empty subkey allowed
+            val_disp = fmt(v)
+            print(f"| {' ' * indent}{sub_disp:<{key_width}} | {val_disp:>{val_width}} |")
+    print(border)

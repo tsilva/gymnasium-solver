@@ -27,7 +27,7 @@ class BaseAgent(pl.LightningModule):
             norm_reward=config.normalize_reward,
             n_envs=n_envs,
             vec_env_cls="DummyVecEnv",
-            reward_shaping=config.reward_shaping,
+            reward_shaping=config.reward_shaping, # TODO: generalize to specifying wrappers
             frame_stack=config.frame_stack,
             obs_type=config.obs_type,
             **kwargs
@@ -96,6 +96,8 @@ class BaseAgent(pl.LightningModule):
         return dataloader
     
     def training_step(self, batch, batch_idx):
+        # Assert that train_dataloader is called once per epoch
+        # (this is the method that is performing the per-epoch rollout)
         assert self._last_train_dataloader_epoch == self.current_epoch, "train_dataloader must be called once per epoch"
         
         import torch
@@ -138,7 +140,7 @@ class BaseAgent(pl.LightningModule):
     def _flush_metrics(self):
         # TODO: self.log is a gigantic bottleneck, currently halving performance;
         # ; must fix this bug while retaining FPS
-        self.log_dict(self._epoch_metrics)
+        self.log_dict(self._epoch_metrics) # TODO: when does this flush?
         print_namespaced_dict(self._epoch_metrics)
         self._epoch_metrics = {}
 
@@ -230,8 +232,9 @@ class BaseAgent(pl.LightningModule):
     # TODO: add more stats to video (eg: episode, step, current reward, etc)
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
     def eval(self):
+        # Ensure output video directory exists
         assert wandb.run is not None, "wandb.init() must run before building the env"
-        root = os.path.join(wandb.run.dir, "videos", "eval", "episodes")
+        root = os.path.join(wandb.run.dir, "videos", "eval")
         os.makedirs(root, exist_ok=True)
 
         eval_seed = self.config.seed + 1000  # Use a different seed for evaluation
@@ -244,7 +247,7 @@ class BaseAgent(pl.LightningModule):
                 "name_prefix": f"{int(time.time())}",
             }
         )
-        try: self._eval(eval_env)
+        try: return self._eval(eval_env)
         finally: eval_env.close()
     
     def _eval(self, env):
@@ -269,7 +272,6 @@ class BaseAgent(pl.LightningModule):
         )
 
         eval_metrics = prefix_dict_keys(info, "eval")
-        
         self.log_metrics(eval_metrics)
  
         return info

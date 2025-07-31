@@ -82,7 +82,7 @@ class WandbLoggerAutomedia(WandbLogger):
 
         return by_key
 
-    def _scan_and_log_once(self):
+    def _scan_and_log_once(self, step=None):
         run = self.experiment  # wandb.Run
         if run is None:
             return
@@ -92,6 +92,7 @@ class WandbLoggerAutomedia(WandbLogger):
             return
 
         files_by_key = self._gather_new_files(root)
+        
         for key, files in files_by_key.items():
             if not files:
                 continue
@@ -104,9 +105,11 @@ class WandbLoggerAutomedia(WandbLogger):
                 else:
                     media.append(wandb.Image(str(f)))
                 self._seen.add(str(f))
-            # Log the bucket under the derived key.
-            # Example: key="train/rollouts" => shows as a single media panel in the UI.
-        wandb.log({key: media}, commit=self.commit)
+            
+            # Use Lightning's log_metrics instead of direct wandb.log
+            # This ensures proper step handling and integration with Lightning
+            video_metrics = {key: media}
+            super(WandbLoggerAutomedia, self).log_metrics(video_metrics, step=step)
 
     # ---------- Lightning hooks ----------
 
@@ -114,20 +117,14 @@ class WandbLoggerAutomedia(WandbLogger):
         # First let the base class handle metrics/steps
         super().log_metrics(metrics, step=step)
 
-        # Throttled media sync
-        now = time.time()
-        if now - self._last_sync >= self.log_interval_s:
-            self._last_sync = now
-            try:
-                self._scan_and_log_once()
-            except Exception as e:
-                # Best effort: never break training due to media sync
-                print(f"[WandbLoggerAutomedia] Warning during media sync: {e}")
+        # Note: Video scanning is now handled explicitly in the evaluation code
+        # to ensure exact step alignment with evaluation metrics.
+        # We no longer do automatic scanning here to avoid step mismatches.
 
     def finalize(self, status: str) -> None:
         # Do one last sweep at the end of the run
         try:
-            self._scan_and_log_once()
+            self._scan_and_log_once(step=None)
         except Exception as e:
             print(f"[WandbLoggerAutomedia] Warning during finalize sync: {e}")
         return super().finalize(status)

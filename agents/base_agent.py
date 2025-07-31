@@ -140,9 +140,14 @@ class BaseAgent(pl.LightningModule):
     def _flush_metrics(self):
         # TODO: self.log is a gigantic bottleneck, currently halving performance;
         # ; must fix this bug while retaining FPS
+        # Capture the current step before logging for video alignment
+        current_step = self.global_step if hasattr(self, 'global_step') else None
         self.log_dict(self._epoch_metrics) # TODO: when does this flush?
         print_namespaced_dict(self._epoch_metrics)
         print(wandb.run.get_url())
+        
+        # Store the step used for metrics so videos can use the same step
+        self._last_logged_step = current_step
         self._epoch_metrics = {}
 
     def on_fit_end(self):
@@ -274,5 +279,14 @@ class BaseAgent(pl.LightningModule):
 
         eval_metrics = prefix_dict_keys(info, "eval")
         self.log_metrics(eval_metrics)
+        
+        # Flush eval metrics immediately to ensure video step alignment
+        self._flush_metrics()
+        
+        # Force immediate video scan and log at the same step as eval metrics
+        # Use the exact step that was used for logging the metrics
+        if hasattr(self.logger, '_scan_and_log_once'):
+            step_for_videos = getattr(self, '_last_logged_step', None)
+            self.logger._scan_and_log_once(step=step_for_videos)
  
         return info

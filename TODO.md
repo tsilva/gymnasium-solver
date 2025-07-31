@@ -34,3 +34,4 @@
 - FEAT: support continuous environments
 - FEAT: support for multi-env rollout collectors
 - FEAT: add multitask heads support (eg: Atari, Sega Genesis) -- consider large output space
+- Ask agent for next learning steps/tasks (prompt file)

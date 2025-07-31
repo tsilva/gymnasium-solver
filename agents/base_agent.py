@@ -142,6 +142,7 @@ class BaseAgent(pl.LightningModule):
         # ; must fix this bug while retaining FPS
         self.log_dict(self._epoch_metrics) # TODO: when does this flush?
         print_namespaced_dict(self._epoch_metrics)
+        print(wandb.run.get_url())
         self._epoch_metrics = {}
 
     def on_fit_end(self):

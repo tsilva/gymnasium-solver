@@ -335,8 +335,6 @@ class RolloutCollector():
             "ep_len_mean": ep_len_mean
         }
 
-    # TODO: make sure we pass batch size and suffle to collect (add asserts)
-    # TODO: this method makes me think that we shouldn't store stats in self._metrics
     # TODO: this will still collect trajectories from envs that reached quota
     # TODO: don't eval deterministically for atari envs (in SB3 this is done by default)
     def collect_episodes(

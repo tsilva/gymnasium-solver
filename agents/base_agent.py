@@ -117,6 +117,8 @@ class BaseAgent(pl.LightningModule):
 
         time_metrics = self._get_time_metrics()
         self.log_dict({
+            # TODO: is this same as _iterations?
+            "train/epoch": self.current_epoch, # TODO: is this the same value as in epoch_start?
             "train/n_updates": self._n_updates,
             "time/iterations": self._iterations,
             **prefix_dict_keys(rollout_metrics, "rollout"),
@@ -230,16 +232,29 @@ class BaseAgent(pl.LightningModule):
             "fps": int(fps)
         }
     
-    # TODO: softcode this
+    # TODO: softcode this, move to registry
     def get_reward_threshold(self):
         from utils.environment import get_env_reward_threshold
         reward_threshold = get_env_reward_threshold(self.train_env)
         return reward_threshold
     
     # TODO: check how sb3 does eval_async
-    # TODO: add more stats to video (eg: episode, step, current reward, etc)
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
     def run_evaluation(self):
+        env = self.build_env_fn(
+            self.config.seed + 1000,
+            n_envs=1,
+            record_video=True
+        )
+        try: return self._eval(env)
+        finally: env.close()
+    
+    # TODO: add more stats to video (eg: episode, step, current reward, etc)
+    # TODO: currently recording more than the requested episodes (rollout not trimmed)
+    # TODO: consider making recording a rollout collector concern again (cleaner separation of concerns)
+    def _eval(self, env):
+        assert env.num_envs == 1, "Evaluation should be run with a single environment instance"
+
         # Ensure output video directory exists
         assert wandb.run is not None, "wandb.init() must run before building the env"
         
@@ -247,39 +262,25 @@ class BaseAgent(pl.LightningModule):
         video_root = os.path.join(wandb.run.dir, "videos", "eval", "episodes")
         os.makedirs(video_root, exist_ok=True)
 
-        env = self.build_env_fn(
-            self.config.seed + 1000,
-            n_envs=1,
-            record_video=True,
-            record_video_kwargs={
-                "video_folder": video_root,
-                "video_length": None,
-                "name_prefix": f"{int(time.time())}", # TODO: this is ensuring multiple videos are created, but we should use a better name
-            }
-        )
-        try: return self._eval(env)
-        finally: env.close()
-    
-    # TODO: confirm that stats are for average of all episodes
-    # TODO: check when upload is being triggered
-    # TODO: install file watchdog to monitor video directory and upload new videos
-    def _eval(self, env):
-        assert env.num_envs == 1, "Evaluation should be run with a single environment instance"
+        video_path = os.path.join(video_root, f"rollout_epoch_{self.current_epoch}.mp4")
 
         # TODO: make sure this is not calculating advantages
         collector = RolloutCollector(
             env,
             self.policy_model,
             n_steps=self.config.n_steps,
-            **self.config.rollout_collector_hyperparams()
+            **self.config.rollout_collector_hyperparams() # TODO: softcode
         )
 
         # Collect until we reach the required number of episodes
+        env.start_recording()
         total_episodes = 0
         while total_episodes < self.config.eval_episodes:
             collector.collect(deterministic=self.config.eval_deterministic)
             metrics = collector.get_metrics()
             total_episodes = metrics["total_episodes"]
+        env.stop_recording()
+        env.save_recording(video_path)
 
         return metrics
 

@@ -4,7 +4,7 @@
 
 import os
 import os.path
-from typing import Callable, Optional, Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 from gymnasium import error, logger
@@ -39,16 +39,11 @@ class VecVideoRecorder(VecEnvWrapper):
     :param stroke_width: Width of the text outline in pixels
     """
 
-    video_name: str
-    video_path: str
-
     def __init__(
         self,
         venv: VecEnv,
         video_folder: str,
-        record_video_trigger: Callable[[int], bool],
         video_length: Optional[int] = 200,
-        name_prefix: str = "rl-video",
         # Text overlay options
         enable_overlay: bool = True,
         font_size: int = 24,
@@ -78,12 +73,6 @@ class VecVideoRecorder(VecEnvWrapper):
 
         self.frames_per_sec = self.env.metadata.get("render_fps", 30)
 
-        self.record_video_trigger = record_video_trigger
-        self.video_folder = os.path.abspath(video_folder)
-        # Create output folder if needed
-        os.makedirs(self.video_folder, exist_ok=True)
-
-        self.name_prefix = name_prefix
         self.step_id = 0
         self.video_length = video_length
 
@@ -189,47 +178,23 @@ class VecVideoRecorder(VecEnvWrapper):
         self.current_episode += 1
         self.current_step = 0
         
-        if self._video_enabled():
-            self._start_video_recorder()
+        if self.recording: self._capture_frame()
+
         return obs
-
-    def _start_video_recorder(self) -> None:
-        # Update video name and path
-        if self.video_length is None:
-            self.video_name = f"{self.name_prefix}-step-{self.step_id}-episode-{self.current_episode}.mp4"
-        else:
-            self.video_name = f"{self.name_prefix}-step-{self.step_id}-to-step-{self.step_id + self.video_length}.mp4"
-        self.video_path = os.path.join(self.video_folder, self.video_name)
-        self._start_recording()
-        self._capture_frame()
-
-    def _video_enabled(self) -> bool:
-        return self.record_video_trigger(self.step_id)
 
     def step_wait(self) -> VecEnvStepReturn:
         obs, rewards, dones, infos = self.venv.step_wait()
 
-        self.step_id += 1
+        self.step_id += 1 # TODO: should this be incremented ever?
         self.current_step += 1
         
         if self.recording:
             self._capture_frame()
-            # Stop recording if video_length is reached OR if video_length is None and episode ended
-            should_stop = False
-            if self.video_length is not None and len(self.recorded_frames) > self.video_length:
-                should_stop = True
-            elif self.video_length is None and np.any(dones):
-                should_stop = True
-                
-            if should_stop:
-                #print(f"Saving video to {self.video_path}")
-                self._stop_recording()
-        elif self._video_enabled():
-            self._start_video_recorder()
 
         # Reset step counter if any environment is done
         if np.any(dones):
             self.current_step = 0
+            self.current_episode += 1 # TODO: doesnt work for multiple envs
 
         return obs, rewards, dones, infos
 
@@ -238,43 +203,32 @@ class VecVideoRecorder(VecEnvWrapper):
 
         frame = self.env.render()
 
-        if isinstance(frame, np.ndarray):
-            # Add overlay to frame
-            frame_with_overlay = self._add_overlay_to_frame(frame)
-            self.recorded_frames.append(frame_with_overlay)
-        else:
-            self._stop_recording()
-            logger.warn(
-                f"Recording stopped: expected type of frame returned by render to be a numpy array, got instead {type(frame)}."
-            )
-
+        assert isinstance(frame, np.ndarray)
+        frame_with_overlay = self._add_overlay_to_frame(frame)
+        self.recorded_frames.append(frame_with_overlay)
+        
     def close(self) -> None:
         """Closes the wrapper then the video recorder."""
         VecEnvWrapper.close(self)
         if self.recording:  # pragma: no cover
-            self._stop_recording()
+            self.stop_recording()
 
-    def _start_recording(self) -> None:
-        """Start a new recording. If it is already recording, stops the current recording before starting the new one."""
-        if self.recording:  # pragma: no cover
-            self._stop_recording()
-
+    def start_recording(self) -> None:
+        self.recorded_frames = []
         self.recording = True
 
-    def _stop_recording(self) -> None:
-        """Stop current recording and saves the video."""
+    def stop_recording(self) -> None:
         assert self.recording, "_stop_recording was called, but no recording was started"
-
-        if len(self.recorded_frames) == 0:  # pragma: no cover
-            logger.warn("Ignored saving a video as there were zero frames to save.")
-        else:
-            from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
-
-            clip = ImageSequenceClip(self.recorded_frames, fps=self.frames_per_sec)
-            clip.write_videofile(self.video_path, audio=False, logger=None)
-
-        self.recorded_frames = []
         self.recording = False
+
+    def save_recording(self, video_path: str) -> None:
+        assert len(self.recorded_frames) > 0, "No frames recorded to save."
+
+        assert video_path.endswith(".mp4"), "Video file must have .mp4 extension"
+
+        from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
+        clip = ImageSequenceClip(self.recorded_frames, fps=self.frames_per_sec)
+        clip.write_videofile(video_path, audio=False, logger=None)
 
     def __del__(self) -> None:
         """Warn the user in case last video wasn't saved."""

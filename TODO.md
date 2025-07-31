@@ -1,35 +1,29 @@
 - FEAT: track output distribution
 - BUG: videos not logged at correct timesteps
 - BUG: confirm that buffer growth is under control
-- BUG: eval is being calculated before window is full, consider evaling frequently by n_steps instead of n_episodes
 - BUG: fix thread safety issues with async eval collector (copy model weights with lock)
 - BUG: check that were are matching rlzoo stop criteria
 - BUG: stats table value precision is not softcoded
 - FEAT: consider computing mean reward by timesteps, this way in eval we just have to request n_steps = reward_threshold * N, this will make it easier to support vectorized envs
-- FEAT: add assertion that certain metrics must always increase
 - FEAT: add logging support (file logging)
 - FEAT: add assertions where applicable
+- FEAT: add assertion that certain metrics must always increase
 - FEAT: add type hints where applicable
 - FEAT: add ability to hardcode reward threshold
 - FEAT: log steps/episodes to progress bar
 - FEAT: support for softcoding activations
-- FEAT: train for convergence without deterministic policy
 - FEAT: a2c (only after reinforce/ppo is stable), add baseline subtraction
 - FEAT: get reward threshold from env specs (hardcoded)
 - FEAT: add n_timesteps support
 - FEAT: add same linear decay features as rlzoo
 - FEAT: add support for premature early stop if train_mean_reward is above threshold
-- solve mountaincar with framestacking
+- FEAT: add support for checkpointing models and replaying them locally
+- FEAT: add alert support to metric tracker (algo dependent)
 - rlzoo save model, run it in my model and compare rollout results (set seed and 1 env)
 - rlzoo better due to missing param support like decay
 - save best model/agent checkpoints (use trainer) / background tasks records video 
-- CHECK: run rollout through dataloader process, do we always get n_batches?
-- CHECK: assert that dataloader is always going through all expected batches
-- When I group by episodes I discard data from that rollout that won't be included in the next sequence of trajectories, so I need to make sure I don't lose data
-- FEAT: add alert support to metric tracker (algo dependent)
-- make best model be saved to wandb
+- CHECK: run rollout through dataloader process, do we always get n_batches? assert it 
 - add support for plotting charts as text and feeding to llm, check how end of training does it
-- track environment stats, observarion stats, reward distributions, etc
 - change api to match sb3
 - https://cs.stanford.edu/people/karpathy/reinforcejs/index.html
 - https://alazareva.github.io/rl_playground/

@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import torch
 import wandb
 import pytorch_lightning as pl
 from utils.rollouts import RolloutCollector
@@ -93,7 +94,6 @@ class BaseAgent(pl.LightningModule):
         # (this is the method that is performing the per-epoch rollout)
         assert self._last_train_dataloader_epoch == self.current_epoch, "train_dataloader must be called once per epoch"
         
-        import torch
         for _ in range(self.config.n_epochs): 
             losses = self.train_on_batch(batch, batch_idx)
             optimizers = self.optimizers()

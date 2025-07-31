@@ -120,7 +120,7 @@ class BaseAgent(pl.LightningModule):
         self.total_timesteps = rollout_metrics["total_timesteps"]
 
         time_metrics = self._get_time_metrics()
-        self.log_metrics({
+        self.log_dict({
             "train/n_updates": self._n_updates,
             "time/iterations": self._iterations,
             **prefix_dict_keys(rollout_metrics, "rollout"),
@@ -164,7 +164,7 @@ class BaseAgent(pl.LightningModule):
         # Run evaluation episodes
         eval_metrics = self.run_evaluation()
         
-        self.log_metrics(prefix_dict_keys(eval_metrics, "eval"))
+        self.log_dict(prefix_dict_keys(eval_metrics, "eval"))
 
         # Check for early stopping based on reward threshold
         reward_threshold = self.get_reward_threshold()
@@ -177,9 +177,6 @@ class BaseAgent(pl.LightningModule):
     def on_validation_epoch_end(self):
         self._flush_metrics()
 
-    def log_metrics(self, metrics):
-        for key, value in metrics.items(): self._epoch_metrics[key] = value # TODO: assert no overwriting of keys
-    
     # NOTE: beware of any changes to logging as torch lightning logging can slowdown training (expected performance is >6000 FPS on Macbook Pro M1)
     def _flush_metrics(self, safe_logging=True):
         # TODO: self.log is a gigantic bottleneck, currently halving performance;
@@ -187,30 +184,16 @@ class BaseAgent(pl.LightningModule):
         # Capture the current step before logging for video alignment
         current_step = self.global_step if hasattr(self, 'global_step') else None
         
-        if safe_logging:
-            try:
-                self.log_dict(self._epoch_metrics) # TODO: when does this flush?
-            except Exception as e:
-                # If we can't log through Lightning, log directly to wandb
-                print(f"Warning: Could not log through Lightning ({e}), logging directly to wandb")
-                if wandb.run is not None:
-                    wandb.log(self._epoch_metrics, step=current_step)
-        else:
-            # Log directly to wandb when Lightning logging is not safe
-            if wandb.run is not None:
-                wandb.log(self._epoch_metrics, step=current_step)
-                
-        print_namespaced_dict(self._epoch_metrics)
+        #print_namespaced_dict(self._epoch_metrics)
         print(wandb.run.get_url())
         
         # Store the step used for metrics so videos can use the same step
         self._last_logged_step = current_step
-        self._epoch_metrics = {}
 
     def on_fit_end(self):
         time_elapsed = self._get_time_metrics()["time_elapsed"]
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
-        print_namespaced_dict(self._epoch_metrics)
+        #print_namespaced_dict(self._epoch_metrics)
 
     def run_training(self):
         from pytorch_lightning.loggers import WandbLogger
@@ -268,14 +251,6 @@ class BaseAgent(pl.LightningModule):
         reward_threshold = get_env_reward_threshold(self.train_env)
         return reward_threshold
     
-    # TODO: should eval freq be based on n_updates?
-    def _check_early_stop(self):
-        """
-        Early stopping logic has been moved to validation_step().
-        This method is kept for backward compatibility but doesn't do anything.
-        """
-        pass
-
     # TODO: consider recording single video with all episodes in sequence
     # TODO: consider moving to validation_step()
     # TODO: check how sb3 does eval_async
@@ -321,17 +296,4 @@ class BaseAgent(pl.LightningModule):
             deterministic=self.config.eval_deterministic
         )
 
-        #eval_metrics = prefix_dict_keys(info, "eval")
-       # self.log_metrics(eval_metrics)
-        
-        # Flush eval metrics immediately to ensure video step alignment
-        # Use safe_logging=False since we might be in a validation hook
-        #self._flush_metrics(safe_logging=False)
-        
-        # Force immediate video scan and log at the same step as eval metrics
-        # Use the exact step that was used for logging the metrics
-        #if hasattr(self.logger, '_scan_and_log_once'):
-        #    step_for_videos = getattr(self, '_last_logged_step', None)
-        #    self.logger._scan_and_log_once(step=step_for_videos)
- 
         return info

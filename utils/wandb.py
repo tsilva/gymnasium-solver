@@ -113,14 +113,6 @@ class WandbLoggerAutomedia(WandbLogger):
 
     # ---------- Lightning hooks ----------
 
-    def log_metrics(self, metrics, step=None):
-        # First let the base class handle metrics/steps
-        super().log_metrics(metrics, step=step)
-
-        # Note: Video scanning is now handled explicitly in the evaluation code
-        # to ensure exact step alignment with evaluation metrics.
-        # We no longer do automatic scanning here to avoid step mismatches.
-
     def finalize(self, status: str) -> None:
         # Do one last sweep at the end of the run
         try:

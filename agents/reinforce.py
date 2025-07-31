@@ -42,7 +42,7 @@ class REINFORCE(BaseAgent):
             'entropy_loss': entropy_loss.detach().item(),
             'entropy': entropy.detach().item(), 
         }, "train")
-        self.log_metrics(metrics)
+        self.log_dict(metrics)
         return loss
         
     def configure_optimizers(self):

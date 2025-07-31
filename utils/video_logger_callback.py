@@ -40,7 +40,7 @@ class VideoLoggerCallback(pl.Callback):
         exts: Iterable[str] = [".mp4"],
         namespace_depth: int = 1,
         include_modified: bool = True,
-        min_age_sec: float = 0.25,
+        min_age_sec: float = 0.0 # TODO: was previously 0.25, but last video is not recorded with that value
     ):
         # IMPORTANT: keep absolute paths absolute; don't strip leading slashes
         self.media_root = Path(media_root)

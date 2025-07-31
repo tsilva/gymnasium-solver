@@ -4,7 +4,7 @@
 
 import os
 import os.path
-from typing import Callable, Tuple
+from typing import Callable, Optional, Tuple
 
 import numpy as np
 from gymnasium import error, logger
@@ -47,7 +47,7 @@ class VecVideoRecorder(VecEnvWrapper):
         venv: VecEnv,
         video_folder: str,
         record_video_trigger: Callable[[int], bool],
-        video_length: int = 200,
+        video_length: Optional[int] = 200,
         name_prefix: str = "rl-video",
         # Text overlay options
         enable_overlay: bool = True,
@@ -195,7 +195,10 @@ class VecVideoRecorder(VecEnvWrapper):
 
     def _start_video_recorder(self) -> None:
         # Update video name and path
-        self.video_name = f"{self.name_prefix}-step-{self.step_id}-to-step-{self.step_id + self.video_length}.mp4"
+        if self.video_length is None:
+            self.video_name = f"{self.name_prefix}-step-{self.step_id}-episode-{self.current_episode}.mp4"
+        else:
+            self.video_name = f"{self.name_prefix}-step-{self.step_id}-to-step-{self.step_id + self.video_length}.mp4"
         self.video_path = os.path.join(self.video_folder, self.video_name)
         self._start_recording()
         self._capture_frame()
@@ -211,7 +214,14 @@ class VecVideoRecorder(VecEnvWrapper):
         
         if self.recording:
             self._capture_frame()
-            if len(self.recorded_frames) > self.video_length:
+            # Stop recording if video_length is reached OR if video_length is None and episode ended
+            should_stop = False
+            if self.video_length is not None and len(self.recorded_frames) > self.video_length:
+                should_stop = True
+            elif self.video_length is None and np.any(dones):
+                should_stop = True
+                
+            if should_stop:
                 #print(f"Saving video to {self.video_path}")
                 self._stop_recording()
         elif self._video_enabled():

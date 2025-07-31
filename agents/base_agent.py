@@ -253,6 +253,7 @@ class BaseAgent(pl.LightningModule):
             record_video=True,
             record_video_kwargs={
                 "video_folder": video_root,
+                "video_length": None,
                 "name_prefix": f"{int(time.time())}", # TODO: this is ensuring multiple videos are created, but we should use a better name
             }
         )

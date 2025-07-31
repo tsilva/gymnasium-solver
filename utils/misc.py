@@ -368,3 +368,140 @@ def print_namespaced_dict(
             color=bool(color and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None),
         )
     _default_printer.update(data)
+
+
+# metrics_table_callback.py
+from typing import Iterable, Optional, Dict, Any
+import re
+import torch
+import pytorch_lightning as pl
+
+class StdoutMetricsTable(pl.Callback):
+    """
+    Periodically prints a table to stdout with the *latest value* for each logged metric.
+
+    Sources:
+      - trainer.logged_metrics        (step-level latest values)
+      - trainer.callback_metrics      (epoch-level aggregated values)
+      - trainer.progress_bar_metrics  (if present; UI-focused values)
+
+    Usage:
+      printer = StdoutMetricsTable(every_n_steps=200, every_n_epochs=1, include=[r'^train/', r'^val/'])
+      trainer = pl.Trainer(callbacks=[printer], ...)
+    """
+
+    def __init__(
+        self,
+        every_n_steps: Optional[int] = None,   # if None, don't print by step
+        every_n_epochs: Optional[int] = 1,     # print each epoch by default
+        include: Optional[Iterable[str]] = None,  # regex patterns to keep
+        exclude: Optional[Iterable[str]] = None,  # regex patterns to drop
+        digits: int = 4,                          # rounding for floats
+    ):
+        super().__init__()
+        self.every_n_steps = every_n_steps
+        self.every_n_epochs = every_n_epochs
+        self.include = [re.compile(p) for p in (include or [])]
+        self.exclude = [re.compile(p) for p in (exclude or [])]
+        self.digits = digits
+
+    # ---------- hooks ----------
+    def on_train_batch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", outputs, batch, batch_idx):
+        if self.every_n_steps is None:
+            return
+        # global_step increments after optimizer step; print when divisible
+        if trainer.global_step > 0 and trainer.global_step % self.every_n_steps == 0:
+            self._maybe_print(trainer, stage="train-step")
+
+    def on_validation_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"):
+        if self.every_n_epochs is not None and (trainer.current_epoch + 1) % self.every_n_epochs == 0:
+            self._maybe_print(trainer, stage="val-epoch")
+
+    def on_train_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"):
+        if self.every_n_epochs is not None and (trainer.current_epoch + 1) % self.every_n_epochs == 0:
+            self._maybe_print(trainer, stage="train-epoch")
+
+    def on_test_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"):
+        # Always print at test end if enabled by epoch cadence
+        if self.every_n_epochs is not None:
+            self._maybe_print(trainer, stage="test-epoch")
+
+    # ---------- internals ----------
+    def _maybe_print(self, trainer: "pl.Trainer", stage: str):
+        # Only the main process prints
+        if hasattr(trainer, "is_global_zero") and not trainer.is_global_zero:
+            return
+
+        metrics = self._collect_metrics(trainer)
+        metrics = self._filter_metrics(metrics)
+        if not metrics:
+            return
+
+        step = getattr(trainer, "global_step", None)
+        epoch = getattr(trainer, "current_epoch", None)
+        header = f"[{stage}] epoch={epoch} step={step}"
+        self._print_table(metrics, header)
+
+    def _collect_metrics(self, trainer: "pl.Trainer") -> Dict[str, Any]:
+        combo: Dict[str, Any] = {}
+
+        # Merge, with later sources taking precedence
+        dicts = []
+        if hasattr(trainer, "logged_metrics"):
+            dicts.append(trainer.logged_metrics)
+        if hasattr(trainer, "callback_metrics"):
+            dicts.append(trainer.callback_metrics)
+        if hasattr(trainer, "progress_bar_metrics"):  # not always present
+            dicts.append(trainer.progress_bar_metrics)
+
+        for d in dicts:
+            for k, v in d.items():
+                combo[k] = self._to_python_scalar(v)
+        # Drop common housekeeping keys if present
+        for k in ["epoch", "step", "global_step"]:
+            combo.pop(k, None)
+        return combo
+
+    def _filter_metrics(self, metrics: Dict[str, Any]) -> Dict[str, Any]:
+        if self.include:
+            metrics = {k: v for k, v in metrics.items() if any(p.search(k) for p in self.include)}
+        if self.exclude:
+            metrics = {k: v for k, v in metrics.items() if not any(p.search(k) for p in self.exclude)}
+        return metrics
+
+    def _to_python_scalar(self, x: Any) -> Any:
+        # Convert tensors and numpy scalars to plain Python types when possible
+        try:
+            if isinstance(x, torch.Tensor):
+                if x.numel() == 1:
+                    return x.detach().item()
+                return x.detach().float().mean().item()
+            # numpy scalar support without importing numpy explicitly
+            if hasattr(x, "item") and callable(getattr(x, "item")):
+                return x.item()
+            return x
+        except Exception:
+            return x
+
+    def _print_table(self, metrics: Dict[str, Any], header: str):
+        from utils.misc import print_namespaced_dict
+        print_namespaced_dict(metrics)
+        return
+        # Simple monospaced table without external deps
+        keys = sorted(metrics.keys())
+        name_w = max([len("metric")] + [len(k) for k in keys])
+        val_w = max([len("last_value")] + [len(self._format_val(metrics[k])) for k in keys])
+
+        print(f"\n{header}")
+        print(f"+{'-'*(name_w+2)}+{'-'*(val_w+2)}+")
+        print(f"| {'metric'.ljust(name_w)} | {'last_value'.rjust(val_w)} |")
+        print(f"+{'-'*(name_w+2)}+{'-'*(val_w+2)}+")
+        for k in keys:
+            v = self._format_val(metrics[k])
+            print(f"| {k.ljust(name_w)} | {v.rjust(val_w)} |")
+        print(f"+{'-'*(name_w+2)}+{'-'*(val_w+2)}+\n", flush=True)
+
+    def _format_val(self, v: Any) -> str:
+        if isinstance(v, float):
+            return f"{v:.{self.digits}f}"
+        return str(v)

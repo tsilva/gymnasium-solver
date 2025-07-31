@@ -4,7 +4,7 @@ import time
 import wandb
 import pytorch_lightning as pl
 from utils.rollouts import RolloutCollector
-from utils.misc import prefix_dict_keys, print_namespaced_dict
+from utils.misc import prefix_dict_keys, StdoutMetricsTable
 from utils.wandb import WandbLoggerAutomedia
 
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
@@ -221,6 +221,14 @@ class BaseAgent(pl.LightningModule):
             commit=False                # don't change Lightning's step handling
         )
         
+        printer = StdoutMetricsTable(
+            every_n_steps=200,   # print every 200 optimizer steps
+            every_n_epochs=1,    # and at the end of every epoch
+            include=[r"^train/", r"^val/"],  # optional filters; remove to show everything
+            # exclude=[r"^grad/"],           # example: drop noisy keys
+            digits=4,
+        )
+
         trainer = pl.Trainer(
             logger=wandb_logger,
             # TODO: softcode this
@@ -231,7 +239,7 @@ class BaseAgent(pl.LightningModule):
             accelerator="cpu",  # Use CPU for training # TODO: softcode this
             reload_dataloaders_every_n_epochs=1,#self.config.n_epochs
             check_val_every_n_epoch=self.config.eval_freq_epochs,  # Run validation every epoch
-            #callbacks=[WandbCleanup()]
+            callbacks=[printer]  # Add the metrics table printe
         )
         trainer.fit(self)
     
@@ -297,3 +305,4 @@ class BaseAgent(pl.LightningModule):
         )
 
         return info
+

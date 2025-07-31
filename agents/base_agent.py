@@ -175,7 +175,7 @@ class BaseAgent(pl.LightningModule):
         # Create video logging callback
         video_logger = VideoLoggerCallback(
             media_root="videos",        # where you will drop files
-            namespace_depth=2,          # "phase/name" from path
+            namespace_depth=1,          # "episodes" from train/episodes/ or eval/episodes/
             #log_interval_s=5.0,         # scan at most every 5 seconds
             #max_per_key=8,              # avoid spamming the panel
         )
@@ -226,16 +226,16 @@ class BaseAgent(pl.LightningModule):
         # Ensure output video directory exists
         assert wandb.run is not None, "wandb.init() must run before building the env"
         
-        # TODO: create better recording abstraction
-        root = os.path.join(wandb.run.dir, "videos", "eval", "episodes") # TODO: ensure two directories because last two are the key
-        os.makedirs(root, exist_ok=True)
+        # Create video directory structure to match logger expectations
+        video_root = os.path.join(wandb.run.dir, "videos", "eval", "episodes")
+        os.makedirs(video_root, exist_ok=True)
 
         env = self.build_env_fn(
             self.config.seed + 1000,
             n_envs=1,
             record_video=True,
             record_video_kwargs={
-                "video_folder": root,
+                "video_folder": video_root,
                 "name_prefix": f"{int(time.time())}", # TODO: this is ensuring multiple videos are created, but we should use a better name
             }
         )

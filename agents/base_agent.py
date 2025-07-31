@@ -5,7 +5,7 @@ import wandb
 import pytorch_lightning as pl
 from utils.rollouts import RolloutCollector
 from utils.misc import prefix_dict_keys, StdoutMetricsTable
-from utils.wandb import WandbLoggerAutomedia
+from utils.video_logger_callback import VideoLoggerCallback
 from utils.misc import create_dummy_dataloader
 
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
@@ -152,6 +152,7 @@ class BaseAgent(pl.LightningModule):
     def run_training(self):
         from tsilva_notebook_utils.colab import load_secrets_into_env # TODO: get rid of all references to this project
         from dataclasses import asdict
+        from pytorch_lightning.loggers import WandbLogger
 
         # TODO: load this in main?
         _ = load_secrets_into_env(['WANDB_API_KEY'])
@@ -163,18 +164,20 @@ class BaseAgent(pl.LightningModule):
         project_name = self.config.env_id.replace("/", "-").replace("\\", "-") # TODO: softcode this
         experiment_name = f"{self.config.algo_id}-{self.config.seed}" # TODO: softcode this        
 
-        # TODO: clean this up
-        wandb_logger = WandbLoggerAutomedia(
+        # Use regular WandbLogger
+        wandb_logger = WandbLogger(
             project=project_name,
             name=experiment_name,
             log_model=True,
             config=config_dict,
-            #
+        )
+        
+        # Create video logging callback
+        video_logger = VideoLoggerCallback(
             media_root="videos",        # where you will drop files
             namespace_depth=2,          # "phase/name" from path
             log_interval_s=5.0,         # scan at most every 5 seconds
             max_per_key=8,              # avoid spamming the panel
-            commit=False                # don't change Lightning's step handling
         )
         
         # TODO: clean this up
@@ -196,7 +199,7 @@ class BaseAgent(pl.LightningModule):
             accelerator="cpu",  # Use CPU for training # TODO: softcode this
             reload_dataloaders_every_n_epochs=1,#self.config.n_epochs
             check_val_every_n_epoch=self.config.eval_freq_epochs,  # Run validation every epoch
-            callbacks=[printer]  # Add the metrics table printe
+            callbacks=[printer, video_logger]  # Add both callbacks
         )
         trainer.fit(self)
     

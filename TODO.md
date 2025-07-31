@@ -1,20 +1,21 @@
 - FEAT: add logging support (file logging)
+- FEAT: add assertions where applicable
+- FEAT: track output distribution
+- FEAT: measure obs mean/std
+- FEAT: measure reward mean/std
 - BUG: eval is only being looged in the end
 - BUG: eval is not recording full episodes (eg: LunarLander-v3 post-training)
+- BUG: confirm that buffer growth is under control
 - add support for premature early stop if train_mean_reward is above threshold
-- confirm that buffer growth is under control
 - FEAT: get reward threshold from env specs (hardcoded)
 - add n_timesteps support
 - add ability to hardcode reward threshold
 - check that were are matching rlzoo stop criteria
 - solve mountaincar with framestacking
 - rlzoo save model, run it in my model and compare rollout results (set seed and 1 env)
-- measure obs mean/var
-- measure reward mean/var
 - check if rlzoo solves mountaincar
 - rlzoo better due to missing param support like decay
 - save best model/agent checkpoints (use trainer) / background tasks records video 
-- ✅ DONE: upload recorded eval videos to wandb logger
 - Try solving MountainCar-v0 with PPO + frame stacking (no reward shaping)
 - FEAT: log steps/episodes to progress bar
 - BUG: eval is being calculated before window is full, consider evaling frequently by n_steps instead of n_episodes
@@ -22,20 +23,19 @@
 - FEAT: support for softcoding activations
 - FEAT: train for convergence without deterministic policy
 - FEAT: a2c (only after reinforce/ppo is stable), add baseline subtraction
-- FEAT: add normalization support
-- FEAT: track output distribution
-- FEAT: support continuous environments
-- FEAT: support for multi-env rollout collectors
-- FEAT: add multitask heads support (eg: Atari, Sega Genesis) -- consider large output space
 - CHECK: run rollout through dataloader process, do we always get n_batches?
 - CHECK: assert that dataloader is always going through all expected batches
 - When I group by episodes I discard data from that rollout that won't be included in the next sequence of trajectories, so I need to make sure I don't lose data
 - FEAT: add alert support to metric tracker (algo dependent)
 - make best model be saved to wandb
-- log results to huggingface?
-- Write wandb diagnostics script, use claude desktop to debug
 - add support for plotting charts as text and feeding to llm, check how end of training does it
 - track environment stats, observarion stats, reward distributions, etc
 - change api to match sb3
 - https://cs.stanford.edu/people/karpathy/reinforcejs/index.html
 - https://alazareva.github.io/rl_playground/
+- FEAT: log results to huggingface
+- FEAT: Write wandb diagnostics script, use claude desktop to debug
+- FEAT: add normalization support
+- FEAT: support continuous environments
+- FEAT: support for multi-env rollout collectors
+- FEAT: add multitask heads support (eg: Atari, Sega Genesis) -- consider large output space

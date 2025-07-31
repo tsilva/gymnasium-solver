@@ -162,26 +162,20 @@ class BaseAgent(pl.LightningModule):
             Dict with validation metrics or None
         """
         # Run evaluation episodes
-        eval_info = self.run_evaluation()
+        eval_metrics = self.run_evaluation()
         
+        self.log_metrics(prefix_dict_keys(eval_metrics, "eval"))
+
         # Check for early stopping based on reward threshold
         reward_threshold = self.get_reward_threshold()
-        ep_rew_mean = eval_info["ep_rew_mean"]
+        ep_rew_mean = eval_metrics["ep_rew_mean"]
         
         if ep_rew_mean >= reward_threshold:
             print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
             self.trainer.should_stop = True
         
-        # Return validation metrics for logging
-        return {
-            'val_reward_mean': ep_rew_mean,
-            'val_reward_std': eval_info.get("ep_rew_std", 0.0),
-            'val_ep_len_mean': eval_info.get("ep_len_mean", 0.0)
-        }
-
     def on_validation_epoch_end(self):
-        """Called at the very end of the validation epoch."""
-        pass
+        self._flush_metrics()
 
     def log_metrics(self, metrics):
         for key, value in metrics.items(): self._epoch_metrics[key] = value # TODO: assert no overwriting of keys
@@ -253,7 +247,7 @@ class BaseAgent(pl.LightningModule):
             enable_checkpointing=False,  # Disable checkpointing for speed
             accelerator="cpu",  # Use CPU for training # TODO: softcode this
             reload_dataloaders_every_n_epochs=1,#self.config.n_epochs
-            check_val_every_n_epoch=self.config.eval_freq_epochs
+            check_val_every_n_epoch=self.config.eval_freq_epochs,  # Run validation every epoch
             #callbacks=[WandbCleanup()]
         )
         trainer.fit(self)
@@ -327,17 +321,17 @@ class BaseAgent(pl.LightningModule):
             deterministic=self.config.eval_deterministic
         )
 
-        eval_metrics = prefix_dict_keys(info, "eval")
-        self.log_metrics(eval_metrics)
+        #eval_metrics = prefix_dict_keys(info, "eval")
+       # self.log_metrics(eval_metrics)
         
         # Flush eval metrics immediately to ensure video step alignment
         # Use safe_logging=False since we might be in a validation hook
-        self._flush_metrics(safe_logging=False)
+        #self._flush_metrics(safe_logging=False)
         
         # Force immediate video scan and log at the same step as eval metrics
         # Use the exact step that was used for logging the metrics
-        if hasattr(self.logger, '_scan_and_log_once'):
-            step_for_videos = getattr(self, '_last_logged_step', None)
-            self.logger._scan_and_log_once(step=step_for_videos)
+        #if hasattr(self.logger, '_scan_and_log_once'):
+        #    step_for_videos = getattr(self, '_last_logged_step', None)
+        #    self.logger._scan_and_log_once(step=step_for_videos)
  
         return info

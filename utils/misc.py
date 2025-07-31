@@ -4,11 +4,61 @@ from typing import Dict, Any
 from contextlib import contextmanager
 import os
 import sys
-from typing import Dict, Any
+from typing import Dict, Any, Iterable, Optional
+import numbers
 
 
 def prefix_dict_keys(data: dict, prefix: str) -> dict:
     return {f"{prefix}/{key}" if prefix else key: value for key, value in data.items()}
+
+def print_namespaced_dict(data: dict) -> None:
+    """
+    Prints a dictionary with namespaced keys (e.g., 'rollout/ep_len_mean')
+    in a formatted ASCII table grouped by namespaces.
+    Floats are formatted to 2 decimal places.
+    """
+    if not data: return
+    # Group keys by their namespace prefix
+    grouped = {}
+    for key, value in data.items():
+        if "/" in key:
+            namespace, subkey = key.split("/", 1)
+        else:
+            namespace, subkey = key, ""
+        grouped.setdefault(namespace, {})[subkey] = value
+
+    # Format values first (floats to 2 decimals)
+    formatted_grouped = {}
+    for ns, subdict in grouped.items():
+        formatted_grouped[ns] = {
+            subkey: str(val)
+            for subkey, val in subdict.items()
+        }
+
+    # Determine column widths
+    max_key_len = max(len(subkey) for ns in formatted_grouped for subkey in formatted_grouped[ns]) + 4
+    max_val_len = max(len(val) for ns in formatted_grouped for val in formatted_grouped[ns].values()) + 2
+
+    # Print table
+    border = "-" * (max_key_len + max_val_len + 5)
+    print(border)
+    for ns, subdict in formatted_grouped.items():
+        print(f"| {ns + '/':<{max_key_len}} |")
+        for subkey, val in subdict.items():
+            print(f"|    {subkey:<{max_key_len-4}} | {val:<{max_val_len}}|")
+    print(border)
+
+def _convert_numeric_strings(config_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert string representations of numbers back to numeric types."""
+    for key, value in config_dict.items():
+        if isinstance(value, str):
+            # Try to convert scientific notation strings to float
+            if 'e' in value.lower() or 'E' in value:
+                try:
+                    config_dict[key] = float(value)
+                except ValueError:
+                    pass  # Keep as string if conversion fails
+    return config_dict
 
 
 # TODO: move this somewhere else?
@@ -45,64 +95,272 @@ def _device_of(module: torch.nn.Module) -> torch.device:
     return next(module.parameters()).device
 
 
+# ========= Helpers =========
+
+def _is_number(x: Any) -> bool:
+    return isinstance(x, numbers.Number)
+
+def _humanize_num(v: numbers.Number, float_fmt: str = ".2f") -> str:
+    """Compact formatting for ints/floats."""
+    if isinstance(v, bool):
+        return "1" if v else "0"
+    if isinstance(v, int):
+        n = abs(v)
+        sign = "-" if v < 0 else ""
+        if n >= 1_000_000_000:
+            return f"{sign}{n/1_000_000_000:.2f}B"
+        if n >= 1_000_000:
+            return f"{sign}{n/1_000_000:.2f}M"
+        if n >= 1_000:
+            return f"{sign}{n/1_000:.2f}k"
+        return str(v)
+    if isinstance(v, float):
+        # keep small floats readable; switch to scientific for very tiny
+        if 0 < abs(v) < 1e-6:
+            return f"{v:.2e}"
+        return format(v, float_fmt)
+    return str(v)
+
+def _fmt_plain(v: Any, float_fmt: str = ".2f") -> str:
+    if isinstance(v, float):
+        return format(v, float_fmt)
+    return str(v)
+
+def _ansi(color: Optional[str], s: str, enable: bool) -> str:
+    if not enable or not color:
+        return s
+    codes = {
+        "red": "31",
+        "green": "32",
+        "yellow": "33",
+        "blue": "34",
+        "magenta": "35",
+        "cyan": "36",
+        "gray": "90",
+        "bold": "1",
+    }
+    if color == "bold":
+        return f"\x1b[{codes['bold']}m{s}\x1b[0m"
+    return f"\x1b[{codes[color]}m{s}\x1b[0m"
+
+# ========= Printer =========
+
+class NamespaceTablePrinter:
+    def __init__(
+        self,
+        *,
+        float_fmt: str = ".2f",
+        indent: int = 4,
+        compact_numbers: bool = True,
+        color: bool = True,
+        # If provided, use this to decide what counts as "improvement".
+        # Keys are "namespace/subkey" (e.g. "train/loss": False meaning lower is better).
+        better_when_increasing: Optional[Dict[str, bool]] = None,
+        # Section order; others follow alphabetically
+        fixed_section_order: Optional[Iterable[str]] = ("train", "time", "rollout"),
+        sort_keys_within_section: bool = True,
+        # Render method
+        use_ansi_inplace: bool = True,
+        stream=None,
+        delta_tol: float = 1e-12,
+    ):
+        self.float_fmt = float_fmt
+        self.indent = indent
+        self.compact_numbers = compact_numbers
+        self.color = bool(color and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None)
+        self.better_when_increasing = dict(better_when_increasing or {})
+        self.fixed_section_order = list(fixed_section_order) if fixed_section_order else None
+        self.sort_keys_within_section = sort_keys_within_section
+        self.use_ansi_inplace = use_ansi_inplace and sys.stdout.isatty()
+        self.stream = stream or sys.stdout
+        self.delta_tol = delta_tol
+
+        self._prev: Optional[Dict[str, Any]] = None
+        self._last_height: int = 0  # how many lines we printed last time
+
+    # ---------- public API ----------
+    def update(self, data: Dict[str, Any]) -> None:
+        """Print (or reprint) the table for `data`, with diffs vs. prior call."""
+        if not data:
+            return
+
+        grouped = self._group_by_namespace(data)
+        # Order sections
+        ns_names = list(grouped.keys())
+        if self.fixed_section_order:
+            pref = [ns for ns in self.fixed_section_order if ns in grouped]
+            rest = sorted([ns for ns in ns_names if ns not in self.fixed_section_order])
+            ns_order = pref + rest
+        else:
+            ns_order = sorted(ns_names)
+
+        # Possibly sort keys within each section
+        for ns in ns_order:
+            if self.sort_keys_within_section:
+                grouped[ns] = dict(sorted(grouped[ns].items(), key=lambda kv: kv[0]))
+
+        # Build formatted values (including delta strings), then compute widths
+        formatted = {}
+        val_candidates = []
+        key_candidates = [ns + "/" for ns in ns_order]
+        for ns in ns_order:
+            subdict = grouped[ns]
+            f_sub = {}
+            for sub, v in subdict.items():
+                key_candidates.append(sub)
+
+                # Compose value string: value + optional colored delta
+                val_str = self._format_value(v)
+                delta_str, color_name = self._delta_for_key(ns, sub, v)
+
+                if delta_str:
+                    # keep a small space before delta
+                    delta_disp = _ansi(color_name, delta_str, self.color)
+                    val_disp = f"{val_str} {delta_disp}"
+                else:
+                    val_disp = val_str
+
+                f_sub[sub] = val_disp
+                val_candidates.append(self._strip_ansi(val_disp))
+            formatted[ns] = f_sub
+
+        # Compute widths (include headers and values)
+        indent = self.indent
+        key_width = max(len(k) for k in key_candidates) if key_candidates else 0
+        val_width = max((len(v) for v in val_candidates), default=0)
+
+        # Row layout: "| " + (indent + key_width) + " | " + (val_width) + " |"
+        border_len = 2 + (indent + key_width) + 3 + val_width + 2
+        border = "-" * border_len
+
+        # Prepare lines to print
+        lines = []
+        lines.append(border)
+        for ns in ns_order:
+            header = ns + "/"
+            # Header: flush-left (no indent visually), but occupy same key field width
+            header_line = f"| {header:<{indent + key_width}} | {'':>{val_width}} |"
+            lines.append(_ansi("bold", header_line, self.color))
+            for sub, val in formatted[ns].items():
+                sub_disp = sub
+                # Keep indent for metrics
+                lines.append(f"| {' ' * indent}{sub_disp:<{key_width}} | {val:>{val_width}} |")
+        lines.append(border)
+
+        # In-place reprint without flicker
+        self._render_lines(lines)
+
+        # Save state
+        self._prev = dict(data)
+        self._last_height = len(lines)
+
+    # ---------- internals ----------
+    def _render_lines(self, lines):
+        text = "\n".join(lines)
+        if self.use_ansi_inplace and self._last_height > 0:
+            # Move cursor up by the last height, erase to end, then print
+            # ESC[{n}F would move to beginning of line n lines up; ESC[{n}A moves cursor up.
+            self.stream.write(f"\x1b[{self._last_height}F")  # move up N lines to the top border
+            self.stream.write("\x1b[0J")                    # clear from cursor to end of screen
+            self.stream.write(text + "\n")
+            self.stream.flush()
+        else:
+            # First render or no ANSI — fall back to clear or normal print
+            if not self.use_ansi_inplace:
+                # optional: minimal clear to avoid scroll (comment out if undesired)
+                os.system('cls' if os.name == 'nt' else 'clear')
+            print(text, file=self.stream)
+
+    def _group_by_namespace(self, data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        grouped: Dict[str, Dict[str, Any]] = {}
+        for k, v in data.items():
+            if "/" in k:
+                ns, sub = k.split("/", 1)
+            else:
+                ns, sub = k, ""
+            grouped.setdefault(ns, {})[sub] = v
+        return grouped
+
+    def _format_value(self, v: Any) -> str:
+        if v is None:
+            return "—"
+        if self.compact_numbers and _is_number(v):
+            return _humanize_num(v, self.float_fmt)
+        return _fmt_plain(v, self.float_fmt)
+
+    def _delta_for_key(self, ns: str, sub: str, v: Any):
+        """Return (delta_str, color_name) for the full key vs previous."""
+        if self._prev is None:
+            return ("", None)
+        full_key = f"{ns}/{sub}" if sub else ns
+        if full_key not in self._prev:
+            return ("", None)
+        prev_v = self._prev[full_key]
+        if not (_is_number(v) and _is_number(prev_v)):
+            return ("", None)
+        delta = v - prev_v
+        if abs(delta) <= self.delta_tol:
+            return ("→0", "gray")  # unchanged / negligible
+        # Improvement logic:
+        color = None
+        arrow = "↑" if delta > 0 else "↓"
+        if full_key in self.better_when_increasing:
+            inc_better = self.better_when_increasing[full_key]
+            improved = (delta > 0) if inc_better else (delta < 0)
+            color = "green" if improved else "red"
+        else:
+            # If no preference, color by sign
+            color = "green" if delta > 0 else "red"
+        # format delta magnitude compactly
+        mag = _humanize_num(abs(delta), self.float_fmt) if self.compact_numbers else _fmt_plain(abs(delta), self.float_fmt)
+        return (f"{arrow}{mag}", color)
+
+    @staticmethod
+    def _strip_ansi(s: str) -> str:
+        # cheap and cheerful: remove \x1b[...m sequences for width calc
+        out = []
+        i = 0
+        while i < len(s):
+            if s[i] == "\x1b":
+                # skip until 'm' or end
+                while i < len(s) and s[i] != "m":
+                    i += 1
+                if i < len(s):
+                    i += 1
+            else:
+                out.append(s[i])
+                i += 1
+        return "".join(out)
+
+# ========= Optional: backwards-compatible function =========
+
+# Create a default singleton so you can keep calling print_namespaced_dict(...)
+_default_printer = NamespaceTablePrinter()
 
 def print_namespaced_dict(
     data: Dict[str, Any],
+    *,
     inplace: bool = True,
     float_fmt: str = ".2f",
-    indent: int = 4,
-) -> None:
+    compact_numbers: bool = True,
+    color: bool = True,
+):
     """
-    Prints a dictionary with namespaced keys (e.g., 'rollout/ep_len_mean')
-    as a formatted ASCII table grouped by namespaces.
-
-    - Namespace headers (e.g., 'train/', 'time/', 'rollout/') are flush-left.
-    - Metric rows are indented by `indent` spaces.
-    - Floats are formatted using `float_fmt` (default: '.2f').
+    Thin wrapper to keep your old callsite working. For advanced config,
+    instantiate NamespaceTablePrinter yourself.
     """
-    if not data:
-        return
-
-    if inplace:
-        os.system('cls' if os.name == 'nt' else 'clear')
-
-    # Group by namespace (preserves insertion order in Python 3.7+)
-    grouped: Dict[str, Dict[str, Any]] = {}
-    for k, v in data.items():
-        ns, sub = k.split("/", 1) if "/" in k else (k, "")
-        grouped.setdefault(ns, {})[sub] = v
-
-    # Formatter
-    def fmt(v: Any) -> str:
-        return format(v, float_fmt) if isinstance(v, float) else str(v)
-
-    # Compute column widths (include headers and all subkeys/values)
-    ns_order = list(grouped.keys())
-    key_candidates = [ns + "/" for ns in ns_order]  # headers
-    val_candidates = []
-    for ns in ns_order:
-        for sub, v in grouped[ns].items():
-            key_candidates.append(sub)
-            val_candidates.append(fmt(v))
-
-    key_width = max(len(k) for k in key_candidates) if key_candidates else 0
-    val_width = max((len(v) for v in val_candidates), default=0)
-
-    # Total width matches the row layout below:
-    # "| " + (key field of width indent+key_width) + " | " + (val field of width val_width) + " |"
-    border_len = 2 + (indent + key_width) + 3 + val_width + 2
-    border = "-" * border_len
-
-    print(border)
-    for ns in ns_order:
-        header = ns + "/"
-        # Header: NO indent visually; we fill the whole key field without the leading indent spaces
-        # but keep the field width equal to (indent + key_width) so the right column aligns.
-        print(f"| {header:<{indent + key_width}} | {'':>{val_width}} |")
-
-        # Metrics: keep indent before subkeys
-        for sub, v in grouped[ns].items():
-            sub_disp = sub  # empty subkey allowed
-            val_disp = fmt(v)
-            print(f"| {' ' * indent}{sub_disp:<{key_width}} | {val_disp:>{val_width}} |")
-    print(border)
+    # If the user changes core options, recreate the singleton
+    global _default_printer
+    if (
+        _default_printer.float_fmt != float_fmt
+        or _default_printer.compact_numbers != compact_numbers
+        or (_default_printer.use_ansi_inplace != bool(inplace and sys.stdout.isatty()))
+        or _default_printer.color != bool(color and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None)
+    ):
+        _default_printer = NamespaceTablePrinter(
+            float_fmt=float_fmt,
+            compact_numbers=compact_numbers,
+            use_ansi_inplace=bool(inplace and sys.stdout.isatty()),
+            color=bool(color and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None),
+        )
+    _default_printer.update(data)

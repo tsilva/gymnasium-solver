@@ -174,10 +174,10 @@ class VecVideoRecorder(VecEnvWrapper):
         obs = self.venv.reset()
         
         # Increment episode counter and reset step counter
-        self.current_episode += 1
+        self.current_episode = 0
         self.current_step = 0
         
-        if self.recording: self._capture_frame()
+        self._capture_frame()
 
         return obs
 
@@ -187,8 +187,7 @@ class VecVideoRecorder(VecEnvWrapper):
         self.step_id += 1 # TODO: should this be incremented ever?
         self.current_step += 1
         
-        if self.recording:
-            self._capture_frame()
+        self._capture_frame()
 
         # Reset step counter if any environment is done
         if np.any(dones):
@@ -198,7 +197,8 @@ class VecVideoRecorder(VecEnvWrapper):
         return obs, rewards, dones, infos
 
     def _capture_frame(self) -> None:
-        assert self.recording, "Cannot capture a frame, recording wasn't started."
+        if not self.recording: 
+            return
 
         if self.video_length is not None and len(self.recorded_frames) >= self.video_length:
             return

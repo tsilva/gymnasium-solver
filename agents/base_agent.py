@@ -53,10 +53,7 @@ class BaseAgent(pl.LightningModule):
     
     def create_models(self):
         raise NotImplementedError("Subclass must implement create_models()")
-    
-    def training_step(self, batch, batch_idx):
-        raise NotImplementedError("Subclass must implement training_step()")
-
+ 
     def train_on_batch(self, batch, batch_idx):
         raise NotImplementedError("Subclass must implement train_on_batch()")
     
@@ -132,17 +129,95 @@ class BaseAgent(pl.LightningModule):
 
         self._flush_metrics()
         self._check_early_stop()
-    
+
+    def val_dataloader(self):
+        """
+        Return a dummy validation dataloader to trigger validation methods.
+        In RL, we don't use traditional validation data but run evaluation episodes.
+        """
+        import torch
+        from torch.utils.data import DataLoader, TensorDataset
+        
+        # Create a dummy dataset with a single item to trigger validation_step once per epoch
+        dummy_data = torch.zeros(1, 1)
+        dummy_target = torch.zeros(1, 1)
+        dataset = TensorDataset(dummy_data, dummy_target)
+        return DataLoader(dataset, batch_size=1)
+
+    def on_validation_epoch_start(self):
+        """Called at the start of the validation epoch."""
+        pass
+
+    def validation_step(self, batch, batch_idx, dataloader_idx=0):
+        """
+        Operates on a single batch of data from the validation set.
+        For RL, this runs evaluation rollouts instead of processing validation batches.
+        
+        Args:
+            batch: The output of your data iterable (dummy data for RL)
+            batch_idx: The index of this batch
+            dataloader_idx: The index of the dataloader (default 0)
+            
+        Returns:
+            Dict with validation metrics or None
+        """
+        # Only run evaluation at the specified frequency
+        if not hasattr(self, '_last_validation_timesteps'):
+            self._last_validation_timesteps = 0
+            
+        delta = self.total_timesteps - self._last_validation_timesteps
+        delta_env = delta // self.train_env.num_envs
+        
+        if delta_env >= self.config.eval_freq:
+            self._last_validation_timesteps = self.total_timesteps
+            
+            # Run evaluation episodes
+            eval_info = self.run_evaluation()
+            
+            # Check for early stopping based on reward threshold
+            reward_threshold = self.get_reward_threshold()
+            ep_rew_mean = eval_info["ep_rew_mean"]
+            
+            if ep_rew_mean >= reward_threshold:
+                print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
+                self.trainer.should_stop = True
+            
+            # Return validation metrics for logging
+            return {
+                'val_reward_mean': ep_rew_mean,
+                'val_reward_std': eval_info.get("ep_rew_std", 0.0),
+                'val_ep_len_mean': eval_info.get("ep_len_mean", 0.0)
+            }
+        
+        return None
+
+    def on_validation_epoch_end(self):
+        """Called at the very end of the validation epoch."""
+        pass
+
     def log_metrics(self, metrics):
         for key, value in metrics.items(): self._epoch_metrics[key] = value # TODO: assert no overwriting of keys
     
     # NOTE: beware of any changes to logging as torch lightning logging can slowdown training (expected performance is >6000 FPS on Macbook Pro M1)
-    def _flush_metrics(self):
+    def _flush_metrics(self, safe_logging=True):
         # TODO: self.log is a gigantic bottleneck, currently halving performance;
         # ; must fix this bug while retaining FPS
         # Capture the current step before logging for video alignment
         current_step = self.global_step if hasattr(self, 'global_step') else None
-        self.log_dict(self._epoch_metrics) # TODO: when does this flush?
+        
+        if safe_logging:
+            try:
+                self.log_dict(self._epoch_metrics) # TODO: when does this flush?
+            except Exception as e:
+                # If we can't log through Lightning, log directly to wandb
+                print(f"Warning: Could not log through Lightning ({e}), logging directly to wandb")
+                if wandb.run is not None:
+                    wandb.log(self._epoch_metrics, step=current_step)
+        else:
+            # Log directly to wandb when Lightning logging is not safe
+            if wandb.run is not None:
+                wandb.log(self._epoch_metrics, step=current_step)
+                
         print_namespaced_dict(self._epoch_metrics)
         print(wandb.run.get_url())
         
@@ -155,11 +230,7 @@ class BaseAgent(pl.LightningModule):
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
         print_namespaced_dict(self._epoch_metrics)
 
-    # TODO: when does this run? should I run eval_rollout_collector here?
-    #def validation_step(self, *args, **kwargs):
-    #    return super().validation_step(*args, **kwargs)
-
-    def train(self):
+    def run_training(self):
         from pytorch_lightning.loggers import WandbLogger
         from tsilva_notebook_utils.colab import load_secrets_into_env # TODO: get rid of all references to this project
         from dataclasses import asdict
@@ -193,7 +264,8 @@ class BaseAgent(pl.LightningModule):
             enable_progress_bar=False,
             enable_checkpointing=False,  # Disable checkpointing for speed
             accelerator="cpu",  # Use CPU for training # TODO: softcode this
-            reload_dataloaders_every_n_epochs=1#self.config.n_epochs
+            reload_dataloaders_every_n_epochs=1,#self.config.n_epochs
+            check_val_every_n_epoch=1,  # Run validation every epoch
             #callbacks=[WandbCleanup()]
         )
         trainer.fit(self)
@@ -216,28 +288,18 @@ class BaseAgent(pl.LightningModule):
     
     # TODO: should eval freq be based on n_updates?
     def _check_early_stop(self):
-        # Return in case it's not time to run evaluation yet
-        last_total_timesteps = self._last_total_timesteps if hasattr(self, "_last_total_timesteps") else 0
-        delta = self.total_timesteps - last_total_timesteps
-        delta_env = delta // self.train_env.num_envs
-        if delta_env < self.config.eval_freq: return
-        self._last_total_timesteps = self.total_timesteps
-
-        # In case reward threshold hasn't been reached yet then 
-        info = self.eval()
-        reward_threshold = self.get_reward_threshold()
-        ep_rew_mean = info["ep_rew_mean"]
-        if ep_rew_mean < reward_threshold: return
-
-        print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
-        self.trainer.should_stop = True
+        """
+        Early stopping logic has been moved to validation_step().
+        This method is kept for backward compatibility but doesn't do anything.
+        """
+        pass
 
     # TODO: consider recording single video with all episodes in sequence
     # TODO: consider moving to validation_step()
     # TODO: check how sb3 does eval_async
     # TODO: add more stats to video (eg: episode, step, current reward, etc)
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
-    def eval(self):
+    def run_evaluation(self):
         # Ensure output video directory exists
         assert wandb.run is not None, "wandb.init() must run before building the env"
         root = os.path.join(wandb.run.dir, "videos", "eval", "episodes") # TODO: ensure two directories because last two are the key
@@ -281,7 +343,8 @@ class BaseAgent(pl.LightningModule):
         self.log_metrics(eval_metrics)
         
         # Flush eval metrics immediately to ensure video step alignment
-        self._flush_metrics()
+        # Use safe_logging=False since we might be in a validation hook
+        self._flush_metrics(safe_logging=False)
         
         # Force immediate video scan and log at the same step as eval metrics
         # Use the exact step that was used for logging the metrics

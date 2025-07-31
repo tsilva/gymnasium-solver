@@ -176,8 +176,8 @@ class BaseAgent(pl.LightningModule):
         video_logger = VideoLoggerCallback(
             media_root="videos",        # where you will drop files
             namespace_depth=2,          # "phase/name" from path
-            log_interval_s=5.0,         # scan at most every 5 seconds
-            max_per_key=8,              # avoid spamming the panel
+            #log_interval_s=5.0,         # scan at most every 5 seconds
+            #max_per_key=8,              # avoid spamming the panel
         )
         
         # TODO: clean this up

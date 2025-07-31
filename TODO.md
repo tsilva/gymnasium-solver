@@ -1,29 +1,33 @@
+- BUG: not recording all eval videos
+- BUG: videos dont have all eval episodes
+- BUG: videos not logged at correct timesteps
+- BUG: videos overlay is not accurate
+- BUG: eval is only being looged in the end
+- BUG: eval is not recording full episodes (eg: LunarLander-v3 post-training)
+- BUG: confirm that buffer growth is under control
+- BUG: eval is being calculated before window is full, consider evaling frequently by n_steps instead of n_episodes
+- BUG: fix thread safety issues with async eval collector (copy model weights with lock)
+- BUG: check that were are matching rlzoo stop criteria
+- FEAT: add assertion that certain metrics must always increase
 - FEAT: add logging support (file logging)
 - FEAT: add assertions where applicable
 - FEAT: track output distribution
 - FEAT: measure obs mean/std
 - FEAT: measure reward mean/std
 - FEAT: add type hints where applicable
-- BUG: eval is only being looged in the end
-- BUG: eval is not recording full episodes (eg: LunarLander-v3 post-training)
-- BUG: confirm that buffer growth is under control
-- add support for premature early stop if train_mean_reward is above threshold
-- FEAT: get reward threshold from env specs (hardcoded)
-- add n_timesteps support
-- add ability to hardcode reward threshold
-- check that were are matching rlzoo stop criteria
-- solve mountaincar with framestacking
-- rlzoo save model, run it in my model and compare rollout results (set seed and 1 env)
-- check if rlzoo solves mountaincar
-- rlzoo better due to missing param support like decay
-- save best model/agent checkpoints (use trainer) / background tasks records video 
-- Try solving MountainCar-v0 with PPO + frame stacking (no reward shaping)
+- FEAT: add ability to hardcode reward threshold
 - FEAT: log steps/episodes to progress bar
-- BUG: eval is being calculated before window is full, consider evaling frequently by n_steps instead of n_episodes
-- BUG: fix thread safety issues with async eval collector (copy model weights with lock)
 - FEAT: support for softcoding activations
 - FEAT: train for convergence without deterministic policy
 - FEAT: a2c (only after reinforce/ppo is stable), add baseline subtraction
+- FEAT: get reward threshold from env specs (hardcoded)
+- FEAT: add n_timesteps support
+- FEAT: add same linear decay features as rlzoo
+- FEAT: add support for premature early stop if train_mean_reward is above threshold
+- solve mountaincar with framestacking
+- rlzoo save model, run it in my model and compare rollout results (set seed and 1 env)
+- rlzoo better due to missing param support like decay
+- save best model/agent checkpoints (use trainer) / background tasks records video 
 - CHECK: run rollout through dataloader process, do we always get n_batches?
 - CHECK: assert that dataloader is always going through all expected batches
 - When I group by episodes I discard data from that rollout that won't be included in the next sequence of trajectories, so I need to make sure I don't lose data

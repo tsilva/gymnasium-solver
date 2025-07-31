@@ -12,6 +12,7 @@ class REINFORCE(BaseAgent):
             hidden=self.config.hidden_dims
         )
     
+    # TODO: broken, must fix
     def rollout_collector_hyperparams(self):
         # Override to disable GAE for REINFORCE - use pure Monte Carlo returns
         base_params = self.config.rollout_collector_hyperparams()

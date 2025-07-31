@@ -2,6 +2,7 @@
 - BUG: videos dont have all eval episodes
 - BUG: videos not logged at correct timesteps
 - BUG: videos overlay is not accurate
+- BUG: videos not logging all steps
 - BUG: eval is only being looged in the end
 - BUG: eval is not recording full episodes (eg: LunarLander-v3 post-training)
 - BUG: confirm that buffer growth is under control

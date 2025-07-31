@@ -42,7 +42,6 @@ class VecVideoRecorder(VecEnvWrapper):
     def __init__(
         self,
         venv: VecEnv,
-        video_folder: str,
         video_length: Optional[int] = 200,
         # Text overlay options
         enable_overlay: bool = True,
@@ -201,6 +200,9 @@ class VecVideoRecorder(VecEnvWrapper):
     def _capture_frame(self) -> None:
         assert self.recording, "Cannot capture a frame, recording wasn't started."
 
+        if self.video_length is not None and len(self.recorded_frames) >= self.video_length:
+            return
+        
         frame = self.env.render()
 
         assert isinstance(frame, np.ndarray)

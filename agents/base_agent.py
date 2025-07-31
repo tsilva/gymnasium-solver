@@ -244,11 +244,15 @@ class BaseAgent(pl.LightningModule):
         env = self.build_env_fn(
             self.config.seed + 1000,
             n_envs=1,
-            record_video=True
+            record_video=True,
+            record_video_kwargs={
+                "video_length": 100
+            }
         )
         try: return self._eval(env)
         finally: env.close()
     
+    # TODO: BUG: video first episode = 2, should be 1
     # TODO: add more stats to video (eg: episode, step, current reward, etc)
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
     # TODO: consider making recording a rollout collector concern again (cleaner separation of concerns)

@@ -37,7 +37,7 @@ class VideoLoggerCallback(pl.Callback):
         self,
         *,
         media_root: str = "videos",
-        exts: Iterable[str] = (".mp4", ".gif", ".png", ".jpg"),
+        exts: Iterable[str] = [".mp4"],
         namespace_depth: int = 1,
         include_modified: bool = True,
         min_age_sec: float = 0.25,
@@ -58,6 +58,7 @@ class VideoLoggerCallback(pl.Callback):
         self._handler = None
         self._train_root: Path | None = None
         self._eval_root: Path | None = None
+        self._trainer = None
 
     # --------- path helpers --------------------------------------------------
     def _resolve_roots(self, run_dir: str) -> tuple[Path, Path]:
@@ -161,6 +162,8 @@ class VideoLoggerCallback(pl.Callback):
 
     # --------- Lightning hooks ----------------------------------------------
     def on_fit_start(self, trainer, *_):
+        # Store trainer reference for later use
+        self._trainer = trainer
         # Start early so we don't miss files during the first epoch.
         run = getattr(wandb, "run", None)
         if run:
@@ -175,7 +178,16 @@ class VideoLoggerCallback(pl.Callback):
         # to ensure correct timestep alignment with eval metrics
         pass
 
+    def on_fit_end(self, trainer, *_):
+        # Process any remaining videos before training ends
+        self._process(trainer, "train")
+        self._process(trainer, "eval")
+
     def teardown(self, *a, **k):
+        # Process any remaining videos one last time before shutdown
+        if self._trainer:
+            self._process(self._trainer, "train")
+            self._process(self._trainer, "eval")
         self._stop_watch()
 
     # --------- core ----------------------------------------------------------

@@ -220,7 +220,7 @@ def build_env(
         from wrappers.vec_video_recorder import VecVideoRecorder
         env = VecVideoRecorder(
             env,
-            record_video_kwargs
+            **record_video_kwargs
         )
 
     return env

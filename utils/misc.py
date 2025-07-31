@@ -227,7 +227,7 @@ class NamespaceTablePrinter:
         # Compute widths (include headers and values)
         indent = self.indent
         key_width = max(len(k) for k in key_candidates) if key_candidates else 0
-        val_width = max((len(v) for v in val_candidates), default=0)
+        val_width = max(len(v) for v in val_candidates) if val_candidates else 0
 
         # Row layout: "| " + (indent + key_width) + " | " + (val_width) + " |"
         border_len = 2 + (indent + key_width) + 3 + val_width + 2
@@ -244,7 +244,11 @@ class NamespaceTablePrinter:
             for sub, val in formatted[ns].items():
                 sub_disp = sub
                 # Keep indent for metrics
-                lines.append(f"| {' ' * indent}{sub_disp:<{key_width}} | {val:>{val_width}} |")
+                # Handle ANSI codes in val by manually calculating padding
+                val_display_len = len(self._strip_ansi(val))
+                val_padding = val_width - val_display_len
+                val_padded = " " * val_padding + val if val_padding > 0 else val
+                lines.append(f"| {' ' * indent}{sub_disp:<{key_width}} | {val_padded} |")
         lines.append(border)
 
         # In-place reprint without flicker
@@ -340,7 +344,7 @@ _default_printer = NamespaceTablePrinter()
 def print_namespaced_dict(
     data: Dict[str, Any],
     *,
-    inplace: bool = True,
+    inplace: bool = False,
     float_fmt: str = ".2f",
     compact_numbers: bool = True,
     color: bool = True,

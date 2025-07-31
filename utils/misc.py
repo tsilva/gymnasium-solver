@@ -6,7 +6,14 @@ import os
 import sys
 from typing import Dict, Any, Iterable, Optional
 import numbers
+import torch
+from torch.utils.data import DataLoader, TensorDataset
 
+def create_dummy_dataloader(n_samples: int = 1, sample_dim: int = 1, batch_size: int = 1) -> torch.utils.data.DataLoader:
+    dummy_data = torch.zeros(n_samples, sample_dim)
+    dummy_target = torch.zeros(n_samples, sample_dim)
+    dataset = TensorDataset(dummy_data, dummy_target)
+    return DataLoader(dataset, batch_size=batch_size)
 
 def prefix_dict_keys(data: dict, prefix: str) -> dict:
     return {f"{prefix}/{key}" if prefix else key: value for key, value in data.items()}

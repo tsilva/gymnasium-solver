@@ -334,33 +334,3 @@ class RolloutCollector():
             "ep_rew_mean": ep_rew_mean,
             "ep_len_mean": ep_len_mean
         }
-
-    # TODO: this will still collect trajectories from envs that reached quota
-    # TODO: don't eval deterministically for atari envs (in SB3 this is done by default)
-    def collect_episodes(
-        self,
-        n_episodes: int,
-        deterministic=False
-    ):
-        if n_episodes % self.env.num_envs != 0:
-            raise ValueError(
-                f"n_episodes={n_episodes} must be a multiple of num_envs={self.n_envs} to avoid sampling bias."
-            )
-
-        target_episodes_per_env = n_episodes // self.n_envs
-        while True:
-            self.collect(deterministic=deterministic)
-            reached = [len(deque) >= target_episodes_per_env for deque in self.env_episode_reward_deques]
-            if np.all(reached): break
-
-        env_episode_reward_deques = [list(deque)[:target_episodes_per_env] for deque in self.env_episode_reward_deques]
-        env_episode_reward_means = [float(np.mean(deque)) if deque else 0.0 for deque in env_episode_reward_deques]
-        ep_rew_mean = np.mean(env_episode_reward_means)
-        env_episode_length_deques = [list(deque)[:target_episodes_per_env] for deque in self.env_episode_length_deques]
-        env_episode_length_means = [float(np.mean(deque)) if deque else 0.0 for deque in env_episode_length_deques]
-        ep_len_mean = np.mean(env_episode_length_means)
-
-        return {
-            "ep_rew_mean": ep_rew_mean,
-            "ep_len_mean": ep_len_mean
-        }

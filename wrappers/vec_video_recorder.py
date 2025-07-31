@@ -4,7 +4,7 @@
 
 import os
 import os.path
-from typing import Callable
+from typing import Callable, Tuple
 
 import numpy as np
 from gymnasium import error, logger
@@ -31,6 +31,12 @@ class VecVideoRecorder(VecEnvWrapper):
                                         and returns whether we should start recording or not.
     :param video_length:  Length of recorded videos
     :param name_prefix: Prefix to the video name
+    :param enable_overlay: Whether to add episode and step overlay text to frames
+    :param font_size: Size of the overlay text font
+    :param text_position: (x, y) position for the overlay text
+    :param text_color: RGB color tuple for the text
+    :param stroke_color: RGB color tuple for the text outline
+    :param stroke_width: Width of the text outline in pixels
     """
 
     video_name: str
@@ -43,6 +49,13 @@ class VecVideoRecorder(VecEnvWrapper):
         record_video_trigger: Callable[[int], bool],
         video_length: int = 200,
         name_prefix: str = "rl-video",
+        # Text overlay options
+        enable_overlay: bool = True,
+        font_size: int = 24,
+        text_position: Tuple[int, int] = (10, 10),
+        text_color: Tuple[int, int, int] = (255, 255, 255),
+        stroke_color: Tuple[int, int, int] = (0, 0, 0),
+        stroke_width: int = 2,
     ):
         VecEnvWrapper.__init__(self, venv)
 
@@ -76,14 +89,106 @@ class VecVideoRecorder(VecEnvWrapper):
 
         self.recording = False
         self.recorded_frames: list[np.ndarray] = []
+        
+        # Episode and step tracking for overlay
+        self.current_episode = 0
+        self.current_step = 0
+        
+        # Overlay configuration
+        self.enable_overlay = enable_overlay
+        self.font_size = font_size
+        self.text_position = text_position
+        self.text_color = text_color
+        self.stroke_color = stroke_color
+        self.stroke_width = stroke_width
+        self._font = None  # Will be initialized when needed
 
         try:
             import moviepy  # noqa: F401
         except ImportError as e:  # pragma: no cover
             raise error.DependencyNotInstalled("MoviePy is not installed, run `pip install 'gymnasium[other]'`") from e
 
+    def _get_font(self):
+        """Get or create the font for text overlay."""
+        if self._font is None:
+            try:
+                from PIL import ImageFont
+                try:
+                    # Try to load a monospace font
+                    self._font = ImageFont.truetype("DejaVuSansMono.ttf", size=self.font_size)
+                except OSError:
+                    try:
+                        # Fallback to Arial or similar
+                        self._font = ImageFont.truetype("Arial.ttf", size=self.font_size)
+                    except OSError:
+                        # Use default font
+                        self._font = ImageFont.load_default()
+            except ImportError:
+                # PIL not available, overlay will be disabled
+                self.enable_overlay = False
+                self._font = None
+        return self._font
+
+    def _add_overlay_to_frame(self, frame: np.ndarray) -> np.ndarray:
+        """Add episode and step overlay to the frame."""
+        if not self.enable_overlay:
+            return frame
+            
+        try:
+            from PIL import Image, ImageDraw
+            
+            # Convert numpy array to PIL Image
+            pil_image = Image.fromarray(frame)
+            draw = ImageDraw.Draw(pil_image)
+            
+            # Create overlay text
+            text = f"Episode: {self.current_episode + 1}  Step: {self.current_step + 1}"
+            
+            # Get font
+            font = self._get_font()
+            
+            if font is not None:
+                # Draw text with stroke (outline)
+                x, y = self.text_position
+                
+                # Draw stroke by drawing text in multiple positions
+                for dx in [-self.stroke_width, 0, self.stroke_width]:
+                    for dy in [-self.stroke_width, 0, self.stroke_width]:
+                        if dx != 0 or dy != 0:  # Don't draw at center position yet
+                            draw.text(
+                                (x + dx, y + dy),
+                                text,
+                                font=font,
+                                fill=self.stroke_color
+                            )
+                
+                # Draw main text
+                draw.text(
+                    self.text_position,
+                    text,
+                    font=font,
+                    fill=self.text_color
+                )
+            
+            # Convert back to numpy array
+            return np.array(pil_image)
+            
+        except ImportError:
+            # PIL not available, return original frame
+            self.enable_overlay = False
+            return frame
+        except Exception as e:
+            # If any error occurs, just return the original frame
+            logger.warn(f"Error adding overlay to frame: {e}")
+            return frame
+
     def reset(self) -> VecEnvObs:
         obs = self.venv.reset()
+        
+        # Increment episode counter and reset step counter
+        self.current_episode += 1
+        self.current_step = 0
+        
         if self._video_enabled():
             self._start_video_recorder()
         return obs
@@ -102,6 +207,8 @@ class VecVideoRecorder(VecEnvWrapper):
         obs, rewards, dones, infos = self.venv.step_wait()
 
         self.step_id += 1
+        self.current_step += 1
+        
         if self.recording:
             self._capture_frame()
             if len(self.recorded_frames) > self.video_length:
@@ -109,6 +216,10 @@ class VecVideoRecorder(VecEnvWrapper):
                 self._stop_recording()
         elif self._video_enabled():
             self._start_video_recorder()
+
+        # Reset step counter if any environment is done
+        if np.any(dones):
+            self.current_step = 0
 
         return obs, rewards, dones, infos
 
@@ -118,7 +229,9 @@ class VecVideoRecorder(VecEnvWrapper):
         frame = self.env.render()
 
         if isinstance(frame, np.ndarray):
-            self.recorded_frames.append(frame)
+            # Add overlay to frame
+            frame_with_overlay = self._add_overlay_to_frame(frame)
+            self.recorded_frames.append(frame_with_overlay)
         else:
             self._stop_recording()
             logger.warn(

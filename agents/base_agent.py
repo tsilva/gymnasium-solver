@@ -6,6 +6,7 @@ import pytorch_lightning as pl
 from utils.rollouts import RolloutCollector
 from utils.misc import prefix_dict_keys, StdoutMetricsTable
 from utils.wandb import WandbLoggerAutomedia
+from utils.misc import create_dummy_dataloader
 
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class BaseAgent(pl.LightningModule):
@@ -127,41 +128,13 @@ class BaseAgent(pl.LightningModule):
             **prefix_dict_keys(time_metrics, "time")
         })
 
-        self._flush_metrics()
-        #self._check_early_stop()
-
     def val_dataloader(self):
-        """
-        Return a dummy validation dataloader to trigger validation methods.
-        In RL, we don't use traditional validation data but run evaluation episodes.
-        """
-        import torch
-        from torch.utils.data import DataLoader, TensorDataset
-        
-        # Create a dummy dataset with a single item to trigger validation_step once per epoch
-        dummy_data = torch.zeros(1, 1)
-        dummy_target = torch.zeros(1, 1)
-        dataset = TensorDataset(dummy_data, dummy_target)
-        return DataLoader(dataset, batch_size=1)
+        return create_dummy_dataloader()
 
     def on_validation_epoch_start(self):
-        """Called at the start of the validation epoch."""
         pass
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
-        """
-        Operates on a single batch of data from the validation set.
-        For RL, this runs evaluation rollouts instead of processing validation batches.
-        
-        Args:
-            batch: The output of your data iterable (dummy data for RL)
-            batch_idx: The index of this batch
-            dataloader_idx: The index of the dataloader (default 0)
-            
-        Returns:
-            Dict with validation metrics or None
-        """
-        # Run evaluation episodes
         eval_metrics = self.run_evaluation()
         
         self.log_dict(prefix_dict_keys(eval_metrics, "eval"))
@@ -175,25 +148,12 @@ class BaseAgent(pl.LightningModule):
             self.trainer.should_stop = True
         
     def on_validation_epoch_end(self):
-        self._flush_metrics()
+        pass
 
-    # NOTE: beware of any changes to logging as torch lightning logging can slowdown training (expected performance is >6000 FPS on Macbook Pro M1)
-    def _flush_metrics(self, safe_logging=True):
-        # TODO: self.log is a gigantic bottleneck, currently halving performance;
-        # ; must fix this bug while retaining FPS
-        # Capture the current step before logging for video alignment
-        current_step = self.global_step if hasattr(self, 'global_step') else None
-        
-        #print_namespaced_dict(self._epoch_metrics)
-        print(wandb.run.get_url())
-        
-        # Store the step used for metrics so videos can use the same step
-        self._last_logged_step = current_step
 
     def on_fit_end(self):
         time_elapsed = self._get_time_metrics()["time_elapsed"]
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
-        #print_namespaced_dict(self._epoch_metrics)
 
     def run_training(self):
         from pytorch_lightning.loggers import WandbLogger
@@ -259,8 +219,6 @@ class BaseAgent(pl.LightningModule):
         reward_threshold = get_env_reward_threshold(self.train_env)
         return reward_threshold
     
-    # TODO: consider recording single video with all episodes in sequence
-    # TODO: consider moving to validation_step()
     # TODO: check how sb3 does eval_async
     # TODO: add more stats to video (eg: episode, step, current reward, etc)
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
@@ -284,6 +242,8 @@ class BaseAgent(pl.LightningModule):
         finally: eval_env.close()
     
     def _eval(self, env):
+        assert env.num_envs == 1, "Evaluation should be run with a single environment instance"
+
         # TODO: make sure this is not calculating advantages
         collector = RolloutCollector(
             env,
@@ -292,17 +252,12 @@ class BaseAgent(pl.LightningModule):
             **self.rollout_collector_hyperparams()
         )
 
-        # Consider the eval episodes in the config to be 
-        # the minimum required and find a multiple of 
-        # num_envs that is above that minimum    
-        eval_episodes = 0
-        while eval_episodes < self.config.eval_episodes: eval_episodes += env.num_envs
+        # Collect until we reach the required number of episodes
+        total_episodes = 0
+        while total_episodes < self.config.eval_episodes:
+            collector.collect(deterministic=self.config.eval_deterministic)
+            metrics = collector.get_metrics()
+            total_episodes = metrics["total_episodes"]
 
-        # TODO: review collect_episodes internals
-        info = collector.collect_episodes(
-            eval_episodes, 
-            deterministic=self.config.eval_deterministic
-        )
-
-        return info
+        return metrics
 

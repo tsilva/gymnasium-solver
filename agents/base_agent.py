@@ -177,7 +177,7 @@ class BaseAgent(pl.LightningModule):
             namespace_depth=2,          # "phase/name" from path
             log_interval_s=5.0,         # scan at most every 5 seconds
             max_per_key=8,              # avoid spamming the panel
-            commit=False,               # don't change Lightning's step handling
+            commit=False                # don't change Lightning's step handling
         )
         
         trainer = pl.Trainer(
@@ -235,7 +235,7 @@ class BaseAgent(pl.LightningModule):
     def eval(self):
         # Ensure output video directory exists
         assert wandb.run is not None, "wandb.init() must run before building the env"
-        root = os.path.join(wandb.run.dir, "videos", "eval")
+        root = os.path.join(wandb.run.dir, "videos", "eval", "episodes") # TODO: ensure two directories because last two are the key
         os.makedirs(root, exist_ok=True)
 
         eval_seed = self.config.seed + 1000  # Use a different seed for evaluation

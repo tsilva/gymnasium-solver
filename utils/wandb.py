@@ -106,7 +106,7 @@ class WandbLoggerAutomedia(WandbLogger):
                 self._seen.add(str(f))
             # Log the bucket under the derived key.
             # Example: key="train/rollouts" => shows as a single media panel in the UI.
-            wandb.log({key: media}, commit=self.commit)
+        wandb.log({key: media}, commit=self.commit)
 
     # ---------- Lightning hooks ----------
 

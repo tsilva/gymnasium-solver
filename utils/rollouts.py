@@ -74,6 +74,10 @@ class RolloutCollector():
         self.env_episode_reward_deques = [deque(maxlen=stats_window_size) for _ in range(self.n_envs)]
         self.env_episode_length_deques = [deque(maxlen=stats_window_size) for _ in range(self.n_envs)]
         
+        # Observation and reward statistics tracking
+        self.obs_values_deque: Deque[np.ndarray] = deque(maxlen=stats_window_size)
+        self.reward_values_deque: Deque[float] = deque(maxlen=stats_window_size)
+        
         self.total_rollouts: int = 0
         self.total_steps: int = 0
         self.total_episodes: int = 0
@@ -191,6 +195,15 @@ class RolloutCollector():
 
         # Use buffers directly since they're pre-allocated to exact size
         T = step_idx
+        
+        # Collect observation and reward statistics from this rollout
+        # Flatten observations and rewards across time and environments for statistics
+        obs_flat = obs_buf[:T].reshape(-1, *obs_buf.shape[2:])  # Shape: (T*n_envs, *obs_shape)
+        rewards_flat = rewards_buf[:T].flatten()  # Shape: (T*n_envs,)
+        
+        # Store flattened observations and rewards for windowed statistics
+        self.obs_values_deque.extend(obs_flat)
+        self.reward_values_deque.extend(rewards_flat)
         
         # Single batch transfer of GPU tensors to CPU after rollout collection
         logprobs_buf[:T] = logprobs_tensor_buf[:T].detach().cpu().numpy()
@@ -324,6 +337,20 @@ class RolloutCollector():
         ep_len_mean = int(np.mean(self.episode_length_deque)) if self.episode_length_deque else 0
         elapsed_mean = float(np.mean(self.rollout_durations))
 
+        # Calculate observation statistics
+        obs_mean = obs_std = 0.0
+        if self.obs_values_deque:
+            obs_array = np.array(list(self.obs_values_deque))
+            obs_mean = float(np.mean(obs_array))
+            obs_std = float(np.std(obs_array))
+        
+        # Calculate reward statistics
+        reward_mean = reward_std = 0.0
+        if self.reward_values_deque:
+            reward_array = np.array(list(self.reward_values_deque))
+            reward_mean = float(np.mean(reward_array))
+            reward_std = float(np.std(reward_array))
+
         return {
             "total_timesteps": self.total_steps, # TODO: steps vs timesteps
             "total_episodes": self.total_episodes,
@@ -332,5 +359,9 @@ class RolloutCollector():
             "episodes_count": self.rollout_episodes,  # Renamed to avoid conflict with video logging
             "elapsed_mean": elapsed_mean, # TODO: better name?
             "ep_rew_mean": ep_rew_mean,
-            "ep_len_mean": ep_len_mean
+            "ep_len_mean": ep_len_mean,
+            "obs_mean": obs_mean,
+            "obs_std": obs_std,
+            "reward_mean": reward_mean,
+            "reward_std": reward_std
         }

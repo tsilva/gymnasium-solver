@@ -1,16 +1,14 @@
+- FEAT: track output distribution
 - BUG: videos not logged at correct timesteps
-- BUG: eval is only being looged in the end
 - BUG: confirm that buffer growth is under control
 - BUG: eval is being calculated before window is full, consider evaling frequently by n_steps instead of n_episodes
 - BUG: fix thread safety issues with async eval collector (copy model weights with lock)
 - BUG: check that were are matching rlzoo stop criteria
 - BUG: stats table value precision is not softcoded
+- FEAT: consider computing mean reward by timesteps, this way in eval we just have to request n_steps = reward_threshold * N, this will make it easier to support vectorized envs
 - FEAT: add assertion that certain metrics must always increase
 - FEAT: add logging support (file logging)
 - FEAT: add assertions where applicable
-- FEAT: track output distribution
-- FEAT: measure obs mean/std
-- FEAT: measure reward mean/std
 - FEAT: add type hints where applicable
 - FEAT: add ability to hardcode reward threshold
 - FEAT: log steps/episodes to progress bar

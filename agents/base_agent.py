@@ -224,7 +224,7 @@ class BaseAgent(pl.LightningModule):
         printer = StdoutMetricsTable(
             every_n_steps=200,   # print every 200 optimizer steps
             every_n_epochs=1,    # and at the end of every epoch
-            include=[r"^train/", r"^val/"],  # optional filters; remove to show everything
+            #include=[r"^train/", r"^val/", r"^time/", r"^rollout/", r"^eval/"],  # optional filters; remove to show everything
             # exclude=[r"^grad/"],           # example: drop noisy keys
             digits=4,
         )

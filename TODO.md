@@ -1,3 +1,4 @@
+- FEAT: add logging support (file logging)
 - BUG: eval is only being looged in the end
 - BUG: eval is not recording full episodes (eg: LunarLander-v3 post-training)
 - add support for premature early stop if train_mean_reward is above threshold

@@ -6,6 +6,7 @@ import wandb
 import pytorch_lightning as pl
 
 
+# TODO: use watchdog
 class VideoLoggerCallback(pl.Callback):
     """
     PyTorch Lightning callback that automatically logs video files found under
@@ -47,31 +48,12 @@ class VideoLoggerCallback(pl.Callback):
         self._size_cache: Dict[str, int] = {}
 
     def on_train_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
-        """Log videos with 'train/' prefix at the end of training epochs."""
-        if self._should_scan():
-            self._scan_and_log(pl_module, prefix="train")
+        self._scan_and_log(trainer, prefix="train")
 
     def on_validation_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
-        """Log videos with 'eval/' prefix at the end of validation epochs."""
-        if self._should_scan():
-            self._scan_and_log(pl_module, prefix="eval")
+        self._scan_and_log(trainer, prefix="eval")
 
-    def on_fit_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
-        """Do one final scan at the end of training."""
-        try:
-            self._scan_and_log(pl_module, prefix="final")
-        except Exception as e:
-            print(f"[VideoLoggerCallback] Warning during finalize sync: {e}")
-
-    def _should_scan(self) -> bool:
-        """Check if enough time has passed since last scan to avoid spam."""
-        now = time.time()
-        if now - self._last_sync < self.log_interval_s:
-            return False
-        self._last_sync = now
-        return True
-
-    def _scan_and_log(self, pl_module: "pl.LightningModule", prefix: str) -> None:
+    def _scan_and_log(self, trainer,  prefix: str) -> None:
         """Scan for new videos and log them with the given prefix."""
         if not hasattr(wandb, 'run') or wandb.run is None:
             return
@@ -99,8 +81,8 @@ class VideoLoggerCallback(pl.Callback):
             
             # Log directly to wandb with prefix since pl_module.log_dict can't handle wandb objects
             full_key = f"{prefix}/{key}"
-            wandb.log({full_key: media})
-
+            trainer.logger.experiment.log({full_key: media})
+            
     def _key_for(self, rel_path: Path) -> str:
         """
         Map a file path relative to <run.dir>/<media_root> to a W&B key.

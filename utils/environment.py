@@ -217,7 +217,7 @@ def build_env(
         env = VecFrameStack(env, n_stack=frame_stack)
     
     if record_video:
-        from stable_baselines3.common.vec_env import VecVideoRecorder
+        from wrappers.vec_video_recorder import VecVideoRecorder
         env = VecVideoRecorder(
             env,
             **{

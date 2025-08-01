@@ -1,4 +1,4 @@
-cartpole_basic:
+CartPole-v1:
   env_id: CartPole-v1
   n_envs: 8
   n_epochs: 1
@@ -12,7 +12,22 @@ cartpole_basic:
   hidden_dims: [64]
   frame_stack: 3
 
-mountaincar_normalized:
+MountainCar-v0:
+  env_id: MountainCar-v0
+  n_envs: 8
+  n_epochs: 1
+  n_steps: 1024
+  batch_size: 128
+  gamma: 0.999
+  ent_coef: 0.01
+  learning_rate: 1e-3
+  normalize_obs: false
+  normalize_reward: false
+  hidden_dims: [128, 128]
+  frame_stack: 1
+  max_epochs: 2000
+
+MountainCar-v0_rewardshaping:
   env_id: MountainCar-v0
   n_envs: 8
   n_epochs: 1
@@ -32,18 +47,3 @@ mountaincar_normalized:
         position_reward_scale: 100.0
         velocity_reward_scale: 10.0
         height_reward_scale: 50.0
-
-mountaincar_basic:
-  env_id: MountainCar-v0
-  n_envs: 8
-  n_epochs: 1
-  n_steps: 1024
-  batch_size: 128
-  gamma: 0.999
-  ent_coef: 0.01
-  learning_rate: 1e-3
-  normalize_obs: false
-  normalize_reward: false
-  hidden_dims: [128, 128]
-  frame_stack: 1
-  max_epochs: 2000

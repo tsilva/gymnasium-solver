@@ -1,4 +1,4 @@
-cartpole_basic:
+CartPole-v1:
   env_id: CartPole-v1
   n_envs: 8
   n_timesteps: !!float 1e5
@@ -16,7 +16,7 @@ cartpole_basic:
   normalize_reward: false
   frame_stack: 1
 
-cartpole_normalized:
+CartPole-v1_normalized:
   env_id: CartPole-v1
   n_envs: 8
   n_timesteps: !!float 1e5
@@ -34,7 +34,7 @@ cartpole_normalized:
   normalize_reward: true
   frame_stack: 1
 
-acrobot_normalized:
+Acrobot-v1:
   env_id: Acrobot-v1
   normalize: true
   n_envs: 16
@@ -47,7 +47,7 @@ acrobot_normalized:
   n_epochs: 4
   ent_coef: 0.0
 
-lunarlander_basic:
+LunarLander-v3:
   env_id: LunarLander-v3
   n_envs: 16
   n_timesteps: !!float 1e6
@@ -59,7 +59,7 @@ lunarlander_basic:
   n_epochs: 4
   ent_coef: 0.01
 
-mountaincar_normalized:
+MountainCar-v0:
   env_id: MountainCar-v0
   normalize: true
   n_envs: 16
@@ -83,7 +83,7 @@ mountaincar_normalized:
         velocity_reward_scale: 10.0
         height_reward_scale: 50.0
 
-mountaincar_basic:
+MountainCar-v0:
   env_id: MountainCar-v0
   normalize: false
   n_envs: 16
@@ -101,7 +101,7 @@ mountaincar_basic:
   frame_stack: 1
   max_epochs: 1000
 
-pong_ram:
+ALE/Pong-v5_ram:
   env_id: ALE/Pong-v5
   n_envs: 8
   n_timesteps: !!float 1e6

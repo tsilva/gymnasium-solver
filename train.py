@@ -7,7 +7,7 @@ def is_debugger_attached():
 
 def main():
     parser = argparse.ArgumentParser(description="Train RL agent.")
-    parser.add_argument("--config", type=str, default="cartpole_basic", help="Config ID (default: cartpole_basic)")
+    parser.add_argument("--config", type=str, default="CartPole-v1", help="Config ID (default: CartPole-v1)")
     parser.add_argument("--algo", type=str, default="ppo", help="Agent type (default: ppo)")
     args = parser.parse_args()
 

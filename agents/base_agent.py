@@ -62,6 +62,18 @@ class BaseAgent(pl.LightningModule):
             'gae_lambda': self.config.gae_lambda
         }
     
+    def get_algorithm_metric_rules(self):
+        """Get algorithm-specific metric validation rules that trigger warnings when violated.
+        
+        Returns:
+            Dict[str, dict]: Mapping of metric names to rule configurations.
+            Each rule config contains:
+            - 'check': callable that takes (previous_value, current_value) and returns bool
+            - 'message': warning message template
+            - 'level': warning level ('warning', 'error')
+        """
+        return {}
+    
     def get_env_spec(self):
         """Get environment specification."""
         from utils.environment import get_env_spec
@@ -208,6 +220,23 @@ class BaseAgent(pl.LightningModule):
             #max_per_key=8,              # avoid spamming the panel
         )
         
+        # Create algorithm-specific metric rules
+        algo_metric_rules = self.get_algorithm_metric_rules()
+        
+        # Convert algorithm rules to the format expected by StdoutMetricsTable
+        # Combine with existing delta rules
+        combined_delta_rules = {
+            # Metrics that should only increase (monotonically non-decreasing)
+            "rollout/total_timesteps": lambda prev, curr: curr >= prev,
+            "rollout/total_episodes": lambda prev, curr: curr >= prev,
+            "time/total_timesteps": lambda prev, curr: curr >= prev,
+            "train/epoch": lambda prev, curr: curr >= prev,
+            "train/n_updates": lambda prev, curr: curr >= prev,
+            "time/iterations": lambda prev, curr: curr >= prev,
+            # Time elapsed should always increase
+            "time/time_elapsed": lambda prev, curr: curr >= prev,
+        }
+        
         # TODO: clean this up
         printer = StdoutMetricsTable(
             every_n_steps=200,   # print every 200 optimizer steps
@@ -229,17 +258,8 @@ class BaseAgent(pl.LightningModule):
                 "train/n_updates": 0,          # no decimals for update count
                 "time/iterations": 0,          # no decimals for iterations 
             },
-            metric_delta_rules={
-                # Metrics that should only increase (monotonically non-decreasing)
-                "rollout/total_timesteps": lambda prev, curr: curr >= prev,
-                "rollout/total_episodes": lambda prev, curr: curr >= prev,
-                "time/total_timesteps": lambda prev, curr: curr >= prev,
-                "train/epoch": lambda prev, curr: curr >= prev,
-                "train/n_updates": lambda prev, curr: curr >= prev,
-                "time/iterations": lambda prev, curr: curr >= prev,
-                # Time elapsed should always increase
-                "time/time_elapsed": lambda prev, curr: curr >= prev,
-            }
+            metric_delta_rules=combined_delta_rules,
+            algorithm_metric_rules=algo_metric_rules  # Pass algorithm-specific rules
         )
 
         trainer = pl.Trainer(

@@ -48,3 +48,18 @@ class REINFORCE(BaseAgent):
         
     def configure_optimizers(self):
         return torch.optim.Adam(self.policy_model.parameters(), lr=self.config.policy_lr)
+    
+    def get_algorithm_metric_rules(self):
+        """Get REINFORCE-specific metric validation rules."""
+        return {
+            'train/entropy': {
+                'check': lambda value: value > 0.05,  # Warn if entropy gets too low
+                'message': 'Low entropy ({current_value:.3f}) in REINFORCE indicates policy is becoming too deterministic. Consider increasing entropy coefficient.',
+                'level': 'warning'
+            },
+            'train/policy_loss': {
+                'check': lambda prev, curr: abs(curr - prev) < 10.0,  # Warn if policy loss changes dramatically
+                'message': 'Large policy loss change (from {previous_value:.3f} to {current_value:.3f}) may indicate unstable training. Consider reducing learning rate.',
+                'level': 'warning'
+            }
+        }

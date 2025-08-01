@@ -463,6 +463,7 @@ class StdoutMetricsTable(pl.Callback):
         digits: int = 4,                          # rounding for floats
         metric_precision: Optional[Dict[str, int]] = None,  # precision per metric
         metric_delta_rules: Optional[Dict[str, callable]] = None,  # delta validation rules per metric
+        algorithm_metric_rules: Optional[Dict[str, dict]] = None,  # algorithm-specific warning rules
     ):
         super().__init__()
         self.every_n_steps = every_n_steps
@@ -472,6 +473,7 @@ class StdoutMetricsTable(pl.Callback):
         self.digits = digits
         self.metric_precision = metric_precision or {}
         self.metric_delta_rules = metric_delta_rules or {}
+        self.algorithm_metric_rules = algorithm_metric_rules or {}
         self.previous_metrics: Dict[str, Any] = {}  # Store previous values for delta validation
 
     # ---------- hooks ----------
@@ -508,6 +510,9 @@ class StdoutMetricsTable(pl.Callback):
 
         # Validate metric delta rules before printing
         self._validate_metric_deltas(metrics)
+        
+        # Check algorithm-specific metric rules and log warnings
+        self._check_algorithm_metric_rules(metrics)
 
         step = getattr(trainer, "global_step", None)
         epoch = getattr(trainer, "current_epoch", None)
@@ -544,6 +549,69 @@ class StdoutMetricsTable(pl.Callback):
                     raise ValueError(
                         f"Error evaluating metric delta rule for '{metric_name}': {str(e)}"
                     ) from e
+
+    def _check_algorithm_metric_rules(self, current_metrics: Dict[str, Any]) -> None:
+        """Check algorithm-specific metric rules and log warnings when violated."""
+        import warnings
+        
+        for metric_name, rule_config in self.algorithm_metric_rules.items():
+            if metric_name in current_metrics:
+                current_value = self._to_python_scalar(current_metrics[metric_name])
+                
+                # Skip validation if value is not a number
+                if not _is_number(current_value):
+                    continue
+                
+                try:
+                    # Get rule configuration
+                    check_func = rule_config.get('check')
+                    message_template = rule_config.get('message', f"Algorithm metric rule violated for '{metric_name}'")
+                    level = rule_config.get('level', 'warning')
+                    
+                    if check_func is None:
+                        continue
+                    
+                    # Check if rule is satisfied (different types of checks)
+                    rule_satisfied = False
+                    
+                    if callable(check_func):
+                        # For threshold checks that only need current value
+                        if check_func.__code__.co_argcount == 1:
+                            rule_satisfied = check_func(current_value)
+                        # For delta checks that need previous and current values
+                        elif metric_name in self.previous_metrics:
+                            previous_value = self._to_python_scalar(self.previous_metrics[metric_name])
+                            if _is_number(previous_value):
+                                rule_satisfied = check_func(previous_value, current_value)
+                            else:
+                                continue  # Skip if previous value isn't a number
+                        else:
+                            continue  # Skip if no previous value for delta check
+                    
+                    if not rule_satisfied:
+                        # Format the warning message
+                        if metric_name in self.previous_metrics:
+                            previous_value = self._to_python_scalar(self.previous_metrics[metric_name])
+                            formatted_message = message_template.format(
+                                metric_name=metric_name,
+                                current_value=current_value,
+                                previous_value=previous_value if _is_number(previous_value) else 'N/A'
+                            )
+                        else:
+                            formatted_message = message_template.format(
+                                metric_name=metric_name,
+                                current_value=current_value,
+                                previous_value='N/A'
+                            )
+                        
+                        # Log warning or error based on level
+                        if level == 'error':
+                            print(f"🚨 ALGORITHM ERROR: {formatted_message}")
+                        else:
+                            print(f"⚠️  ALGORITHM WARNING: {formatted_message}")
+                            
+                except Exception as e:
+                    print(f"⚠️  Error checking algorithm metric rule for '{metric_name}': {str(e)}")
 
     def _collect_metrics(self, trainer: "pl.Trainer") -> Dict[str, Any]:
         combo: Dict[str, Any] = {}

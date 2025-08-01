@@ -1,5 +1,6 @@
 - BUG: copilot not loading correct venv (vscode settings)
 - FEAT: add n_timesteps support
+- FEAT: add logging support (file logging)
 - FEAT: config files should have config ids that are different from env ids (you can have multiple configs for the same env)
 - FEAT: add assertion that certain metrics must always increase
 - FEAT: add assertions where applicable
@@ -13,8 +14,6 @@
 - BUG: check that were are matching rlzoo stop criteria
 - BUG: stats table value precision is not softcoded
 - FEAT: consider computing mean reward by timesteps, this way in eval we just have to request n_steps = reward_threshold * N, this will make it easier to support vectorized envs
-- FEAT: add logging support (file logging)
-- FEAT: add type hints where applicable
 - FEAT: add ability to hardcode reward threshold
 - FEAT: log steps/episodes to progress bar
 - FEAT: support for softcoding activations
@@ -39,3 +38,4 @@
 - FEAT: support for multi-env rollout collectors
 - FEAT: add multitask heads support (eg: Atari, Sega Genesis) -- consider large output space
 - Ask agent for next learning steps/tasks (prompt file)
+- REFACTOR: add type hints where applicable

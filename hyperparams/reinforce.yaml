@@ -43,7 +43,6 @@ MountainCar-v0_rewardshaping:
   max_epochs: 2000
   env_wrappers:
     - id: RewardShaper_MountainCarV0
-      kwargs:
-        position_reward_scale: 100.0
-        velocity_reward_scale: 10.0
-        height_reward_scale: 50.0
+      position_reward_scale: 100.0
+      velocity_reward_scale: 10.0
+      height_reward_scale: 50.0

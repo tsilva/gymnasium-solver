@@ -16,19 +16,50 @@ from pathlib import Path
 def load_model(model_path, config):
     """Load a saved model and return the policy."""
     from agents import create_agent
+    from pathlib import Path
     
     # Create agent with the same config
     agent = create_agent(config)
     
     # Load the saved state dict with weights_only=False since we trust our own files
     checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
-    agent.policy_model.load_state_dict(checkpoint['model_state_dict'])
+    
+    # Check if this is a checkpoint format or legacy format
+    if 'model_state_dict' in checkpoint:
+        agent.policy_model.load_state_dict(checkpoint['model_state_dict'])
+    else:
+        # Assume legacy format where checkpoint IS the state dict
+        agent.policy_model.load_state_dict(checkpoint)
+    
     agent.policy_model.eval()  # Set to evaluation mode
     
     print(f"Loaded model from {model_path}")
     print(f"Model was trained for {checkpoint.get('total_timesteps', 'unknown')} timesteps")
-    print(f"Best eval reward: {checkpoint.get('eval_reward', 'unknown')}")
-    print(f"Training epoch: {checkpoint.get('epoch', 'unknown')}")
+    
+    # Handle different checkpoint formats
+    if 'best_eval_reward' in checkpoint:
+        # New checkpoint format
+        print(f"Best eval reward: {checkpoint.get('best_eval_reward', 'unknown')}")
+        if 'current_eval_reward' in checkpoint:
+            print(f"Current eval reward: {checkpoint.get('current_eval_reward', 'unknown')}")
+        print(f"Training epoch: {checkpoint.get('epoch', 'unknown')}")
+        print(f"Global step: {checkpoint.get('global_step', 'unknown')}")
+        
+        # Show checkpoint flags
+        flags = []
+        if checkpoint.get('is_best', False):
+            flags.append("best")
+        if checkpoint.get('is_last', False):
+            flags.append("last")
+        if checkpoint.get('is_threshold', False):
+            flags.append("threshold")
+        
+        if flags:
+            print(f"Checkpoint type: {', '.join(flags)}")
+    else:
+        # Old format compatibility
+        print(f"Best eval reward: {checkpoint.get('eval_reward', 'unknown')}")
+        print(f"Training epoch: {checkpoint.get('epoch', 'unknown')}")
     
     # Handle backward compatibility - if config is saved as object, it will be in 'config' key
     # If saved as dict, it will be in 'config_dict' key
@@ -158,20 +189,38 @@ def main():
     
     # Determine model path
     if args.model is None:
-        # Auto-detect model path
-        model_filename = f"best_model_{config.env_id.replace('/', '_')}_{config.algo_id}.pth"
-        model_path = Path("saved_models") / model_filename
+        # Auto-detect model path - try new checkpoint system first
+        from utils.checkpoint import find_latest_checkpoint, list_available_checkpoints
         
-        if not model_path.exists():
-            print(f"Model file not found: {model_path}")
-            print("Available models:")
-            models_dir = Path("saved_models")
-            if models_dir.exists():
-                for model_file in models_dir.glob("*.pth"):
-                    print(f"  {model_file}")
-            else:
-                print("  No saved_models directory found")
-            return
+        checkpoint_path = find_latest_checkpoint(config.algo_id, config.env_id)
+        
+        if checkpoint_path:
+            model_path = checkpoint_path
+            print(f"Found checkpoint: {model_path}")
+        else:
+            # Fall back to old saved_models directory
+            model_filename = f"best_model_{config.env_id.replace('/', '_')}_{config.algo_id}.pth"
+            model_path = Path("saved_models") / model_filename
+            
+            if not model_path.exists():
+                print(f"No model found for {config.algo_id}/{config.env_id}")
+                print("\nAvailable checkpoints:")
+                checkpoints = list_available_checkpoints()
+                if checkpoints:
+                    for algo, envs in checkpoints.items():
+                        for env, files in envs.items():
+                            print(f"  {algo}/{env}: {files}")
+                else:
+                    print("  No checkpoints found")
+                
+                print("\nAvailable legacy models:")
+                models_dir = Path("saved_models")
+                if models_dir.exists():
+                    for model_file in models_dir.glob("*.pth"):
+                        print(f"  {model_file}")
+                else:
+                    print("  No saved_models directory found")
+                return
     else:
         model_path = Path(args.model)
         if not model_path.exists():

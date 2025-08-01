@@ -68,6 +68,10 @@ class Config:
 
     use_baseline: bool = False  # Use baseline subtraction for REINFORCE (default: false)
     
+    # Checkpointing and resuming
+    resume: bool = False  # Whether to resume training from the latest checkpoint
+    checkpoint_dir: str = "checkpoints"  # Directory to save/load checkpoints
+    
     env_wrappers: list = field(default_factory=list)
 
     @classmethod

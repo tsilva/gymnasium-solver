@@ -14,7 +14,7 @@
 - FEAT: add interactive mode support
 - rlzoo save model, run it in my model and compare rollout results (set seed and 1 env)
 - rlzoo better due to missing param support like decay
-- save best model/agent checkpoints (use trainer) / background tasks records video 
+- ✅ FEAT: Improved model saving strategy with checkpoints (checkpoints/algoid/envid folder structure, resume functionality, save on eval improvement and threshold reached)
 - CHECK: run rollout through dataloader process, do we always get n_batches? assert it 
 - add support for plotting charts as text and feeding to llm, check how end of training does it
 - change api to match sb3

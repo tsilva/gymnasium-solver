@@ -8,6 +8,7 @@ from utils.rollouts import RolloutCollector
 from utils.misc import prefix_dict_keys, StdoutMetricsTable
 from utils.video_logger_callback import VideoLoggerCallback
 from utils.misc import create_dummy_dataloader
+from utils.checkpoint import ModelCheckpointCallback, find_latest_checkpoint, load_checkpoint
 
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class BaseAgent(pl.LightningModule):
@@ -44,9 +45,28 @@ class BaseAgent(pl.LightningModule):
         # Best model tracking
         self.best_eval_reward = float('-inf')
         self.best_model_path = None
+        
+        # Checkpoint handling - check for resume
+        self.checkpoint_callback = None
+        self.resume_checkpoint_path = None
+        if getattr(config, 'resume', False):
+            checkpoint_path = find_latest_checkpoint(
+                config.algo_id, 
+                config.env_id, 
+                getattr(config, 'checkpoint_dir', 'checkpoints')
+            )
+            if checkpoint_path:
+                self.resume_checkpoint_path = checkpoint_path
+                print(f"Found checkpoint to resume from: {checkpoint_path}")
+            else:
+                print(f"Resume requested but no checkpoint found for {config.algo_id}/{config.env_id}")
 
         self.create_models()
         assert self.policy_model is not None, "Policy model must be created in create_models()"
+        
+        # Load checkpoint after models are created
+        if self.resume_checkpoint_path:
+            load_checkpoint(self.resume_checkpoint_path, self, resume_training=True)
     
     def create_models(self):
         raise NotImplementedError("Subclass must implement create_models()")
@@ -173,12 +193,13 @@ class BaseAgent(pl.LightningModule):
         time_elapsed = self._get_time_metrics()["time_elapsed"]
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
         
-        # Save final model if no best model was saved during training
-        if self.best_model_path is None:
-            self.best_model_path = self._save_best_model()
-            print(f"Final model saved at {self.best_model_path}")
+        # Checkpoint system now handles model saving automatically
+        if self.checkpoint_callback and self.checkpoint_callback.best_checkpoint_path:
+            print(f"Best model saved at {self.checkpoint_callback.best_checkpoint_path} with eval reward {self.best_eval_reward:.2f}")
+        elif self.checkpoint_callback and self.checkpoint_callback.last_checkpoint_path:
+            print(f"Last model saved at {self.checkpoint_callback.last_checkpoint_path}")
         else:
-            print(f"Best model saved at {self.best_model_path} with eval reward {self.best_eval_reward:.2f}")
+            print("No checkpoints were saved during training")
 
     def _process_eval_videos(self):
         """Process eval videos immediately to ensure they're logged at the correct timestep."""
@@ -229,6 +250,15 @@ class BaseAgent(pl.LightningModule):
             #max_per_key=8,              # avoid spamming the panel
         )
         
+        # Create checkpoint callback
+        self.checkpoint_callback = ModelCheckpointCallback(
+            checkpoint_dir=getattr(self.config, 'checkpoint_dir', 'checkpoints'),
+            monitor="eval/ep_rew_mean",
+            mode="max",
+            save_last=True,
+            save_threshold_reached=True
+        )
+        
         # Create algorithm-specific metric rules
         algo_metric_rules = self.get_algorithm_metric_rules()
         
@@ -277,11 +307,11 @@ class BaseAgent(pl.LightningModule):
             log_every_n_steps=1, # TODO: softcode this
             max_epochs=self.config.max_epochs if self.config.max_epochs is not None else -1,
             enable_progress_bar=True,
-            enable_checkpointing=False,  # Disable checkpointing for speed
+            enable_checkpointing=False,  # Disable built-in checkpointing, use our custom callback
             accelerator="cpu",  # Use CPU for training # TODO: softcode this
             reload_dataloaders_every_n_epochs=1,#self.config.n_epochs
             check_val_every_n_epoch=self.config.eval_freq_epochs,  # Run validation every epoch
-            callbacks=[printer, video_logger_cb]  # Add both callbacks
+            callbacks=[printer, video_logger_cb, self.checkpoint_callback]  # Add checkpoint callback
         )
         trainer.fit(self)
     
@@ -336,51 +366,21 @@ class BaseAgent(pl.LightningModule):
         if reward_threshold is not None:
             ep_rew_mean = metrics["ep_rew_mean"]
             
-            # Save best model if this is the best performance so far
+            # Note: Best model saving is now handled by ModelCheckpointCallback
+            # Update best_eval_reward for compatibility and early stopping logic
             if ep_rew_mean > self.best_eval_reward:
                 self.best_eval_reward = ep_rew_mean
-                self.best_model_path = self._save_best_model()
-                print(f"New best model saved with eval reward {ep_rew_mean:.2f} at {self.best_model_path}")
             
             if ep_rew_mean >= reward_threshold:
                 print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
                 self.trainer.should_stop = True
         else:
-            # Even without reward threshold, save best model
+            # Even without reward threshold, update best eval reward for tracking
             ep_rew_mean = metrics["ep_rew_mean"]
             if ep_rew_mean > self.best_eval_reward:
                 self.best_eval_reward = ep_rew_mean
-                self.best_model_path = self._save_best_model()
-                print(f"New best model saved with eval reward {ep_rew_mean:.2f} at {self.best_model_path}")
             print("No reward threshold available (neither in config nor environment spec) - skipping early stopping check")
     
-    def _save_best_model(self):
-        """Save the current policy model as the best model."""
-        import os
-        import torch
-        from dataclasses import asdict
-        
-        # Create models directory if it doesn't exist
-        models_dir = "saved_models"
-        os.makedirs(models_dir, exist_ok=True)
-        
-        # Save path with environment and algorithm info
-        model_filename = f"best_model_{self.config.env_id.replace('/', '_')}_{self.config.algo_id}.pth"
-        model_path = os.path.join(models_dir, model_filename)
-        
-        # Convert config to dict to avoid pickle issues with custom classes
-        config_dict = asdict(self.config)
-        
-        # Save the policy model state dict
-        torch.save({
-            'model_state_dict': self.policy_model.state_dict(),
-            'config_dict': config_dict,  # Save as dict instead of object
-            'eval_reward': self.best_eval_reward,
-            'epoch': self.current_epoch,
-            'total_timesteps': self.total_timesteps
-        }, model_path)
-        
-        return model_path
     
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
     # TODO: consider making recording a rollout collector concern again (cleaner separation of concerns)

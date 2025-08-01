@@ -4,7 +4,7 @@ from typing import Dict, Any
 from contextlib import contextmanager
 import os
 import sys
-from typing import Dict, Any, Iterable, Optional
+from typing import Dict, Any, Iterable, Optional, List
 import numbers
 import torch
 from torch.utils.data import DataLoader, TensorDataset
@@ -137,6 +137,8 @@ class NamespaceTablePrinter:
         metric_precision: Optional[Dict[str, int]] = None,
         # Minimum width for the values column
         min_val_width: int = 15,
+        # Priority order for sorting keys within sections
+        key_priority: Optional[List[str]] = None,
     ):
         self.float_fmt = float_fmt
         self.indent = indent
@@ -150,6 +152,7 @@ class NamespaceTablePrinter:
         self.delta_tol = delta_tol
         self.metric_precision = dict(metric_precision or {})
         self.min_val_width = min_val_width
+        self.key_priority = key_priority or []
 
         self._prev: Optional[Dict[str, Any]] = None
         self._last_height: int = 0  # how many lines we printed last time
@@ -173,7 +176,7 @@ class NamespaceTablePrinter:
         # Possibly sort keys within each section
         for ns in ns_order:
             if self.sort_keys_within_section:
-                grouped[ns] = dict(sorted(grouped[ns].items(), key=lambda kv: kv[0]))
+                grouped[ns] = dict(sorted(grouped[ns].items(), key=lambda kv: self._get_sort_key(ns, kv[0])))
 
         # Build formatted values (including delta strings), then compute widths
         formatted = {}
@@ -308,6 +311,18 @@ class NamespaceTablePrinter:
         mag = _humanize_num(abs(delta), self.float_fmt) if self.compact_numbers else _fmt_plain(abs(delta), self.float_fmt)
         return (f"{arrow}{mag}", color)
 
+    def _get_sort_key(self, namespace: str, subkey: str) -> tuple:
+        """Generate a sort key that prioritizes specified keys, then alphabetical order."""
+        full_key = f"{namespace}/{subkey}" if subkey else namespace
+        
+        # Check if this key is in our priority list
+        try:
+            priority_index = self.key_priority.index(full_key)
+            return (0, priority_index)  # Priority items come first (0), then by their order
+        except ValueError:
+            # Not in priority list, sort alphabetically after priority items
+            return (1, subkey.lower())  # Non-priority items come second (1), then alphabetically
+
     @staticmethod
     def _strip_ansi(s: str) -> str:
         # cheap and cheerful: remove \x1b[...m sequences for width calc
@@ -339,6 +354,7 @@ def print_namespaced_dict(
     color: bool = True,
     metric_precision: Optional[Dict[str, int]] = None,
     min_val_width: int = 15,
+    key_priority: Optional[List[str]] = None,
 ):
     """
     Thin wrapper to keep your old callsite working. For advanced config,
@@ -353,6 +369,7 @@ def print_namespaced_dict(
         metric_precision: Optional dict mapping metric keys to precision values.
                          0 means integer formatting, positive values specify decimal places.
         min_val_width: Minimum width for the values column
+        key_priority: Optional list of keys to prioritize in sorting order
     """
     # If the user changes core options, recreate the singleton
     global _default_printer
@@ -363,6 +380,7 @@ def print_namespaced_dict(
         or _default_printer.color != bool(color and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None)
         or _default_printer.metric_precision != (metric_precision or {})
         or _default_printer.min_val_width != min_val_width
+        or _default_printer.key_priority != (key_priority or [])
     ):
         _default_printer = NamespaceTablePrinter(
             float_fmt=float_fmt,
@@ -371,6 +389,7 @@ def print_namespaced_dict(
             color=bool(color and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None),
             metric_precision=metric_precision,
             min_val_width=min_val_width,
+            key_priority=key_priority,
         )
     _default_printer.update(data)
 
@@ -406,6 +425,7 @@ class StdoutMetricsTable(pl.Callback):
         metric_delta_rules: Optional[Dict[str, callable]] = None,  # delta validation rules per metric
         algorithm_metric_rules: Optional[Dict[str, dict]] = None,  # algorithm-specific warning rules
         min_val_width: int = 15,                  # minimum width for values column
+        key_priority: Optional[List[str]] = None,  # priority order for sorting keys
     ):
         super().__init__()
         self.every_n_steps = every_n_steps
@@ -417,6 +437,24 @@ class StdoutMetricsTable(pl.Callback):
         self.metric_delta_rules = metric_delta_rules or {}
         self.algorithm_metric_rules = algorithm_metric_rules or {}
         self.min_val_width = min_val_width
+        # TODO: softcode this
+        self.key_priority = key_priority or [
+            "train/epoch", 
+            "train/n_updates", 
+            "train/loss",
+            "train/policy_loss",
+            "train/value_loss",
+            "time/total_timesteps",
+            "rollout/total_timesteps",
+            "rollout/total_episodes",
+            "rollout/total_rollouts",
+            "eval/total_timesteps",
+            "eval/total_episodes",
+            "eval/total_rollouts",
+            "eval/episodes_count",
+            "eval/ep_rew_mean",
+            "eval/ep_len_mean"
+        ]
         self.previous_metrics: Dict[str, Any] = {}  # Store previous values for delta validation
 
     # ---------- hooks ----------
@@ -599,7 +637,7 @@ class StdoutMetricsTable(pl.Callback):
 
     def _print_table(self, metrics: Dict[str, Any], header: str):
         from utils.misc import print_namespaced_dict
-        print_namespaced_dict(metrics, metric_precision=self.metric_precision, min_val_width=self.min_val_width)
+        print_namespaced_dict(metrics, metric_precision=self.metric_precision, min_val_width=self.min_val_width, key_priority=self.key_priority)
 
     def _format_val(self, v: Any) -> str:
         if isinstance(v, float):

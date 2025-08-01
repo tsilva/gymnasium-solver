@@ -1,4 +1,3 @@
-- FEAT: add min with to second column of stats table to be bigger (lowers probability of resizing)
 - FEAT: make algo warnings not be logged as strings to console but instead just flag the stats table with a warning emoji next to value
 - FEAT: add logging support (file logging)
 - FEAT: add assertions where applicable

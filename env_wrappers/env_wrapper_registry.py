@@ -2,8 +2,9 @@ class EnvWrapperRegistry():
     _registry = {}
 
     @classmethod
-    def register(cls, name, wrapper_cls):
-        cls._registry[name] = wrapper_cls
+    def register(cls, wrapper_classes):
+        if not type(wrapper_classes) is list: wrapper_classes = [wrapper_classes]
+        for wrapper_cls in wrapper_classes: cls._registry[wrapper_cls.__name__] = wrapper_cls
 
     @classmethod
     def apply(cls, env, wrapper_spec):

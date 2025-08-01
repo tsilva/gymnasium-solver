@@ -81,6 +81,9 @@ class RolloutCollector():
         # Action statistics tracking
         self.action_values_deque: Deque[int] = deque(maxlen=stats_window_size)
         
+        # Baseline tracking for REINFORCE (rolling average of returns)
+        self.baseline_deque: Deque[float] = deque(maxlen=stats_window_size)
+        
         self.total_rollouts: int = 0
         self.total_steps: int = 0
         self.total_episodes: int = 0
@@ -277,8 +280,18 @@ class RolloutCollector():
                 returns = rewards_buf[t] + self.gamma * returns * non_terminal[t]
                 returns_buf[t] = returns
             
-            # For REINFORCE, advantages are the returns themselves (no baseline subtraction)
-            advantages_buf = returns_buf.copy()
+            # Always calculate baseline (rolling average of returns) and advantages
+            # Flatten returns across time and environments for baseline update
+            returns_flat = returns_buf.flatten()
+            self.baseline_deque.extend(returns_flat)
+            
+            # Calculate baseline from rolling average
+            if len(self.baseline_deque) > 0:
+                baseline = float(np.mean(self.baseline_deque))
+                advantages_buf = returns_buf - baseline
+            else:
+                # If no baseline history yet, advantages equal returns (no baseline subtraction)
+                advantages_buf = returns_buf.copy()
 
         # Normalize advantages across rollout (we could normalize across training batches 
         # later on, but in some situations normalizing across rollouts provides better numerical stability)
@@ -367,6 +380,13 @@ class RolloutCollector():
             # Store the full action distribution for histogram logging
             action_distribution = action_array
 
+        # Calculate baseline statistics (always calculated now)
+        baseline_mean = baseline_std = 0.0
+        if self.baseline_deque:
+            baseline_array = np.array(list(self.baseline_deque))
+            baseline_mean = float(np.mean(baseline_array))
+            baseline_std = float(np.std(baseline_array))
+
         return {
             "total_timesteps": self.total_steps, # TODO: steps vs timesteps
             "total_episodes": self.total_episodes,
@@ -382,5 +402,7 @@ class RolloutCollector():
             "reward_std": reward_std,
             "action_mean": action_mean,
             "action_std": action_std,
-            "action_distribution": action_distribution
+            "action_distribution": action_distribution,
+            "baseline_mean": baseline_mean,
+            "baseline_std": baseline_std
         }

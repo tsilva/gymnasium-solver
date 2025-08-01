@@ -65,6 +65,8 @@ class Config:
     # Atari-specific settings
     obs_type: str = "rgb"  # Default: "rgb" (other options: "ram", "grayscale")
 
+    use_baseline: bool = False  # Use baseline subtraction for REINFORCE (default: false)
+    
     env_wrappers: list = field(default_factory=list)
 
     @classmethod

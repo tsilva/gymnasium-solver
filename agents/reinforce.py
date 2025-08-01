@@ -14,7 +14,6 @@ class REINFORCE(BaseAgent):
             hidden=self.config.hidden_dims
         )
     
-    # TODO: broken, must fix
     def rollout_collector_hyperparams(self):
         # Override to disable GAE for REINFORCE - use pure Monte Carlo returns
         base_params = self.config.rollout_collector_hyperparams()
@@ -25,14 +24,23 @@ class REINFORCE(BaseAgent):
         states = batch.observations
         actions = batch.actions
         returns = batch.returns
+        advantages = batch.advantages
         
         ent_coef = self.config.ent_coef
+        use_baseline = getattr(self.config, 'use_baseline', False)
 
         dist, _ = self.policy_model(states)
         log_probs = dist.log_prob(actions)
       
-        # REINFORCE uses Monte Carlo returns directly, not advantages
-        policy_loss = -(log_probs * returns).mean()
+        # Choose between returns (vanilla REINFORCE) or advantages (REINFORCE with baseline)
+        if use_baseline:
+            # Use advantages (returns - baseline) for baseline subtraction
+            policy_targets = advantages
+        else:
+            # Use raw returns for vanilla REINFORCE
+            policy_targets = returns
+            
+        policy_loss = -(log_probs * policy_targets).mean()
 
         entropy = dist.entropy().mean()
         entropy_loss = -entropy
@@ -43,7 +51,8 @@ class REINFORCE(BaseAgent):
             'loss' : loss.detach().item(),
             'policy_loss': policy_loss.detach().item(),
             'entropy_loss': entropy_loss.detach().item(),
-            'entropy': entropy.detach().item(), 
+            'entropy': entropy.detach().item(),
+            'use_baseline': float(use_baseline),  # Track whether baseline is being used
         }, "train")
         self.log_dict(metrics)
         return loss

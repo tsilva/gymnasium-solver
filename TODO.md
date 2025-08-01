@@ -2,10 +2,8 @@
 - FEAT: add ability to hardcode reward threshold
 - FEAT: log steps/episodes to progress bar
 - FEAT: add logging support (file logging)
-- FEAT: add alert support to metric tracker (algo dependent)
 - FEAT: add assertions where applicable
 - FEAT: add support for fully recording last eval
-- FEAT: measure mean value, use that as baseline subtraction
 - FEAT: track output distribution
 - BUG: videos not logged at correct timesteps
 - BUG: confirm that buffer growth is under control
@@ -13,7 +11,7 @@
 - BUG: check that were are matching rlzoo stop criteria
 - FEAT: consider computing mean reward by timesteps, this way in eval we just have to request n_steps = reward_threshold * N, this will make it easier to support vectorized envs
 - FEAT: support for softcoding activations
-- FEAT: a2c (only after reinforce/ppo is stable), add baseline subtraction
+- FEAT: a2c (only after reinforce/ppo is stable)
 - FEAT: add same linear decay features as rlzoo
 - FEAT: add support for premature early stop if train_mean_reward is above threshold
 - FEAT: add support for checkpointing models and replaying them locally

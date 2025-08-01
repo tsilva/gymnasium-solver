@@ -3,7 +3,7 @@
 import yaml
 from pathlib import Path
 from dataclasses import dataclass, field, MISSING
-from typing import Union, Tuple, Dict, Any
+from typing import Union, Tuple, Dict, Any, Optional
 from utils.misc import _convert_numeric_strings
 
 # TODO: review this file again
@@ -53,6 +53,7 @@ class Config:
     eval_episodes: int = 10
     eval_async: bool = False  # Default: true (async evaluation)
     eval_deterministic: bool = True  # Default: true (deterministic evaluation)
+    reward_threshold: Optional[float] = None  # Default: None (use environment's reward threshold)
 
 
     # Normalization
@@ -237,6 +238,8 @@ class Config:
             raise ValueError("eval_freq_epochs must be a positive integer.")
         if self.eval_episodes is not None and self.eval_episodes <= 0:
             raise ValueError("eval_episodes must be a positive integer.")
+        if self.reward_threshold is not None and self.reward_threshold <= 0:
+            raise ValueError("reward_threshold must be a positive float.")
 
 def load_config(config_id: str, algo_id: str, config_dir: str = "hyperparams") -> Config:
     """Convenience function to load configuration."""

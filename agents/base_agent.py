@@ -288,7 +288,11 @@ class BaseAgent(pl.LightningModule):
             }
         )
 
-        reward_threshold = env.get_reward_threshold()
+        # Use config reward threshold if provided, otherwise use environment's reward threshold
+        if self.config.reward_threshold is not None:
+            reward_threshold = self.config.reward_threshold
+        else:
+            reward_threshold = env.get_reward_threshold()
 
         try: metrics = self._eval(env)
         finally: env.close()
@@ -309,12 +313,15 @@ class BaseAgent(pl.LightningModule):
                     "eval/action_distribution": wandb.Histogram(action_distribution)
                 }, step=self.global_step)
 
-        # Check for early stopping based on reward threshold
-        ep_rew_mean = metrics["ep_rew_mean"]
-        
-        if ep_rew_mean >= reward_threshold:
-            print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
-            self.trainer.should_stop = True
+        # Check for early stopping based on reward threshold (only if threshold is available)
+        if reward_threshold is not None:
+            ep_rew_mean = metrics["ep_rew_mean"]
+            
+            if ep_rew_mean >= reward_threshold:
+                print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
+                self.trainer.should_stop = True
+        else:
+            print("No reward threshold available (neither in config nor environment spec) - skipping early stopping check")
     
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
     # TODO: consider making recording a rollout collector concern again (cleaner separation of concerns)

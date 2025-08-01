@@ -97,8 +97,6 @@ ALE/Pong-v5_ram:
   normalize_obs: true
   normalize_reward: false
   hidden_dims: [256, 256]
-  eval_episodes: 10
-  eval_async: true
 
 Taxi-v3:
   env_id: Taxi-v3
@@ -110,7 +108,7 @@ Taxi-v3:
   n_epochs: 4
   gae_lambda: 0.95
   gamma: 0.99
-  ent_coef: 0.01
+  ent_coef: 0.5
   learning_rate: 0.0003
   clip_range: 0.1
   hidden_dims: [256, 256]

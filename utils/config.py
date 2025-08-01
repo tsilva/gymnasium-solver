@@ -2,7 +2,7 @@
 
 import yaml
 from pathlib import Path
-from dataclasses import dataclass, MISSING
+from dataclasses import dataclass, field, MISSING
 from typing import Union, Tuple, Dict, Any
 from utils.misc import _convert_numeric_strings
 
@@ -64,10 +64,8 @@ class Config:
     
     # Atari-specific settings
     obs_type: str = "rgb"  # Default: "rgb" (other options: "ram", "grayscale")
-    
-    # TODO: generalize to just add custom wrappers
-    # Reward Shaping (for environments like MountainCar)
-    reward_shaping: Union[bool, Dict[str, Any]] = False  # Default: false
+
+    env_wrappers: list = field(default_factory=list)
 
     @classmethod
     def load_from_yaml(cls, env_id: str, algo_id: str, config_dir: str = "hyperparams") -> 'Config':

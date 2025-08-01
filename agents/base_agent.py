@@ -29,7 +29,6 @@ class BaseAgent(pl.LightningModule):
             norm_reward=config.normalize_reward,
             n_envs=n_envs,
             vec_env_cls="DummyVecEnv",
-            reward_shaping=config.reward_shaping, # TODO: generalize to specifying wrappers
             frame_stack=config.frame_stack,
             obs_type=config.obs_type,
             **kwargs
@@ -58,6 +57,13 @@ class BaseAgent(pl.LightningModule):
     def train_on_batch(self, batch, batch_idx):
         raise NotImplementedError("Subclass must implement train_on_batch()") # TODO: use override_required decorator
     
+    def rollout_collector_hyperparams(self):
+        """Return hyperparameters for the rollout collector."""
+        return {
+            'gamma': self.config.gamma,
+            'gae_lambda': self.config.gae_lambda
+        }
+    
     def get_env_spec(self):
         """Get environment specification."""
         from utils.environment import get_env_spec
@@ -73,7 +79,7 @@ class BaseAgent(pl.LightningModule):
             self.train_env,
             self.policy_model,
             n_steps=self.config.n_steps,
-            **self.config.rollout_collector_hyperparams()
+            **self.rollout_collector_hyperparams()
         )
 
     def on_train_epoch_start(self):
@@ -296,7 +302,7 @@ class BaseAgent(pl.LightningModule):
             env,
             self.policy_model,
             n_steps=self.config.n_steps,
-            **self.config.rollout_collector_hyperparams() # TODO: softcode
+            **self.rollout_collector_hyperparams() # TODO: softcode
         )
 
         # Collect until we reach the required number of episodes

@@ -54,10 +54,6 @@ MountainCar-v0:
   hidden_dims: [256, 256]
   frame_stack: 3
   max_epochs: 1000
-  reward_shaping:
-    position_reward_scale: 100.0
-    velocity_reward_scale: 10.0
-    height_reward_scale: 50.0
 
 ALE/Pong-v5:
   n_envs: 8

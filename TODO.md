@@ -1,3 +1,5 @@
+- FEAT: config files should have config ids that are different from env ids (you can have multiple configs for the same env)
+- FEAT: measure mean value, use that as baseline subtraction
 - FEAT: track output distribution
 - BUG: videos not logged at correct timesteps
 - BUG: confirm that buffer growth is under control

@@ -306,7 +306,7 @@ class BaseAgent(pl.LightningModule):
             # TODO: softcode this
             log_every_n_steps=1, # TODO: softcode this
             max_epochs=self.config.max_epochs if self.config.max_epochs is not None else -1,
-            enable_progress_bar=True,
+            enable_progress_bar=False,
             enable_checkpointing=False,  # Disable built-in checkpointing, use our custom callback
             accelerator="cpu",  # Use CPU for training # TODO: softcode this
             reload_dataloaders_every_n_epochs=1,#self.config.n_epochs

@@ -71,3 +71,23 @@ class VecInfoWrapper(VecEnvWrapper):
         """
         spec = self.get_spec()
         return getattr(spec, "reward_threshold", None)
+    
+    def get_input_dim(self):
+        """
+        Return the input dimension (observation space shape).
+        """
+        obs_space = self.venv.observation_space
+        if hasattr(obs_space, 'shape') and obs_space.shape:
+            return obs_space.shape[0]
+        return None
+
+    def get_output_dim(self):
+        """
+        Return the output dimension (action space size).
+        """
+        action_space = self.venv.action_space
+        if hasattr(action_space, 'n'):  # Discrete action space
+            return action_space.n
+        elif hasattr(action_space, 'shape') and action_space.shape:  # Continuous action space
+            return action_space.shape[0]
+        return None

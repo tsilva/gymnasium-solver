@@ -1,4 +1,6 @@
 - BUG: copilot not loading correct venv (vscode settings)
+- FEAT: add ability to hardcode reward threshold
+
 - FEAT: log steps/episodes to progress bar
 - FEAT: add logging support (file logging)
 - FEAT: add alert support to metric tracker (algo dependent)
@@ -11,7 +13,6 @@
 - BUG: fix thread safety issues with async eval collector (copy model weights with lock)
 - BUG: check that were are matching rlzoo stop criteria
 - FEAT: consider computing mean reward by timesteps, this way in eval we just have to request n_steps = reward_threshold * N, this will make it easier to support vectorized envs
-- FEAT: add ability to hardcode reward threshold
 - FEAT: support for softcoding activations
 - FEAT: a2c (only after reinforce/ppo is stable), add baseline subtraction
 - FEAT: add same linear decay features as rlzoo

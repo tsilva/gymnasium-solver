@@ -34,12 +34,6 @@ class BaseAgent(pl.LightningModule):
             **kwargs
         )
         self.train_env = self.build_env_fn(config.seed)
-
-        # TODO: these spec inspects should be centralized somewhere
-        # Note: frame_stack is already applied in build_env, so observation_space.shape[0] 
-        # already includes the frame stacking multiplication
-        self.input_dim = self.train_env.observation_space.shape[0]
-        self.output_dim = self.train_env.action_space.n
        
         # Training state
         self.start_time = None # TODO: cleaner way of measuring this?

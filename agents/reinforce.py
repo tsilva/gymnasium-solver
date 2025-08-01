@@ -6,9 +6,11 @@ from utils.misc import prefix_dict_keys
 class REINFORCE(BaseAgent):
     
     def create_models(self):
+        input_dim = self.train_env.get_input_dim()
+        output_dim = self.train_env.get_output_dim()
         self.policy_model = PolicyOnly(
-            self.input_dim,
-            self.output_dim,
+            input_dim,
+            output_dim,
             hidden=self.config.hidden_dims
         )
     

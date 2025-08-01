@@ -40,6 +40,10 @@ class BaseAgent(pl.LightningModule):
         self.total_timesteps = 0
         self._n_updates = 0 # TODO: is this required?
         self._iterations = 0 # TODO: is this required?
+        
+        # Best model tracking
+        self.best_eval_reward = float('-inf')
+        self.best_model_path = None
 
         self.create_models()
         assert self.policy_model is not None, "Policy model must be created in create_models()"
@@ -168,6 +172,13 @@ class BaseAgent(pl.LightningModule):
     def on_fit_end(self):
         time_elapsed = self._get_time_metrics()["time_elapsed"]
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
+        
+        # Save final model if no best model was saved during training
+        if self.best_model_path is None:
+            self.best_model_path = self._save_best_model()
+            print(f"Final model saved at {self.best_model_path}")
+        else:
+            print(f"Best model saved at {self.best_model_path} with eval reward {self.best_eval_reward:.2f}")
 
     def _process_eval_videos(self):
         """Process eval videos immediately to ensure they're logged at the correct timestep."""
@@ -325,11 +336,51 @@ class BaseAgent(pl.LightningModule):
         if reward_threshold is not None:
             ep_rew_mean = metrics["ep_rew_mean"]
             
+            # Save best model if this is the best performance so far
+            if ep_rew_mean > self.best_eval_reward:
+                self.best_eval_reward = ep_rew_mean
+                self.best_model_path = self._save_best_model()
+                print(f"New best model saved with eval reward {ep_rew_mean:.2f} at {self.best_model_path}")
+            
             if ep_rew_mean >= reward_threshold:
                 print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
                 self.trainer.should_stop = True
         else:
+            # Even without reward threshold, save best model
+            ep_rew_mean = metrics["ep_rew_mean"]
+            if ep_rew_mean > self.best_eval_reward:
+                self.best_eval_reward = ep_rew_mean
+                self.best_model_path = self._save_best_model()
+                print(f"New best model saved with eval reward {ep_rew_mean:.2f} at {self.best_model_path}")
             print("No reward threshold available (neither in config nor environment spec) - skipping early stopping check")
+    
+    def _save_best_model(self):
+        """Save the current policy model as the best model."""
+        import os
+        import torch
+        from dataclasses import asdict
+        
+        # Create models directory if it doesn't exist
+        models_dir = "saved_models"
+        os.makedirs(models_dir, exist_ok=True)
+        
+        # Save path with environment and algorithm info
+        model_filename = f"best_model_{self.config.env_id.replace('/', '_')}_{self.config.algo_id}.pth"
+        model_path = os.path.join(models_dir, model_filename)
+        
+        # Convert config to dict to avoid pickle issues with custom classes
+        config_dict = asdict(self.config)
+        
+        # Save the policy model state dict
+        torch.save({
+            'model_state_dict': self.policy_model.state_dict(),
+            'config_dict': config_dict,  # Save as dict instead of object
+            'eval_reward': self.best_eval_reward,
+            'epoch': self.current_epoch,
+            'total_timesteps': self.total_timesteps
+        }, model_path)
+        
+        return model_path
     
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
     # TODO: consider making recording a rollout collector concern again (cleaner separation of concerns)

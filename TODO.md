@@ -11,7 +11,6 @@
 - FEAT: a2c (only after reinforce/ppo is stable)
 - FEAT: add same linear decay features as rlzoo
 - FEAT: add support for premature early stop if train_mean_reward is above threshold
-- FEAT: add support for checkpointing models and replaying them locally
 - FEAT: add interactive mode support
 - rlzoo save model, run it in my model and compare rollout results (set seed and 1 env)
 - rlzoo better due to missing param support like decay

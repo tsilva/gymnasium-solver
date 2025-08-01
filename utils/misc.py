@@ -139,6 +139,8 @@ class NamespaceTablePrinter:
         min_val_width: int = 15,
         # Priority order for sorting keys within sections
         key_priority: Optional[List[str]] = None,
+        # Warning flags for metrics: {"namespace/subkey": "warning"|"error"}
+        metric_warnings: Optional[Dict[str, str]] = None,
     ):
         self.float_fmt = float_fmt
         self.indent = indent
@@ -153,15 +155,20 @@ class NamespaceTablePrinter:
         self.metric_precision = dict(metric_precision or {})
         self.min_val_width = min_val_width
         self.key_priority = key_priority or []
+        self.metric_warnings = dict(metric_warnings or {})
 
         self._prev: Optional[Dict[str, Any]] = None
         self._last_height: int = 0  # how many lines we printed last time
 
     # ---------- public API ----------
-    def update(self, data: Dict[str, Any]) -> None:
+    def update(self, data: Dict[str, Any], metric_warnings: Optional[Dict[str, str]] = None) -> None:
         """Print (or reprint) the table for `data`, with diffs vs. prior call."""
         if not data:
             return
+
+        # Update warning flags if provided
+        if metric_warnings:
+            self.metric_warnings.update(metric_warnings)
 
         grouped = self._group_by_namespace(data)
         # Order sections
@@ -270,19 +277,34 @@ class NamespaceTablePrinter:
         if v is None:
             return "—"
         
+        # Format the base value
+        base_value = ""
+        
         # Check if we have specific precision for this metric
         if full_key in self.metric_precision:
             precision = self.metric_precision[full_key]
             if _is_number(v):
                 if precision == 0:  # Integer formatting
-                    return str(int(round(v)))
+                    base_value = str(int(round(v)))
                 else:  # Float with specific precision
-                    return f"{v:.{precision}f}"
+                    base_value = f"{v:.{precision}f}"
         
-        # Fall back to original logic
-        if self.compact_numbers and _is_number(v):
-            return _humanize_num(v, self.float_fmt)
-        return _fmt_plain(v, self.float_fmt)
+        # Fall back to original logic if not set above
+        if not base_value:
+            if self.compact_numbers and _is_number(v):
+                base_value = _humanize_num(v, self.float_fmt)
+            else:
+                base_value = _fmt_plain(v, self.float_fmt)
+        
+        # Add warning emoji if this metric has a warning
+        if full_key in self.metric_warnings:
+            warning_level = self.metric_warnings[full_key]
+            if warning_level == "error":
+                return f"{base_value} 🚨"
+            else:  # warning
+                return f"{base_value} ⚠️"
+        
+        return base_value
 
     def _delta_for_key(self, ns: str, sub: str, v: Any):
         """Return (delta_str, color_name) for the full key vs previous."""
@@ -355,6 +377,7 @@ def print_namespaced_dict(
     metric_precision: Optional[Dict[str, int]] = None,
     min_val_width: int = 15,
     key_priority: Optional[List[str]] = None,
+    metric_warnings: Optional[Dict[str, str]] = None,
 ):
     """
     Thin wrapper to keep your old callsite working. For advanced config,
@@ -370,6 +393,7 @@ def print_namespaced_dict(
                          0 means integer formatting, positive values specify decimal places.
         min_val_width: Minimum width for the values column
         key_priority: Optional list of keys to prioritize in sorting order
+        metric_warnings: Optional dict mapping metric keys to warning levels ("warning"|"error")
     """
     # If the user changes core options, recreate the singleton
     global _default_printer
@@ -391,7 +415,7 @@ def print_namespaced_dict(
             min_val_width=min_val_width,
             key_priority=key_priority,
         )
-    _default_printer.update(data)
+    _default_printer.update(data, metric_warnings)
 
 
 # metrics_table_callback.py
@@ -456,6 +480,7 @@ class StdoutMetricsTable(pl.Callback):
             "eval/ep_len_mean"
         ]
         self.previous_metrics: Dict[str, Any] = {}  # Store previous values for delta validation
+        self.current_warnings: Dict[str, str] = {}  # Store current warning flags for metrics
 
     # ---------- hooks ----------
     def on_train_batch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", outputs, batch, batch_idx):
@@ -484,6 +509,9 @@ class StdoutMetricsTable(pl.Callback):
         if hasattr(trainer, "is_global_zero") and not trainer.is_global_zero:
             return
 
+        # Clear previous warnings
+        self.current_warnings.clear()
+
         metrics = self._collect_metrics(trainer)
         metrics = self._filter_metrics(metrics)
         if not metrics:
@@ -492,7 +520,7 @@ class StdoutMetricsTable(pl.Callback):
         # Validate metric delta rules before printing
         self._validate_metric_deltas(metrics)
         
-        # Check algorithm-specific metric rules and log warnings
+        # Check algorithm-specific metric rules and collect warnings
         self._check_algorithm_metric_rules(metrics)
 
         step = getattr(trainer, "global_step", None)
@@ -532,8 +560,7 @@ class StdoutMetricsTable(pl.Callback):
                     ) from e
 
     def _check_algorithm_metric_rules(self, current_metrics: Dict[str, Any]) -> None:
-        """Check algorithm-specific metric rules and log warnings when violated."""
-        import warnings
+        """Check algorithm-specific metric rules and collect warning flags."""
         
         for metric_name, rule_config in self.algorithm_metric_rules.items():
             if metric_name in current_metrics:
@@ -546,7 +573,6 @@ class StdoutMetricsTable(pl.Callback):
                 try:
                     # Get rule configuration
                     check_func = rule_config.get('check')
-                    message_template = rule_config.get('message', f"Algorithm metric rule violated for '{metric_name}'")
                     level = rule_config.get('level', 'warning')
                     
                     if check_func is None:
@@ -570,29 +596,12 @@ class StdoutMetricsTable(pl.Callback):
                             continue  # Skip if no previous value for delta check
                     
                     if not rule_satisfied:
-                        # Format the warning message
-                        if metric_name in self.previous_metrics:
-                            previous_value = self._to_python_scalar(self.previous_metrics[metric_name])
-                            formatted_message = message_template.format(
-                                metric_name=metric_name,
-                                current_value=current_value,
-                                previous_value=previous_value if _is_number(previous_value) else 'N/A'
-                            )
-                        else:
-                            formatted_message = message_template.format(
-                                metric_name=metric_name,
-                                current_value=current_value,
-                                previous_value='N/A'
-                            )
-                        
-                        # Log warning or error based on level
-                        if level == 'error':
-                            print(f"🚨 ALGORITHM ERROR: {formatted_message}")
-                        else:
-                            print(f"⚠️  ALGORITHM WARNING: {formatted_message}")
+                        # Store warning flag instead of printing
+                        self.current_warnings[metric_name] = level
                             
                 except Exception as e:
-                    print(f"⚠️  Error checking algorithm metric rule for '{metric_name}': {str(e)}")
+                    # For errors in rule evaluation, we can still store a warning flag
+                    self.current_warnings[metric_name] = "error"
 
     def _collect_metrics(self, trainer: "pl.Trainer") -> Dict[str, Any]:
         combo: Dict[str, Any] = {}
@@ -637,7 +646,13 @@ class StdoutMetricsTable(pl.Callback):
 
     def _print_table(self, metrics: Dict[str, Any], header: str):
         from utils.misc import print_namespaced_dict
-        print_namespaced_dict(metrics, metric_precision=self.metric_precision, min_val_width=self.min_val_width, key_priority=self.key_priority)
+        print_namespaced_dict(
+            metrics, 
+            metric_precision=self.metric_precision, 
+            min_val_width=self.min_val_width, 
+            key_priority=self.key_priority,
+            metric_warnings=self.current_warnings
+        )
 
     def _format_val(self, v: Any) -> str:
         if isinstance(v, float):

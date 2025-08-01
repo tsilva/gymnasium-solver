@@ -18,73 +18,6 @@ def create_dummy_dataloader(n_samples: int = 1, sample_dim: int = 1, batch_size:
 def prefix_dict_keys(data: dict, prefix: str) -> dict:
     return {f"{prefix}/{key}" if prefix else key: value for key, value in data.items()}
 
-def print_namespaced_dict(data: dict, metric_precision: Optional[Dict[str, int]] = None) -> None:
-    """
-    Prints a dictionary with namespaced keys (e.g., 'rollout/ep_len_mean')
-    in a formatted ASCII table grouped by namespaces.
-    
-    Args:
-        data: Dictionary with potentially namespaced keys
-        metric_precision: Optional dict mapping metric keys to precision values.
-                         0 means integer formatting, positive values specify decimal places.
-                         E.g., {"train/loss": 4, "rollout/ep_len_mean": 0}
-    """
-    if not data: return
-    metric_precision = metric_precision or {}
-    
-    # Group keys by their namespace prefix
-    grouped = {}
-    for key, value in data.items():
-        if "/" in key:
-            namespace, subkey = key.split("/", 1)
-        else:
-            namespace, subkey = key, ""
-        grouped.setdefault(namespace, {})[subkey] = value
-
-    # Format values with custom precision if specified
-    formatted_grouped = {}
-    for ns, subdict in grouped.items():
-        formatted_grouped[ns] = {}
-        for subkey, val in subdict.items():
-            full_key = f"{ns}/{subkey}" if subkey else ns
-            
-            if full_key in metric_precision and _is_number(val):
-                precision = metric_precision[full_key]
-                if precision == 0:  # Integer formatting
-                    formatted_val = str(int(round(val)))
-                else:  # Float with specific precision
-                    formatted_val = f"{val:.{precision}f}"
-            else:
-                formatted_val = str(val)
-                
-            formatted_grouped[ns][subkey] = formatted_val
-
-    # Determine column widths
-    max_key_len = max(len(subkey) for ns in formatted_grouped for subkey in formatted_grouped[ns]) + 4
-    max_val_len = max(len(val) for ns in formatted_grouped for val in formatted_grouped[ns].values()) + 2
-
-    # Print table
-    border = "-" * (max_key_len + max_val_len + 5)
-    print(border)
-    for ns, subdict in formatted_grouped.items():
-        print(f"| {ns + '/':<{max_key_len}} |")
-        for subkey, val in subdict.items():
-            print(f"|    {subkey:<{max_key_len-4}} | {val:<{max_val_len}}|")
-    print(border)
-
-    # Determine column widths
-    max_key_len = max(len(subkey) for ns in formatted_grouped for subkey in formatted_grouped[ns]) + 4
-    max_val_len = max(len(val) for ns in formatted_grouped for val in formatted_grouped[ns].values()) + 2
-
-    # Print table
-    border = "-" * (max_key_len + max_val_len + 5)
-    print(border)
-    for ns, subdict in formatted_grouped.items():
-        print(f"| {ns + '/':<{max_key_len}} |")
-        for subkey, val in subdict.items():
-            print(f"|    {subkey:<{max_key_len-4}} | {val:<{max_val_len}}|")
-    print(border)
-
 def _convert_numeric_strings(config_dict: Dict[str, Any]) -> Dict[str, Any]:
     """Convert string representations of numbers back to numeric types."""
     for key, value in config_dict.items():
@@ -202,6 +135,8 @@ class NamespaceTablePrinter:
         delta_tol: float = 1e-12,
         # Precision per metric: {"namespace/subkey": precision, ...} where 0 = int
         metric_precision: Optional[Dict[str, int]] = None,
+        # Minimum width for the values column
+        min_val_width: int = 15,
     ):
         self.float_fmt = float_fmt
         self.indent = indent
@@ -214,6 +149,7 @@ class NamespaceTablePrinter:
         self.stream = stream or sys.stdout
         self.delta_tol = delta_tol
         self.metric_precision = dict(metric_precision or {})
+        self.min_val_width = min_val_width
 
         self._prev: Optional[Dict[str, Any]] = None
         self._last_height: int = 0  # how many lines we printed last time
@@ -269,6 +205,7 @@ class NamespaceTablePrinter:
         indent = self.indent
         key_width = max(len(k) for k in key_candidates) if key_candidates else 0
         val_width = max(len(v) for v in val_candidates) if val_candidates else 0
+        val_width = max(val_width, self.min_val_width)  # Apply minimum width
 
         # Row layout: "| " + (indent + key_width) + " | " + (val_width) + " |"
         border_len = 2 + (indent + key_width) + 3 + val_width + 2
@@ -401,6 +338,7 @@ def print_namespaced_dict(
     compact_numbers: bool = True,
     color: bool = True,
     metric_precision: Optional[Dict[str, int]] = None,
+    min_val_width: int = 15,
 ):
     """
     Thin wrapper to keep your old callsite working. For advanced config,
@@ -414,6 +352,7 @@ def print_namespaced_dict(
         color: Whether to use colored output
         metric_precision: Optional dict mapping metric keys to precision values.
                          0 means integer formatting, positive values specify decimal places.
+        min_val_width: Minimum width for the values column
     """
     # If the user changes core options, recreate the singleton
     global _default_printer
@@ -423,6 +362,7 @@ def print_namespaced_dict(
         or (_default_printer.use_ansi_inplace != bool(inplace and sys.stdout.isatty()))
         or _default_printer.color != bool(color and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None)
         or _default_printer.metric_precision != (metric_precision or {})
+        or _default_printer.min_val_width != min_val_width
     ):
         _default_printer = NamespaceTablePrinter(
             float_fmt=float_fmt,
@@ -430,6 +370,7 @@ def print_namespaced_dict(
             use_ansi_inplace=bool(inplace and sys.stdout.isatty()),
             color=bool(color and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None),
             metric_precision=metric_precision,
+            min_val_width=min_val_width,
         )
     _default_printer.update(data)
 
@@ -464,6 +405,7 @@ class StdoutMetricsTable(pl.Callback):
         metric_precision: Optional[Dict[str, int]] = None,  # precision per metric
         metric_delta_rules: Optional[Dict[str, callable]] = None,  # delta validation rules per metric
         algorithm_metric_rules: Optional[Dict[str, dict]] = None,  # algorithm-specific warning rules
+        min_val_width: int = 15,                  # minimum width for values column
     ):
         super().__init__()
         self.every_n_steps = every_n_steps
@@ -474,6 +416,7 @@ class StdoutMetricsTable(pl.Callback):
         self.metric_precision = metric_precision or {}
         self.metric_delta_rules = metric_delta_rules or {}
         self.algorithm_metric_rules = algorithm_metric_rules or {}
+        self.min_val_width = min_val_width
         self.previous_metrics: Dict[str, Any] = {}  # Store previous values for delta validation
 
     # ---------- hooks ----------
@@ -656,7 +599,7 @@ class StdoutMetricsTable(pl.Callback):
 
     def _print_table(self, metrics: Dict[str, Any], header: str):
         from utils.misc import print_namespaced_dict
-        print_namespaced_dict(metrics, metric_precision=self.metric_precision)
+        print_namespaced_dict(metrics, metric_precision=self.metric_precision, min_val_width=self.min_val_width)
 
     def _format_val(self, v: Any) -> str:
         if isinstance(v, float):

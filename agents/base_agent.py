@@ -283,6 +283,7 @@ class BaseAgent(pl.LightningModule):
             #include=[r"^train/", r"^val/", r"^time/", r"^rollout/", r"^eval/"],  # optional filters; remove to show everything
             # exclude=[r"^grad/"],           # example: drop noisy keys
             digits=4,
+            # TODO: create metric config file
             metric_precision={
                 "train/total_episodes": 0,  # no decimals for episode counts
                 "train/total_timesteps": 0,  # no decimals for timesteps

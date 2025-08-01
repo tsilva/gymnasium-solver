@@ -110,5 +110,3 @@ class RewardShaper_MountainCarV0(gym.Wrapper):
         shaped_reward = reward + shaping_reward
         
         return obs, shaped_reward, terminated, truncated, info
-    
-EnvWrapperRegistry.register('RewardShaper_MountainCarV0', RewardShaper_MountainCarV0)

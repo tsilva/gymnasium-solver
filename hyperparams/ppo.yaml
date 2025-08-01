@@ -1,4 +1,3 @@
-# Specific environment configurations
 CartPole-v1:
   env_id: CartPole-v1
   n_envs: 8
@@ -77,22 +76,53 @@ MountainCar-v0_rewardshaping:
 
 ALE/Pong-v5_ram:
   env_id: ALE/Pong-v5
-  n_envs: 8
-  n_timesteps: !!float 1e5
+  n_envs: 20               # Sweet spot for sample diversity vs computational overhead
   policy: 'MlpPolicy'
-  frame_stack: 1
-  n_timesteps: !!float 1e6
-  n_steps: 256
-  batch_size: 64
-  n_epochs: 4
+  frame_stack: 1           # RAM contains full game state - no stacking needed
+  #n_timesteps: !!float 1e6
+  n_steps: 768             # Optimal rollout length for Atari RAM
+  batch_size: 384          # Increased for better gradient estimates
+  n_epochs: 6              # Balanced sample reuse without overfitting
+  gae_lambda: 0.97         # Fine-tuned for Pong's reward structure
+  gamma: 0.99              # Standard Atari discount factor
+  ent_coef: 0.002          # Minimal entropy for faster convergence
+  clip_range: 0.12         # Tighter clipping for stable learning
+  learning_rate: 0.00015   # Slightly higher for faster initial learning
+  obs_type: "ram"
+  normalize_obs: "static"
+  hidden_dims: [256, 256]  # Balanced network size for RAM processing
+  eval_freq_epochs: 25     # Frequent evaluation for convergence monitoring
+  eval_episodes: 5         # More episodes for reliable evaluation
+
+ALE/Pong-v5_ram_throughput:
+  env_id: ALE/Pong-v5
+  policy: "MlpPolicy"
+  obs_type: "ram"
+
+  # Max-throughput knobs
+  n_envs: 32                # ≈ (# of logical CPU cores − 2). Raise/lower to saturate CPU.
+  frame_stack: 1            # RAM stacking is usually unnecessary and costs copies.
+  normalize_obs: "static"     # or false – avoid per-step normalization work.
+  hidden_dims: [128, 128]   # Smaller net = faster. Try [64, 64] for even more speed.
+
+  # Rollout/update (amortize optimizer & Python overhead)
+  n_steps: 1024             # Larger rollouts => fewer updates per wall-clock second
+  batch_size: 4096          # Big minibatches => fewer optimizer steps
+  n_epochs: 1               # Single pass per update maximizes throughput
+
+  # PPO essentials (unchanged for speed)
   gae_lambda: 0.95
   gamma: 0.99
   ent_coef: 0.01
   clip_range: 0.2
-  learning_rate: 0.00025
-  obs_type: "ram"
-  normalize_obs: "static"
-  hidden_dims: [256, 256]
+  learning_rate: 0.0005     # Slightly higher LR tends to suit huge batches
+
+  # Housekeeping
+  eval_freq_epochs: 100       # Disable eval to avoid pauses
+  eval_episodes: 10
+  #device: "cpu"             # For Atari RAM, CPU avoids CPU↔GPU transfer overhead
+  # torch_num_threads: 1    # If your trainer supports it; helps with many envs
+  # vec_env: "async"        # If available: Async/Subproc vector env
 
 Taxi-v3:
   env_id: Taxi-v3

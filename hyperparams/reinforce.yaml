@@ -10,3 +10,23 @@ CartPole-v1:
   normalize_reward: false
   hidden_dims: [64]
   frame_stack: 3
+
+MountainCar-v0:
+  n_envs: 8
+  n_epochs: 1
+  n_steps: 1024
+  batch_size: 128
+  gamma: 0.999
+  ent_coef: 0.01
+  learning_rate: 1e-3
+  normalize_obs: true
+  normalize_reward: false
+  hidden_dims: [128, 128]
+  frame_stack: 1
+  max_epochs: 2000
+  env_wrappers:
+    - id: RewardShaper_MountainCarV0
+      kwargs:
+        position_reward_scale: 100.0
+        velocity_reward_scale: 10.0
+        height_reward_scale: 50.0

@@ -15,6 +15,7 @@ from collections.abc import Sequence
 
 import numpy as np
 from gymnasium import spaces
+import env_wrappers  # Import to register all wrappers
 from env_wrappers.env_wrapper_registry import EnvWrapperRegistry
 from stable_baselines3.common.vec_env.base_vec_env import VecEnv, VecEnvWrapper, VecEnvStepReturn
 
@@ -98,7 +99,7 @@ def build_env(
         
         # Apply configured env wrappers
         for wrapper in env_wrappers:
-            env = EnvWrapperRegistry.apply_wrapper(env, wrapper)
+            env = EnvWrapperRegistry.apply(env, wrapper)
 
         return env
 

@@ -25,6 +25,7 @@ class BaseAgent(pl.LightningModule):
         self.build_env_fn = lambda seed, n_envs=config.n_envs, **kwargs: build_env(
             config.env_id,
             seed=seed,
+            env_wrappers=config.env_wrappers,
             norm_obs=config.normalize_obs,
             norm_reward=config.normalize_reward,
             n_envs=n_envs,

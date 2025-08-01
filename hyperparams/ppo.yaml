@@ -54,6 +54,18 @@ MountainCar-v0:
   hidden_dims: [256, 256]
   frame_stack: 3
   max_epochs: 1000
+  env_wrappers:
+    - id: RewardShaper_MountainCarV0
+      kwargs:
+        position_reward_scale: 100.0
+        velocity_reward_scale: 10.0
+        height_reward_scale: 50.0
+  ent_coef: 0.01
+  clip_range: 0.2
+  learning_rate: 3e-4
+  hidden_dims: [256, 256]
+  frame_stack: 3
+  max_epochs: 1000
 
 ALE/Pong-v5:
   n_envs: 8

@@ -228,6 +228,17 @@ class BaseAgent(pl.LightningModule):
                 "train/epoch": 0,              # no decimals for epoch count
                 "train/n_updates": 0,          # no decimals for update count
                 "time/iterations": 0,          # no decimals for iterations 
+            },
+            metric_delta_rules={
+                # Metrics that should only increase (monotonically non-decreasing)
+                "rollout/total_timesteps": lambda prev, curr: curr >= prev,
+                "rollout/total_episodes": lambda prev, curr: curr >= prev,
+                "time/total_timesteps": lambda prev, curr: curr >= prev,
+                "train/epoch": lambda prev, curr: curr >= prev,
+                "train/n_updates": lambda prev, curr: curr >= prev,
+                "time/iterations": lambda prev, curr: curr >= prev,
+                # Time elapsed should always increase
+                "time/time_elapsed": lambda prev, curr: curr >= prev,
             }
         )
 

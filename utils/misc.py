@@ -462,6 +462,7 @@ class StdoutMetricsTable(pl.Callback):
         exclude: Optional[Iterable[str]] = None,  # regex patterns to drop
         digits: int = 4,                          # rounding for floats
         metric_precision: Optional[Dict[str, int]] = None,  # precision per metric
+        metric_delta_rules: Optional[Dict[str, callable]] = None,  # delta validation rules per metric
     ):
         super().__init__()
         self.every_n_steps = every_n_steps
@@ -470,6 +471,8 @@ class StdoutMetricsTable(pl.Callback):
         self.exclude = [re.compile(p) for p in (exclude or [])]
         self.digits = digits
         self.metric_precision = metric_precision or {}
+        self.metric_delta_rules = metric_delta_rules or {}
+        self.previous_metrics: Dict[str, Any] = {}  # Store previous values for delta validation
 
     # ---------- hooks ----------
     def on_train_batch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", outputs, batch, batch_idx):
@@ -503,10 +506,44 @@ class StdoutMetricsTable(pl.Callback):
         if not metrics:
             return
 
+        # Validate metric delta rules before printing
+        self._validate_metric_deltas(metrics)
+
         step = getattr(trainer, "global_step", None)
         epoch = getattr(trainer, "current_epoch", None)
         header = f"[{stage}] epoch={epoch} step={step}"
         self._print_table(metrics, header)
+
+        # Update previous metrics for next comparison
+        self.previous_metrics.update(metrics)
+
+    def _validate_metric_deltas(self, current_metrics: Dict[str, Any]) -> None:
+        """Validate that metric deltas follow specified rules."""
+        for metric_name, rule_lambda in self.metric_delta_rules.items():
+            if metric_name in current_metrics and metric_name in self.previous_metrics:
+                current_value = self._to_python_scalar(current_metrics[metric_name])
+                previous_value = self._to_python_scalar(self.previous_metrics[metric_name])
+                
+                # Skip validation if either value is not a number
+                if not (_is_number(current_value) and _is_number(previous_value)):
+                    continue
+                
+                try:
+                    # Call the lambda with (previous, current) values
+                    rule_satisfied = rule_lambda(previous_value, current_value)
+                    if not rule_satisfied:
+                        raise ValueError(
+                            f"Metric delta rule violation for '{metric_name}': "
+                            f"previous={previous_value}, current={current_value}. "
+                            f"Rule: {rule_lambda.__name__ if hasattr(rule_lambda, '__name__') else 'lambda'}"
+                        )
+                except Exception as e:
+                    if isinstance(e, ValueError) and "Metric delta rule violation" in str(e):
+                        raise  # Re-raise our validation errors
+                    # For other exceptions (e.g., in lambda evaluation), wrap them
+                    raise ValueError(
+                        f"Error evaluating metric delta rule for '{metric_name}': {str(e)}"
+                    ) from e
 
     def _collect_metrics(self, trainer: "pl.Trainer") -> Dict[str, Any]:
         combo: Dict[str, Any] = {}

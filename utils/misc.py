@@ -493,20 +493,6 @@ class StdoutMetricsTable(pl.Callback):
     def _print_table(self, metrics: Dict[str, Any], header: str):
         from utils.misc import print_namespaced_dict
         print_namespaced_dict(metrics)
-        return
-        # Simple monospaced table without external deps
-        keys = sorted(metrics.keys())
-        name_w = max([len("metric")] + [len(k) for k in keys])
-        val_w = max([len("last_value")] + [len(self._format_val(metrics[k])) for k in keys])
-
-        print(f"\n{header}")
-        print(f"+{'-'*(name_w+2)}+{'-'*(val_w+2)}+")
-        print(f"| {'metric'.ljust(name_w)} | {'last_value'.rjust(val_w)} |")
-        print(f"+{'-'*(name_w+2)}+{'-'*(val_w+2)}+")
-        for k in keys:
-            v = self._format_val(metrics[k])
-            print(f"| {k.ljust(name_w)} | {v.rjust(val_w)} |")
-        print(f"+{'-'*(name_w+2)}+{'-'*(val_w+2)}+\n", flush=True)
 
     def _format_val(self, v: Any) -> str:
         if isinstance(v, float):

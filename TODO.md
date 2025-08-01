@@ -1,5 +1,4 @@
 - BUG: copilot not loading correct venv (vscode settings)
-- FEAT: add n_timesteps support
 - FEAT: add logging support (file logging)
 - BUG: stats table value precision is not softcoded
 - FEAT: add alert support to metric tracker (algo dependent)

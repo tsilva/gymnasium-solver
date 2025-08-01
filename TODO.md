@@ -1,7 +1,8 @@
 - BUG: copilot not loading correct venv (vscode settings)
 - FEAT: add n_timesteps support
 - FEAT: add logging support (file logging)
-- FEAT: config files should have config ids that are different from env ids (you can have multiple configs for the same env)
+- BUG: stats table value precision is not softcoded
+- FEAT: add alert support to metric tracker (algo dependent)
 - FEAT: add assertion that certain metrics must always increase
 - FEAT: add assertions where applicable
 
@@ -12,7 +13,6 @@
 - BUG: confirm that buffer growth is under control
 - BUG: fix thread safety issues with async eval collector (copy model weights with lock)
 - BUG: check that were are matching rlzoo stop criteria
-- BUG: stats table value precision is not softcoded
 - FEAT: consider computing mean reward by timesteps, this way in eval we just have to request n_steps = reward_threshold * N, this will make it easier to support vectorized envs
 - FEAT: add ability to hardcode reward threshold
 - FEAT: log steps/episodes to progress bar
@@ -21,7 +21,6 @@
 - FEAT: add same linear decay features as rlzoo
 - FEAT: add support for premature early stop if train_mean_reward is above threshold
 - FEAT: add support for checkpointing models and replaying them locally
-- FEAT: add alert support to metric tracker (algo dependent)
 - FEAT: add interactive mode support
 - rlzoo save model, run it in my model and compare rollout results (set seed and 1 env)
 - rlzoo better due to missing param support like decay

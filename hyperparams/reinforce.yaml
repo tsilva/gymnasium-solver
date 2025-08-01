@@ -1,46 +1,35 @@
-CartPole-v1:
-  env_id: CartPole-v1
+# Base configuration for REINFORCE
+_base_reinforce:
   n_envs: 8
   n_epochs: 1
+  ent_coef: 0.01
+  normalize_obs: false
+  normalize_reward: false
+
+CartPole-v1:
+  inherit_from: _base_reinforce
+  env_id: CartPole-v1
   n_steps: 512
   batch_size: 64
   gamma: 0.99
-  ent_coef: 0.01
   learning_rate: 5e-4
-  normalize_obs: false
-  normalize_reward: false
   hidden_dims: [64]
   frame_stack: 3
 
 MountainCar-v0:
+  inherit_from: _base_reinforce
   env_id: MountainCar-v0
-  n_envs: 8
-  n_epochs: 1
   n_steps: 1024
   batch_size: 128
   gamma: 0.999
-  ent_coef: 0.01
   learning_rate: 1e-3
-  normalize_obs: false
-  normalize_reward: false
   hidden_dims: [128, 128]
   frame_stack: 1
   max_epochs: 2000
 
 MountainCar-v0_rewardshaping:
-  env_id: MountainCar-v0
-  n_envs: 8
-  n_epochs: 1
-  n_steps: 1024
-  batch_size: 128
-  gamma: 0.999
-  ent_coef: 0.01
-  learning_rate: 1e-3
+  inherit_from: MountainCar-v0
   normalize_obs: true
-  normalize_reward: false
-  hidden_dims: [128, 128]
-  frame_stack: 1
-  max_epochs: 2000
   env_wrappers:
     - id: RewardShaper_MountainCarV0
       position_reward_scale: 100.0

@@ -73,6 +73,7 @@ class Config:
         Load configuration from YAML files supporting both formats:
         1. New format: config_id is a config identifier, env_id is read from the config
         2. Legacy format: config_id is env_id, for backward compatibility
+        3. Inheritance: config can inherit from another config using 'inherit_from' field
         """
         # Get the project root directory
         project_root = Path(__file__).parent.parent
@@ -97,9 +98,36 @@ class Config:
         # Set algo_id
         final_config['algo_id'] = algo_id
 
+        # Helper function to resolve inheritance
+        def resolve_config_with_inheritance(config_name: str, visited: set = None) -> Dict[str, Any]:
+            if visited is None:
+                visited = set()
+            
+            if config_name in visited:
+                raise ValueError(f"Circular inheritance detected: {' -> '.join(visited)} -> {config_name}")
+            
+            if config_name not in algo_config:
+                raise ValueError(f"Config '{config_name}' not found for inheritance in {algo_config_path}")
+            
+            config_data = algo_config[config_name].copy()
+            
+            # Handle inheritance
+            if 'inherit_from' in config_data:
+                parent_config_name = config_data.pop('inherit_from')
+                visited.add(config_name)
+                parent_config = resolve_config_with_inheritance(parent_config_name, visited)
+                visited.remove(config_name)
+                
+                # Merge parent config with child config (child overrides parent)
+                merged_config = parent_config.copy()
+                merged_config.update(config_data)
+                return merged_config
+            
+            return config_data
+
         # Try new format first (config_id with env_id field)
         if config_id in algo_config:
-            config_data = algo_config[config_id]
+            config_data = resolve_config_with_inheritance(config_id)
             final_config.update(config_data)
             
             # In new format, env_id should be in the config data
@@ -116,7 +144,7 @@ class Config:
             
             if len(matching_configs) == 1:
                 # Found exactly one config for this env_id in new format
-                config_data = algo_config[matching_configs[0]]
+                config_data = resolve_config_with_inheritance(matching_configs[0])
                 final_config.update(config_data)
             elif len(matching_configs) > 1:
                 # Multiple configs for same env_id - user needs to be specific
@@ -131,7 +159,8 @@ class Config:
                 
                 if config_id in legacy_configs:
                     # Legacy format: config_id is env_id, no env_id field in config
-                    final_config.update(legacy_configs[config_id])
+                    config_data = resolve_config_with_inheritance(config_id)
+                    final_config.update(config_data)
                     final_config['env_id'] = config_id
                 else:
                     available_configs = list(algo_config.keys())

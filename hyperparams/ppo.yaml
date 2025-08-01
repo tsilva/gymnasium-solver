@@ -16,6 +16,7 @@ CartPole-v1:
   hidden_dims: [64]
   normalize_obs: false
   normalize_reward: false
+  reward_threshold: 500
 
 CartPole-v1_normalized:
   inherit_from: CartPole-v1

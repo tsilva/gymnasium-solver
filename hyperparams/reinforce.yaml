@@ -3,8 +3,6 @@ CartPole-v1:
   n_envs: 8
   n_epochs: 1
   ent_coef: 0.01
-  normalize_obs: false
-  normalize_reward: false
   n_steps: 512
   batch_size: 64
   gamma: 0.99
@@ -19,8 +17,6 @@ MountainCar-v0:
   n_envs: 8
   n_epochs: 1
   ent_coef: 0.01
-  normalize_obs: false
-  normalize_reward: false
   n_steps: 1024
   batch_size: 128
   gamma: 0.999
@@ -43,8 +39,6 @@ Taxi-v3:
   n_envs: 8
   n_epochs: 1
   ent_coef: 0.01
-  normalize_obs: false
-  normalize_reward: false
   n_steps: 256
   batch_size: 32
   gamma: 0.99

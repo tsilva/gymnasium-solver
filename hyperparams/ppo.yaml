@@ -14,14 +14,11 @@ CartPole-v1:
   learning_rate: 1e-3
   clip_range: 0.2
   hidden_dims: [64]
-  normalize_obs: false
-  normalize_reward: false
   reward_threshold: 500
 
 CartPole-v1_normalized:
   inherit_from: CartPole-v1
-  normalize_obs: true
-  normalize_reward: true
+  normalize_obs: "static"
 
 Acrobot-v1:
   env_id: Acrobot-v1
@@ -94,8 +91,7 @@ ALE/Pong-v5_ram:
   clip_range: 0.2
   learning_rate: 0.00025
   obs_type: "ram"
-  normalize_obs: true
-  normalize_reward: false
+  normalize_obs: "static"
   hidden_dims: [256, 256]
 
 Taxi-v3:
@@ -112,5 +108,3 @@ Taxi-v3:
   learning_rate: 0.0003
   clip_range: 0.1
   hidden_dims: [256, 256]
-  normalize_obs: false
-  normalize_reward: false

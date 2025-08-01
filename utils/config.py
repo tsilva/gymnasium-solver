@@ -68,12 +68,11 @@ class Config:
     env_wrappers: list = field(default_factory=list)
 
     @classmethod
-    def load_from_yaml(cls, env_id: str, algo_id: str, config_dir: str = "hyperparams") -> 'Config':
+    def load_from_yaml(cls, config_id: str, algo_id: str, config_dir: str = "hyperparams") -> 'Config':
         """
-        Load configuration from YAML files in RLZOO SB3 format:
-        1. Start with RLConfig class defaults
-        2. Load algorithm-specific file (hyperparams/{algo_id}.yaml)
-        3. Apply environment-specific config from that file
+        Load configuration from YAML files supporting both formats:
+        1. New format: config_id is a config identifier, env_id is read from the config
+        2. Legacy format: config_id is env_id, for backward compatibility
         """
         # Get the project root directory
         project_root = Path(__file__).parent.parent
@@ -95,15 +94,49 @@ class Config:
         with open(algo_config_path, 'r') as f:
             algo_config = yaml.safe_load(f)
 
-        # Set env_id and algo_id
-        final_config['env_id'] = env_id
+        # Set algo_id
         final_config['algo_id'] = algo_id
 
-        # Apply environment-specific config from algorithm file
-        if env_id in algo_config:
-            final_config.update(algo_config[env_id])
+        # Try new format first (config_id with env_id field)
+        if config_id in algo_config:
+            config_data = algo_config[config_id]
+            final_config.update(config_data)
+            
+            # In new format, env_id should be in the config data
+            if 'env_id' not in config_data:
+                raise ValueError(f"Config '{config_id}' missing required 'env_id' field in {algo_config_path}")
+                
         else:
-            raise ValueError(f"Environment '{env_id}' not found in {algo_config_path}")
+            # Try legacy format (config_id is actually env_id)
+            # Check if any config has this env_id
+            matching_configs = []
+            for conf_id, conf_data in algo_config.items():
+                if isinstance(conf_data, dict) and conf_data.get('env_id') == config_id:
+                    matching_configs.append(conf_id)
+            
+            if len(matching_configs) == 1:
+                # Found exactly one config for this env_id in new format
+                config_data = algo_config[matching_configs[0]]
+                final_config.update(config_data)
+            elif len(matching_configs) > 1:
+                # Multiple configs for same env_id - user needs to be specific
+                raise ValueError(f"Multiple configs found for environment '{config_id}': {matching_configs}. "
+                               f"Please specify one of these config IDs instead of the environment ID.")
+            else:
+                # Check if it's a legacy format (env_id as top-level key without env_id field)
+                legacy_configs = {}
+                for conf_id, conf_data in algo_config.items():
+                    if isinstance(conf_data, dict) and 'env_id' not in conf_data:
+                        legacy_configs[conf_id] = conf_data
+                
+                if config_id in legacy_configs:
+                    # Legacy format: config_id is env_id, no env_id field in config
+                    final_config.update(legacy_configs[config_id])
+                    final_config['env_id'] = config_id
+                else:
+                    available_configs = list(algo_config.keys())
+                    raise ValueError(f"Config/Environment '{config_id}' not found in {algo_config_path}. "
+                                   f"Available configs: {available_configs}")
 
         # Convert any numeric strings (like scientific notation)
         final_config = _convert_numeric_strings(final_config)
@@ -174,6 +207,6 @@ class Config:
         if self.eval_episodes is not None and self.eval_episodes <= 0:
             raise ValueError("eval_episodes must be a positive integer.")
 
-def load_config(env_id: str, algo_id: str, config_dir: str = "hyperparams") -> Config:
+def load_config(config_id: str, algo_id: str, config_dir: str = "hyperparams") -> Config:
     """Convenience function to load configuration."""
-    return Config.load_from_yaml(env_id, algo_id, config_dir)
+    return Config.load_from_yaml(config_id, algo_id, config_dir)

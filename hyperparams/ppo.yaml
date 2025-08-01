@@ -1,4 +1,5 @@
-CartPole-v1:
+cartpole_basic:
+  env_id: CartPole-v1
   n_envs: 8
   n_timesteps: !!float 1e5
   policy: 'MlpPolicy'
@@ -15,7 +16,26 @@ CartPole-v1:
   normalize_reward: false
   frame_stack: 1
 
-Acrobot-v1:
+cartpole_normalized:
+  env_id: CartPole-v1
+  n_envs: 8
+  n_timesteps: !!float 1e5
+  policy: 'MlpPolicy'
+  n_steps: 32
+  batch_size: 256
+  gae_lambda: 0.8
+  gamma: 0.98
+  ent_coef: 0.0
+  n_epochs: 20
+  learning_rate: 1e-3
+  clip_range: 0.2
+  hidden_dims: [64]
+  normalize_obs: true
+  normalize_reward: true
+  frame_stack: 1
+
+acrobot_normalized:
+  env_id: Acrobot-v1
   normalize: true
   n_envs: 16
   n_timesteps: !!float 1e6
@@ -27,7 +47,8 @@ Acrobot-v1:
   n_epochs: 4
   ent_coef: 0.0
 
-LunarLander-v3:
+lunarlander_basic:
+  env_id: LunarLander-v3
   n_envs: 16
   n_timesteps: !!float 1e6
   policy: 'MlpPolicy'
@@ -38,7 +59,8 @@ LunarLander-v3:
   n_epochs: 4
   ent_coef: 0.01
 
-MountainCar-v0:
+mountaincar_normalized:
+  env_id: MountainCar-v0
   normalize: true
   n_envs: 16
   n_timesteps: !!float 1e6
@@ -60,14 +82,27 @@ MountainCar-v0:
         position_reward_scale: 100.0
         velocity_reward_scale: 10.0
         height_reward_scale: 50.0
+
+mountaincar_basic:
+  env_id: MountainCar-v0
+  normalize: false
+  n_envs: 16
+  n_timesteps: !!float 1e6
+  policy: 'MlpPolicy'
+  n_steps: 128
+  batch_size: 128
+  gae_lambda: 0.95
+  gamma: 0.999
+  n_epochs: 10
   ent_coef: 0.01
   clip_range: 0.2
   learning_rate: 3e-4
   hidden_dims: [256, 256]
-  frame_stack: 3
+  frame_stack: 1
   max_epochs: 1000
 
-ALE/Pong-v5:
+pong_ram:
+  env_id: ALE/Pong-v5
   n_envs: 8
   n_timesteps: !!float 1e6
   policy: 'MlpPolicy'

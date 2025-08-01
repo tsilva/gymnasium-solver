@@ -1,8 +1,14 @@
-import ale_py
-import gymnasium
-gymnasium.register_envs(ale_py)
+try:
+    import ale_py
+    import gymnasium
+    gymnasium.register_envs(ale_py)
+except ImportError:
+    # ale_py not available, skip Atari environment registration
+    import gymnasium
 
 from wrappers.env_wrapper_registry import EnvWrapperRegistry
+from wrappers.discrete_to_onehot import DiscreteToOneHot
+from gymnasium import spaces
 
 def is_atari_env_id(env_id: str) -> bool:
     return env_id.startswith("ALE/")
@@ -28,13 +34,17 @@ def build_env(
     from wrappers.vec_normalize_static import VecNormalizeStatic
     
     # Assert render_mode is set if recording video
-    if record_video and render_mode is not "rgb_array":
+    if record_video and render_mode != "rgb_array":
         raise ValueError("Video recording requires render_mode='rgb_array'")
 
     def env_fn():
         # TODO: is there overlap here?
         if is_atari_env_id(env_id): env = gym.make(env_id, obs_type=obs_type, render_mode=render_mode)
         else: env = gym.make(env_id, render_mode=render_mode)
+
+        # Automatically apply DiscreteToOneHot wrapper for discrete observation spaces
+        if isinstance(env.observation_space, spaces.Discrete):
+            env = DiscreteToOneHot(env)
 
         # Apply configured env wrappers
         for wrapper in env_wrappers: env = EnvWrapperRegistry.apply(env, wrapper)

@@ -5,7 +5,6 @@
 - FEAT: add alert support to metric tracker (algo dependent)
 - FEAT: add assertion that certain metrics must always increase
 - FEAT: add assertions where applicable
-
 - FEAT: add support for fully recording last eval
 - FEAT: measure mean value, use that as baseline subtraction
 - FEAT: track output distribution

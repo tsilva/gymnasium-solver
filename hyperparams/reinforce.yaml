@@ -1,14 +1,10 @@
-# Base configuration for REINFORCE
-_base_reinforce:
+CartPole-v1:
+  env_id: CartPole-v1
   n_envs: 8
   n_epochs: 1
   ent_coef: 0.01
   normalize_obs: false
   normalize_reward: false
-
-CartPole-v1:
-  inherit_from: _base_reinforce
-  env_id: CartPole-v1
   n_steps: 512
   batch_size: 64
   gamma: 0.99
@@ -17,8 +13,12 @@ CartPole-v1:
   frame_stack: 3
 
 MountainCar-v0:
-  inherit_from: _base_reinforce
   env_id: MountainCar-v0
+  n_envs: 8
+  n_epochs: 1
+  ent_coef: 0.01
+  normalize_obs: false
+  normalize_reward: false
   n_steps: 1024
   batch_size: 128
   gamma: 0.999

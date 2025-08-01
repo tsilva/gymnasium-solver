@@ -149,9 +149,9 @@ class BaseAgent(pl.LightningModule):
         # Log action distribution as histogram to WandB
         if action_distribution is not None and len(action_distribution) > 0:
             if hasattr(self.logger, 'experiment') and self.logger.experiment:
-                self.logger.experiment.log({
+                self.logger.log_metrics({
                     "rollout/action_distribution": wandb.Histogram(action_distribution)
-                }, step=self.global_step) # TODO: use global step in videos too
+                }, step=self.global_step)
 
     def val_dataloader(self):
         return create_dummy_dataloader()
@@ -201,6 +201,14 @@ class BaseAgent(pl.LightningModule):
             log_model=True,
             config=config_dict,
         )
+        
+        # Define wandb metrics to prevent step ordering issues
+        if wandb_logger.experiment:
+            # Define step-based metrics to ensure proper ordering
+            wandb_logger.experiment.define_metric("train/*", step_metric="trainer/global_step")
+            wandb_logger.experiment.define_metric("eval/*", step_metric="trainer/global_step")
+            wandb_logger.experiment.define_metric("rollout/*", step_metric="trainer/global_step")
+            wandb_logger.experiment.define_metric("time/*", step_metric="trainer/global_step")
         
         # Create video logging callback
         video_logger_cb = VideoLoggerCallback(
@@ -309,7 +317,7 @@ class BaseAgent(pl.LightningModule):
         # Log action distribution as histogram to WandB for evaluation
         if action_distribution is not None and len(action_distribution) > 0:
             if hasattr(self.logger, 'experiment') and self.logger.experiment:
-                self.logger.experiment.log({
+                self.logger.log_metrics({
                     "eval/action_distribution": wandb.Histogram(action_distribution)
                 }, step=self.global_step)
 

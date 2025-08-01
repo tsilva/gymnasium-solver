@@ -258,11 +258,12 @@ class VideoLoggerCallback(pl.Callback):
             key = self._key_for(rel)
             by_key.setdefault(key, []).append(p)
 
-        # Log per key
+        # Log per key using Lightning's proper logging mechanism
         for key, files in by_key.items():
             media = [wandb.Video(str(p)) for p in files]
             self._seen.update(map(str, files))
-            trainer.logger.experiment.log({f"{prefix}/{key}": media})
+            # Use Lightning's log_metrics to ensure proper step handling
+            trainer.logger.log_metrics({f"{prefix}/{key}": media}, step=trainer.global_step)
 
     def _key_for(self, rel: Path) -> str:
         parts = rel.parts[: self.depth] or ("media",)

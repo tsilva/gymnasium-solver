@@ -18,13 +18,20 @@ def create_dummy_dataloader(n_samples: int = 1, sample_dim: int = 1, batch_size:
 def prefix_dict_keys(data: dict, prefix: str) -> dict:
     return {f"{prefix}/{key}" if prefix else key: value for key, value in data.items()}
 
-def print_namespaced_dict(data: dict) -> None:
+def print_namespaced_dict(data: dict, metric_precision: Optional[Dict[str, int]] = None) -> None:
     """
     Prints a dictionary with namespaced keys (e.g., 'rollout/ep_len_mean')
     in a formatted ASCII table grouped by namespaces.
-    Floats are formatted to 2 decimal places.
+    
+    Args:
+        data: Dictionary with potentially namespaced keys
+        metric_precision: Optional dict mapping metric keys to precision values.
+                         0 means integer formatting, positive values specify decimal places.
+                         E.g., {"train/loss": 4, "rollout/ep_len_mean": 0}
     """
     if not data: return
+    metric_precision = metric_precision or {}
+    
     # Group keys by their namespace prefix
     grouped = {}
     for key, value in data.items():
@@ -34,13 +41,36 @@ def print_namespaced_dict(data: dict) -> None:
             namespace, subkey = key, ""
         grouped.setdefault(namespace, {})[subkey] = value
 
-    # Format values first (floats to 2 decimals)
+    # Format values with custom precision if specified
     formatted_grouped = {}
     for ns, subdict in grouped.items():
-        formatted_grouped[ns] = {
-            subkey: str(val)
-            for subkey, val in subdict.items()
-        }
+        formatted_grouped[ns] = {}
+        for subkey, val in subdict.items():
+            full_key = f"{ns}/{subkey}" if subkey else ns
+            
+            if full_key in metric_precision and _is_number(val):
+                precision = metric_precision[full_key]
+                if precision == 0:  # Integer formatting
+                    formatted_val = str(int(round(val)))
+                else:  # Float with specific precision
+                    formatted_val = f"{val:.{precision}f}"
+            else:
+                formatted_val = str(val)
+                
+            formatted_grouped[ns][subkey] = formatted_val
+
+    # Determine column widths
+    max_key_len = max(len(subkey) for ns in formatted_grouped for subkey in formatted_grouped[ns]) + 4
+    max_val_len = max(len(val) for ns in formatted_grouped for val in formatted_grouped[ns].values()) + 2
+
+    # Print table
+    border = "-" * (max_key_len + max_val_len + 5)
+    print(border)
+    for ns, subdict in formatted_grouped.items():
+        print(f"| {ns + '/':<{max_key_len}} |")
+        for subkey, val in subdict.items():
+            print(f"|    {subkey:<{max_key_len-4}} | {val:<{max_val_len}}|")
+    print(border)
 
     # Determine column widths
     max_key_len = max(len(subkey) for ns in formatted_grouped for subkey in formatted_grouped[ns]) + 4
@@ -170,6 +200,8 @@ class NamespaceTablePrinter:
         use_ansi_inplace: bool = True,
         stream=None,
         delta_tol: float = 1e-12,
+        # Precision per metric: {"namespace/subkey": precision, ...} where 0 = int
+        metric_precision: Optional[Dict[str, int]] = None,
     ):
         self.float_fmt = float_fmt
         self.indent = indent
@@ -181,6 +213,7 @@ class NamespaceTablePrinter:
         self.use_ansi_inplace = use_ansi_inplace and sys.stdout.isatty()
         self.stream = stream or sys.stdout
         self.delta_tol = delta_tol
+        self.metric_precision = dict(metric_precision or {})
 
         self._prev: Optional[Dict[str, Any]] = None
         self._last_height: int = 0  # how many lines we printed last time
@@ -217,7 +250,8 @@ class NamespaceTablePrinter:
                 key_candidates.append(sub)
 
                 # Compose value string: value + optional colored delta
-                val_str = self._format_value(v)
+                full_key = f"{ns}/{sub}" if sub else ns
+                val_str = self._format_value(v, full_key)
                 delta_str, color_name = self._delta_for_key(ns, sub, v)
 
                 if delta_str:
@@ -292,9 +326,20 @@ class NamespaceTablePrinter:
             grouped.setdefault(ns, {})[sub] = v
         return grouped
 
-    def _format_value(self, v: Any) -> str:
+    def _format_value(self, v: Any, full_key: str = "") -> str:
         if v is None:
             return "—"
+        
+        # Check if we have specific precision for this metric
+        if full_key in self.metric_precision:
+            precision = self.metric_precision[full_key]
+            if _is_number(v):
+                if precision == 0:  # Integer formatting
+                    return str(int(round(v)))
+                else:  # Float with specific precision
+                    return f"{v:.{precision}f}"
+        
+        # Fall back to original logic
         if self.compact_numbers and _is_number(v):
             return _humanize_num(v, self.float_fmt)
         return _fmt_plain(v, self.float_fmt)
@@ -355,10 +400,20 @@ def print_namespaced_dict(
     float_fmt: str = ".2f",
     compact_numbers: bool = True,
     color: bool = True,
+    metric_precision: Optional[Dict[str, int]] = None,
 ):
     """
     Thin wrapper to keep your old callsite working. For advanced config,
     instantiate NamespaceTablePrinter yourself.
+    
+    Args:
+        data: Dictionary with potentially namespaced keys
+        inplace: Whether to update the display in-place
+        float_fmt: Default float formatting
+        compact_numbers: Whether to use compact number formatting
+        color: Whether to use colored output
+        metric_precision: Optional dict mapping metric keys to precision values.
+                         0 means integer formatting, positive values specify decimal places.
     """
     # If the user changes core options, recreate the singleton
     global _default_printer
@@ -367,12 +422,14 @@ def print_namespaced_dict(
         or _default_printer.compact_numbers != compact_numbers
         or (_default_printer.use_ansi_inplace != bool(inplace and sys.stdout.isatty()))
         or _default_printer.color != bool(color and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None)
+        or _default_printer.metric_precision != (metric_precision or {})
     ):
         _default_printer = NamespaceTablePrinter(
             float_fmt=float_fmt,
             compact_numbers=compact_numbers,
             use_ansi_inplace=bool(inplace and sys.stdout.isatty()),
             color=bool(color and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None),
+            metric_precision=metric_precision,
         )
     _default_printer.update(data)
 
@@ -404,6 +461,7 @@ class StdoutMetricsTable(pl.Callback):
         include: Optional[Iterable[str]] = None,  # regex patterns to keep
         exclude: Optional[Iterable[str]] = None,  # regex patterns to drop
         digits: int = 4,                          # rounding for floats
+        metric_precision: Optional[Dict[str, int]] = None,  # precision per metric
     ):
         super().__init__()
         self.every_n_steps = every_n_steps
@@ -411,6 +469,7 @@ class StdoutMetricsTable(pl.Callback):
         self.include = [re.compile(p) for p in (include or [])]
         self.exclude = [re.compile(p) for p in (exclude or [])]
         self.digits = digits
+        self.metric_precision = metric_precision or {}
 
     # ---------- hooks ----------
     def on_train_batch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", outputs, batch, batch_idx):
@@ -492,7 +551,7 @@ class StdoutMetricsTable(pl.Callback):
 
     def _print_table(self, metrics: Dict[str, Any], header: str):
         from utils.misc import print_namespaced_dict
-        print_namespaced_dict(metrics)
+        print_namespaced_dict(metrics, metric_precision=self.metric_precision)
 
     def _format_val(self, v: Any) -> str:
         if isinstance(v, float):

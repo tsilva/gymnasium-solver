@@ -215,6 +215,20 @@ class BaseAgent(pl.LightningModule):
             #include=[r"^train/", r"^val/", r"^time/", r"^rollout/", r"^eval/"],  # optional filters; remove to show everything
             # exclude=[r"^grad/"],           # example: drop noisy keys
             digits=4,
+            metric_precision={
+                "train/total_episodes": 0,  # no decimals for episode counts
+                "train/total_timesteps": 0,  # no decimals for timesteps
+                "rollout/total_episodes": 0, # no decimals for episode counts
+                "rollout/total_timesteps": 0, # no decimals for timesteps
+                "eval/ep_rew_mean": 2,        # 2 decimals for mean
+                "eval/ep_len_mean": 2,        # 2 decimals for mean episode length
+                "time/total_timesteps": 0,    # no decimals for timesteps
+                "time/time_elapsed": 2,        # 2 decimals for elapsed time
+                "time/fps": 2,                 # 2 decimals for FPS
+                "train/epoch": 0,              # no decimals for epoch count
+                "train/n_updates": 0,          # no decimals for update count
+                "time/iterations": 0,          # no decimals for iterations 
+            }
         )
 
         trainer = pl.Trainer(

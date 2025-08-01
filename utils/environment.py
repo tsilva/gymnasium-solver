@@ -1,24 +1,11 @@
-import numpy as np
-from typing import Iterable, Tuple, Dict, Any
-import os
-from pathlib import Path
-from PIL import ImageFont
-from IPython.display import HTML
-import tempfile
-import subprocess
-import uuid
-import gymnasium
-import shutil
-from collections.abc import Sequence
-from wrappers.env_wrapper_registry import EnvWrapperRegistry
-
-# TODO: move to EnvRegistry?
 import ale_py
+import gymnasium
 gymnasium.register_envs(ale_py)
 
+from wrappers.env_wrapper_registry import EnvWrapperRegistry
 
 def is_atari_env_id(env_id: str) -> bool:
-    return False
+    return env_id.startswith("ALE/")
 
 def build_env(
     env_id, 
@@ -44,7 +31,6 @@ def build_env(
     if record_video and render_mode is not "rgb_array":
         raise ValueError("Video recording requires render_mode='rgb_array'")
 
-    # Create env_fn with reward shaping for MountainCar and obs_type for Atari
     def env_fn():
         # TODO: is there overlap here?
         if is_atari_env_id(env_id): env = gym.make(env_id, obs_type=obs_type, render_mode=render_mode)

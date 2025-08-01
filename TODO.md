@@ -1,5 +1,6 @@
 
 - FEAT: add logging support (file logging)
+- FEAT: create cartpole reward shaper that prioritizes centering the pole
 - FEAT: add assertions where applicable
 - FEAT: add support for fully recording last eval
 - FEAT: track output distribution

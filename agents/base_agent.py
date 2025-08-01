@@ -57,7 +57,6 @@ class BaseAgent(pl.LightningModule):
         raise NotImplementedError("Subclass must implement train_on_batch()") # TODO: use override_required decorator
     
     def rollout_collector_hyperparams(self):
-        """Return hyperparameters for the rollout collector."""
         return {
             'gamma': self.config.gamma,
             'gae_lambda': self.config.gae_lambda
@@ -150,31 +149,7 @@ class BaseAgent(pl.LightningModule):
         pass
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
-        eval_metrics = self.run_evaluation()
-        
-        # Extract action distribution for histogram logging
-        action_distribution = eval_metrics.pop("action_distribution", None)
-        
-        # Process videos immediately after evaluation, before logging metrics
-        # This ensures videos and metrics are logged at the same timestep
-        self._process_eval_videos()
-        
-        self.log_dict(prefix_dict_keys(eval_metrics, "eval")) # TODO: overrrid log_dict and add prefixig support
-        
-        # Log action distribution as histogram to WandB for evaluation
-        if action_distribution is not None and len(action_distribution) > 0:
-            if hasattr(self.logger, 'experiment') and self.logger.experiment:
-                self.logger.experiment.log({
-                    "eval/action_distribution": wandb.Histogram(action_distribution)
-                }, step=self.global_step)
-
-        # Check for early stopping based on reward threshold
-        reward_threshold = self.get_reward_threshold()
-        ep_rew_mean = eval_metrics["ep_rew_mean"]
-        
-        if ep_rew_mean >= reward_threshold:
-            print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
-            self.trainer.should_stop = True
+        self._run_evaluation()
         
     def on_validation_epoch_end(self):
         pass
@@ -195,7 +170,8 @@ class BaseAgent(pl.LightningModule):
         if video_logger:
             # Process eval videos immediately
             video_logger._process(self.trainer, "eval")
-
+    
+    # TODO: should we change method name?
     def run_training(self):
         from tsilva_notebook_utils.colab import load_secrets_into_env # TODO: get rid of all references to this project
         from dataclasses import asdict
@@ -260,15 +236,9 @@ class BaseAgent(pl.LightningModule):
             "fps": int(fps)
         }
     
-    # TODO: softcode this, move to registry
-    def get_reward_threshold(self):
-        from utils.environment import get_env_reward_threshold
-        reward_threshold = get_env_reward_threshold(self.train_env)
-        return reward_threshold
-    
     # TODO: check how sb3 does eval_async
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
-    def run_evaluation(self):
+    def _run_evaluation(self):
         env = self.build_env_fn(
             self.config.seed + 1000,
             n_envs=1,
@@ -277,8 +247,34 @@ class BaseAgent(pl.LightningModule):
                 "video_length": 100
             }
         )
-        try: return self._eval(env)
+
+        reward_threshold = env.get_reward_threshold()
+
+        try: metrics = self._eval(env)
         finally: env.close()
+        
+        # Extract action distribution for histogram logging
+        action_distribution = metrics.pop("action_distribution", None)
+        
+        # Process videos immediately after evaluation, before logging metrics
+        # This ensures videos and metrics are logged at the same timestep
+        self._process_eval_videos()
+        
+        self.log_dict(prefix_dict_keys(metrics, "eval")) # TODO: overrrid log_dict and add prefixig support
+        
+        # Log action distribution as histogram to WandB for evaluation
+        if action_distribution is not None and len(action_distribution) > 0:
+            if hasattr(self.logger, 'experiment') and self.logger.experiment:
+                self.logger.experiment.log({
+                    "eval/action_distribution": wandb.Histogram(action_distribution)
+                }, step=self.global_step)
+
+        # Check for early stopping based on reward threshold
+        ep_rew_mean = metrics["ep_rew_mean"]
+        
+        if ep_rew_mean >= reward_threshold:
+            print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
+            self.trainer.should_stop = True
     
     # TODO: BUG: video first episode = 2, should be 1
     # TODO: add more stats to video (eg: episode, step, current reward, etc)

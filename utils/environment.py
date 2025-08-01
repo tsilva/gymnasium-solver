@@ -12,9 +12,13 @@ import shutil
 from collections.abc import Sequence
 from wrappers.env_wrapper_registry import EnvWrapperRegistry
 
-# TODO: softcode this
+# TODO: move to EnvRegistry?
+import ale_py
+gymnasium.register_envs(ale_py)
+
+
 def is_atari_env_id(env_id: str) -> bool:
-    return env_id.startswith("ALE/") or env_id in ["Pong-v5", "Breakout-v5", "SpaceInvaders-v5"]
+    return False
 
 def build_env(
     env_id, 
@@ -28,13 +32,11 @@ def build_env(
     record_video=False, 
     record_video_kwargs={}
 ):
-    # TODO: move to EnvRegistry?
-    import ale_py
-    gymnasium.register_envs(ale_py)
 
     import gymnasium as gym
     from stable_baselines3.common.env_util import make_vec_env
     from stable_baselines3.common.vec_env import VecNormalize, VecFrameStack
+    from wrappers.vec_info import VecInfoWrapper
     from wrappers.vec_video_recorder import VecVideoRecorder
     from wrappers.vec_normalize_static import VecNormalizeStatic
     
@@ -44,12 +46,10 @@ def build_env(
 
     # Create env_fn with reward shaping for MountainCar and obs_type for Atari
     def env_fn():
-        if is_atari_env_id(env_id):
-            env = gym.make(env_id, obs_type=obs_type, render_mode=render_mode)
-        else:
-            # TODO: softcode wrappers
-            env = gym.make(env_id, render_mode=render_mode)
-            
+        # TODO: is there overlap here?
+        if is_atari_env_id(env_id): env = gym.make(env_id, obs_type=obs_type, render_mode=render_mode)
+        else: env = gym.make(env_id, render_mode=render_mode)
+
         # Apply configured env wrappers
         for wrapper in env_wrappers: env = EnvWrapperRegistry.apply(env, wrapper)
 
@@ -58,6 +58,11 @@ def build_env(
 
     # Vectorize the environment
     env = make_vec_env(env_fn, n_envs=n_envs, seed=seed)
+
+    # Add instrospection info wrapper that 
+    # allows easily querying for env details
+    # through the vectorized wrapper
+    env = VecInfoWrapper(env)
 
     # Enable observation normalization if requested
     if norm_obs == "static": env = VecNormalizeStatic(env)
@@ -74,17 +79,6 @@ def build_env(
         )
 
     return env
-
-def get_env_spec(env: gymnasium.Env | str) -> Dict[str, Any]:
-    if type(env) is str: return gymnasium.spec(env)
-    return env.envs[0].spec
-
-def get_env_reward_threshold(env):
-    import gymnasium
-    spec = get_env_spec(env)
-    env_id = spec.id#['id']
-    spec = gymnasium.spec(env_id)
-    return spec.reward_threshold
 
 def render_episode_frames(
     frames: Iterable[np.ndarray] | Iterable[Iterable[np.ndarray]],

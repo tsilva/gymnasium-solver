@@ -1,5 +1,3 @@
-- FEAT: add ability to hardcode reward threshold
-- FEAT: log steps/episodes to progress bar
 - FEAT: add logging support (file logging)
 - FEAT: add assertions where applicable
 - FEAT: add support for fully recording last eval

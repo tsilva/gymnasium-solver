@@ -1,7 +1,8 @@
 import argparse
 import debugpy
 from utils.config import load_config
-from tsilva_notebook_utils import load_secrets_into_env
+from tsilva_notebook_utils.colab import load_secrets_into_env # TODO: get rid of all references to this project
+      
 
 # TODO: stop using this lib
 _ = load_secrets_into_env(['WANDB_API_KEY'])

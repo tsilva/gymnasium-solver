@@ -45,11 +45,6 @@ def build_env(
     # Vectorize the environment
     env = make_vec_env(env_fn, n_envs=n_envs, seed=seed)
 
-    # Add instrospection info wrapper that 
-    # allows easily querying for env details
-    # through the vectorized wrapper
-    env = VecInfoWrapper(env)
-
     # Enable observation normalization if requested
     if norm_obs == "static": env = VecNormalizeStatic(env)
     elif norm_obs is True: env = VecNormalize(env, norm_obs=norm_obs)
@@ -63,5 +58,11 @@ def build_env(
             env,
             **record_video_kwargs
         )
+
+    # Add instrospection info wrapper that 
+    # allows easily querying for env details
+    # through the vectorized wrapper
+    # This should be added last to get the final observation space dimensions
+    env = VecInfoWrapper(env)
 
     return env

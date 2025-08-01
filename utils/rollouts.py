@@ -283,6 +283,7 @@ class RolloutCollector():
         # Normalize advantages across rollout (we could normalize across training batches 
         # later on, but in some situations normalizing across rollouts provides better numerical stability)
         if self.normalize_advantage:
+            # TODO: create normalization util
             adv_flat = advantages_buf.reshape(-1)
             advantages_buf = (advantages_buf - adv_flat.mean()) / (adv_flat.std() + self.advantages_norm_eps)
 
@@ -313,7 +314,7 @@ class RolloutCollector():
             actions=actions,
             rewards=rewards,
             dones=dones,
-            old_log_prob=logps,
+            old_log_prob=logps, # TODO: change names
             old_values=values,
             advantages=advantages,
             returns=returns

@@ -184,7 +184,6 @@ class BaseAgent(pl.LightningModule):
     
     # TODO: should we change method name?
     def run_training(self):
-        from tsilva_notebook_utils.colab import load_secrets_into_env # TODO: get rid of all references to this project
         from dataclasses import asdict
         from pytorch_lightning.loggers import WandbLogger
 

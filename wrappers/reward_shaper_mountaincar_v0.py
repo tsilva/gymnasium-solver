@@ -1,6 +1,5 @@
 import numpy as np
 import gymnasium as gym
-from env_wrappers.env_wrapper_registry import EnvWrapperRegistry
 
 class RewardShaper_MountainCarV0(gym.Wrapper):
     """

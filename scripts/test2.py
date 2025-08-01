@@ -1,7 +1,7 @@
 from stable_baselines3.common.vec_env import VecNormalize, VecFrameStack
-from env_wrappers.vec_video_recorder import VecVideoRecorder
+from wrappers.vec_video_recorder import VecVideoRecorder
 import gymnasium as gym
-from env_wrappers.reward_shaper_mountaincar_v0 import MountainCarRewardShaping
+from wrappers.reward_shaper_mountaincar_v0 import MountainCarRewardShaping
 
 def build_env(
     env_id,

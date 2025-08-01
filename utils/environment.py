@@ -1,5 +1,3 @@
-"""Environment setup utilities."""
-
 import numpy as np
 from typing import Iterable, Tuple, Dict, Any
 import os
@@ -12,53 +10,7 @@ import uuid
 import gymnasium
 import shutil
 from collections.abc import Sequence
-
-import numpy as np
-from gymnasium import spaces
-import env_wrappers  # Import to register all wrappers
-from env_wrappers.env_wrapper_registry import EnvWrapperRegistry
-from stable_baselines3.common.vec_env.base_vec_env import VecEnv, VecEnvWrapper, VecEnvStepReturn
-
-class VecNormalizeStatic(VecEnvWrapper):
-    """
-    A simple VecEnv wrapper that normalizes observations to [0, 1]
-    based on the static observation space bounds (Box low/high).
-
-    - Does NOT normalize rewards.
-    - Does NOT track running stats.
-    """
-
-    def __init__(self, venv: VecEnv):
-        super().__init__(venv)
-        assert isinstance(venv.observation_space, spaces.Box), "Only supports Box observation spaces."
-        self.low = venv.observation_space.low.astype(np.float32)
-        self.high = venv.observation_space.high.astype(np.float32)
-        self.scale = self.high - self.low
-        # Update observation space to reflect normalized range
-        self.observation_space = spaces.Box(
-            low=0.0,
-            high=1.0,
-            shape=venv.observation_space.shape,
-            dtype=np.float32,
-        )
-
-    def _normalize_obs(self, obs: np.ndarray) -> np.ndarray:
-        return (obs.astype(np.float32) - self.low) / (self.scale + 1e-8)
-
-    def reset(self) -> np.ndarray:
-        obs = self.venv.reset()
-        return self._normalize_obs(obs)
-
-    def step_wait(self) -> VecEnvStepReturn:
-        obs, rewards, dones, infos = self.venv.step_wait()
-        return self._normalize_obs(obs), rewards, dones, infos
-
-"""Environment wrappers for reward shaping and other modifications."""
-
-import numpy as np
-import gymnasium as gym
-from gymnasium import spaces
-from collections import deque
+from wrappers.env_wrapper_registry import EnvWrapperRegistry
 
 # TODO: softcode this
 def is_atari_env_id(env_id: str) -> bool:
@@ -70,51 +22,52 @@ def build_env(
     seed=None, 
     env_wrappers=[], 
     norm_obs=False, 
-    norm_reward=False, 
-    vec_env_cls=None, 
     frame_stack=None, 
     obs_type=None,
+    render_mode=None,
     record_video=False, 
     record_video_kwargs={}
 ):
+    # TODO: move to EnvRegistry?
+    import ale_py
+    gymnasium.register_envs(ale_py)
+
     import gymnasium as gym
     from stable_baselines3.common.env_util import make_vec_env
-    from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecNormalize, VecFrameStack
+    from stable_baselines3.common.vec_env import VecNormalize, VecFrameStack
+    from wrappers.vec_video_recorder import VecVideoRecorder
+    from wrappers.vec_normalize_static import VecNormalizeStatic
     
-    if vec_env_cls == "SubProcVecEnv": vec_env_cls = SubprocVecEnv
-    elif vec_env_cls == "DummyVecEnv": vec_env_cls = DummyVecEnv
-    
-    render_mode = "rgb_array" if record_video else None
+    # Assert render_mode is set if recording video
+    if record_video and render_mode is not "rgb_array":
+        raise ValueError("Video recording requires render_mode='rgb_array'")
 
     # Create env_fn with reward shaping for MountainCar and obs_type for Atari
     def env_fn():
         if is_atari_env_id(env_id):
-            import ale_py
-            gymnasium.register_envs(ale_py) # TODO: do this only once
             env = gym.make(env_id, obs_type=obs_type, render_mode=render_mode)
         else:
             # TODO: softcode wrappers
             env = gym.make(env_id, render_mode=render_mode)
             
-        
         # Apply configured env wrappers
-        for wrapper in env_wrappers:
-            env = EnvWrapperRegistry.apply(env, wrapper)
+        for wrapper in env_wrappers: env = EnvWrapperRegistry.apply(env, wrapper)
 
+        # Return the environment
         return env
 
-    env = make_vec_env(env_fn, n_envs=n_envs, seed=seed, vec_env_cls=vec_env_cls)
+    # Vectorize the environment
+    env = make_vec_env(env_fn, n_envs=n_envs, seed=seed)
 
-    # TODO: softcode to use this optionally (we want this in ram envs)
+    # Enable observation normalization if requested
     if norm_obs == "static": env = VecNormalizeStatic(env)
-    elif norm_obs or norm_reward: env = VecNormalize(env, norm_obs=norm_obs, norm_reward=norm_reward)
+    elif norm_obs is True: env = VecNormalize(env, norm_obs=norm_obs)
     
-    # Apply frame stacking if specified
-    if frame_stack and frame_stack > 1:
-        env = VecFrameStack(env, n_stack=frame_stack)
+    # Enable frame stacking if requested
+    if frame_stack and frame_stack > 1: env = VecFrameStack(env, n_stack=frame_stack)
     
+    # Enable video recording if requested
     if record_video:
-        from env_wrappers.vec_video_recorder import VecVideoRecorder
         env = VecVideoRecorder(
             env,
             **record_video_kwargs

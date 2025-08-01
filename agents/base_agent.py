@@ -27,11 +27,10 @@ class BaseAgent(pl.LightningModule):
             seed=seed,
             env_wrappers=config.env_wrappers,
             norm_obs=config.normalize_obs,
-            norm_reward=config.normalize_reward,
             n_envs=n_envs,
-            vec_env_cls="DummyVecEnv",
             frame_stack=config.frame_stack,
             obs_type=config.obs_type,
+            render_mode="rgb_array",  # needed for video recording
             **kwargs
         )
         self.train_env = self.build_env_fn(config.seed)
@@ -43,11 +42,10 @@ class BaseAgent(pl.LightningModule):
         self.output_dim = self.train_env.action_space.n
        
         # Training state
-        self.start_time = None
+        self.start_time = None # TODO: cleaner way of measuring this?
         self.total_timesteps = 0
-        self._epoch_metrics = {}
-        self._n_updates = 0
-        self._iterations = 0
+        self._n_updates = 0 # TODO: is this required?
+        self._iterations = 0 # TODO: is this required?
 
         self.create_models()
         assert self.policy_model is not None, "Policy model must be created in create_models()"

@@ -1,6 +1,5 @@
 - BUG: copilot not loading correct venv (vscode settings)
 - FEAT: add ability to hardcode reward threshold
-
 - FEAT: log steps/episodes to progress bar
 - FEAT: add logging support (file logging)
 - FEAT: add alert support to metric tracker (algo dependent)

@@ -1,6 +1,10 @@
 import argparse
 import debugpy
 from utils.config import load_config
+from tsilva_notebook_utils import load_secrets_into_env
+
+# TODO: stop using this lib
+_ = load_secrets_into_env(['WANDB_API_KEY'])
 
 def is_debugger_attached():
     return debugpy.is_client_connected()

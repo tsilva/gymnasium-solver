@@ -188,9 +188,6 @@ class BaseAgent(pl.LightningModule):
         from dataclasses import asdict
         from pytorch_lightning.loggers import WandbLogger
 
-        # TODO: load this in main?
-        _ = load_secrets_into_env(['WANDB_API_KEY'])
-        
         # Convert config to dictionary for logging
         config_dict = asdict(self.config)
         
@@ -207,7 +204,7 @@ class BaseAgent(pl.LightningModule):
         )
         
         # Create video logging callback
-        video_logger = VideoLoggerCallback(
+        video_logger_cb = VideoLoggerCallback(
             media_root="videos",        # where you will drop files
             namespace_depth=1,          # "episodes" from train/episodes/ or eval/episodes/
             #log_interval_s=5.0,         # scan at most every 5 seconds
@@ -266,7 +263,7 @@ class BaseAgent(pl.LightningModule):
             accelerator="cpu",  # Use CPU for training # TODO: softcode this
             reload_dataloaders_every_n_epochs=1,#self.config.n_epochs
             check_val_every_n_epoch=self.config.eval_freq_epochs,  # Run validation every epoch
-            callbacks=[printer, video_logger]  # Add both callbacks
+            callbacks=[printer, video_logger_cb]  # Add both callbacks
         )
         trainer.fit(self)
     
@@ -320,8 +317,6 @@ class BaseAgent(pl.LightningModule):
             print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
             self.trainer.should_stop = True
     
-    # TODO: BUG: video first episode = 2, should be 1
-    # TODO: add more stats to video (eg: episode, step, current reward, etc)
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
     # TODO: consider making recording a rollout collector concern again (cleaner separation of concerns)
     def _eval(self, env):

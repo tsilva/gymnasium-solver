@@ -1,4 +1,5 @@
 
+- FEAT: add determinism check at beginning to make sure that rollout benefits from multiple envs (eg: Pong, test on PongDeterministic)
 - FEAT: add logging support (file logging)
 - FEAT: create cartpole reward shaper that prioritizes centering the pole
 - FEAT: add assertions where applicable

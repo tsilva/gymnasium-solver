@@ -154,7 +154,7 @@ def play_episodes(policy_model, env, num_episodes=5, deterministic=True):
             env.render()
             
             # Small delay to make it watchable
-            time.sleep(0.05)
+            #time.sleep(0.05)
             
             if terminated or truncated:
                 break

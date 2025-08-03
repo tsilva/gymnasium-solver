@@ -76,23 +76,26 @@ MountainCar-v0_rewardshaping:
 
 ALE/Pong-v5_ram:
   env_id: ALE/Pong-v5
-  n_envs: 20               # Sweet spot for sample diversity vs computational overhead
+  n_envs: 16               # Reduced for better sample efficiency
   policy: 'MlpPolicy'
   frame_stack: 1           # RAM contains full game state - no stacking needed
-  #n_timesteps: !!float 1e6
-  n_steps: 768             # Optimal rollout length for Atari RAM
-  batch_size: 384          # Increased for better gradient estimates
-  n_epochs: 6              # Balanced sample reuse without overfitting
-  gae_lambda: 0.97         # Fine-tuned for Pong's reward structure
+  #n_timesteps: !!float 10e6  # Increased training budget
+  n_steps: 512             # Reduced for more frequent updates
+  batch_size: 512          # Larger batches for stable gradients
+  n_epochs: 10             # More epochs to better utilize data
+  gae_lambda: 0.95         # Standard GAE lambda for better advantage estimation
   gamma: 0.99              # Standard Atari discount factor
-  ent_coef: 0.002          # Minimal entropy for faster convergence
-  clip_range: 0.12         # Tighter clipping for stable learning
-  learning_rate: 0.00015   # Slightly higher for faster initial learning
+  ent_coef: 0.01           # Higher entropy for better exploration
+  clip_range: 0.2          # Standard PPO clipping for better updates
+  learning_rate: 0.0003    # Higher learning rate for faster learning
   obs_type: "ram"
   normalize_obs: "static"
-  hidden_dims: [256, 256]  # Balanced network size for RAM processing
-  eval_freq_epochs: 25     # Frequent evaluation for convergence monitoring
-  eval_episodes: 5         # More episodes for reliable evaluation
+  hidden_dims: [512, 512]  # Larger network for complex RAM patterns
+  eval_freq_epochs: 50     # Less frequent eval to focus on training
+  eval_episodes: 10        # More episodes for reliable evaluation
+  # Additional hyperparams for better performance
+  vf_coef: 0.5             # Standard value function coefficient
+  max_grad_norm: 0.5       # Gradient clipping for stability
 
 ALE/Pong-v5_ram_throughput:
   env_id: ALE/Pong-v5

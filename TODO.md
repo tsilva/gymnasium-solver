@@ -1,4 +1,7 @@
+- Adjust eval policy for atari
+- Add OCAtari support
 - Try creating local run folder with assets, create own run id and assign it to wandb if possible
+- Consider increasing sample efficiency by figuring out how different are transitions between different envs
 - FEAT: add determinism check at beginning to make sure that rollout benefits from multiple envs (eg: Pong, test on PongDeterministic)
 - FEAT: add logging support (file logging)
 - FEAT: create cartpole reward shaper that prioritizes centering the pole

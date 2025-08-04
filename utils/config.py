@@ -75,7 +75,7 @@ class Config:
     env_wrappers: list = field(default_factory=list)
 
     @classmethod
-    def load_from_yaml(cls, config_id: str, algo_id: str, config_dir: str = "hyperparams") -> 'Config':
+    def load_from_yaml(cls, config_id: str, algo_id: str, config_dir: str = "config/hyperparams") -> 'Config':
         """
         Load configuration from YAML files supporting both formats:
         1. New format: config_id is a config identifier, env_id is read from the config
@@ -245,7 +245,7 @@ class Config:
         if self.reward_threshold is not None and self.reward_threshold <= 0:
             raise ValueError("reward_threshold must be a positive float.")
 
-def load_config(config_id: str, algo_id: str, config_dir: str = "hyperparams") -> Config:
+def load_config(config_id: str, algo_id: str, config_dir: str = "config/hyperparams") -> Config:
     """Convenience function to load configuration."""
     return Config.load_from_yaml(config_id, algo_id, config_dir)
 

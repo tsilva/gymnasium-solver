@@ -8,7 +8,7 @@ from utils.rollouts import RolloutCollector
 from utils.misc import prefix_dict_keys, StdoutMetricsTable
 from utils.video_logger_callback import VideoLoggerCallback
 from utils.misc import create_dummy_dataloader
-from utils.checkpoint import ModelCheckpointCallback, find_latest_checkpoint, load_checkpoint
+from utils.checkpoint import ModelCheckpointCallback
 
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class BaseAgent(pl.LightningModule):
@@ -54,32 +54,13 @@ class BaseAgent(pl.LightningModule):
         self._n_updates = 0 # TODO: is this required?
         self._iterations = 0 # TODO: is this required?
         
-        # Best model tracking
+        # Best model tracking (maintained for compatibility with checkpoint callback)
         self.best_eval_reward = float('-inf')
         self.best_model_path = None
-        
-        # Checkpoint handling - check for resume
-        self.checkpoint_callback = None
-        self.resume_checkpoint_path = None
-        if getattr(config, 'resume', False):
-            checkpoint_path = find_latest_checkpoint(
-                config.algo_id, 
-                config.env_id, 
-                getattr(config, 'checkpoint_dir', 'checkpoints')
-            )
-            if checkpoint_path:
-                self.resume_checkpoint_path = checkpoint_path
-                print(f"Found checkpoint to resume from: {checkpoint_path}")
-            else:
-                print(f"Resume requested but no checkpoint found for {config.algo_id}/{config.env_id}")
 
         # Create the agent's models
         self.create_models()
         assert self.policy_model is not None, "Policy model must be created in create_models()"
-        
-        # Load checkpoint after models are created
-        if self.resume_checkpoint_path:
-            load_checkpoint(self.resume_checkpoint_path, self, resume_training=True)
     
         self.train_collector = RolloutCollector(
             self.train_env,
@@ -194,13 +175,7 @@ class BaseAgent(pl.LightningModule):
         time_elapsed = self._get_time_metrics()["time_elapsed"]
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
         
-        # Checkpoint system now handles model saving automatically
-        if self.checkpoint_callback and self.checkpoint_callback.best_checkpoint_path:
-            print(f"Best model saved at {self.checkpoint_callback.best_checkpoint_path} with eval reward {self.best_eval_reward:.2f}")
-        elif self.checkpoint_callback and self.checkpoint_callback.last_checkpoint_path:
-            print(f"Last model saved at {self.checkpoint_callback.last_checkpoint_path}")
-        else:
-            print("No checkpoints were saved during training")
+        # Checkpoint completion summary is now handled by ModelCheckpointCallback
 
     def _process_eval_videos(self):
         """Process eval videos immediately to ensure they're logged at the correct timestep."""
@@ -252,12 +227,13 @@ class BaseAgent(pl.LightningModule):
         )
         
         # Create checkpoint callback
-        self.checkpoint_callback = ModelCheckpointCallback(
+        checkpoint_callback = ModelCheckpointCallback(
             checkpoint_dir=getattr(self.config, 'checkpoint_dir', 'checkpoints'),
             monitor="eval/ep_rew_mean",
             mode="max",
             save_last=True,
-            save_threshold_reached=True
+            save_threshold_reached=True,
+            resume=getattr(self.config, 'resume', False)
         )
         
         # Create algorithm-specific metric rules from config
@@ -288,7 +264,7 @@ class BaseAgent(pl.LightningModule):
             accelerator="cpu",  # Use CPU for training # TODO: softcode this
             reload_dataloaders_every_n_epochs=1,#self.config.n_epochs
             check_val_every_n_epoch=self.config.eval_freq_epochs,  # Run validation every epoch
-            callbacks=[printer, video_logger_cb, self.checkpoint_callback]  # Add checkpoint callback
+            callbacks=[printer, video_logger_cb, checkpoint_callback]  # Add checkpoint callback
         )
         trainer.fit(self)
     
@@ -305,10 +281,6 @@ class BaseAgent(pl.LightningModule):
     # TODO: check how sb3 does eval_async
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
     def _run_evaluation(self):
-        # Use config reward threshold if provided, otherwise use environment's reward threshold
-        if self.config.reward_threshold is not None: reward_threshold = self.config.reward_threshold
-        else: reward_threshold = self.eval_env.get_reward_threshold()
-
         metrics = self._eval()
                 
         # Extract action distribution for histogram logging
@@ -327,24 +299,7 @@ class BaseAgent(pl.LightningModule):
                     "eval/action_distribution": wandb.Histogram(action_distribution)
                 }, step=self.global_step)
 
-        # Check for early stopping based on reward threshold (only if threshold is available)
-        if reward_threshold is not None:
-            ep_rew_mean = metrics["ep_rew_mean"]
-            
-            # Note: Best model saving is now handled by ModelCheckpointCallback
-            # Update best_eval_reward for compatibility and early stopping logic
-            if ep_rew_mean > self.best_eval_reward:
-                self.best_eval_reward = ep_rew_mean
-            
-            if ep_rew_mean >= reward_threshold:
-                print(f"Early stopping at epoch {self.current_epoch} with eval mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
-                self.trainer.should_stop = True
-        else:
-            # Even without reward threshold, update best eval reward for tracking
-            ep_rew_mean = metrics["ep_rew_mean"]
-            if ep_rew_mean > self.best_eval_reward:
-                self.best_eval_reward = ep_rew_mean
-            print("No reward threshold available (neither in config nor environment spec) - skipping early stopping check")
+        # Early stopping and best model tracking is now handled by ModelCheckpointCallback
     
     
     # TODO: currently recording more than the requested episodes (rollout not trimmed)

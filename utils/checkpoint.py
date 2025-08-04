@@ -9,14 +9,15 @@ from dataclasses import asdict
 
 
 class ModelCheckpointCallback(pl.Callback):
-    """Custom checkpoint callback that saves models when eval reward improves."""
+    """Custom checkpoint callback that handles all model checkpointing logic including resume."""
     
     def __init__(self, 
                  checkpoint_dir: str = "checkpoints",
                  monitor: str = "eval/ep_rew_mean",
                  mode: str = "max",
                  save_last: bool = True,
-                 save_threshold_reached: bool = True):
+                 save_threshold_reached: bool = True,
+                 resume: bool = False):
         """
         Initialize the checkpoint callback.
         
@@ -26,6 +27,7 @@ class ModelCheckpointCallback(pl.Callback):
             mode: 'max' or 'min' for the monitored metric
             save_last: Whether to save the last checkpoint
             save_threshold_reached: Whether to save when reward threshold is reached
+            resume: Whether to attempt to resume from existing checkpoint
         """
         super().__init__()
         self.checkpoint_dir = Path(checkpoint_dir)
@@ -33,11 +35,34 @@ class ModelCheckpointCallback(pl.Callback):
         self.mode = mode
         self.save_last = save_last
         self.save_threshold_reached = save_threshold_reached
+        self.resume = resume
         
         self.best_metric_value = float('-inf') if mode == 'max' else float('inf')
         self.best_checkpoint_path = None
         self.last_checkpoint_path = None
+        self.resume_checkpoint_path = None
         
+    def setup(self, trainer, pl_module, stage):
+        """Setup callback - called before training starts."""
+        if stage == "fit" and self.resume:
+            self._handle_resume(pl_module)
+    
+    def _handle_resume(self, agent):
+        """Handle resume logic - find and load checkpoint if available."""
+        if getattr(agent.config, 'resume', False):
+            checkpoint_path = find_latest_checkpoint(
+                agent.config.algo_id, 
+                agent.config.env_id, 
+                getattr(agent.config, 'checkpoint_dir', 'checkpoints')
+            )
+            if checkpoint_path:
+                self.resume_checkpoint_path = checkpoint_path
+                print(f"Found checkpoint to resume from: {checkpoint_path}")
+                # Load checkpoint after models are created
+                load_checkpoint(checkpoint_path, agent, resume_training=True)
+            else:
+                print(f"Resume requested but no checkpoint found for {agent.config.algo_id}/{agent.config.env_id}")
+    
     def _get_checkpoint_dir(self, agent) -> Path:
         """Get the checkpoint directory for this specific agent/env combination."""
         algo_id = agent.config.algo_id
@@ -81,7 +106,7 @@ class ModelCheckpointCallback(pl.Callback):
             return current_value < self.best_metric_value
     
     def on_validation_epoch_end(self, trainer, pl_module):
-        """Save checkpoints when validation ends (after eval)."""
+        """Save checkpoints when validation ends (after eval) and handle early stopping."""
         if not hasattr(trainer, 'logged_metrics'):
             return
             
@@ -146,6 +171,42 @@ class ModelCheckpointCallback(pl.Callback):
                 torch.save(checkpoint_data, threshold_path)
                 
                 print(f"Threshold reached! Saved model with reward {current_metric_value:.4f} at {threshold_path}")
+                
+                # Early stopping when threshold is reached
+                print(f"Early stopping at epoch {pl_module.current_epoch} with eval mean reward {current_metric_value:.2f} >= threshold {pl_module.config.reward_threshold}")
+                trainer.should_stop = True
+        
+        # Handle early stopping logic and best reward tracking that was in BaseAgent
+        self._handle_early_stopping_and_tracking(trainer, pl_module)
+    
+    def _handle_early_stopping_and_tracking(self, trainer, pl_module):
+        """Handle early stopping logic and best reward tracking that was previously in BaseAgent."""
+        # Get reward threshold - use config if provided, otherwise use environment's reward threshold
+        if pl_module.config.reward_threshold is not None: 
+            reward_threshold = pl_module.config.reward_threshold
+        else: 
+            reward_threshold = pl_module.eval_env.get_reward_threshold()
+
+        # Get current eval metrics
+        if hasattr(trainer, 'logged_metrics') and "eval/ep_rew_mean" in trainer.logged_metrics:
+            ep_rew_mean = float(trainer.logged_metrics["eval/ep_rew_mean"])
+            
+            # Check for early stopping based on reward threshold (only if threshold is available)
+            if reward_threshold is not None:
+                # Update best_eval_reward for compatibility and early stopping logic
+                if ep_rew_mean > pl_module.best_eval_reward:
+                    pl_module.best_eval_reward = ep_rew_mean
+                
+                # Note: Early stopping for threshold is already handled above in checkpoint saving
+                # This is just for the case where threshold stopping wasn't triggered by checkpoint saving
+                if ep_rew_mean >= reward_threshold and not trainer.should_stop:
+                    print(f"Early stopping at epoch {pl_module.current_epoch} with eval mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
+                    trainer.should_stop = True
+            else:
+                # Even without reward threshold, update best eval reward for tracking
+                if ep_rew_mean > pl_module.best_eval_reward:
+                    pl_module.best_eval_reward = ep_rew_mean
+                print("No reward threshold available (neither in config nor environment spec) - skipping early stopping check")
     
     def on_train_epoch_end(self, trainer, pl_module):
         """Save last checkpoint after each training epoch."""
@@ -155,6 +216,16 @@ class ModelCheckpointCallback(pl.Callback):
             self.last_checkpoint_path = self._save_checkpoint(
                 pl_module, last_path, is_last=True
             )
+    
+    def on_fit_end(self, trainer, pl_module):
+        """Handle training completion summary that was previously in BaseAgent."""
+        # Print completion summary
+        if self.best_checkpoint_path:
+            print(f"Best model saved at {self.best_checkpoint_path} with eval reward {pl_module.best_eval_reward:.2f}")
+        elif self.last_checkpoint_path:
+            print(f"Last model saved at {self.last_checkpoint_path}")
+        else:
+            print("No checkpoints were saved during training")
 
 
 def find_latest_checkpoint(algo_id: str, env_id: str, checkpoint_dir: str = "checkpoints") -> Optional[Path]:

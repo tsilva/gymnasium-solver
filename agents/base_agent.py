@@ -163,8 +163,6 @@ class BaseAgent(pl.LightningModule):
         time_elapsed = self._get_time_metrics()["time_elapsed"]
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
         
-        # Checkpoint completion summary is now handled by ModelCheckpointCallback
-
     def _process_eval_videos(self):
         """Process eval videos immediately to ensure they're logged at the correct timestep."""
         # Find the video logger callback

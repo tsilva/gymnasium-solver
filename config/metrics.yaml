@@ -1,0 +1,124 @@
+# Metric precision configuration
+# Define precision (decimal places) for each metric type
+# Metric names should be without namespace prefixes since the same metric
+# can appear across different namespaces (train/, eval/, rollout/, etc.)
+
+precision:
+  # Episode and timestep counts (integers)
+  total_episodes: 0
+  total_timesteps: 0
+  
+  # Episode statistics
+  ep_rew_mean: 2        # Mean episode reward
+  ep_len_mean: 2        # Mean episode length
+  ep_rew_min: 2         # Min episode reward
+  ep_rew_max: 2         # Max episode reward
+  ep_len_min: 0         # Min episode length (integer)
+  ep_len_max: 0         # Max episode length (integer)
+  ep_rew_std: 2         # Episode reward standard deviation
+  ep_len_std: 2         # Episode length standard deviation
+  
+  # Training metrics
+  epoch: 0              # Training epoch (integer)
+  n_updates: 0          # Number of updates (integer)
+  iterations: 0         # Training iterations (integer)
+  
+  # Time metrics
+  time_elapsed: 2       # Elapsed time in seconds
+  fps: 2                # Frames per second
+  
+  # Loss metrics
+  policy_loss: 4        # Policy loss
+  value_loss: 4         # Value function loss
+  entropy_loss: 4       # Entropy loss
+  total_loss: 4         # Total loss
+  approx_kl: 4          # Approximate KL divergence
+  clip_fraction: 3      # Clipping fraction
+  explained_variance: 3 # Explained variance
+  
+  # Learning rates
+  policy_lr: 6          # Policy learning rate
+  value_lr: 6           # Value learning rate
+  learning_rate: 6      # General learning rate
+  
+  # Gradient metrics
+  grad_norm: 4          # Gradient norm
+  max_grad_norm: 4      # Maximum gradient norm
+  
+  # Algorithm-specific metrics (can be overridden by specific algorithms)
+  advantage_mean: 4     # Mean advantage
+  advantage_std: 4      # Advantage standard deviation
+  value_mean: 4         # Mean value estimate
+  value_std: 4          # Value estimate standard deviation
+
+# Default precision for metrics not explicitly listed
+default_precision: 4
+
+# Metrics that should be treated as integers regardless of their values
+force_integer:
+  - total_episodes
+  - total_timesteps
+  - epoch
+  - n_updates
+  - iterations
+  - ep_len_min
+  - ep_len_max
+
+# Delta rules for metrics that should follow certain patterns
+# These define validation rules for metric changes between steps
+delta_rules:
+  # Metrics that should only increase (monotonically non-decreasing)
+  total_timesteps: "non_decreasing"  # Should always increase
+  total_episodes: "non_decreasing"   # Should always increase
+  epoch: "non_decreasing"            # Should always increase
+  n_updates: "non_decreasing"        # Should always increase
+  iterations: "non_decreasing"       # Should always increase
+  time_elapsed: "non_decreasing"     # Time should always increase
+
+# Algorithm-specific metric validation rules
+# These define warnings/errors when certain thresholds are violated
+algorithm_rules:
+  ppo:
+    clip_fraction:
+      threshold: 0.5
+      condition: "less_than"
+      message: "High clip fraction ({current_value:.3f}) indicates policy is changing too rapidly. Consider reducing learning rate or clip_range."
+      level: "warning"
+    
+    approx_kl:
+      threshold: 0.1
+      condition: "less_than"
+      message: "High approximate KL divergence ({current_value:.4f}) indicates large policy changes. Consider reducing learning rate."
+      level: "warning"
+    
+    kl_div:
+      threshold: 0.1
+      condition: "less_than"
+      message: "High KL divergence ({current_value:.4f}) indicates large policy changes. Consider reducing learning rate."
+      level: "warning"
+    
+    entropy:
+      threshold: 0.1
+      condition: "greater_than"
+      message: "Low entropy ({current_value:.3f}) indicates policy is becoming too deterministic. Consider increasing entropy coefficient."
+      level: "warning"
+    
+    explained_variance:
+      threshold: -0.5
+      condition: "greater_than"
+      message: "Very negative explained variance ({current_value:.3f}) indicates value function is performing poorly. Check value function architecture or learning rate."
+      level: "warning"
+
+  reinforce:
+    # REINFORCE-specific rules
+    entropy:
+      threshold: 0.05
+      condition: "greater_than"
+      message: "Low entropy ({current_value:.3f}) in REINFORCE indicates policy is becoming too deterministic. Consider increasing entropy coefficient."
+      level: "warning"
+    
+    policy_loss:
+      threshold: 1000.0
+      condition: "less_than"
+      message: "Very high policy loss ({current_value:.3f}) may indicate training instability."
+      level: "warning"

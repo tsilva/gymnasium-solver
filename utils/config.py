@@ -248,3 +248,153 @@ class Config:
 def load_config(config_id: str, algo_id: str, config_dir: str = "hyperparams") -> Config:
     """Convenience function to load configuration."""
     return Config.load_from_yaml(config_id, algo_id, config_dir)
+
+
+def load_metrics_config(config_dir: str = "config") -> Dict[str, Any]:
+    """Load metrics configuration from YAML file.
+    
+    Args:
+        config_dir: Directory containing the metrics.yaml file
+        
+    Returns:
+        Dictionary containing metrics configuration
+    """
+    # Get the project root directory
+    project_root = Path(__file__).parent.parent
+    metrics_config_path = project_root / config_dir / "metrics.yaml"
+    
+    if not metrics_config_path.exists():
+        raise FileNotFoundError(f"Metrics config file not found: {metrics_config_path}")
+    
+    with open(metrics_config_path, 'r') as f:
+        return yaml.safe_load(f)
+
+
+def get_metric_precision_dict(metrics_config: Optional[Dict[str, Any]] = None) -> Dict[str, int]:
+    """Convert metrics config to precision dictionary format expected by StdoutMetricsTable.
+    
+    This function takes metric names without namespaces and expands them to include
+    all common namespaces (train/, eval/, rollout/, time/).
+    
+    Args:
+        metrics_config: Metrics configuration dictionary. If None, loads from file.
+        
+    Returns:
+        Dictionary mapping full metric names (with namespaces) to precision values
+    """
+    if metrics_config is None:
+        metrics_config = load_metrics_config()
+    
+    precision_config = metrics_config.get('precision', {})
+    default_precision = metrics_config.get('default_precision', 4)
+    force_integer = set(metrics_config.get('force_integer', []))
+    
+    # Common namespaces where metrics can appear
+    namespaces = ['train', 'eval', 'rollout', 'time']
+    
+    precision_dict = {}
+    
+    # Add metrics with all possible namespaces
+    for metric_name, precision in precision_config.items():
+        # Add the metric without namespace (for backward compatibility)
+        precision_dict[metric_name] = precision
+        
+        # Add the metric with each namespace
+        for namespace in namespaces:
+            full_metric_name = f"{namespace}/{metric_name}"
+            precision_dict[full_metric_name] = precision
+    
+    # Handle force_integer metrics - they should have 0 precision regardless of config
+    for metric_name in force_integer:
+        precision_dict[metric_name] = 0
+        for namespace in namespaces:
+            full_metric_name = f"{namespace}/{metric_name}"
+            precision_dict[full_metric_name] = 0
+    
+    return precision_dict
+
+
+def get_metric_delta_rules(metrics_config: Optional[Dict[str, Any]] = None) -> Dict[str, callable]:
+    """Convert metrics config delta rules to callable format expected by StdoutMetricsTable.
+    
+    Args:
+        metrics_config: Metrics configuration dictionary. If None, loads from file.
+        
+    Returns:
+        Dictionary mapping metric names to validation functions
+    """
+    if metrics_config is None:
+        metrics_config = load_metrics_config()
+    
+    delta_rules_config = metrics_config.get('delta_rules', {})
+    namespaces = ['train', 'eval', 'rollout', 'time']
+    
+    delta_rules = {}
+    
+    for metric_name, rule_type in delta_rules_config.items():
+        if rule_type == "non_decreasing":
+            rule_fn = lambda prev, curr: curr >= prev
+        else:
+            # Add other rule types as needed
+            continue
+        
+        # Add the rule for the metric without namespace
+        delta_rules[metric_name] = rule_fn
+        
+        # Add the rule for the metric with each namespace
+        for namespace in namespaces:
+            full_metric_name = f"{namespace}/{metric_name}"
+            delta_rules[full_metric_name] = rule_fn
+    
+    return delta_rules
+
+
+def get_algorithm_metric_rules(algo_id: str, metrics_config: Optional[Dict[str, Any]] = None) -> Dict[str, dict]:
+    """Get algorithm-specific metric validation rules.
+    
+    Args:
+        algo_id: Algorithm identifier (e.g., 'ppo', 'reinforce')
+        metrics_config: Metrics configuration dictionary. If None, loads from file.
+        
+    Returns:
+        Dictionary mapping metric names to rule configurations
+    """
+    if metrics_config is None:
+        metrics_config = load_metrics_config()
+    
+    algorithm_rules_config = metrics_config.get('algorithm_rules', {})
+    algo_rules_config = algorithm_rules_config.get(algo_id.lower(), {})
+    
+    rules = {}
+    namespaces = ['train', 'eval', 'rollout', 'time']
+    
+    for metric_name, rule_config in algo_rules_config.items():
+        threshold = rule_config.get('threshold')
+        condition = rule_config.get('condition')
+        message = rule_config.get('message', 'Metric validation failed')
+        level = rule_config.get('level', 'warning')
+        
+        # Create the validation function based on condition
+        if condition == "less_than":
+            check_fn = lambda value, thresh=threshold: value < thresh
+        elif condition == "greater_than":
+            check_fn = lambda value, thresh=threshold: value > thresh
+        elif condition == "between":
+            min_val = rule_config.get('min', float('-inf'))
+            max_val = rule_config.get('max', float('inf'))
+            check_fn = lambda value, min_v=min_val, max_v=max_val: min_v <= value <= max_v
+        else:
+            continue
+        
+        rule_dict = {
+            'check': check_fn,
+            'message': message,
+            'level': level
+        }
+        
+        # Add rules for metric with each namespace
+        for namespace in namespaces:
+            full_metric_name = f"{namespace}/{metric_name}"
+            rules[full_metric_name] = rule_dict
+    
+    return rules

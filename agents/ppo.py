@@ -15,36 +15,6 @@ class PPO(BaseAgent):
             hidden=self.config.hidden_dims
         )
     
-    def get_algorithm_metric_rules(self):
-        """Get PPO-specific metric validation rules."""
-        return {
-            'train/clip_fraction': {
-                'check': lambda value: value < 0.5,  # Warn if more than 50% of ratios are clipped
-                'message': 'High clip fraction ({current_value:.3f}) indicates policy is changing too rapidly. Consider reducing learning rate or clip_range.',
-                'level': 'warning'
-            },
-            'train/approx_kl': {
-                'check': lambda value: value < 0.1,  # Warn if approximate KL is too high
-                'message': 'High approximate KL divergence ({current_value:.4f}) indicates large policy changes. Consider reducing learning rate.',
-                'level': 'warning'
-            },
-            'train/kl_div': {
-                'check': lambda value: value < 0.1,  # Similar threshold for KL divergence
-                'message': 'High KL divergence ({current_value:.4f}) indicates large policy changes. Consider reducing learning rate.',
-                'level': 'warning'
-            },
-            'train/entropy': {
-                'check': lambda value: value > 0.1,  # Warn if entropy gets too low too quickly (depends on action space)
-                'message': 'Low entropy ({current_value:.3f}) indicates policy is becoming too deterministic. Consider increasing entropy coefficient.',
-                'level': 'warning'
-            },
-            'train/explained_variance': {
-                'check': lambda value: value > -0.5,  # Warn if explained variance is very negative
-                'message': 'Very negative explained variance ({current_value:.3f}) indicates value function is performing poorly. Check value function architecture or learning rate.',
-                'level': 'warning'
-            }
-        }
-    
     def train_on_batch(self, batch, batch_idx):
         # use type for this? check sb3
         states = batch.observations

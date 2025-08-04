@@ -80,18 +80,6 @@ class BaseAgent(pl.LightningModule):
             'gae_lambda': self.config.gae_lambda
         }
     
-    def get_algorithm_metric_rules(self):
-        """Get algorithm-specific metric validation rules that trigger warnings when violated.
-        
-        Returns:
-            Dict[str, dict]: Mapping of metric names to rule configurations.
-            Each rule config contains:
-            - 'check': callable that takes (previous_value, current_value) and returns bool
-            - 'message': warning message template
-            - 'level': warning level ('warning', 'error')
-        """
-        return {}
-    
     def get_env_spec(self):
         """Get environment specification."""
         from utils.environment import get_env_spec
@@ -259,22 +247,11 @@ class BaseAgent(pl.LightningModule):
             save_threshold_reached=True
         )
         
-        # Create algorithm-specific metric rules
-        algo_metric_rules = self.get_algorithm_metric_rules()
-        
-        # Convert algorithm rules to the format expected by StdoutMetricsTable
-        # Combine with existing delta rules
-        combined_delta_rules = {
-            # Metrics that should only increase (monotonically non-decreasing)
-            "rollout/total_timesteps": lambda prev, curr: curr >= prev,
-            "rollout/total_episodes": lambda prev, curr: curr >= prev,
-            "time/total_timesteps": lambda prev, curr: curr >= prev,
-            "train/epoch": lambda prev, curr: curr >= prev,
-            "train/n_updates": lambda prev, curr: curr >= prev,
-            "time/iterations": lambda prev, curr: curr >= prev,
-            # Time elapsed should always increase
-            "time/time_elapsed": lambda prev, curr: curr >= prev,
-        }
+        # Create algorithm-specific metric rules from config
+        from utils.config import get_metric_precision_dict, get_metric_delta_rules, get_algorithm_metric_rules
+        metric_precision = get_metric_precision_dict()
+        metric_delta_rules = get_metric_delta_rules()
+        algo_metric_rules = get_algorithm_metric_rules(self.config.algo_id)
         
         # TODO: clean this up
         printer = StdoutMetricsTable(
@@ -283,22 +260,8 @@ class BaseAgent(pl.LightningModule):
             #include=[r"^train/", r"^val/", r"^time/", r"^rollout/", r"^eval/"],  # optional filters; remove to show everything
             # exclude=[r"^grad/"],           # example: drop noisy keys
             digits=4,
-            # TODO: create metric config file
-            metric_precision={
-                "train/total_episodes": 0,  # no decimals for episode counts
-                "train/total_timesteps": 0,  # no decimals for timesteps
-                "rollout/total_episodes": 0, # no decimals for episode counts
-                "rollout/total_timesteps": 0, # no decimals for timesteps
-                "eval/ep_rew_mean": 2,        # 2 decimals for mean
-                "eval/ep_len_mean": 2,        # 2 decimals for mean episode length
-                "time/total_timesteps": 0,    # no decimals for timesteps
-                "time/time_elapsed": 2,        # 2 decimals for elapsed time
-                "time/fps": 2,                 # 2 decimals for FPS
-                "train/epoch": 0,              # no decimals for epoch count
-                "train/n_updates": 0,          # no decimals for update count
-                "time/iterations": 0,          # no decimals for iterations 
-            },
-            metric_delta_rules=combined_delta_rules,
+            metric_precision=metric_precision,
+            metric_delta_rules=metric_delta_rules,
             algorithm_metric_rules=algo_metric_rules  # Pass algorithm-specific rules
         )
 

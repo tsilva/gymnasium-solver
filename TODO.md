@@ -1,4 +1,9 @@
 - Adjust eval policy for atari
+	•	Stack k RAM frames (e.g., 4–8) and add a small LSTM/GRU on top of the MLP.
+	•	Normalize each byte (e.g., to [0,1]) and consider embedding bits (treat bytes as 8 bits).
+	•	Increase model capacity slightly (wider MLP) and retune PPO (lr, clip range, entropy bonus, batch size).
+	•	Try longer training and more seeds; RAM setups often need more steps to stabilize.
+	•	If you can, expose extra emulator registers (RAM+) to reduce partial observability.
 - Add OCAtari support
 - Try creating local run folder with assets, create own run id and assign it to wandb if possible
 - Consider increasing sample efficiency by figuring out how different are transitions between different envs

@@ -73,6 +73,7 @@ class BaseAgent(pl.LightningModule):
             else:
                 print(f"Resume requested but no checkpoint found for {config.algo_id}/{config.env_id}")
 
+        # Create the agent's models
         self.create_models()
         assert self.policy_model is not None, "Policy model must be created in create_models()"
         
@@ -105,17 +106,10 @@ class BaseAgent(pl.LightningModule):
             'gamma': self.config.gamma,
             'gae_lambda': self.config.gae_lambda
         }
-    
-    def get_env_spec(self):
-        """Get environment specification."""
-        from utils.environment import get_env_spec
-        env = self.build_env_fn(self.config.seed)
-        return get_env_spec(env)
 
     def on_fit_start(self):
         self.start_time = time.time_ns()
         print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
-
   
     def on_train_epoch_start(self):
         pass

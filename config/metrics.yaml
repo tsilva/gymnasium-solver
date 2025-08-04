@@ -1,124 +1,203 @@
-# Metric precision configuration
-# Define precision (decimal places) for each metric type
+# Metric-centric configuration
+# Each metric is defined as a top-level entry with all its properties
 # Metric names should be without namespace prefixes since the same metric
 # can appear across different namespaces (train/, eval/, rollout/, etc.)
 
-precision:
-  # Episode and timestep counts (integers)
-  total_episodes: 0
-  total_timesteps: 0
-  
-  # Episode statistics
-  ep_rew_mean: 2        # Mean episode reward
-  ep_len_mean: 2        # Mean episode length
-  ep_rew_min: 2         # Min episode reward
-  ep_rew_max: 2         # Max episode reward
-  ep_len_min: 0         # Min episode length (integer)
-  ep_len_max: 0         # Max episode length (integer)
-  ep_rew_std: 2         # Episode reward standard deviation
-  ep_len_std: 2         # Episode length standard deviation
-  
-  # Training metrics
-  epoch: 0              # Training epoch (integer)
-  n_updates: 0          # Number of updates (integer)
-  iterations: 0         # Training iterations (integer)
-  
-  # Time metrics
-  time_elapsed: 2       # Elapsed time in seconds
-  fps: 2                # Frames per second
-  
-  # Loss metrics
-  policy_loss: 4        # Policy loss
-  value_loss: 4         # Value function loss
-  entropy_loss: 4       # Entropy loss
-  total_loss: 4         # Total loss
-  approx_kl: 4          # Approximate KL divergence
-  clip_fraction: 3      # Clipping fraction
-  explained_variance: 3 # Explained variance
-  
-  # Learning rates
-  policy_lr: 6          # Policy learning rate
-  value_lr: 6           # Value learning rate
-  learning_rate: 6      # General learning rate
-  
-  # Gradient metrics
-  grad_norm: 4          # Gradient norm
-  max_grad_norm: 4      # Maximum gradient norm
-  
-  # Algorithm-specific metrics (can be overridden by specific algorithms)
-  advantage_mean: 4     # Mean advantage
-  advantage_std: 4      # Advantage standard deviation
-  value_mean: 4         # Mean value estimate
-  value_std: 4          # Value estimate standard deviation
+# Global configuration
+_global:
+  default_precision: 4  # Default precision for metrics not explicitly configured
 
-# Default precision for metrics not explicitly listed
-default_precision: 4
+# Episode and timestep counts (integers)
+total_episodes:
+  precision: 0
+  force_integer: true
+  delta_rule: "non_decreasing"  # Should always increase
+  description: "Total number of episodes completed"
 
-# Metrics that should be treated as integers regardless of their values
-force_integer:
-  - total_episodes
-  - total_timesteps
-  - epoch
-  - n_updates
-  - iterations
-  - ep_len_min
-  - ep_len_max
+total_timesteps:
+  precision: 0
+  force_integer: true
+  delta_rule: "non_decreasing"  # Should always increase
+  description: "Total number of timesteps processed"
 
-# Delta rules for metrics that should follow certain patterns
-# These define validation rules for metric changes between steps
-delta_rules:
-  # Metrics that should only increase (monotonically non-decreasing)
-  total_timesteps: "non_decreasing"  # Should always increase
-  total_episodes: "non_decreasing"   # Should always increase
-  epoch: "non_decreasing"            # Should always increase
-  n_updates: "non_decreasing"        # Should always increase
-  iterations: "non_decreasing"       # Should always increase
-  time_elapsed: "non_decreasing"     # Time should always increase
+# Episode statistics
+ep_rew_mean:
+  precision: 2
+  description: "Mean episode reward"
 
-# Algorithm-specific metric validation rules
-# These define warnings/errors when certain thresholds are violated
-algorithm_rules:
-  ppo:
-    clip_fraction:
-      threshold: 0.5
+ep_len_mean:
+  precision: 2
+  description: "Mean episode length"
+
+ep_rew_min:
+  precision: 2
+  description: "Minimum episode reward"
+
+ep_rew_max:
+  precision: 2
+  description: "Maximum episode reward"
+
+ep_len_min:
+  precision: 0
+  force_integer: true
+  description: "Minimum episode length"
+
+ep_len_max:
+  precision: 0
+  force_integer: true
+  description: "Maximum episode length"
+
+ep_rew_std:
+  precision: 2
+  description: "Episode reward standard deviation"
+
+ep_len_std:
+  precision: 2
+  description: "Episode length standard deviation"
+
+# Training metrics
+epoch:
+  precision: 0
+  force_integer: true
+  delta_rule: "non_decreasing"  # Should always increase
+  description: "Training epoch"
+
+n_updates:
+  precision: 0
+  force_integer: true
+  delta_rule: "non_decreasing"  # Should always increase
+  description: "Number of updates"
+
+iterations:
+  precision: 0
+  force_integer: true
+  delta_rule: "non_decreasing"  # Should always increase
+  description: "Training iterations"
+
+# Time metrics
+time_elapsed:
+  precision: 2
+  delta_rule: "non_decreasing"  # Time should always increase
+  description: "Elapsed time in seconds"
+
+fps:
+  precision: 2
+  description: "Frames per second"
+
+# Loss metrics
+policy_loss:
+  precision: 4
+  description: "Policy loss"
+  algorithm_rules:
+    reinforce:
+      threshold: 1000.0
       condition: "less_than"
-      message: "High clip fraction ({current_value:.3f}) indicates policy is changing too rapidly. Consider reducing learning rate or clip_range."
+      message: "Very high policy loss ({current_value:.3f}) may indicate training instability."
       level: "warning"
-    
-    approx_kl:
+
+value_loss:
+  precision: 4
+  description: "Value function loss"
+
+entropy_loss:
+  precision: 4
+  description: "Entropy loss"
+
+total_loss:
+  precision: 4
+  description: "Total loss"
+
+# Algorithm-specific metrics
+approx_kl:
+  precision: 4
+  description: "Approximate KL divergence"
+  algorithm_rules:
+    ppo:
       threshold: 0.1
       condition: "less_than"
       message: "High approximate KL divergence ({current_value:.4f}) indicates large policy changes. Consider reducing learning rate."
       level: "warning"
-    
-    kl_div:
+
+kl_div:
+  precision: 4
+  description: "KL divergence"
+  algorithm_rules:
+    ppo:
       threshold: 0.1
       condition: "less_than"
       message: "High KL divergence ({current_value:.4f}) indicates large policy changes. Consider reducing learning rate."
       level: "warning"
-    
-    entropy:
-      threshold: 0.1
-      condition: "greater_than"
-      message: "Low entropy ({current_value:.3f}) indicates policy is becoming too deterministic. Consider increasing entropy coefficient."
+
+clip_fraction:
+  precision: 3
+  description: "Clipping fraction"
+  algorithm_rules:
+    ppo:
+      threshold: 0.5
+      condition: "less_than"
+      message: "High clip fraction ({current_value:.3f}) indicates policy is changing too rapidly. Consider reducing learning rate or clip_range."
       level: "warning"
-    
-    explained_variance:
+
+explained_variance:
+  precision: 3
+  description: "Explained variance"
+  algorithm_rules:
+    ppo:
       threshold: -0.5
       condition: "greater_than"
       message: "Very negative explained variance ({current_value:.3f}) indicates value function is performing poorly. Check value function architecture or learning rate."
       level: "warning"
 
-  reinforce:
-    # REINFORCE-specific rules
-    entropy:
+entropy:
+  precision: 4
+  description: "Policy entropy"
+  algorithm_rules:
+    ppo:
+      threshold: 0.1
+      condition: "greater_than"
+      message: "Low entropy ({current_value:.3f}) indicates policy is becoming too deterministic. Consider increasing entropy coefficient."
+      level: "warning"
+    reinforce:
       threshold: 0.05
       condition: "greater_than"
       message: "Low entropy ({current_value:.3f}) in REINFORCE indicates policy is becoming too deterministic. Consider increasing entropy coefficient."
       level: "warning"
-    
-    policy_loss:
-      threshold: 1000.0
-      condition: "less_than"
-      message: "Very high policy loss ({current_value:.3f}) may indicate training instability."
-      level: "warning"
+
+# Learning rates
+policy_lr:
+  precision: 6
+  description: "Policy learning rate"
+
+value_lr:
+  precision: 6
+  description: "Value learning rate"
+
+learning_rate:
+  precision: 6
+  description: "General learning rate"
+
+# Gradient metrics
+grad_norm:
+  precision: 4
+  description: "Gradient norm"
+
+max_grad_norm:
+  precision: 4
+  description: "Maximum gradient norm"
+
+# Algorithm-specific metrics
+advantage_mean:
+  precision: 4
+  description: "Mean advantage"
+
+advantage_std:
+  precision: 4
+  description: "Advantage standard deviation"
+
+value_mean:
+  precision: 4
+  description: "Mean value estimate"
+
+value_std:
+  precision: 4
+  description: "Value estimate standard deviation"

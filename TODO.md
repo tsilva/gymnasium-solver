@@ -1,3 +1,4 @@
+- BUG: why low FPS sometimes?
 - BUG: video step is still not alligned
 - BUG: step 100 = reward 99
 - BUG: CartPole FPS has regressed, should be >6000

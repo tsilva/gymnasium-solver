@@ -47,14 +47,12 @@ class REINFORCE(BaseAgent):
         
         loss = policy_loss + (ent_coef * entropy_loss)
         
-        metrics = prefix_dict_keys({
+        self.log_metrics({
             'loss' : loss.detach().item(),
             'policy_loss': policy_loss.detach().item(),
             'entropy_loss': entropy_loss.detach().item(),
-            'entropy': entropy.detach().item(),
-            'use_baseline': float(use_baseline),  # Track whether baseline is being used
-        }, "train")
-        self.log_dict(metrics, on_epoch=True)
+            'entropy': entropy.detach().item()
+        }, prefix="train")
         return loss
         
     def configure_optimizers(self):

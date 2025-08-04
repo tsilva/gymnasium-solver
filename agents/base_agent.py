@@ -78,6 +78,8 @@ class BaseAgent(pl.LightningModule):
             n_steps=self.config.n_steps,
             **self.rollout_collector_hyperparams() # TODO: softcode
         )
+
+        self._epoch_metrics = {}
     
     def create_models(self):
         raise NotImplementedError("Subclass must implement create_models()")
@@ -102,11 +104,17 @@ class BaseAgent(pl.LightningModule):
 
         self._last_train_dataloader_epoch = self.current_epoch
 
+        start = time.time_ns()
         self.train_collector.collect()
+        end = time.time_ns()
+        print(f"Rollout collection took {(end - start) / 1e6:.2f} ms")  # Print time in milliseconds
+        start = time.time_ns()
         dataloader = self.train_collector.create_dataloader(
             batch_size=self.config.batch_size,
             shuffle=True
         )
+        end = time.time_ns()
+        print(f"DataLoader creation took {(end - start) / 1e6:.2f} ms")  # Print time in milliseconds
         return dataloader
       
     def on_train_epoch_start(self):
@@ -131,35 +139,38 @@ class BaseAgent(pl.LightningModule):
 
             self._n_updates += 1
     
-    # TODO: when I enable uncomment this, train/fps is 2x faster
-    #def log_dict(*args, **kwargs):
-    #    pass
-
     # TODO: aggregate logging
     def on_train_epoch_end(self):
         # Calculate FPS
         time_elapsed = max((time.time_ns() - self.train_epoch_start_time) / 1e9, sys.float_info.epsilon)
+        print(time_elapsed)
         rollout_metrics = self.train_collector.get_metrics()
         total_timesteps = rollout_metrics["total_timesteps"]
         timesteps_elapsed = total_timesteps - self.train_epoch_start_timesteps
+        assert timesteps_elapsed == self.config.n_steps * self.config.n_envs, f"Timesteps elapsed should match n_steps * n_envs ({timesteps_elapsed} != {self.config.n_steps} * {self.config.n_envs})"
         fps = int(timesteps_elapsed / time_elapsed)
         print(fps)
+
+        if fps < 1000:
+            pass
 
         # TODO: softcode this
         rollout_metrics.pop("action_distribution")
 
         # Log metrics 
-        self.log_dict(prefix_dict_keys({
+        self.log_metrics({
             **rollout_metrics,
             "epoch": self.current_epoch, # TODO: is this the same value as in epoch_start?
             "n_updates": self._n_updates,
             "fps": fps,
-        }, "train"), on_epoch=True)
+        }, prefix="train")
         
         # In case we have reached the maximum number of training timesteps then stop training
         if self.config.n_timesteps is not None and total_timesteps >= self.config.n_timesteps:
             print(f"Stopping training at epoch {self.current_epoch} with {total_timesteps} timesteps >= limit {self.config.n_timesteps}")
             self.trainer.should_stop = True
+
+        self._flush_metrics()
 
     def val_dataloader(self):
         return create_dummy_dataloader()
@@ -203,11 +214,13 @@ class BaseAgent(pl.LightningModule):
         rollout_metrics.pop("action_distribution", None)  # Remove action distribution if present
 
         # Log metrics
-        self.log_dict(prefix_dict_keys({
+        self.log_metrics({
             **rollout_metrics,
             "epoch": self.current_epoch,
             "fps": fps
-        }, "eval"), on_epoch=True)
+        }, prefix="eval")
+
+        self._flush_metrics()
 
     def on_fit_end(self):
         time_elapsed = max((time.time_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
@@ -259,6 +272,7 @@ class BaseAgent(pl.LightningModule):
         algo_metric_rules = get_algorithm_metric_rules(self.config.algo_id)
         
         # TODO: clean this up
+        # TODO: print myself without printer callback?
         printer_cb = PrintMetricsCallback(
             # TODO: should this be same as log_every_n_steps?
             every_n_steps=200,   # print every 200 optimizer steps
@@ -272,8 +286,6 @@ class BaseAgent(pl.LightningModule):
 
         trainer = pl.Trainer(
             logger=wandb_logger,
-            # TODO: softcode this
-            log_every_n_steps=1, # TODO: softcode this
             max_epochs=self.config.max_epochs if self.config.max_epochs is not None else -1,
             enable_progress_bar=False,
             enable_checkpointing=False,  # Disable built-in checkpointing, use our custom callback
@@ -281,6 +293,21 @@ class BaseAgent(pl.LightningModule):
             reload_dataloaders_every_n_epochs=1,#self.config.n_epochs
             check_val_every_n_epoch=self.config.eval_freq_epochs,  # Run validation every epoch
             # TODO: these slowdown FPS a bit, but not too much
-            callbacks=[printer_cb, video_logger_cb, checkpoint_cb]  # Add checkpoint callback
+            #callbacks=[printer_cb, video_logger_cb, checkpoint_cb]  # Add checkpoint callback
         )
         trainer.fit(self)
+
+    def log_metrics(self, metrics, *, prefix=None):
+        _metrics = metrics
+        if prefix: _metrics = prefix_dict_keys(metrics, prefix)
+        for key, value in _metrics.items():
+            _list = self._epoch_metrics.get(key, [])
+            _list.append(value)
+            self._epoch_metrics[key] = _list
+
+    def _flush_metrics(self):
+        means = {}
+        for key, values in self._epoch_metrics.items():
+            mean = sum(values) / len(values) if values else 0
+            means[key] = mean
+        self.log_dict(means)

@@ -27,7 +27,6 @@ class PPO(BaseAgent):
         #if self.normalize_advantage and len(advantages) > 1:
         #advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-
         clip_range = self.config.clip_range
         ent_coef = self.config.ent_coef
         vf_coef = self.config.vf_coef
@@ -46,12 +45,9 @@ class PPO(BaseAgent):
         entropy_loss = -entropy # TODO: is this entropy loss to them?
         
         # Value loss
-        # TODO: sb3 is clipping value function as well
-        value_loss = ((returns - value) ** 2).mean()
-        value_loss_2 = F.mse_loss(returns, value)
+        value_loss = F.mse_loss(returns, value)
         
         # TODO: detach everything post loss calculation?
-        #th.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm) (do this in optimization step, check how lightning does it)
         loss = policy_loss + (vf_coef * value_loss) + (ent_coef * entropy_loss)
 
         # Metrics (detached for logging)
@@ -61,7 +57,7 @@ class PPO(BaseAgent):
         approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
         explained_var = 1 - torch.var(returns - value.detach()) / torch.var(returns)
 
-        metrics = prefix_dict_keys({
+        self.log_metrics({
             'loss' : loss.detach().item(),
             'policy_loss': policy_loss.item(),
             'entropy_loss': entropy_loss.item(),
@@ -71,8 +67,7 @@ class PPO(BaseAgent):
             'kl_div': kl_div.detach().item(), 
             'approx_kl': approx_kl.detach().item(), 
             'explained_variance': explained_var.detach().item()
-        }, "train")
-        self.log_dict(metrics, on_epoch=True)
+        }, prefix="train")
         return loss
     
     def configure_optimizers(self):

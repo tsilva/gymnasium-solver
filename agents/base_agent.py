@@ -161,22 +161,20 @@ class BaseAgent(pl.LightningModule):
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
     # TODO: consider making recording a rollout collector concern again (cleaner separation of concerns)
+    # TODO: consider using rollout_ep
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
+        # TODO: currently support single environment evaluation
         assert self.eval_env.num_envs == 1, "Evaluation should be run with a single environment instance"
-        
-        # Ensure output video directory exists
-        assert wandb.run is not None, "wandb.init() must run before building the env"
         
         self.eval_collector.set_seed(random.randint(0, 1000000))  # Set a random seed for evaluation
 
         # Create video directory structure to match logger expectations
-        video_root = os.path.join(wandb.run.dir, "videos", "eval", "episodes")
-        os.makedirs(video_root, exist_ok=True)
-
-        video_path = os.path.join(video_root, f"rollout_epoch_{self.current_epoch}.mp4")
 
         # TODO: make sure we can keep using same env across evals
         # Collect until we reach the required number of episodes
+        video_root = os.path.join(wandb.run.dir, "videos", "eval", "episodes")
+        os.makedirs(video_root, exist_ok=True)
+        video_path = os.path.join(video_root, f"rollout_epoch_{self.current_epoch}.mp4")
         self.eval_env.start_recording()
         metrics = self.eval_collector.get_metrics()
         total_episodes = metrics["total_episodes"]
@@ -215,24 +213,18 @@ class BaseAgent(pl.LightningModule):
         from dataclasses import asdict
         from pytorch_lightning.loggers import WandbLogger
 
-        # Convert config to dictionary for logging
-        config_dict = asdict(self.config)
-        
-        # Sanitize project name for wandb (replace invalid characters)
-        project_name = self.config.env_id.replace("/", "-").replace("\\", "-") # TODO: softcode this
-        experiment_name = f"{self.config.algo_id}-{self.config.seed}" # TODO: softcode this        
-
         # Use regular WandbLogger
+        project_name = self.config.env_id.replace("/", "-").replace("\\", "-")
+        experiment_name = f"{self.config.algo_id}-{self.config.seed}"
         wandb_logger = WandbLogger(
             project=project_name,
             name=experiment_name,
             log_model=True,
-            config=config_dict
+            config=asdict(self.config)
         )
         
-        # Define wandb metrics to prevent step ordering issues
+        # Define step-based metrics to ensure proper ordering
         if wandb_logger.experiment:
-            # Define step-based metrics to ensure proper ordering
             wandb_logger.experiment.define_metric("train/*", step_metric="trainer/global_step")
             wandb_logger.experiment.define_metric("eval/*", step_metric="trainer/global_step")
         
@@ -244,6 +236,7 @@ class BaseAgent(pl.LightningModule):
             #max_per_key=8,              # avoid spamming the panel
         )
         
+        # TODO: review early stopping logic
         # Create checkpoint callback
         checkpoint_cb = ModelCheckpointCallback(
             checkpoint_dir=getattr(self.config, 'checkpoint_dir', 'checkpoints'),
@@ -262,9 +255,11 @@ class BaseAgent(pl.LightningModule):
         
         # TODO: clean this up
         printer_cb = PrintMetricsCallback(
+            # TODO: should this be same as log_every_n_steps?
             every_n_steps=200,   # print every 200 optimizer steps
             every_n_epochs=1,    # and at the end of every epoch
-            digits=4,
+            digits=4, # TODO: is this still needed?
+            # TODO: pass single metric config
             metric_precision=metric_precision,
             metric_delta_rules=metric_delta_rules,
             algorithm_metric_rules=algo_metric_rules  # Pass algorithm-specific rules

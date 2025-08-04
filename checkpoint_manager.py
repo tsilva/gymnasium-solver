@@ -119,6 +119,8 @@ def clean_checkpoints(algo_id: str, env_id: str, checkpoint_dir: str = "checkpoi
 def main():
     parser = argparse.ArgumentParser(description="Manage checkpoints for gymnasium-solver")
     parser.add_argument("--checkpoint-dir", default="checkpoints", help="Checkpoint directory (default: checkpoints)")
+    parser.add_argument("--log", action="store_true", help="Enable logging to file")
+    parser.add_argument("--log-dir", type=str, default="logs", help="Directory for log files (default: logs)")
     
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
     
@@ -140,6 +142,17 @@ def main():
     
     args = parser.parse_args()
     
+    # Set up logging if requested
+    if args.log:
+        from utils.logging import capture_all_output
+        with capture_all_output(log_dir=args.log_dir):
+            _execute_command(args)
+    else:
+        _execute_command(args)
+
+
+def _execute_command(args):
+    """Execute the parsed command."""
     if args.command == "list":
         list_checkpoints(args.checkpoint_dir)
     elif args.command == "info":
@@ -148,6 +161,8 @@ def main():
         clean_checkpoints(args.algo_id, args.env_id, args.checkpoint_dir,
                          args.keep_best, args.keep_last, args.keep_threshold)
     else:
+        import argparse
+        parser = argparse.ArgumentParser()
         parser.print_help()
 
 
@@ -255,55 +270,3 @@ def clean_checkpoints(algo_id=None, env_id=None, keep_best=True, keep_threshold=
                 if not any(checkpoint_dir_path.parent.iterdir()):
                     print(f"Removing empty directory {checkpoint_dir_path.parent}")
                     checkpoint_dir_path.parent.rmdir()
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Checkpoint management utility")
-    parser.add_argument("--checkpoint-dir", type=str, default="checkpoints", 
-                       help="Checkpoint directory (default: checkpoints)")
-    
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
-    
-    # List command
-    list_parser = subparsers.add_parser("list", help="List all available checkpoints")
-    
-    # Show command
-    show_parser = subparsers.add_parser("show", help="Show details for specific algorithm/environment")
-    show_parser.add_argument("--algo", type=str, required=True, help="Algorithm ID")
-    show_parser.add_argument("--env", type=str, required=True, help="Environment ID")
-    
-    # Clean command
-    clean_parser = subparsers.add_parser("clean", help="Clean up old checkpoints")
-    clean_parser.add_argument("--algo", type=str, help="Algorithm ID (optional, cleans all if not specified)")
-    clean_parser.add_argument("--env", type=str, help="Environment ID (optional, cleans all if not specified)")
-    clean_parser.add_argument("--no-keep-best", action="store_true", help="Don't keep best checkpoints")
-    clean_parser.add_argument("--no-keep-threshold", action="store_true", help="Don't keep threshold checkpoints")
-    clean_parser.add_argument("--confirm", action="store_true", help="Skip confirmation prompt")
-    
-    args = parser.parse_args()
-    
-    if args.command == "list":
-        list_checkpoints(args.checkpoint_dir)
-    elif args.command == "show":
-        show_checkpoint_details(args.algo, args.env, args.checkpoint_dir)
-    elif args.command == "clean":
-        if not args.confirm:
-            print("This will remove checkpoint files. Use --confirm to proceed.")
-            response = input("Continue? (y/N): ")
-            if response.lower() != 'y':
-                print("Cancelled.")
-                return
-        
-        clean_checkpoints(
-            algo_id=args.algo,
-            env_id=args.env,
-            keep_best=not args.no_keep_best,
-            keep_threshold=not args.no_keep_threshold,
-            checkpoint_dir=args.checkpoint_dir
-        )
-    else:
-        parser.print_help()
-
-
-if __name__ == "__main__":
-    main()

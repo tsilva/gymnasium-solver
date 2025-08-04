@@ -176,6 +176,7 @@ def main():
                        help="Use stochastic policy (default: deterministic)")
     parser.add_argument("--seed", type=int, default=42,
                        help="Random seed for reproducibility")
+    parser.add_argument("--log-dir", type=str, default="logs", help="Directory for log files (default: logs)")
     
     args = parser.parse_args()
     
@@ -183,83 +184,90 @@ def main():
     from utils.config import load_config
     config = load_config(args.config, args.algo)
     
-    # Set random seed
-    from stable_baselines3.common.utils import set_random_seed
-    set_random_seed(args.seed)
+    # Set up logging for play session
+    from utils.logging import capture_all_output, log_config_details
     
-    # Determine model path
-    if args.model is None:
-        # Auto-detect model path - try new checkpoint system first
-        from utils.checkpoint import find_latest_checkpoint, list_available_checkpoints
+    with capture_all_output(config=config, log_dir=args.log_dir):
+        print(f"=== Play Session Started ===")
+        print(f"Command: {' '.join(['python', 'play.py'] + [arg for arg in [args.config, '--algo', args.algo] + (['--model', args.model] if args.model else []) + (['--stochastic'] if args.stochastic else [])])}")
         
-        checkpoint_path = find_latest_checkpoint(config.algo_id, config.env_id)
+        # Set random seed
+        from stable_baselines3.common.utils import set_random_seed
+        set_random_seed(args.seed)
         
-        if checkpoint_path:
-            model_path = checkpoint_path
-            print(f"Found checkpoint: {model_path}")
-        else:
-            # Fall back to old saved_models directory
-            model_filename = f"best_model_{config.env_id.replace('/', '_')}_{config.algo_id}.pth"
-            model_path = Path("saved_models") / model_filename
+        # Determine model path
+        if args.model is None:
+            # Auto-detect model path - try new checkpoint system first
+            from utils.checkpoint import find_latest_checkpoint, list_available_checkpoints
             
-            if not model_path.exists():
-                print(f"No model found for {config.algo_id}/{config.env_id}")
-                print("\nAvailable checkpoints:")
-                checkpoints = list_available_checkpoints()
-                if checkpoints:
-                    for algo, envs in checkpoints.items():
-                        for env, files in envs.items():
-                            print(f"  {algo}/{env}: {files}")
-                else:
-                    print("  No checkpoints found")
+            checkpoint_path = find_latest_checkpoint(config.algo_id, config.env_id)
+            
+            if checkpoint_path:
+                model_path = checkpoint_path
+                print(f"Found checkpoint: {model_path}")
+            else:
+                # Fall back to old saved_models directory
+                model_filename = f"best_model_{config.env_id.replace('/', '_')}_{config.algo_id}.pth"
+                model_path = Path("saved_models") / model_filename
                 
-                print("\nAvailable legacy models:")
-                models_dir = Path("saved_models")
-                if models_dir.exists():
-                    for model_file in models_dir.glob("*.pth"):
-                        print(f"  {model_file}")
-                else:
-                    print("  No saved_models directory found")
+                if not model_path.exists():
+                    print(f"No model found for {config.algo_id}/{config.env_id}")
+                    print("\nAvailable checkpoints:")
+                    checkpoints = list_available_checkpoints()
+                    if checkpoints:
+                        for algo, envs in checkpoints.items():
+                            for env, files in envs.items():
+                                print(f"  {algo}/{env}: {files}")
+                    else:
+                        print("  No checkpoints found")
+                    
+                    print("\nAvailable legacy models:")
+                    models_dir = Path("saved_models")
+                    if models_dir.exists():
+                        for model_file in models_dir.glob("*.pth"):
+                            print(f"  {model_file}")
+                    else:
+                        print("  No saved_models directory found")
+                    return
+        else:
+            model_path = Path(args.model)
+            if not model_path.exists():
+                print(f"Model file not found: {model_path}")
                 return
-    else:
-        model_path = Path(args.model)
-        if not model_path.exists():
-            print(f"Model file not found: {model_path}")
-            return
-    
-    # Load the trained model
-    policy_model = load_model(model_path, config)
-    
-    # Create environment with human rendering
-    from utils.environment import build_env
-    env = build_env(
-        config.env_id,
-        seed=args.seed,
-        env_wrappers=config.env_wrappers,
-        norm_obs=config.normalize_obs,
-        n_envs=1,  # Single environment for playing
-        frame_stack=config.frame_stack,
-        obs_type=config.obs_type,
-        render_mode="human"  # Human-readable rendering
-    )
-    
-    print(f"\nEnvironment: {config.env_id}")
-    print(f"Algorithm: {config.algo_id}")
-    print(f"Deterministic: {not args.stochastic}")
-    print(f"Episodes to play: {args.episodes}")
-    
-    try:
-        # Play episodes
-        play_episodes(
-            policy_model, 
-            env, 
-            num_episodes=args.episodes,
-            deterministic=not args.stochastic
+        
+        # Load the trained model
+        policy_model = load_model(model_path, config)
+        
+        # Create environment with human rendering
+        from utils.environment import build_env
+        env = build_env(
+            config.env_id,
+            seed=args.seed,
+            env_wrappers=config.env_wrappers,
+            norm_obs=config.normalize_obs,
+            n_envs=1,  # Single environment for playing
+            frame_stack=config.frame_stack,
+            obs_type=config.obs_type,
+            render_mode="human"  # Human-readable rendering
         )
-    finally:
-        env.close()
-    
-    print("\nDone playing!")
+        
+        print(f"\nEnvironment: {config.env_id}")
+        print(f"Algorithm: {config.algo_id}")
+        print(f"Deterministic: {not args.stochastic}")
+        print(f"Episodes to play: {args.episodes}")
+        
+        try:
+            # Play episodes
+            play_episodes(
+                policy_model, 
+                env, 
+                num_episodes=args.episodes,
+                deterministic=not args.stochastic
+            )
+        finally:
+            env.close()
+        
+        print("\nDone playing!")
 
 
 if __name__ == "__main__":

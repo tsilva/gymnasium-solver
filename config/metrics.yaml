@@ -26,7 +26,7 @@ rollout_timesteps:
   force_integer: true
   delta_rule: "non_decreasing"  # Should always increase
   description: "Total number of timesteps in the current rollout"
-  
+
 # Episode statistics
 ep_rew_mean:
   precision: 2
@@ -82,7 +82,8 @@ time_elapsed:
   description: "Elapsed time in seconds"
 
 fps:
-  precision: 2
+  precision: 0
+  force_integer: true
   description: "Frames per second"
 
 # Loss metrics

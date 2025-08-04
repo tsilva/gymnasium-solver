@@ -21,6 +21,12 @@ total_timesteps:
   # between evaluation runs when using different eval strategies or env resets
   description: "Total number of timesteps processed"
 
+rollout_timesteps:
+  precision: 0
+  force_integer: true
+  delta_rule: "non_decreasing"  # Should always increase
+  description: "Total number of timesteps in the current rollout"
+  
 # Episode statistics
 ep_rew_mean:
   precision: 2

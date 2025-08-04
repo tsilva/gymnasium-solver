@@ -4,10 +4,35 @@ from typing import Dict, Any
 from contextlib import contextmanager
 import os
 import sys
-from typing import Dict, Any, Iterable, Optional, List
+from typing import Dict, Any, Iterable, Optional, List, Tuple, Union
 import numbers
 import torch
 from torch.utils.data import DataLoader, TensorDataset
+import numpy as np
+from collections import deque
+
+def calculate_deque_stats(values_deque: deque, return_distribution: bool = False) -> Tuple[float, float, Optional[np.ndarray]]:
+    """
+    Calculate mean and standard deviation from a deque of values.
+    
+    Args:
+        values_deque: Deque containing numeric values
+        return_distribution: If True, also return the full array for distribution analysis
+        
+    Returns:
+        Tuple of (mean, std, distribution_array) where distribution_array is None 
+        if return_distribution is False or deque is empty
+    """
+    if not values_deque:
+        return 0.0, 0.0, None
+    
+    values_array = np.array(list(values_deque))
+    mean = float(np.mean(values_array))
+    std = float(np.std(values_array))
+    distribution = values_array if return_distribution else None
+    
+    return mean, std, distribution
+
 
 def create_dummy_dataloader(n_samples: int = 1, sample_dim: int = 1, batch_size: int = 1) -> torch.utils.data.DataLoader:
     dummy_data = torch.zeros(n_samples, sample_dim)

@@ -7,7 +7,7 @@ import torch
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset as TorchDataset
 
-from utils.misc import inference_ctx, _device_of
+from utils.misc import inference_ctx, _device_of, calculate_deque_stats
 
 class RolloutTrajectory(NamedTuple):
     observations: torch.Tensor
@@ -357,35 +357,18 @@ class RolloutCollector():
         elapsed_mean = float(np.mean(self.rollout_durations))
 
         # Calculate observation statistics
-        obs_mean = obs_std = 0.0
-        if self.obs_values_deque:
-            obs_array = np.array(list(self.obs_values_deque))
-            obs_mean = float(np.mean(obs_array))
-            obs_std = float(np.std(obs_array))
+        obs_mean, obs_std, _ = calculate_deque_stats(self.obs_values_deque)
         
         # Calculate reward statistics
-        reward_mean = reward_std = 0.0
-        if self.reward_values_deque:
-            reward_array = np.array(list(self.reward_values_deque))
-            reward_mean = float(np.mean(reward_array))
-            reward_std = float(np.std(reward_array))
+        reward_mean, reward_std, _ = calculate_deque_stats(self.reward_values_deque)
 
         # Calculate action statistics
-        action_mean = action_std = 0.0
-        action_distribution = None
-        if self.action_values_deque:
-            action_array = np.array(list(self.action_values_deque))
-            action_mean = float(np.mean(action_array))
-            action_std = float(np.std(action_array))
-            # Store the full action distribution for histogram logging
-            action_distribution = action_array
+        action_mean, action_std, action_distribution = calculate_deque_stats(
+            self.action_values_deque, return_distribution=True
+        )
 
         # Calculate baseline statistics (always calculated now)
-        baseline_mean = baseline_std = 0.0
-        if self.baseline_deque:
-            baseline_array = np.array(list(self.baseline_deque))
-            baseline_mean = float(np.mean(baseline_array))
-            baseline_std = float(np.std(baseline_array))
+        baseline_mean, baseline_std, _ = calculate_deque_stats(self.baseline_deque)
 
         return {
             "total_timesteps": self.total_steps, # TODO: steps vs timesteps

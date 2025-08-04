@@ -5,10 +5,8 @@ import torch
 import wandb
 import pytorch_lightning as pl
 from utils.rollouts import RolloutCollector
-from utils.misc import prefix_dict_keys, PrintMetricsCallback
-from utils.video_logger_callback import VideoLoggerCallback
-from utils.misc import create_dummy_dataloader
-from utils.checkpoint import ModelCheckpointCallback
+from utils.misc import prefix_dict_keys, create_dummy_dataloader
+from callbacks import PrintMetricsCallback, VideoLoggerCallback, ModelCheckpointCallback
 
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class BaseAgent(pl.LightningModule):
@@ -193,7 +191,7 @@ class BaseAgent(pl.LightningModule):
             project=project_name,
             name=experiment_name,
             log_model=True,
-            config=config_dict,
+            config=config_dict
         )
         
         # Define wandb metrics to prevent step ordering issues

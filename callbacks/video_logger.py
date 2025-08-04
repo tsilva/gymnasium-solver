@@ -1,3 +1,5 @@
+"""Video logger callback for watching and logging media files to Weights & Biases."""
+
 import threading
 import time
 from pathlib import Path

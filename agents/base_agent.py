@@ -271,7 +271,7 @@ class BaseAgent(pl.LightningModule):
         )
 
         trainer = pl.Trainer(
-            #logger=wandb_logger,
+            logger=wandb_logger,
             # TODO: softcode this
             log_every_n_steps=1, # TODO: softcode this
             max_epochs=self.config.max_epochs if self.config.max_epochs is not None else -1,
@@ -284,18 +284,3 @@ class BaseAgent(pl.LightningModule):
             callbacks=[printer_cb, video_logger_cb, checkpoint_cb]  # Add checkpoint callback
         )
         trainer.fit(self)
-    
-    """
-    def _process_eval_videos(self):
-        # Find the video logger callback
-        video_logger = None
-        for callback in self.trainer.callbacks:
-            if isinstance(callback, VideoLoggerCallback):
-                video_logger = callback
-                break
-        
-        if video_logger:
-            # Process eval videos immediately
-            video_logger._process(self.trainer, "eval")
-    """
-    

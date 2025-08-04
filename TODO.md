@@ -1,3 +1,4 @@
+- BUG: step 100 = reward 99
 - BUG: CartPole FPS has regressed, should be >6000
 - BUG: eval FPS is low
 - BUG: eval is not calculating last policy mean

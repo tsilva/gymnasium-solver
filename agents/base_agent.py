@@ -167,23 +167,16 @@ class BaseAgent(pl.LightningModule):
         
         self.eval_collector.set_seed(random.randint(0, 1000000))  # Set a random seed for evaluation
 
-        # Create video directory structure to match logger expectations
-
-        # TODO: make sure we can keep using same env across evals
         # Collect until we reach the required number of episodes
-        video_root = os.path.join(wandb.run.dir, "videos", "eval", "episodes")
-        os.makedirs(video_root, exist_ok=True)
-        video_path = os.path.join(video_root, f"rollout_epoch_{self.current_epoch}.mp4")
-        self.eval_env.start_recording()
-        metrics = self.eval_collector.get_metrics()
-        total_episodes = metrics["total_episodes"]
-        target_episodes = total_episodes + self.config.eval_episodes
-        while total_episodes < target_episodes:
-            self.eval_collector.collect(deterministic=self.config.eval_deterministic)
+        video_path = os.path.join(wandb.run.dir, f"videos/eval/episodes/rollout_epoch_{self.current_epoch}.mp4")
+        with self.eval_env.recorder(video_path):
             metrics = self.eval_collector.get_metrics()
             total_episodes = metrics["total_episodes"]
-        self.eval_env.stop_recording()
-        self.eval_env.save_recording(video_path)
+            target_episodes = total_episodes + self.config.eval_episodes
+            while total_episodes < target_episodes:
+                self.eval_collector.collect(deterministic=self.config.eval_deterministic)
+                metrics = self.eval_collector.get_metrics()
+                total_episodes = metrics["total_episodes"]
 
     def on_validation_epoch_end(self):
         # Calculate time elapsed for the validation epoch

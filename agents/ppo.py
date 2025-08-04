@@ -30,7 +30,7 @@ class PPO(BaseAgent):
 
         clip_range = self.config.clip_range
         ent_coef = self.config.ent_coef
-        val_coef = self.config.val_coef
+        vf_coef = self.config.vf_coef
 
         dist, value = self.policy_model(states)
     
@@ -52,7 +52,7 @@ class PPO(BaseAgent):
         
         # TODO: detach everything post loss calculation?
         #th.nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm) (do this in optimization step, check how lightning does it)
-        loss = policy_loss + (val_coef * value_loss) + (ent_coef * entropy_loss)
+        loss = policy_loss + (vf_coef * value_loss) + (ent_coef * entropy_loss)
 
         # Metrics (detached for logging)
         #clip_fraction = th.mean((th.abs(ratio - 1) > clip_range).float()).item()

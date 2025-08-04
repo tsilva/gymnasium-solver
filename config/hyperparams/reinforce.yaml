@@ -10,7 +10,6 @@ CartPole-v1:
   hidden_dims: [64]
   frame_stack: 1
   use_baseline: False
-  reward_threshold: 500
 
 MountainCar-v0:
   env_id: MountainCar-v0

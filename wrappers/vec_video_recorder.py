@@ -5,6 +5,7 @@
 import os
 import os.path
 from typing import Optional, Tuple
+from contextlib import contextmanager
 
 import numpy as np
 from gymnasium import error, logger
@@ -231,6 +232,26 @@ class VecVideoRecorder(VecEnvWrapper):
     def stop_recording(self) -> None:
         assert self.recording, "_stop_recording was called, but no recording was started"
         self.recording = False
+
+    @contextmanager
+    def recorder(self, video_path: str):
+        """Context manager for automatic recording start/stop.
+        
+        Usage:
+            with recorder.recording_context():
+                # Recording starts automatically
+                for _ in range(100):
+                    obs, rewards, dones, infos = env.step(actions)
+                # Recording stops automatically when exiting the with block
+        """
+
+        video_root = os.path.dirname(video_path)
+        os.makedirs(video_root, exist_ok=True)
+
+        self.start_recording()
+        yield self
+        self.stop_recording()
+        self.save_recording(video_path)
 
     def save_recording(self, video_path: str) -> None:
         assert len(self.recorded_frames) > 0, "No frames recorded to save."

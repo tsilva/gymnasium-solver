@@ -30,8 +30,7 @@ class Config:
     learning_rate: float = None  # RLZOO format learning rate (overrides policy_lr if set)
     #value_lr: float = 0.001  # Default: 0.001
     ent_coef: float = 0.01  # Default: 0.01
-    val_coef: float = 0.5  # Default: 0.5 (for PPO)
-    vf_coef: float = None  # RLZOO format value function coefficient
+    vf_coef: float = 0.5  # Default: 0.5 (for PPO)
 
     max_grad_norm: float = 0.5  # Default: 0.5 (for gradient clipping)
     
@@ -186,9 +185,8 @@ class Config:
             final_config['normalize_obs'] = final_config['normalize']
             final_config['normalize_reward'] = final_config['normalize']
         
-        # Handle vf_coef -> val_coef
         if 'vf_coef' in final_config and final_config['vf_coef'] is not None:
-            final_config['val_coef'] = final_config['vf_coef']
+            final_config['vf_coef'] = final_config['vf_coef']
 
         # Convert list values to tuples for hidden_dims
         if 'hidden_dims' in final_config and isinstance(final_config['hidden_dims'], list):

@@ -21,6 +21,13 @@ class BaseAgent(pl.LightningModule):
         # Store core attributes
         self.config = config
 
+
+        self.fit_start_time = None
+        self.train_epoch_start_time = None
+        self.validation_epoch_start_time = None
+        
+        self._n_updates = 0 # TODO: is this required?
+
         # TODO: create this only for training? create on_fit_start() and destroy with on_fit_end()?
         self.train_env = build_env(
             config.env_id,
@@ -46,14 +53,6 @@ class BaseAgent(pl.LightningModule):
                 "video_length": 100 # TODO: softcode this
             }
         )
-
-        self.fit_start_time = None
-        self.train_epoch_start_time = None
-        self.validation_epoch_start_time = None
-        
-        # Training state
-        
-        self._n_updates = 0 # TODO: is this required?
         
         # TODO: this should be in callback?
         # Best model tracking (maintained for compatibility with checkpoint callback)

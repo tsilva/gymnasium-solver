@@ -45,21 +45,20 @@ class PrintMetricsCallback(pl.Callback):
         self.min_val_width = min_val_width
         # TODO: softcode this
         self.key_priority = key_priority or [
-            "train/epoch", 
-            "train/n_updates", 
-            "train/loss",
-            "train/policy_loss",
-            "train/value_loss",
-            "time/total_timesteps",
-            "rollout/total_timesteps",
-            "rollout/total_episodes",
-            "rollout/total_rollouts",
-            "eval/total_timesteps",
-            "eval/total_episodes",
+            "train/total_timesteps", 
+            "train/total_episodes", 
+            "train/total_rollouts",
+            "train/fps",
+            "train/ep_rew_mean",
+            "train/ep_len_mean",
+            "train/epoch",
+            "eval/total_timesteps", 
+            "eval/total_episodes", 
             "eval/total_rollouts",
-            "eval/rollout_episodes",
+            "eval/fps",
             "eval/ep_rew_mean",
-            "eval/ep_len_mean"
+            "eval/ep_len_mean",
+            "eval/epoch",
         ]
         self.previous_metrics: Dict[str, Any] = {}  # Store previous values for delta validation
 

@@ -234,7 +234,7 @@ class VecVideoRecorder(VecEnvWrapper):
         self.recording = False
 
     @contextmanager
-    def recorder(self, video_path: str):
+    def recorder(self, video_path: str, record_video: bool = True):
         """Context manager for automatic recording start/stop.
         
         Usage:
@@ -244,6 +244,9 @@ class VecVideoRecorder(VecEnvWrapper):
                     obs, rewards, dones, infos = env.step(actions)
                 # Recording stops automatically when exiting the with block
         """
+        if not record_video:
+            yield self
+            return
 
         video_root = os.path.dirname(video_path)
         os.makedirs(video_root, exist_ok=True)

@@ -152,6 +152,7 @@ class BaseAgent(pl.LightningModule):
         print(fps)
 
         if fps < 1000:
+            print(f"Warning: Training FPS is low ({fps}). Consider reducing n_envs or n_steps to improve performance.")
             pass
 
         # TODO: softcode this
@@ -185,20 +186,25 @@ class BaseAgent(pl.LightningModule):
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
     # TODO: consider making recording a rollout collector concern again (cleaner separation of concerns)
     # TODO: consider using rollout_ep
+    # TODO: there are train/fps drops caused by running the collector N times (its not only the video recording); cause currently unknown
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         # TODO: currently support single environment evaluation
         assert self.validation_env.num_envs == 1, "Evaluation should be run with a single environment instance"
         
+        # TODO: reset reward windows!!!
         self.validation_collector.set_seed(random.randint(0, 1000000))  # Set a random seed for evaluation
 
         # Collect until we reach the required number of episodes
+        # NOTE: processing/saving video is a bottleneck that will make next training epoch be slower,
+        # if you see train/fps drops, make video recording less frequent by adjusting `eval_recording_freq_epochs`
+        record_video = self.current_epoch == 0 or self.config.eval_recording_freq_epochs % self.current_epoch == 0
         video_path = os.path.join(wandb.run.dir, f"videos/eval/episodes/rollout_epoch_{self.current_epoch}.mp4")
-        with self.validation_env.recorder(video_path):
+        with self.validation_env.recorder(video_path, record_video=record_video): # TODO: make rew window = config.eval_episodes
             metrics = self.validation_collector.get_metrics()
             total_episodes = metrics["total_episodes"]
             target_episodes = total_episodes + self.config.eval_episodes
             while total_episodes < target_episodes:
-                self.validation_collector.collect(deterministic=self.config.eval_deterministic)
+                self.validation_collector.collect(deterministic=self.config.eval_deterministic) # TODO: this still won't be as fast as possible because it will have run steps that will not be used 
                 metrics = self.validation_collector.get_metrics()
                 total_episodes = metrics["total_episodes"]
 

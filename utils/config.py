@@ -49,6 +49,7 @@ class Config:
 
     # Evaluation
     eval_freq_epochs: int = 10
+    eval_recording_freq_epochs: int = 100  # Record evaluation videos every 5 epochs
     eval_episodes: int = 10
     eval_async: bool = False  # Default: true (async evaluation)
     eval_deterministic: bool = True  # Default: true (deterministic evaluation)

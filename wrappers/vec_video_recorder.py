@@ -240,6 +240,9 @@ class VecVideoRecorder(VecEnvWrapper):
         from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
         clip = ImageSequenceClip(self.recorded_frames, fps=self.frames_per_sec)
         clip.write_videofile(video_path, audio=False, logger=None)
+        
+        # Clear recorded frames after saving to prevent warning in __del__
+        self.recorded_frames = []
 
     def __del__(self) -> None:
         """Warn the user in case last video wasn't saved."""

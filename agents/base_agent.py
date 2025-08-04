@@ -141,16 +141,15 @@ class BaseAgent(pl.LightningModule):
         # TODO: softcode this
         rollout_metrics.pop("action_distribution")
 
+        # Log metrics 
         rollout_timesteps = rollout_metrics["rollout_timesteps"]
         fps = int(rollout_timesteps / time_elapsed)
-
-        # Log metrics 
-        self.log_dict({
-            "train/epoch": self.current_epoch, # TODO: is this the same value as in epoch_start?
-            "train/n_updates": self._n_updates,
-            "train/fps": fps,
-            **prefix_dict_keys(rollout_metrics, "train")
-        })
+        self.log_dict(prefix_dict_keys({
+            **rollout_metrics,
+            "epoch": self.current_epoch, # TODO: is this the same value as in epoch_start?
+            "n_updates": self._n_updates,
+            "fps": fps,
+        }, "train"))
         
     def val_dataloader(self):
         return create_dummy_dataloader()
@@ -198,9 +197,9 @@ class BaseAgent(pl.LightningModule):
         # TODO: softcode this
         metrics.pop("action_distribution", None)  # Remove action distribution if present
 
+        # Log metrics
         rollout_steps = metrics["rollout_timesteps"]
         fps = int(rollout_steps / time_elapsed)
-
         self.log_dict(prefix_dict_keys({
             **metrics,
             "epoch": self.current_epoch,

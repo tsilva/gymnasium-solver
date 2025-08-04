@@ -52,7 +52,6 @@ class BaseAgent(pl.LightningModule):
 
         # Training state
         self.start_time = None # TODO: cleaner way of measuring this?
-        self.total_timesteps = 0
         self._n_updates = 0 # TODO: is this required?
         
         # Best model tracking (maintained for compatibility with checkpoint callback)
@@ -127,11 +126,10 @@ class BaseAgent(pl.LightningModule):
             
     # TODO: aggregate logging
     def on_train_epoch_end(self):
-        rollout_metrics = self.train_collector.get_metrics()
-        self.total_timesteps = rollout_metrics["total_timesteps"]
-        
         # Check for early stopping based on n_timesteps limit
-        if self.config.n_timesteps is not None and self.total_timesteps >= self.config.n_timesteps:
+        rollout_metrics = self.train_collector.get_metrics()
+        total_timesteps = rollout_metrics["total_timesteps"]
+        if self.config.n_timesteps is not None and total_timesteps >= self.config.n_timesteps:
             print(f"Stopping training at epoch {self.current_epoch} with {self.total_timesteps} timesteps >= limit {self.config.n_timesteps}")
             self.trainer.should_stop = True
         

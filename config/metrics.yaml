@@ -69,12 +69,6 @@ n_updates:
   delta_rule: "non_decreasing"  # Should always increase
   description: "Number of updates"
 
-iterations:
-  precision: 0
-  force_integer: true
-  delta_rule: "non_decreasing"  # Should always increase
-  description: "Training iterations"
-
 # Time metrics
 time_elapsed:
   precision: 2

@@ -23,7 +23,6 @@ class BaseAgent(pl.LightningModule):
 
         # Create environment builder
         from utils.environment import build_env
-        # TODO: consider moving this to on_fit_start()
         self.build_env_fn = lambda seed, n_envs=config.n_envs, **kwargs: build_env(
             config.env_id,
             seed=seed,
@@ -52,7 +51,6 @@ class BaseAgent(pl.LightningModule):
         self.start_time = None # TODO: cleaner way of measuring this?
         self.total_timesteps = 0
         self._n_updates = 0 # TODO: is this required?
-        self._iterations = 0 # TODO: is this required?
         
         # Best model tracking (maintained for compatibility with checkpoint callback)
         self.best_eval_reward = float('-inf')
@@ -126,8 +124,6 @@ class BaseAgent(pl.LightningModule):
             
     # TODO: aggregate logging
     def on_train_epoch_end(self):
-        self._iterations += 1
-
         rollout_metrics = self.train_collector.get_metrics()
         self.total_timesteps = rollout_metrics["total_timesteps"]
         
@@ -141,10 +137,8 @@ class BaseAgent(pl.LightningModule):
 
         time_metrics = self._get_time_metrics()
         metrics_dict = {
-            # TODO: is this same as _iterations?
             "train/epoch": self.current_epoch, # TODO: is this the same value as in epoch_start?
             "train/n_updates": self._n_updates,
-            "time/iterations": self._iterations,
             **prefix_dict_keys(rollout_metrics, "rollout"),
             **prefix_dict_keys(time_metrics, "time")
         }

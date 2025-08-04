@@ -425,7 +425,7 @@ import re
 import torch
 import pytorch_lightning as pl
 
-class StdoutMetricsTable(pl.Callback):
+class PrintMetricsCallback(pl.Callback):
     """
     Periodically prints a table to stdout with the *latest value* for each logged metric.
 

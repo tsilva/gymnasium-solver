@@ -5,7 +5,7 @@ import torch
 import wandb
 import pytorch_lightning as pl
 from utils.rollouts import RolloutCollector
-from utils.misc import prefix_dict_keys, StdoutMetricsTable
+from utils.misc import prefix_dict_keys, PrintMetricsCallback
 from utils.video_logger_callback import VideoLoggerCallback
 from utils.misc import create_dummy_dataloader
 from utils.checkpoint import ModelCheckpointCallback
@@ -229,7 +229,7 @@ class BaseAgent(pl.LightningModule):
         algo_metric_rules = get_algorithm_metric_rules(self.config.algo_id)
         
         # TODO: clean this up
-        printer = StdoutMetricsTable(
+        printer_cb = PrintMetricsCallback(
             every_n_steps=200,   # print every 200 optimizer steps
             every_n_epochs=1,    # and at the end of every epoch
             digits=4,
@@ -248,7 +248,7 @@ class BaseAgent(pl.LightningModule):
             accelerator="cpu",  # Use CPU for training # TODO: softcode this
             reload_dataloaders_every_n_epochs=1,#self.config.n_epochs
             check_val_every_n_epoch=self.config.eval_freq_epochs,  # Run validation every epoch
-            callbacks=[printer, video_logger_cb, checkpoint_cb]  # Add checkpoint callback
+            callbacks=[printer_cb, video_logger_cb, checkpoint_cb]  # Add checkpoint callback
         )
         trainer.fit(self)
     

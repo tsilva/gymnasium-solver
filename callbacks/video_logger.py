@@ -262,7 +262,25 @@ class VideoLoggerCallback(pl.Callback):
 
         # Log per key using Lightning's proper logging mechanism
         for key, files in by_key.items():
-            media = [wandb.Video(str(p)) for p in files]
+            media = []
+            for p in files:
+                # Determine format from file extension
+                ext = p.suffix.lower()
+                if ext == '.mp4':
+                    format_type = "mp4"
+                elif ext == '.gif':
+                    format_type = "gif"
+                elif ext in ['.png', '.jpg', '.jpeg']:
+                    # For images, use wandb.Image instead
+                    img_format = "png" if ext == '.png' else "jpg"
+                    media.append(wandb.Image(str(p), format=img_format))
+                    continue
+                else:
+                    # Default to mp4 for unknown video extensions
+                    format_type = "mp4"
+                
+                media.append(wandb.Video(str(p), format=format_type))
+            
             self._seen.update(map(str, files))
             # Use Lightning's log_metrics to ensure proper step handling
             trainer.logger.log_metrics({f"{prefix}/{key}": media}, step=trainer.global_step)

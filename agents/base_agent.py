@@ -3,12 +3,13 @@ import sys
 import time
 import torch
 import wandb
+import random
 import pytorch_lightning as pl
+from utils.environment import build_env
 from utils.rollouts import RolloutCollector
 from utils.misc import prefix_dict_keys, create_dummy_dataloader
 from callbacks import PrintMetricsCallback, VideoLoggerCallback, ModelCheckpointCallback
 
-# TODO: move fps metric to train/eval namespaces
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class BaseAgent(pl.LightningModule):
     
@@ -19,9 +20,6 @@ class BaseAgent(pl.LightningModule):
 
         # Store core attributes
         self.config = config
-
-        # Create environment builder
-        from utils.environment import build_env
 
         # TODO: create this only for training? create on_fit_start() and destroy with on_fit_end()?
         self.train_env = build_env(
@@ -45,12 +43,16 @@ class BaseAgent(pl.LightningModule):
             render_mode="rgb_array",
             record_video=True,
             record_video_kwargs={
-                "video_length": 100
+                "video_length": 100 # TODO: softcode this
             }
         )
 
+        self.fit_start_time = None
+        self.train_epoch_start_time = None
+        self.validation_epoch_start_time = None
+        
         # Training state
-        self.start_time = None # TODO: cleaner way of measuring this?
+        
         self._n_updates = 0 # TODO: is this required?
         
         # TODO: this should be in callback?
@@ -89,11 +91,11 @@ class BaseAgent(pl.LightningModule):
         }
 
     def on_fit_start(self):
-        self.start_time = time.time_ns()
-        print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        self.fit_start_time = time.time_ns()
+        print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}") # TODO: use self.fit_start_time for logging
   
     def on_train_epoch_start(self):
-        pass
+        self.train_epoch_start_time = time.time_ns()
 
     def train_dataloader(self):
         self._last_train_dataloader_epoch = self.current_epoch
@@ -126,58 +128,91 @@ class BaseAgent(pl.LightningModule):
             
     # TODO: aggregate logging
     def on_train_epoch_end(self):
+        # Calculate time elapsed for the training epoch
+        time_elapsed = max((time.time_ns() - self.train_epoch_start_time) / 1e9, sys.float_info.epsilon)
+
         # Check for early stopping based on n_timesteps limit
         rollout_metrics = self.train_collector.get_metrics()
         total_timesteps = rollout_metrics["total_timesteps"]
         if self.config.n_timesteps is not None and total_timesteps >= self.config.n_timesteps:
             print(f"Stopping training at epoch {self.current_epoch} with {self.total_timesteps} timesteps >= limit {self.config.n_timesteps}")
             self.trainer.should_stop = True
-        
-        # Extract action distribution for histogram logging
-        action_distribution = rollout_metrics.pop("action_distribution", None)
 
-        time_metrics = self._get_time_metrics()
-        metrics_dict = {
+        # TODO: softcode this
+        rollout_metrics.pop("action_distribution")
+
+        rollout_timesteps = rollout_metrics["rollout_timesteps"]
+        fps = int(rollout_timesteps / time_elapsed)
+
+        # Log metrics 
+        self.log_dict({
             "train/epoch": self.current_epoch, # TODO: is this the same value as in epoch_start?
             "train/n_updates": self._n_updates,
-            **prefix_dict_keys(rollout_metrics, "rollout"),
-            **prefix_dict_keys(time_metrics, "time")
-        }
-        
-        # Log regular metrics
-        self.log_dict(metrics_dict)
+            "train/fps": fps,
+            **prefix_dict_keys(rollout_metrics, "train")
+        })
         
     def val_dataloader(self):
         return create_dummy_dataloader()
 
     def on_validation_epoch_start(self):
-        pass
+        self.validation_epoch_start_time = time.time_ns()
 
+    # TODO: check how sb3 does eval_async
+    # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
+    # TODO: currently recording more than the requested episodes (rollout not trimmed)
+    # TODO: consider making recording a rollout collector concern again (cleaner separation of concerns)
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
-        self._run_evaluation()
+        assert self.eval_env.num_envs == 1, "Evaluation should be run with a single environment instance"
         
+        # Ensure output video directory exists
+        assert wandb.run is not None, "wandb.init() must run before building the env"
+        
+        self.eval_collector.set_seed(random.randint(0, 1000000))  # Set a random seed for evaluation
+
+        # Create video directory structure to match logger expectations
+        video_root = os.path.join(wandb.run.dir, "videos", "eval", "episodes")
+        os.makedirs(video_root, exist_ok=True)
+
+        video_path = os.path.join(video_root, f"rollout_epoch_{self.current_epoch}.mp4")
+
+        # TODO: make sure we can keep using same env across evals
+        # Collect until we reach the required number of episodes
+        self.eval_env.start_recording()
+        metrics = self.eval_collector.get_metrics()
+        total_episodes = metrics["total_episodes"]
+        target_episodes = total_episodes + self.config.eval_episodes
+        while total_episodes < target_episodes:
+            self.eval_collector.collect(deterministic=self.config.eval_deterministic)
+            metrics = self.eval_collector.get_metrics()
+            total_episodes = metrics["total_episodes"]
+        self.eval_env.stop_recording()
+        self.eval_env.save_recording(video_path)
+
     def on_validation_epoch_end(self):
-        pass
+        # Calculate time elapsed for the validation epoch
+        time_elapsed = max((time.time_ns() - self.validation_epoch_start_time) / 1e9, sys.float_info.epsilon)
+
+        metrics = self.eval_collector.get_metrics()
+
+        # TODO: softcode this
+        metrics.pop("action_distribution", None)  # Remove action distribution if present
+
+        rollout_steps = metrics["rollout_timesteps"]
+        fps = int(rollout_steps / time_elapsed)
+
+        self.log_dict(prefix_dict_keys({
+            **metrics,
+            "epoch": self.current_epoch,
+            "fps": fps
+        }, "eval"))
 
     def on_fit_end(self):
-        time_elapsed = self._get_time_metrics()["time_elapsed"]
+        time_elapsed = max((time.time_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
         
-    def _process_eval_videos(self):
-        """Process eval videos immediately to ensure they're logged at the correct timestep."""
-        # Find the video logger callback
-        video_logger = None
-        for callback in self.trainer.callbacks:
-            if isinstance(callback, VideoLoggerCallback):
-                video_logger = callback
-                break
-        
-        if video_logger:
-            # Process eval videos immediately
-            video_logger._process(self.trainer, "eval")
-    
     # TODO: should we change method name?
-    def run_training(self):
+    def _run_training(self):
         from dataclasses import asdict
         from pytorch_lightning.loggers import WandbLogger
 
@@ -201,8 +236,6 @@ class BaseAgent(pl.LightningModule):
             # Define step-based metrics to ensure proper ordering
             wandb_logger.experiment.define_metric("train/*", step_metric="trainer/global_step")
             wandb_logger.experiment.define_metric("eval/*", step_metric="trainer/global_step")
-            wandb_logger.experiment.define_metric("rollout/*", step_metric="trainer/global_step")
-            wandb_logger.experiment.define_metric("time/*", step_metric="trainer/global_step")
         
         # Create video logging callback
         video_logger_cb = VideoLoggerCallback(
@@ -252,56 +285,17 @@ class BaseAgent(pl.LightningModule):
         )
         trainer.fit(self)
     
-    def _get_time_metrics(self):
-        total_timesteps = self.train_collector.get_metrics()["total_timesteps"]
-        time_elapsed = max((time.time_ns() - self.start_time) / 1e9, sys.float_info.epsilon)
-        fps = total_timesteps / time_elapsed
-        return {
-            "total_timesteps": total_timesteps,
-            "time_elapsed": int(time_elapsed),
-            "fps": int(fps)
-        }
+    """
+    def _process_eval_videos(self):
+        # Find the video logger callback
+        video_logger = None
+        for callback in self.trainer.callbacks:
+            if isinstance(callback, VideoLoggerCallback):
+                video_logger = callback
+                break
+        
+        if video_logger:
+            # Process eval videos immediately
+            video_logger._process(self.trainer, "eval")
+    """
     
-    # TODO: check how sb3 does eval_async
-    # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
-    def _run_evaluation(self):
-        metrics = self._eval()
-        
-        # Process videos immediately after evaluation, before logging metrics
-        # This ensures videos and metrics are logged at the same timestep
-        self._process_eval_videos()
-        
-        self.log_dict(prefix_dict_keys(metrics, "eval")) # TODO: overrrid log_dict and add prefixig support
-
-    # TODO: currently recording more than the requested episodes (rollout not trimmed)
-    # TODO: consider making recording a rollout collector concern again (cleaner separation of concerns)
-    def _eval(self):
-        assert self.eval_env.num_envs == 1, "Evaluation should be run with a single environment instance"
-        
-        # Ensure output video directory exists
-        assert wandb.run is not None, "wandb.init() must run before building the env"
-        
-        import random
-        self.eval_collector.set_seed(random.randint(0, 1000000))  # Set a random seed for evaluation
-
-        # Create video directory structure to match logger expectations
-        video_root = os.path.join(wandb.run.dir, "videos", "eval", "episodes")
-        os.makedirs(video_root, exist_ok=True)
-
-        video_path = os.path.join(video_root, f"rollout_epoch_{self.current_epoch}.mp4")
-
-        # TODO: make sure we can keep using same env across evals
-        # Collect until we reach the required number of episodes
-        self.eval_env.start_recording()
-        metrics = self.eval_collector.get_metrics()
-        total_episodes = metrics["total_episodes"]
-        target_episodes = total_episodes + self.config.eval_episodes
-        while total_episodes < target_episodes:
-            self.eval_collector.collect(deterministic=self.config.eval_deterministic)
-            metrics = self.eval_collector.get_metrics()
-            total_episodes = metrics["total_episodes"]
-        self.eval_env.stop_recording()
-        self.eval_env.save_recording(video_path)
-
-        return metrics
-

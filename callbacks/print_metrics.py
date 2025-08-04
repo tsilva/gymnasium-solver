@@ -57,7 +57,7 @@ class PrintMetricsCallback(pl.Callback):
             "eval/total_timesteps",
             "eval/total_episodes",
             "eval/total_rollouts",
-            "eval/episodes_count",
+            "eval/rollout_episodes",
             "eval/ep_rew_mean",
             "eval/ep_len_mean"
         ]

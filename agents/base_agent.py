@@ -300,6 +300,11 @@ class BaseAgent(pl.LightningModule):
         trainer.fit(self)
 
     def log_metrics(self, metrics, *, prefix=None):
+        """
+        Lightning logger caused significant performance drops, as much as 2x slower train/fps.
+        Using custom metric collection / flushing logic to avoid this issue.
+        """
+        
         _metrics = metrics
         if prefix: _metrics = prefix_dict_keys(metrics, prefix)
         for key, value in _metrics.items():

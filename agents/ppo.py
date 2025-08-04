@@ -72,7 +72,7 @@ class PPO(BaseAgent):
             'approx_kl': approx_kl.detach().item(), 
             'explained_variance': explained_var.detach().item()
         }, "train")
-        self.log_dict(metrics)
+        self.log_dict(metrics, on_epoch=True)
         return loss
     
     def configure_optimizers(self):

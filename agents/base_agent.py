@@ -24,7 +24,9 @@ class BaseAgent(pl.LightningModule):
 
         self.fit_start_time = None
         self.train_epoch_start_time = None
+        self.train_epoch_start_timesteps = None
         self.validation_epoch_start_time = None
+        self.validation_epoch_start_timesteps = None
         
         self._n_updates = 0 # TODO: is this required?
 
@@ -39,7 +41,7 @@ class BaseAgent(pl.LightningModule):
             obs_type=config.obs_type, # TODO: atari only?
         )
        
-        self.eval_env = build_env(
+        self.validation_env = build_env(
             config.env_id,
             n_envs=1,
             seed=config.seed + 1000,  # Use a different seed for evaluation
@@ -70,8 +72,8 @@ class BaseAgent(pl.LightningModule):
             **self.rollout_collector_hyperparams()
         )
 
-        self.eval_collector = RolloutCollector(
-            self.eval_env,
+        self.validation_collector = RolloutCollector(
+            self.validation_env,
             self.policy_model,
             n_steps=self.config.n_steps,
             **self.rollout_collector_hyperparams() # TODO: softcode
@@ -92,11 +94,12 @@ class BaseAgent(pl.LightningModule):
     def on_fit_start(self):
         self.fit_start_time = time.time_ns()
         print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}") # TODO: use self.fit_start_time for logging
-  
-    def on_train_epoch_start(self):
-        self.train_epoch_start_time = time.time_ns()
 
     def train_dataloader(self):
+        self.train_epoch_start_time = time.time_ns()
+        train_metrics = self.train_collector.get_metrics()
+        self.train_epoch_start_timesteps = train_metrics["total_timesteps"]
+
         self._last_train_dataloader_epoch = self.current_epoch
 
         self.train_collector.collect()
@@ -105,7 +108,10 @@ class BaseAgent(pl.LightningModule):
             shuffle=True
         )
         return dataloader
-    
+      
+    def on_train_epoch_start(self):
+        pass
+
     def training_step(self, batch, batch_idx):
         # Assert that train_dataloader is called once per epoch
         # (this is the method that is performing the per-epoch rollout)
@@ -124,37 +130,44 @@ class BaseAgent(pl.LightningModule):
                 optimizer.step()
 
             self._n_updates += 1
-            
+    
+    # TODO: when I enable uncomment this, train/fps is 2x faster
+    #def log_dict(*args, **kwargs):
+    #    pass
+
     # TODO: aggregate logging
     def on_train_epoch_end(self):
-        # Calculate time elapsed for the training epoch
+        # Calculate FPS
         time_elapsed = max((time.time_ns() - self.train_epoch_start_time) / 1e9, sys.float_info.epsilon)
-
-        # Check for early stopping based on n_timesteps limit
         rollout_metrics = self.train_collector.get_metrics()
         total_timesteps = rollout_metrics["total_timesteps"]
-        if self.config.n_timesteps is not None and total_timesteps >= self.config.n_timesteps:
-            print(f"Stopping training at epoch {self.current_epoch} with {self.total_timesteps} timesteps >= limit {self.config.n_timesteps}")
-            self.trainer.should_stop = True
+        timesteps_elapsed = total_timesteps - self.train_epoch_start_timesteps
+        fps = int(timesteps_elapsed / time_elapsed)
+        print(fps)
 
         # TODO: softcode this
         rollout_metrics.pop("action_distribution")
 
         # Log metrics 
-        rollout_timesteps = rollout_metrics["rollout_timesteps"]
-        fps = int(rollout_timesteps / time_elapsed)
         self.log_dict(prefix_dict_keys({
             **rollout_metrics,
             "epoch": self.current_epoch, # TODO: is this the same value as in epoch_start?
             "n_updates": self._n_updates,
             "fps": fps,
-        }, "train"))
+        }, "train"), on_epoch=True)
         
+        # In case we have reached the maximum number of training timesteps then stop training
+        if self.config.n_timesteps is not None and total_timesteps >= self.config.n_timesteps:
+            print(f"Stopping training at epoch {self.current_epoch} with {total_timesteps} timesteps >= limit {self.config.n_timesteps}")
+            self.trainer.should_stop = True
+
     def val_dataloader(self):
         return create_dummy_dataloader()
 
     def on_validation_epoch_start(self):
         self.validation_epoch_start_time = time.time_ns()
+        validation_metrics = self.validation_collector.get_metrics()
+        self.validation_epoch_start_timesteps = validation_metrics["total_timesteps"]
 
     # TODO: check how sb3 does eval_async
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
@@ -163,38 +176,38 @@ class BaseAgent(pl.LightningModule):
     # TODO: consider using rollout_ep
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         # TODO: currently support single environment evaluation
-        assert self.eval_env.num_envs == 1, "Evaluation should be run with a single environment instance"
+        assert self.validation_env.num_envs == 1, "Evaluation should be run with a single environment instance"
         
-        self.eval_collector.set_seed(random.randint(0, 1000000))  # Set a random seed for evaluation
+        self.validation_collector.set_seed(random.randint(0, 1000000))  # Set a random seed for evaluation
 
         # Collect until we reach the required number of episodes
         video_path = os.path.join(wandb.run.dir, f"videos/eval/episodes/rollout_epoch_{self.current_epoch}.mp4")
-        with self.eval_env.recorder(video_path):
-            metrics = self.eval_collector.get_metrics()
+        with self.validation_env.recorder(video_path):
+            metrics = self.validation_collector.get_metrics()
             total_episodes = metrics["total_episodes"]
             target_episodes = total_episodes + self.config.eval_episodes
             while total_episodes < target_episodes:
-                self.eval_collector.collect(deterministic=self.config.eval_deterministic)
-                metrics = self.eval_collector.get_metrics()
+                self.validation_collector.collect(deterministic=self.config.eval_deterministic)
+                metrics = self.validation_collector.get_metrics()
                 total_episodes = metrics["total_episodes"]
 
     def on_validation_epoch_end(self):
-        # Calculate time elapsed for the validation epoch
+        # Calculate FPS
         time_elapsed = max((time.time_ns() - self.validation_epoch_start_time) / 1e9, sys.float_info.epsilon)
-
-        rollout_metrics = self.eval_collector.get_metrics()
+        rollout_metrics = self.validation_collector.get_metrics()
+        total_timesteps = rollout_metrics["total_timesteps"]
+        timesteps_elapsed = total_timesteps - self.validation_epoch_start_timesteps
+        fps = int(timesteps_elapsed / time_elapsed)
 
         # TODO: softcode this
         rollout_metrics.pop("action_distribution", None)  # Remove action distribution if present
 
         # Log metrics
-        rollout_steps = rollout_metrics["rollout_timesteps"]
-        fps = int(rollout_steps / time_elapsed)
         self.log_dict(prefix_dict_keys({
             **rollout_metrics,
             "epoch": self.current_epoch,
             "fps": fps
-        }, "eval"))
+        }, "eval"), on_epoch=True)
 
     def on_fit_end(self):
         time_elapsed = max((time.time_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
@@ -258,7 +271,7 @@ class BaseAgent(pl.LightningModule):
         )
 
         trainer = pl.Trainer(
-            logger=wandb_logger,
+            #logger=wandb_logger,
             # TODO: softcode this
             log_every_n_steps=1, # TODO: softcode this
             max_epochs=self.config.max_epochs if self.config.max_epochs is not None else -1,
@@ -267,6 +280,7 @@ class BaseAgent(pl.LightningModule):
             accelerator="cpu",  # Use CPU for training # TODO: softcode this
             reload_dataloaders_every_n_epochs=1,#self.config.n_epochs
             check_val_every_n_epoch=self.config.eval_freq_epochs,  # Run validation every epoch
+            # TODO: these slowdown FPS a bit, but not too much
             callbacks=[printer_cb, video_logger_cb, checkpoint_cb]  # Add checkpoint callback
         )
         trainer.fit(self)

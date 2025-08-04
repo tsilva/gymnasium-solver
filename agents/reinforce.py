@@ -54,7 +54,7 @@ class REINFORCE(BaseAgent):
             'entropy': entropy.detach().item(),
             'use_baseline': float(use_baseline),  # Track whether baseline is being used
         }, "train")
-        self.log_dict(metrics)
+        self.log_dict(metrics, on_epoch=True)
         return loss
         
     def configure_optimizers(self):

@@ -186,7 +186,7 @@ class ModelCheckpointCallback(pl.Callback):
         if pl_module.config.reward_threshold is not None: 
             reward_threshold = pl_module.config.reward_threshold
         else: 
-            reward_threshold = pl_module.eval_env.get_reward_threshold()
+            reward_threshold = pl_module.validation_env.get_reward_threshold()
 
         # Get current eval metrics
         if hasattr(trainer, 'logged_metrics') and "eval/ep_rew_mean" in trainer.logged_metrics:

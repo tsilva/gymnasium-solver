@@ -1,3 +1,6 @@
+- BUG: CartPole FPS has regressed, should be >6000
+- BUG: eval FPS is low
+- BUG: eval is not calculating last policy mean
 - Adjust eval policy for atari
 	•	Stack k RAM frames (e.g., 4–8) and add a small LSTM/GRU on top of the MLP.
 	•	Normalize each byte (e.g., to [0,1]) and consider embedding bits (treat bytes as 8 bits).

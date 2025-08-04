@@ -215,8 +215,6 @@ class BaseAgent(pl.LightningModule):
         # TODO: softcode this
         rollout_metrics.pop("action_distribution", None)  # Remove action distribution if present
 
-        print("VALIDATION LOGGED AT EPOCH", self.current_epoch)
-        
         # Log metrics
         self.log_metrics({
             **rollout_metrics,
@@ -315,3 +313,4 @@ class BaseAgent(pl.LightningModule):
             mean = sum(values) / len(values) if values else 0
             means[key] = mean
         self.log_dict(means)
+        self._epoch_metrics.clear()  # Clear metrics after logging to prevent accumulation

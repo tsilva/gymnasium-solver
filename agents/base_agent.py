@@ -23,29 +23,32 @@ class BaseAgent(pl.LightningModule):
 
         # Create environment builder
         from utils.environment import build_env
-        self.build_env_fn = lambda seed, n_envs=config.n_envs, **kwargs: build_env(
+
+        # TODO: create this only for training? create on_fit_start() and destroy with on_fit_end()?
+        self.train_env = build_env(
             config.env_id,
-            seed=seed,
+            n_envs=config.n_envs,
+            seed=config.seed,
             env_wrappers=config.env_wrappers,
             norm_obs=config.normalize_obs,
-            n_envs=n_envs,
             frame_stack=config.frame_stack,
-            obs_type=config.obs_type,
-            render_mode="rgb_array",  # needed for video recording
-            **kwargs
+            obs_type=config.obs_type, # TODO: atari only?
         )
        
-        # TODO: create this only for training? create on_fit_start() and destroy with on_fit_end()?
-        self.train_env = self.build_env_fn(self.config.seed)
-       
-        self.eval_env = self.build_env_fn(
-            self.config.seed + 1000,  # Use a different seed for evaluation
+        self.eval_env = build_env(
+            config.env_id,
             n_envs=1,
+            seed=config.seed + 1000,  # Use a different seed for evaluation
+            env_wrappers=config.env_wrappers,
+            norm_obs=config.normalize_obs,
+            frame_stack=config.frame_stack,
+            obs_type=config.obs_type,
+            render_mode="rgb_array",
             record_video=True,
             record_video_kwargs={
                 "video_length": 100
             }
-        ) 
+        )
 
         # Training state
         self.start_time = None # TODO: cleaner way of measuring this?
@@ -221,7 +224,7 @@ class BaseAgent(pl.LightningModule):
         )
         
         # Create checkpoint callback
-        checkpoint_callback = ModelCheckpointCallback(
+        checkpoint_cb = ModelCheckpointCallback(
             checkpoint_dir=getattr(self.config, 'checkpoint_dir', 'checkpoints'),
             monitor="eval/ep_rew_mean",
             mode="max",
@@ -240,8 +243,6 @@ class BaseAgent(pl.LightningModule):
         printer = StdoutMetricsTable(
             every_n_steps=200,   # print every 200 optimizer steps
             every_n_epochs=1,    # and at the end of every epoch
-            #include=[r"^train/", r"^val/", r"^time/", r"^rollout/", r"^eval/"],  # optional filters; remove to show everything
-            # exclude=[r"^grad/"],           # example: drop noisy keys
             digits=4,
             metric_precision=metric_precision,
             metric_delta_rules=metric_delta_rules,
@@ -258,7 +259,7 @@ class BaseAgent(pl.LightningModule):
             accelerator="cpu",  # Use CPU for training # TODO: softcode this
             reload_dataloaders_every_n_epochs=1,#self.config.n_epochs
             check_val_every_n_epoch=self.config.eval_freq_epochs,  # Run validation every epoch
-            callbacks=[printer, video_logger_cb, checkpoint_callback]  # Add checkpoint callback
+            callbacks=[printer, video_logger_cb, checkpoint_cb]  # Add checkpoint callback
         )
         trainer.fit(self)
     
@@ -292,9 +293,6 @@ class BaseAgent(pl.LightningModule):
                 self.logger.log_metrics({
                     "eval/action_distribution": wandb.Histogram(action_distribution)
                 }, step=self.global_step)
-
-        # Early stopping and best model tracking is now handled by ModelCheckpointCallback
-    
     
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
     # TODO: consider making recording a rollout collector concern again (cleaner separation of concerns)

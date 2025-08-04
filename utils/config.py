@@ -55,7 +55,6 @@ class Config:
     eval_deterministic: bool = True  # Default: true (deterministic evaluation)
     reward_threshold: Optional[float] = None  # Default: None (use environment's reward threshold)
 
-
     # Normalization
     normalize_obs: bool = False  # Default: false
     normalize_reward: bool = False  # Default: false
@@ -399,13 +398,13 @@ def get_algorithm_metric_rules(algo_id: str, metrics_config: Optional[Dict[str, 
         
         # Create the validation function based on condition
         if condition == "less_than":
-            check_fn = lambda value, thresh=threshold: value < thresh
+            check_fn = lambda value: value < threshold
         elif condition == "greater_than":
-            check_fn = lambda value, thresh=threshold: value > thresh
+            check_fn = lambda value: value > threshold
         elif condition == "between":
             min_val = rule_config.get('min', float('-inf'))
             max_val = rule_config.get('max', float('inf'))
-            check_fn = lambda value, min_v=min_val, max_v=max_val: min_v <= value <= max_v
+            check_fn = lambda value: min_val <= value <= max_val
         else:
             continue
         

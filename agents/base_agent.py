@@ -192,16 +192,16 @@ class BaseAgent(pl.LightningModule):
         # Calculate time elapsed for the validation epoch
         time_elapsed = max((time.time_ns() - self.validation_epoch_start_time) / 1e9, sys.float_info.epsilon)
 
-        metrics = self.eval_collector.get_metrics()
+        rollout_metrics = self.eval_collector.get_metrics()
 
         # TODO: softcode this
-        metrics.pop("action_distribution", None)  # Remove action distribution if present
+        rollout_metrics.pop("action_distribution", None)  # Remove action distribution if present
 
         # Log metrics
-        rollout_steps = metrics["rollout_timesteps"]
+        rollout_steps = rollout_metrics["rollout_timesteps"]
         fps = int(rollout_steps / time_elapsed)
         self.log_dict(prefix_dict_keys({
-            **metrics,
+            **rollout_metrics,
             "epoch": self.current_epoch,
             "fps": fps
         }, "eval"))

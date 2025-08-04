@@ -89,42 +89,12 @@ ALE/Pong-v5_ram:
   learning_rate: 0.0003    # Higher learning rate for faster learning
   obs_type: "ram"
   normalize_obs: "static"
-  hidden_dims: [512, 512]  # Larger network for complex RAM patterns
+  hidden_dims: [256, 256, 256]  # Larger network for complex RAM patterns
   eval_freq_epochs: 50     # Less frequent eval to focus on training
   eval_episodes: 10        # More episodes for reliable evaluation
   # Additional hyperparams for better performance
   vf_coef: 0.5             # Standard value function coefficient
   max_grad_norm: 0.5       # Gradient clipping for stability
-
-ALE/Pong-v5_ram_throughput:
-  env_id: ALE/Pong-v5
-  policy: "MlpPolicy"
-  obs_type: "ram"
-
-  # Max-throughput knobs
-  n_envs: 32                # ≈ (# of logical CPU cores − 2). Raise/lower to saturate CPU.
-  frame_stack: 1            # RAM stacking is usually unnecessary and costs copies.
-  normalize_obs: "static"     # or false – avoid per-step normalization work.
-  hidden_dims: [128, 128]   # Smaller net = faster. Try [64, 64] for even more speed.
-
-  # Rollout/update (amortize optimizer & Python overhead)
-  n_steps: 1024             # Larger rollouts => fewer updates per wall-clock second
-  batch_size: 4096          # Big minibatches => fewer optimizer steps
-  n_epochs: 1               # Single pass per update maximizes throughput
-
-  # PPO essentials (unchanged for speed)
-  gae_lambda: 0.95
-  gamma: 0.99
-  ent_coef: 0.01
-  clip_range: 0.2
-  learning_rate: 0.0005     # Slightly higher LR tends to suit huge batches
-
-  # Housekeeping
-  eval_freq_epochs: 100       # Disable eval to avoid pauses
-  eval_episodes: 10
-  #device: "cpu"             # For Atari RAM, CPU avoids CPU↔GPU transfer overhead
-  # torch_num_threads: 1    # If your trainer supports it; helps with many envs
-  # vec_env: "async"        # If available: Async/Subproc vector env
 
 Taxi-v3:
   env_id: Taxi-v3

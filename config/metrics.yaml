@@ -17,7 +17,8 @@ total_episodes:
 total_timesteps:
   precision: 0
   force_integer: true
-  delta_rule: "non_decreasing"  # Should always increase
+  # Note: delta_rule removed because eval/total_timesteps can legitimately decrease
+  # between evaluation runs when using different eval strategies or env resets
   description: "Total number of timesteps processed"
 
 # Episode statistics

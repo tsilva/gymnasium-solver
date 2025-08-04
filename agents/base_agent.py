@@ -266,23 +266,13 @@ class BaseAgent(pl.LightningModule):
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
     def _run_evaluation(self):
         metrics = self._eval()
-                
-        # Extract action distribution for histogram logging
-        action_distribution = metrics.pop("action_distribution", None)
         
         # Process videos immediately after evaluation, before logging metrics
         # This ensures videos and metrics are logged at the same timestep
         self._process_eval_videos()
         
         self.log_dict(prefix_dict_keys(metrics, "eval")) # TODO: overrrid log_dict and add prefixig support
-        
-        # Log action distribution as histogram to WandB for evaluation
-        if action_distribution is not None and len(action_distribution) > 0:
-            if hasattr(self.logger, 'experiment') and self.logger.experiment:
-                self.logger.log_metrics({
-                    "eval/action_distribution": wandb.Histogram(action_distribution)
-                }, step=self.global_step)
-    
+
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
     # TODO: consider making recording a rollout collector concern again (cleaner separation of concerns)
     def _eval(self):

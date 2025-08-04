@@ -8,6 +8,7 @@ from utils.rollouts import RolloutCollector
 from utils.misc import prefix_dict_keys, create_dummy_dataloader
 from callbacks import PrintMetricsCallback, VideoLoggerCallback, ModelCheckpointCallback
 
+# TODO: move fps metric to train/eval namespaces
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class BaseAgent(pl.LightningModule):
     
@@ -52,6 +53,7 @@ class BaseAgent(pl.LightningModule):
         self.start_time = None # TODO: cleaner way of measuring this?
         self._n_updates = 0 # TODO: is this required?
         
+        # TODO: this should be in callback?
         # Best model tracking (maintained for compatibility with checkpoint callback)
         self.best_eval_reward = float('-inf')
         self.best_model_path = None

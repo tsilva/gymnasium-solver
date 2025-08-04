@@ -104,17 +104,11 @@ class BaseAgent(pl.LightningModule):
 
         self._last_train_dataloader_epoch = self.current_epoch
 
-        start = time.time_ns()
         self.train_collector.collect()
-        end = time.time_ns()
-        print(f"Rollout collection took {(end - start) / 1e6:.2f} ms")  # Print time in milliseconds
-        start = time.time_ns()
         dataloader = self.train_collector.create_dataloader(
             batch_size=self.config.batch_size,
             shuffle=True
         )
-        end = time.time_ns()
-        print(f"DataLoader creation took {(end - start) / 1e6:.2f} ms")  # Print time in milliseconds
         return dataloader
       
     def on_train_epoch_start(self):
@@ -143,14 +137,13 @@ class BaseAgent(pl.LightningModule):
     def on_train_epoch_end(self):
         # Calculate FPS
         time_elapsed = max((time.time_ns() - self.train_epoch_start_time) / 1e9, sys.float_info.epsilon)
-        print(time_elapsed)
         rollout_metrics = self.train_collector.get_metrics()
         total_timesteps = rollout_metrics["total_timesteps"]
         timesteps_elapsed = total_timesteps - self.train_epoch_start_timesteps
         assert timesteps_elapsed == self.config.n_steps * self.config.n_envs, f"Timesteps elapsed should match n_steps * n_envs ({timesteps_elapsed} != {self.config.n_steps} * {self.config.n_envs})"
         fps = int(timesteps_elapsed / time_elapsed)
-        print(fps)
-
+        
+        # TODO: temporary, remove this
         if fps < 1000:
             print(f"Warning: Training FPS is low ({fps}). Consider reducing n_envs or n_steps to improve performance.")
             pass
@@ -177,6 +170,7 @@ class BaseAgent(pl.LightningModule):
         return create_dummy_dataloader()
 
     def on_validation_epoch_start(self):
+        assert self.current_epoch == 0 or (self.current_epoch + 1) % self.config.eval_freq_epochs == 0, f"Validation epoch {self.current_epoch} is not a multiple of eval_freq_epochs {self.config.eval_freq_epochs}"
         self.validation_epoch_start_time = time.time_ns()
         validation_metrics = self.validation_collector.get_metrics()
         self.validation_epoch_start_timesteps = validation_metrics["total_timesteps"]
@@ -209,6 +203,8 @@ class BaseAgent(pl.LightningModule):
                 total_episodes = metrics["total_episodes"]
 
     def on_validation_epoch_end(self):
+        assert self.current_epoch == 0 or (self.current_epoch + 1) % self.config.eval_freq_epochs == 0, f"Validation epoch {self.current_epoch} is not a multiple of eval_freq_epochs {self.config.eval_freq_epochs}"
+       
         # Calculate FPS
         time_elapsed = max((time.time_ns() - self.validation_epoch_start_time) / 1e9, sys.float_info.epsilon)
         rollout_metrics = self.validation_collector.get_metrics()
@@ -219,10 +215,12 @@ class BaseAgent(pl.LightningModule):
         # TODO: softcode this
         rollout_metrics.pop("action_distribution", None)  # Remove action distribution if present
 
+        print("VALIDATION LOGGED AT EPOCH", self.current_epoch)
+        
         # Log metrics
         self.log_metrics({
             **rollout_metrics,
-            "epoch": self.current_epoch,
+            "epoch": int(self.current_epoch),
             "fps": fps
         }, prefix="eval")
 
@@ -282,7 +280,8 @@ class BaseAgent(pl.LightningModule):
         printer_cb = PrintMetricsCallback(
             # TODO: should this be same as log_every_n_steps?
             every_n_steps=200,   # print every 200 optimizer steps
-            every_n_epochs=1,    # and at the end of every epoch
+            # TODO: not sure if this is working
+            every_n_epochs=10,    # and at the end of every epoch
             digits=4, # TODO: is this still needed?
             # TODO: pass single metric config
             metric_precision=metric_precision,
@@ -298,8 +297,7 @@ class BaseAgent(pl.LightningModule):
             accelerator="cpu",  # Use CPU for training # TODO: softcode this
             reload_dataloaders_every_n_epochs=1,#self.config.n_epochs
             check_val_every_n_epoch=self.config.eval_freq_epochs,  # Run validation every epoch
-            # TODO: these slowdown FPS a bit, but not too much
-            #callbacks=[printer_cb, video_logger_cb, checkpoint_cb]  # Add checkpoint callback
+            callbacks=[printer_cb, video_logger_cb, checkpoint_cb]  # Add checkpoint callback
         )
         trainer.fit(self)
 

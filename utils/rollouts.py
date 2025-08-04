@@ -88,7 +88,7 @@ class RolloutCollector():
         self.total_steps: int = 0
         self.total_episodes: int = 0
         self.rollout_steps: int = 0
-        self.rollout_episode: int = 0
+        self.rollout_episodes: int = 0
         
         self.dataset = RolloutDataset()
 
@@ -389,3 +389,10 @@ class RolloutCollector():
             "baseline_mean": baseline_mean,
             "baseline_std": baseline_std
         }
+
+    def set_seed(self, seed):
+        # Set the seed in the vectorized environment
+        self.env.seed(seed)
+
+        # Clear the last observation to force the next reset
+        self.obs = None

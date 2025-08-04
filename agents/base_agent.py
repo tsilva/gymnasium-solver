@@ -23,6 +23,7 @@ class BaseAgent(pl.LightningModule):
 
         # Create environment builder
         from utils.environment import build_env
+        # TODO: consider moving this to on_fit_start()
         self.build_env_fn = lambda seed, n_envs=config.n_envs, **kwargs: build_env(
             config.env_id,
             seed=seed,
@@ -34,8 +35,19 @@ class BaseAgent(pl.LightningModule):
             render_mode="rgb_array",  # needed for video recording
             **kwargs
         )
-        self.train_env = self.build_env_fn(config.seed)
        
+        # TODO: create this only for training? create on_fit_start() and destroy with on_fit_end()?
+        self.train_env = self.build_env_fn(self.config.seed)
+       
+        self.eval_env = self.build_env_fn(
+            self.config.seed + 1000,  # Use a different seed for evaluation
+            n_envs=1,
+            record_video=True,
+            record_video_kwargs={
+                "video_length": 100
+            }
+        ) 
+
         # Training state
         self.start_time = None # TODO: cleaner way of measuring this?
         self.total_timesteps = 0
@@ -68,6 +80,20 @@ class BaseAgent(pl.LightningModule):
         if self.resume_checkpoint_path:
             load_checkpoint(self.resume_checkpoint_path, self, resume_training=True)
     
+        self.train_collector = RolloutCollector(
+            self.train_env,
+            self.policy_model,
+            n_steps=self.config.n_steps,
+            **self.rollout_collector_hyperparams()
+        )
+
+        self.eval_collector = RolloutCollector(
+            self.eval_env,
+            self.policy_model,
+            n_steps=self.config.n_steps,
+            **self.rollout_collector_hyperparams() # TODO: softcode
+        )
+    
     def create_models(self):
         raise NotImplementedError("Subclass must implement create_models()")
  
@@ -90,14 +116,7 @@ class BaseAgent(pl.LightningModule):
         self.start_time = time.time_ns()
         print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-        # TODO: create this only for training? create on_fit_start() and destroy with on_fit_end()?
-        self.train_collector = RolloutCollector(
-            self.train_env,
-            self.policy_model,
-            n_steps=self.config.n_steps,
-            **self.rollout_collector_hyperparams()
-        )
-
+  
     def on_train_epoch_start(self):
         pass
 
@@ -292,24 +311,12 @@ class BaseAgent(pl.LightningModule):
     # TODO: check how sb3 does eval_async
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
     def _run_evaluation(self):
-        env = self.build_env_fn(
-            self.config.seed + 1000,
-            n_envs=1,
-            record_video=True,
-            record_video_kwargs={
-                "video_length": 100
-            }
-        )
-
         # Use config reward threshold if provided, otherwise use environment's reward threshold
-        if self.config.reward_threshold is not None:
-            reward_threshold = self.config.reward_threshold
-        else:
-            reward_threshold = env.get_reward_threshold()
+        if self.config.reward_threshold is not None: reward_threshold = self.config.reward_threshold
+        else: reward_threshold = self.eval_env.get_reward_threshold()
 
-        try: metrics = self._eval(env)
-        finally: env.close()
-        
+        metrics = self._eval()
+                
         # Extract action distribution for histogram logging
         action_distribution = metrics.pop("action_distribution", None)
         
@@ -348,35 +355,33 @@ class BaseAgent(pl.LightningModule):
     
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
     # TODO: consider making recording a rollout collector concern again (cleaner separation of concerns)
-    def _eval(self, env):
-        assert env.num_envs == 1, "Evaluation should be run with a single environment instance"
-
+    def _eval(self):
+        assert self.eval_env.num_envs == 1, "Evaluation should be run with a single environment instance"
+        
         # Ensure output video directory exists
         assert wandb.run is not None, "wandb.init() must run before building the env"
         
+        import random
+        self.eval_collector.set_seed(random.randint(0, 1000000))  # Set a random seed for evaluation
+
         # Create video directory structure to match logger expectations
         video_root = os.path.join(wandb.run.dir, "videos", "eval", "episodes")
         os.makedirs(video_root, exist_ok=True)
 
         video_path = os.path.join(video_root, f"rollout_epoch_{self.current_epoch}.mp4")
 
-        # TODO: make sure this is not calculating advantages
-        collector = RolloutCollector(
-            env,
-            self.policy_model,
-            n_steps=self.config.n_steps,
-            **self.rollout_collector_hyperparams() # TODO: softcode
-        )
-
+        # TODO: make sure we can keep using same env across evals
         # Collect until we reach the required number of episodes
-        env.start_recording()
-        total_episodes = 0
-        while total_episodes < self.config.eval_episodes:
-            collector.collect(deterministic=self.config.eval_deterministic)
-            metrics = collector.get_metrics()
+        self.eval_env.start_recording()
+        metrics = self.eval_collector.get_metrics()
+        total_episodes = metrics["total_episodes"]
+        target_episodes = total_episodes + self.config.eval_episodes
+        while total_episodes < target_episodes:
+            self.eval_collector.collect(deterministic=self.config.eval_deterministic)
+            metrics = self.eval_collector.get_metrics()
             total_episodes = metrics["total_episodes"]
-        env.stop_recording()
-        env.save_recording(video_path)
+        self.eval_env.stop_recording()
+        self.eval_env.save_recording(video_path)
 
         return metrics
 

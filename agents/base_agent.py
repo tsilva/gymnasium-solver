@@ -147,13 +147,6 @@ class BaseAgent(pl.LightningModule):
         # Log regular metrics
         self.log_dict(metrics_dict)
         
-        # Log action distribution as histogram to WandB
-        if action_distribution is not None and len(action_distribution) > 0:
-            if hasattr(self.logger, 'experiment') and self.logger.experiment:
-                self.logger.log_metrics({
-                    "rollout/action_distribution": wandb.Histogram(action_distribution)
-                }, step=self.global_step)
-
     def val_dataloader(self):
         return create_dummy_dataloader()
 

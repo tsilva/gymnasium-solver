@@ -1,11 +1,3 @@
-try:
-    import ale_py
-    import gymnasium
-    gymnasium.register_envs(ale_py)
-except ImportError:
-    # ale_py not available, skip Atari environment registration
-    import gymnasium
-
 from wrappers.env_wrapper_registry import EnvWrapperRegistry
 from wrappers.discrete_to_onehot import DiscreteToOneHot
 from gymnasium import spaces
@@ -22,7 +14,7 @@ def build_env(
     frame_stack=None, 
     obs_type=None,
     render_mode=None,
-    subproc=False,
+    subproc=None,
     record_video=False, 
     record_video_kwargs={}
 ):
@@ -39,9 +31,14 @@ def build_env(
         if render_mode != "rgb_array": raise ValueError("Video recording requires render_mode='rgb_array'")
         if subproc: raise ValueError("Subprocess vector environments do not support video recording yet")
 
+    _is_atari = is_atari_env_id(env_id)
+    if _is_atari:
+        import ale_py
+        gym.register_envs(ale_py)
+
     def env_fn():
         # TODO: is there overlap here?
-        if is_atari_env_id(env_id): 
+        if _is_atari: 
             if obs_type == "objects":
                 from ocatari.core import OCAtari
                 env = OCAtari(env_id, mode="ram", hud=False, render_mode=render_mode)
@@ -61,8 +58,11 @@ def build_env(
         return env
 
     # Vectorize the environment
-    vec_env_cls = SubprocVecEnv if subproc else DummyVecEnv
-    vec_env_kwargs = {"start_method": "spawn"} if subproc else {}
+    vec_env_cls = DummyVecEnv
+    if subproc is not None: vec_env_cls = SubprocVecEnv if subproc else DummyVecEnv
+    elif _is_atari: vec_env_cls = SubprocVecEnv if n_envs > 1 else DummyVecEnv
+
+    vec_env_kwargs = {"start_method": "spawn"} if vec_env_cls == SubprocVecEnv else {}
     env = make_vec_env(env_fn, n_envs=n_envs, seed=seed, vec_env_cls=vec_env_cls, vec_env_kwargs=vec_env_kwargs)
 
     # Enable observation normalization if requested

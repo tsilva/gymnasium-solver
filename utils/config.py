@@ -70,7 +70,7 @@ class Config:
     
     env_wrappers: list = field(default_factory=list)
 
-    subproc: bool = False
+    subproc: bool = None
 
     @classmethod
     def load_from_yaml(cls, config_id: str, algo_id: str, config_dir: str = "config/hyperparams") -> 'Config':

@@ -75,7 +75,7 @@ MountainCar-v0_rewardshaping:
 
 ALE/Pong-v5_ram:
   env_id: ALE/Pong-v5
-  n_envs: 16               # Reduced for better sample efficiency
+  n_envs: 8               # Reduced for better sample efficiency
   policy: 'MlpPolicy'
   frame_stack: 1           # RAM contains full game state - no stacking needed
   #n_timesteps: !!float 10e6  # Increased training budget
@@ -89,7 +89,7 @@ ALE/Pong-v5_ram:
   learning_rate: 0.0003    # Higher learning rate for faster learning
   obs_type: "ram"
   normalize_obs: "static"
-  hidden_dims: [256, 256, 256]  # Larger network for complex RAM patterns
+  hidden_dims: [64, 64]  # Larger network for complex RAM patterns
   eval_freq_epochs: 50     # Less frequent eval to focus on training
   eval_episodes: 10        # More episodes for reliable evaluation
   # Additional hyperparams for better performance
@@ -111,14 +111,12 @@ ALE/Pong-v5_objects:
   clip_range: 0.2          # Standard PPO clipping for better updates
   learning_rate: 5e-4    # Higher learning rate for faster learning
   obs_type: "objects"
-  #normalize_obs: "static"
   hidden_dims: [64, 64]  # Larger network for complex RAM patterns
   eval_freq_epochs: 50     # Less frequent eval to focus on training
   eval_episodes: 10        # More episodes for reliable evaluation
   # Additional hyperparams for better performance
   vf_coef: 0.5             # Standard value function coefficient
   max_grad_norm: 0.5       # Gradient clipping for stability
-  subproc: true
   env_wrappers:
     - id: PongV5_FeatureExtractor
 

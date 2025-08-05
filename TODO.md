@@ -1,3 +1,6 @@
+- TEST: does benchmark script still give expected number of FPS on Pong? test with RAM vs RGB
+- FEAT: no deterministic evals in atari envs?
+- FEAT: add Minatari support
 - BUG: CartPole FPS has regressed, should be >6000
 - BUG: videos not logged at correct timesteps
 - TEST: train with ReLU instead of tanh

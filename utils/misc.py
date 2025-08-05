@@ -4,10 +4,9 @@ from typing import Dict, Any
 from contextlib import contextmanager
 import os
 import sys
-from typing import Dict, Any, Iterable, Optional, List, Tuple, Union
+from typing import Dict, Any, Iterable, Optional, List, Tuple
 import numbers
 import torch
-from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
 from collections import deque
 
@@ -32,13 +31,6 @@ def calculate_deque_stats(values_deque: deque, return_distribution: bool = False
     distribution = values_array if return_distribution else None
     
     return mean, std, distribution
-
-
-def create_dummy_dataloader(n_samples: int = 1, sample_dim: int = 1, batch_size: int = 1) -> torch.utils.data.DataLoader:
-    dummy_data = torch.zeros(n_samples, sample_dim)
-    dummy_target = torch.zeros(n_samples, sample_dim)
-    dataset = TensorDataset(dummy_data, dummy_target)
-    return DataLoader(dataset, batch_size=batch_size)
 
 def prefix_dict_keys(data: dict, prefix: str) -> dict:
     return {f"{prefix}/{key}" if prefix else key: value for key, value in data.items()}

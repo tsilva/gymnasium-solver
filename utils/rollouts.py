@@ -68,7 +68,7 @@ class RolloutCollector():
         self.n_envs: int = env.num_envs
         
         # Running average stats (windowed)
-        self.rollout_durations: Deque[float] = deque(maxlen=stats_window_size)
+        self.rollout_fpss: Deque[float] = deque(maxlen=stats_window_size)
         self.episode_reward_deque: Deque[float] = deque(maxlen=stats_window_size)
         self.episode_length_deque: Deque[int] = deque(maxlen=stats_window_size)
         self.env_episode_reward_deques = [deque(maxlen=stats_window_size) for _ in range(self.n_envs)]
@@ -335,7 +335,8 @@ class RolloutCollector():
 
         self.total_rollouts += 1
         rollout_elapsed = time.time() - rollout_start
-        self.rollout_durations.append(rollout_elapsed)
+        fps = len(states) / rollout_elapsed  # steps per second
+        self.rollout_fpss.append(fps)
 
         # TODO: do I need to copy the tuple?
         self.dataset.update(trajectories)
@@ -354,7 +355,7 @@ class RolloutCollector():
     def get_metrics(self):
         ep_rew_mean = float(np.mean(self.episode_reward_deque)) if self.episode_reward_deque else 0.0
         ep_len_mean = int(np.mean(self.episode_length_deque)) if self.episode_length_deque else 0
-        elapsed_mean = float(np.mean(self.rollout_durations)) if self.rollout_durations else 0.0
+        rollout_fps = float(np.mean(self.rollout_fpss)) if self.rollout_fpss else 0.0
 
         # Calculate observation statistics
         obs_mean, obs_std, _ = calculate_deque_stats(self.obs_values_deque)
@@ -376,7 +377,7 @@ class RolloutCollector():
             "total_rollouts": self.total_rollouts,
             "rollout_timesteps": self.rollout_steps,
             "rollout_episodes": self.rollout_episodes,  # Renamed to avoid conflict with video logging
-            "elapsed_mean": elapsed_mean, # TODO: better name?
+            "rollout_fps": rollout_fps, # TODO: better name?
             "ep_rew_mean": ep_rew_mean,
             "ep_len_mean": ep_len_mean,
             "obs_mean": obs_mean,

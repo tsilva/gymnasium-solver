@@ -152,11 +152,11 @@ class BaseAgent(pl.LightningModule):
         total_timesteps = rollout_metrics["total_timesteps"]
         timesteps_elapsed = total_timesteps - self.train_epoch_start_timesteps
         assert timesteps_elapsed == self.config.n_steps * self.config.n_envs, f"Timesteps elapsed should match n_steps * n_envs ({timesteps_elapsed} != {self.config.n_steps} * {self.config.n_envs})"
-        fps = int(timesteps_elapsed / time_elapsed)
+        epoch_fps = int(timesteps_elapsed / time_elapsed)
         
         # TODO: temporary, remove this
-        if fps < 1000:
-            print(f"Warning: Training FPS is low ({fps}). Consider reducing n_envs or n_steps to improve performance.")
+        if epoch_fps < 1000:
+            print(f"Warning: Training FPS is low ({epoch_fps}). Consider reducing n_envs or n_steps to improve performance.")
             pass
 
         # TODO: softcode this
@@ -167,7 +167,7 @@ class BaseAgent(pl.LightningModule):
             **rollout_metrics,
             "epoch": self.current_epoch, # TODO: is this the same value as in epoch_start?
             "n_updates": self._n_updates,
-            "fps": fps,
+            "fps": epoch_fps,
         }, prefix="train")
         
         # In case we have reached the maximum number of training timesteps then stop training

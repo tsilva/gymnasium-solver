@@ -354,7 +354,7 @@ class RolloutCollector():
     def get_metrics(self):
         ep_rew_mean = float(np.mean(self.episode_reward_deque)) if self.episode_reward_deque else 0.0
         ep_len_mean = int(np.mean(self.episode_length_deque)) if self.episode_length_deque else 0
-        elapsed_mean = float(np.mean(self.rollout_durations))
+        elapsed_mean = float(np.mean(self.rollout_durations)) if self.rollout_durations else 0.0
 
         # Calculate observation statistics
         obs_mean, obs_std, _ = calculate_deque_stats(self.obs_values_deque)

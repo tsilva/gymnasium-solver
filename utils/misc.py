@@ -38,7 +38,7 @@ def create_dummy_dataloader(n_samples: int = 1, sample_dim: int = 1, batch_size:
     dummy_data = torch.zeros(n_samples, sample_dim)
     dummy_target = torch.zeros(n_samples, sample_dim)
     dataset = TensorDataset(dummy_data, dummy_target)
-    return DataLoader(dataset, batch_size=batch_size)
+    return DataLoader(dataset, batch_size=batch_size, num_workers=1)
 
 def prefix_dict_keys(data: dict, prefix: str) -> dict:
     return {f"{prefix}/{key}" if prefix else key: value for key, value in data.items()}

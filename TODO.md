@@ -1,6 +1,7 @@
 - BUG: CartPole FPS has regressed, should be >6000
 - BUG: videos not logged at correct timesteps
 - TEST: train with ReLU instead of tanh
+- FEAT: improve config structurtee
 - FEAT : Normalize returns for REINFORCE
 - FEAT: add warning confirming if ale-py has been compiled to target architecture (avoid rosetta in silicon macs)
 - BUG: baseline_mean/std are being recorded even when not used

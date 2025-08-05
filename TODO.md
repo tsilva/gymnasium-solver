@@ -1,4 +1,10 @@
+- FEAT: try training on deterministic Pong env
 - FEAT: no deterministic evals in atari envs?
+- FEAT: add challenge_id to configs
+- FEAT: normalize rewards?
+- FEAT: reward shaper for Pong-v5, points whenever paddle hits ball
+- FEAT: make checkpointing directories be prefixed by challenge_id
+- FEAT: store all training data in run directory (timestamped)
 - FEAT: add normalization support
 - FEAT: add discrete env support
 - Cleanup environment files by using inheritance

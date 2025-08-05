@@ -1,3 +1,4 @@
+- FEAT: train on cloud server
 - FEAT: try training on deterministic Pong env
 - FEAT: no deterministic evals in atari envs?
 - FEAT: add challenge_id to configs

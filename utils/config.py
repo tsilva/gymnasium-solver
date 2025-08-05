@@ -88,17 +88,15 @@ class Config:
         env_config_path = project_root / config_dir
         
         # Search for config_id in all environment challenge files
-        for env_folder in env_config_path.iterdir():
-            if env_folder.is_dir():
-                for challenge_file in env_folder.glob("*.yaml"):
-                    try:
-                        with open(challenge_file, 'r') as f:
-                            challenge_config = yaml.safe_load(f)
-                        
-                        if config_id in challenge_config:
-                            return cls._load_from_environment_config(challenge_config[config_id])
-                    except Exception:
-                        continue  # Skip files that can't be parsed
+        for challenge_file in env_config_path.glob("*.yaml"):
+            try:
+                with open(challenge_file, 'r') as f:
+                    challenge_config = yaml.safe_load(f)
+                
+                if config_id in challenge_config:
+                    return cls._load_from_environment_config(challenge_config[config_id])
+            except Exception:
+                continue  # Skip files that can't be parsed
         
         # Fall back to legacy format
         if algo_id is None:

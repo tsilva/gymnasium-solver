@@ -3,6 +3,7 @@
 - Create benchmarking script to find optimal parallelization for env/machine combo
 - Pong-RAM: Add SubProcEnv support
 - TEST: train with ReLU instead of tanh
+- TEST: predict next state to learn faster
 - BUG: CartPole-v1/PPO performance has regressed vs rlzoo
 - FEAT: log ent_coef (may change it mid traingin)
 - FEAT: Use ale_py vector env for Atari CNN

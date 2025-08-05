@@ -73,16 +73,78 @@ class Config:
     subproc: bool = None
 
     @classmethod
-    def load_from_yaml(cls, config_id: str, algo_id: str, config_dir: str = "config/hyperparams") -> 'Config':
+    def load_from_yaml(cls, config_id: str, algo_id: str = None, config_dir: str = "config/environments") -> 'Config':
         """
         Load configuration from YAML files supporting both formats:
-        1. New format: config_id is a config identifier, env_id is read from the config
-        2. Legacy format: config_id is env_id, for backward compatibility
-        3. Inheritance: config can inherit from another config using 'inherit_from' field
+        1. Environment-centric format: config_id is loaded from environment challenge files
+        2. Legacy format: config_id is env_id, for backward compatibility with hyperparams folder
+        
+        If algo_id is None, it will be extracted from config_id (assuming format like "env_challenge_algo")
         """
         # Get the project root directory
         project_root = Path(__file__).parent.parent
-        config_path = project_root / config_dir
+        
+        # Try new environment-centric format first
+        env_config_path = project_root / config_dir
+        
+        # Search for config_id in all environment challenge files
+        for env_folder in env_config_path.iterdir():
+            if env_folder.is_dir():
+                for challenge_file in env_folder.glob("*.yaml"):
+                    try:
+                        with open(challenge_file, 'r') as f:
+                            challenge_config = yaml.safe_load(f)
+                        
+                        if config_id in challenge_config:
+                            return cls._load_from_environment_config(challenge_config[config_id])
+                    except Exception:
+                        continue  # Skip files that can't be parsed
+        
+        # Fall back to legacy format
+        if algo_id is None:
+            raise ValueError(f"Config '{config_id}' not found in environment configs and no algo_id provided for legacy format")
+        
+        config_path = project_root / "config/hyperparams"
+        return cls._load_from_legacy_config(config_id, algo_id, config_path)
+
+    @classmethod
+    def _load_from_environment_config(cls, config_data: Dict[str, Any]) -> 'Config':
+        """Load configuration from new environment-centric format."""
+        # Start with class defaults
+        final_config = {}
+        for field in cls.__dataclass_fields__.values():
+            if field.default is not MISSING:
+                final_config[field.name] = field.default
+            elif field.default_factory is not MISSING:  # type: ignore
+                final_config[field.name] = field.default_factory()      # type: ignore
+
+        # Apply all configuration settings
+        final_config.update(config_data)
+
+        # Convert any numeric strings (like scientific notation)
+        final_config = _convert_numeric_strings(final_config)
+
+        # Handle RLZOO format compatibility
+        cls._handle_legacy_compatibility(final_config)
+
+        # Convert list values to tuples for hidden_dims
+        if 'hidden_dims' in final_config and isinstance(final_config['hidden_dims'], list):
+            final_config['hidden_dims'] = tuple(final_config['hidden_dims'])
+
+        instance = cls(**final_config)
+        instance.validate()
+        return instance
+
+    @classmethod
+    def _load_from_legacy_config(cls, config_id: str, algo_id: str, config_path: Path) -> 'Config':
+        """Load configuration from legacy hyperparams format."""
+        # Start with class defaults
+        final_config = {}
+        for field in cls.__dataclass_fields__.values():
+            if field.default is not MISSING:
+                final_config[field.name] = field.default
+            elif field.default_factory is not MISSING:  # type: ignore
+                final_config[field.name] = field.default_factory()      # type: ignore
 
         # Start with class defaults
         final_config = {}
@@ -176,17 +238,7 @@ class Config:
         final_config = _convert_numeric_strings(final_config)
 
         # Handle RLZOO format compatibility
-        # Use learning_rate if set, otherwise use policy_lr
-        if 'learning_rate' in final_config and final_config['learning_rate'] is not None:
-            final_config['policy_lr'] = final_config['learning_rate']
-        
-        # Handle normalize flag (RLZOO format) -> normalize_obs
-        if 'normalize' in final_config and final_config['normalize'] is not None:
-            final_config['normalize_obs'] = final_config['normalize']
-            final_config['normalize_reward'] = final_config['normalize']
-        
-        if 'vf_coef' in final_config and final_config['vf_coef'] is not None:
-            final_config['vf_coef'] = final_config['vf_coef']
+        cls._handle_legacy_compatibility(final_config)
 
         # Convert list values to tuples for hidden_dims
         if 'hidden_dims' in final_config and isinstance(final_config['hidden_dims'], list):
@@ -195,6 +247,21 @@ class Config:
         instance = cls(**final_config)
         instance.validate()
         return instance
+
+    @classmethod
+    def _handle_legacy_compatibility(cls, config: Dict[str, Any]) -> None:
+        """Handle RLZOO format compatibility."""
+        # Use learning_rate if set, otherwise use policy_lr
+        if 'learning_rate' in config and config['learning_rate'] is not None:
+            config['policy_lr'] = config['learning_rate']
+        
+        # Handle normalize flag (RLZOO format) -> normalize_obs
+        if 'normalize' in config and config['normalize'] is not None:
+            config['normalize_obs'] = config['normalize']
+            config['normalize_reward'] = config['normalize']
+        
+        if 'vf_coef' in config and config['vf_coef'] is not None:
+            config['vf_coef'] = config['vf_coef']
         
     def rollout_collector_hyperparams(self) -> Dict[str, Any]:
         return {
@@ -242,7 +309,7 @@ class Config:
         if self.reward_threshold is not None and self.reward_threshold <= 0:
             raise ValueError("reward_threshold must be a positive float.")
 
-def load_config(config_id: str, algo_id: str, config_dir: str = "config/hyperparams") -> Config:
+def load_config(config_id: str, algo_id: str = None, config_dir: str = "config/environments") -> Config:
     """Convenience function to load configuration."""
     return Config.load_from_yaml(config_id, algo_id, config_dir)
 

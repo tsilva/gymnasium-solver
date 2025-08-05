@@ -4,8 +4,8 @@ from utils.logging import capture_all_output, log_config_details
 
 def main():
     parser = argparse.ArgumentParser(description="Train RL agent.")
-    parser.add_argument("--config", type=str, default="Pong-v5_ram", help="Config ID (default: CartPole-v1)")
-    parser.add_argument("--algo", type=str, default="ppo", help="Agent type (default: ppo)")
+    parser.add_argument("--config", type=str, default="Pong-v5_objects_ppo", help="Config ID (default: Pong-v5_ram_ppo)")
+    parser.add_argument("--algo", type=str, default=None, help="Agent type (optional, extracted from config if not provided)")
     parser.add_argument("--resume", action="store_true", help="Resume training from latest checkpoint")
     parser.add_argument("--log-dir", type=str, default="logs", help="Directory for log files (default: logs)")
     args = parser.parse_args()
@@ -19,7 +19,13 @@ def main():
     # Set up comprehensive logging - all output will go to both console and log file
     with capture_all_output(config=config, log_dir=args.log_dir):
         print(f"=== Training Session Started ===")
-        print(f"Command: {' '.join(['python'] + [arg for arg in [args.config, '--algo', args.algo] + (['--resume'] if args.resume else [])])}")
+        # Build command string, only include --algo if it was explicitly provided
+        cmd_parts = ['python', 'train.py', '--config', args.config]
+        if args.algo is not None:
+            cmd_parts.extend(['--algo', args.algo])
+        if args.resume:
+            cmd_parts.append('--resume')
+        print(f"Command: {' '.join(cmd_parts)}")
         
         # Log configuration details
         log_config_details(config)

@@ -1,12 +1,15 @@
-- TEST: train with ReLU instead of tanh
 
+- Add subprocenv suppport for video recording
+- Create benchmarking script to find optimal parallelization for env/machine combo
+- Pong-RAM: Add SubProcEnv support
+- TEST: train with ReLU instead of tanh
+- BUG: CartPole-v1/PPO performance has regressed vs rlzoo
 - FEAT: log ent_coef (may change it mid traingin)
 - FEAT: Use ale_py vector env for Atari CNN
 - FEAT: add envpool support (eg: pong)
 - TEST: does benchmark script still give expected number of FPS on Pong? test with RAM vs RGB
 - FEAT: no deterministic evals in atari envs?
 - FEAT: add Minatari support
-- BUG: CartPole FPS has regressed, should be >6000
 - BUG: videos not logged at correct timesteps
 - FEAT: improve config structurtee
 - FEAT : Normalize returns for REINFORCE
@@ -18,7 +21,6 @@
 - FEAT: create cartpole-v1 reward shaper that prioritizes centering the pole
 - BUG: check that were are matching rlzoo stop criteria
 - Pong-RAM: Add support for byte-selection
-- Pong-RAM: Test SubProcEnv 
 - FEAT: add normalization support
 - FEAT: add discrete env support
 - FEAT: rollout_fps vs epoch_fps

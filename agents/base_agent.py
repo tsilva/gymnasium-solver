@@ -39,6 +39,8 @@ class BaseAgent(pl.LightningModule):
             norm_obs=config.normalize_obs,
             frame_stack=config.frame_stack,
             obs_type=config.obs_type, # TODO: atari only?
+            render_mode=None, # TODO: should be None for training
+            subproc=config.subproc
         )
        
         self.validation_env = build_env(
@@ -50,6 +52,7 @@ class BaseAgent(pl.LightningModule):
             frame_stack=config.frame_stack,
             obs_type=config.obs_type,
             render_mode="rgb_array",
+            subproc=False,
             record_video=True,
             record_video_kwargs={
                 "video_length": 100 # TODO: softcode this

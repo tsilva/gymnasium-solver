@@ -98,7 +98,7 @@ ALE/Pong-v5_ram:
 
 ALE/Pong-v5_objects:
   env_id: ALE/Pong-v5
-  n_envs: 16               # Reduced for better sample efficiency
+  n_envs: 8               # Reduced for better sample efficiency
   policy: 'MlpPolicy'
   frame_stack: 1           # RAM contains full game state - no stacking needed
   #n_timesteps: !!float 10e6  # Increased training budget
@@ -118,6 +118,7 @@ ALE/Pong-v5_objects:
   # Additional hyperparams for better performance
   vf_coef: 0.5             # Standard value function coefficient
   max_grad_norm: 0.5       # Gradient clipping for stability
+  subproc: true
   env_wrappers:
     - id: PongV5_FeatureExtractor
 

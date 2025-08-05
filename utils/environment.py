@@ -22,20 +22,22 @@ def build_env(
     frame_stack=None, 
     obs_type=None,
     render_mode=None,
+    subproc=False,
     record_video=False, 
     record_video_kwargs={}
 ):
 
     import gymnasium as gym
     from stable_baselines3.common.env_util import make_vec_env
-    from stable_baselines3.common.vec_env import VecNormalize, VecFrameStack
+    from stable_baselines3.common.vec_env import VecNormalize, VecFrameStack, DummyVecEnv, SubprocVecEnv
     from wrappers.vec_info import VecInfoWrapper
     from wrappers.vec_video_recorder import VecVideoRecorder
     from wrappers.vec_normalize_static import VecNormalizeStatic
     
-    # Assert render_mode is set if recording video
-    if record_video and render_mode != "rgb_array":
-        raise ValueError("Video recording requires render_mode='rgb_array'")
+    # If recording video was requrested, assert valid render mode and subproc disabled 
+    if record_video:
+        if render_mode != "rgb_array": raise ValueError("Video recording requires render_mode='rgb_array'")
+        if subproc: raise ValueError("Subprocess vector environments do not support video recording yet")
 
     def env_fn():
         # TODO: is there overlap here?
@@ -59,7 +61,9 @@ def build_env(
         return env
 
     # Vectorize the environment
-    env = make_vec_env(env_fn, n_envs=n_envs, seed=seed)
+    vec_env_cls = SubprocVecEnv if subproc else DummyVecEnv
+    vec_env_kwargs = {"start_method": "spawn"} if subproc else {}
+    env = make_vec_env(env_fn, n_envs=n_envs, seed=seed, vec_env_cls=vec_env_cls, vec_env_kwargs=vec_env_kwargs)
 
     # Enable observation normalization if requested
     if norm_obs == "static": env = VecNormalizeStatic(env)

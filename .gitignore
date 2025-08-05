@@ -213,3 +213,4 @@ SCRATCH.md
 videos/
 checkpoints/
 lightning_logs/
+logs/

@@ -17,7 +17,8 @@ dependencies = [
     "torchvision",
     "pytest",
     "pyyaml",
-    "watchdog"
+    "watchdog",
+    "setuptools<80"
 ]
 
 [tool.pytest.ini_options]

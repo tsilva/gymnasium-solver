@@ -32,13 +32,13 @@ def build_env(
         if subproc: raise ValueError("Subprocess vector environments do not support video recording yet")
 
     _is_atari = is_atari_env_id(env_id)
-    if _is_atari:
-        import ale_py
-        gym.register_envs(ale_py)
 
     def env_fn():
-        # TODO: is there overlap here?
         if _is_atari: 
+            # Import and register ALE environments in each subprocess
+            import ale_py
+            gym.register_envs(ale_py)
+
             if obs_type == "objects":
                 from ocatari.core import OCAtari
                 env = OCAtari(env_id, mode="ram", hud=False, render_mode=render_mode)

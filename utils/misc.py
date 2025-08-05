@@ -144,7 +144,7 @@ class NamespaceTablePrinter:
         # Keys are "namespace/subkey" (e.g. "train/loss": False meaning lower is better).
         better_when_increasing: Optional[Dict[str, bool]] = None,
         # Section order; others follow alphabetically
-        fixed_section_order: Optional[Iterable[str]] = ("train", "time", "rollout"),
+        fixed_section_order: Optional[Iterable[str]] = ("train", "eval"),
         sort_keys_within_section: bool = True,
         # Render method
         use_ansi_inplace: bool = True,

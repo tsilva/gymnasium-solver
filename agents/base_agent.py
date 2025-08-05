@@ -7,7 +7,7 @@ import random
 import pytorch_lightning as pl
 from utils.environment import build_env
 from utils.rollouts import RolloutCollector
-from utils.misc import prefix_dict_keys, create_dummy_dataloader
+from utils.misc import prefix_dict_keys
 from callbacks import PrintMetricsCallback, VideoLoggerCallback, ModelCheckpointCallback
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -167,7 +167,7 @@ class BaseAgent(pl.LightningModule):
             **rollout_metrics,
             "epoch": self.current_epoch, # TODO: is this the same value as in epoch_start?
             "n_updates": self._n_updates,
-            "fps": epoch_fps,
+            "epoch_fps": epoch_fps,
         }, prefix="train")
         
         # In case we have reached the maximum number of training timesteps then stop training
@@ -221,7 +221,7 @@ class BaseAgent(pl.LightningModule):
         rollout_metrics = self.validation_collector.get_metrics()
         total_timesteps = rollout_metrics["total_timesteps"]
         timesteps_elapsed = total_timesteps - self.validation_epoch_start_timesteps
-        fps = int(timesteps_elapsed / time_elapsed)
+        epoch_fps = int(timesteps_elapsed / time_elapsed)
 
         # TODO: softcode this
         rollout_metrics.pop("action_distribution", None)  # Remove action distribution if present
@@ -230,7 +230,7 @@ class BaseAgent(pl.LightningModule):
         self.log_metrics({
             **rollout_metrics,
             "epoch": int(self.current_epoch),
-            "fps": fps
+            "epoch_fps": epoch_fps
         }, prefix="eval")
 
         self._flush_metrics()

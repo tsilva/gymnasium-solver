@@ -39,8 +39,14 @@ def build_env(
 
     def env_fn():
         # TODO: is there overlap here?
-        if is_atari_env_id(env_id): env = gym.make(env_id, obs_type=obs_type, render_mode=render_mode)
-        else: env = gym.make(env_id, render_mode=render_mode)
+        if is_atari_env_id(env_id): 
+            if obs_type == "objects":
+                from ocatari.core import OCAtari
+                env = OCAtari(env_id, mode="ram", hud=False, render_mode=render_mode)
+            else:
+                env = gym.make(env_id, obs_type=obs_type, render_mode=render_mode)
+        else: 
+            env = gym.make(env_id, render_mode=render_mode)
 
         # Automatically apply DiscreteToOneHot wrapper for discrete observation spaces
         if isinstance(env.observation_space, spaces.Discrete):

@@ -1,8 +1,10 @@
 from .env_wrapper_registry import EnvWrapperRegistry
-from .reward_shaper_mountaincar_v0 import RewardShaper_MountainCarV0
 from .discrete_to_onehot import DiscreteToOneHot
+from .PongV5.feature_extractor import PongV5_FeatureExtractor
+from .MountainCarV0.reward_shaper import MountainCarV0_RewardShaper
 
 EnvWrapperRegistry.register([
-    RewardShaper_MountainCarV0,
-    DiscreteToOneHot
+    DiscreteToOneHot,
+    PongV5_FeatureExtractor,
+    MountainCarV0_RewardShaper
 ])

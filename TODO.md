@@ -1,3 +1,4 @@
+- Should I normalize returns for REINFORCE?
 - BUG: why low FPS sometimes?
 - BUG: video step is still not alligned
 - BUG: step 100 = reward 99

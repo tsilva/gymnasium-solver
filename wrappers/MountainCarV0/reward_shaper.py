@@ -1,7 +1,7 @@
 import numpy as np
 import gymnasium as gym
 
-class RewardShaper_MountainCarV0(gym.Wrapper):
+class MountainCarV0_RewardShaper(gym.Wrapper):
     """
     Reward shaping wrapper for MountainCar-v0 to help with convergence.
     

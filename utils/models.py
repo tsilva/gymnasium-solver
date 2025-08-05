@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from torch.distributions import Categorical
 
-def mlp(in_dim, hidden, act=nn.Tanh):
+def mlp(in_dim, hidden, act=nn.ReLU):
     layers, last = [], in_dim
     for h in hidden:
         layers += [nn.Linear(last, h), act()]
@@ -14,7 +14,7 @@ def mlp(in_dim, hidden, act=nn.Tanh):
 class PolicyOnly(nn.Module):
     def __init__(self, state_dim: int, action_dim: int, hidden=(64, 64)):
         super().__init__()
-        self.backbone = mlp(state_dim, hidden, nn.Tanh)
+        self.backbone = mlp(state_dim, hidden, nn.ReLU)
         self.policy_head = nn.Linear(hidden[-1], action_dim)
 
     def forward(self, obs: torch.Tensor):
@@ -39,7 +39,7 @@ class PolicyOnly(nn.Module):
 class ActorCritic(nn.Module):
     def __init__(self, state_dim: int, action_dim: int, hidden=(64, 64)):
         super().__init__()
-        self.backbone = mlp(state_dim, hidden, nn.Tanh)
+        self.backbone = mlp(state_dim, hidden, nn.ReLU)
         self.policy_head = nn.Linear(hidden[-1], action_dim)
         self.value_head  = nn.Linear(hidden[-1], 1)
 

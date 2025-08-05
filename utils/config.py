@@ -42,9 +42,6 @@ class Config:
 
     # Additional RLZOO format parameters
     normalize: bool = None  # RLZOO format normalization flag
-    # TODO: not supported yet
-    use_sde: bool = False  # Use State Dependent Exploration
-    sde_sample_freq: int = -1  # SDE sample frequency
     policy_kwargs: str = None  # Policy kwargs as string
 
     # Evaluation

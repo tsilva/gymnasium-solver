@@ -1,9 +1,13 @@
+- TEST: train with ReLU instead of tanh
+
+- FEAT: log ent_coef (may change it mid traingin)
+- FEAT: Use ale_py vector env for Atari CNN
+- FEAT: add envpool support (eg: pong)
 - TEST: does benchmark script still give expected number of FPS on Pong? test with RAM vs RGB
 - FEAT: no deterministic evals in atari envs?
 - FEAT: add Minatari support
 - BUG: CartPole FPS has regressed, should be >6000
 - BUG: videos not logged at correct timesteps
-- TEST: train with ReLU instead of tanh
 - FEAT: improve config structurtee
 - FEAT : Normalize returns for REINFORCE
 - FEAT: add warning confirming if ale-py has been compiled to target architecture (avoid rosetta in silicon macs)

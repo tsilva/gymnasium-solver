@@ -107,12 +107,12 @@ ALE/Pong-v5_objects:
   n_epochs: 10             # More epochs to better utilize data
   gae_lambda: 0.95         # Standard GAE lambda for better advantage estimation
   gamma: 0.99              # Standard Atari discount factor
-  ent_coef: 0.01           # Higher entropy for better exploration
+  ent_coef: 0.005           # Higher entropy for better exploration
   clip_range: 0.2          # Standard PPO clipping for better updates
-  learning_rate: 0.0003    # Higher learning rate for faster learning
+  learning_rate: 5e-4    # Higher learning rate for faster learning
   obs_type: "objects"
-  normalize_obs: "static"
-  hidden_dims: [256, 256, 256]  # Larger network for complex RAM patterns
+  #normalize_obs: "static"
+  hidden_dims: [64, 64]  # Larger network for complex RAM patterns
   eval_freq_epochs: 50     # Less frequent eval to focus on training
   eval_episodes: 10        # More episodes for reliable evaluation
   # Additional hyperparams for better performance

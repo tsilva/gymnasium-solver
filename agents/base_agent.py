@@ -9,6 +9,14 @@ from utils.environment import build_env
 from utils.rollouts import RolloutCollector
 from utils.misc import prefix_dict_keys, create_dummy_dataloader
 from callbacks import PrintMetricsCallback, VideoLoggerCallback, ModelCheckpointCallback
+from torch.utils.data import DataLoader, TensorDataset
+
+n_samples, sample_dim, batch_size = (1, 1, 1)
+dummy_data = torch.zeros(n_samples, sample_dim)
+dummy_target = torch.zeros(n_samples, sample_dim)
+dataset = TensorDataset(dummy_data, dummy_target)
+num_workers = os.cpu_count() - 1
+validation_dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, persistent_workers=True)
 
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class BaseAgent(pl.LightningModule):
@@ -170,7 +178,7 @@ class BaseAgent(pl.LightningModule):
         self._flush_metrics()
 
     def val_dataloader(self):
-        return create_dummy_dataloader()
+        return validation_dataloader
 
     def on_validation_epoch_start(self):
         assert self.current_epoch == 0 or (self.current_epoch + 1) % self.config.eval_freq_epochs == 0, f"Validation epoch {self.current_epoch} is not a multiple of eval_freq_epochs {self.config.eval_freq_epochs}"

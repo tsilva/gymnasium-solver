@@ -4,7 +4,7 @@ from utils.logging import capture_all_output, log_config_details
 
 def main():
     parser = argparse.ArgumentParser(description="Train RL agent.")
-    parser.add_argument("--config", type=str, default="ALE/Pong-v5_ram", help="Config ID (default: CartPole-v1)")
+    parser.add_argument("--config", type=str, default="Pong-v5_ram", help="Config ID (default: CartPole-v1)")
     parser.add_argument("--algo", type=str, default="ppo", help="Agent type (default: ppo)")
     parser.add_argument("--resume", action="store_true", help="Resume training from latest checkpoint")
     parser.add_argument("--log-dir", type=str, default="logs", help="Directory for log files (default: logs)")

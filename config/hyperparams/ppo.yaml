@@ -73,7 +73,7 @@ MountainCar-v0_rewardshaping:
       velocity_reward_scale: 10.0
       height_reward_scale: 50.0
 
-ALE/Pong-v5_ram:
+Pong-v5_ram:
   env_id: ALE/Pong-v5
   n_envs: 8               # Reduced for better sample efficiency
   policy: 'MlpPolicy'
@@ -96,7 +96,7 @@ ALE/Pong-v5_ram:
   vf_coef: 0.5             # Standard value function coefficient
   max_grad_norm: 0.5       # Gradient clipping for stability
 
-ALE/Pong-v5_objects:
+Pong-v5_objects:
   env_id: ALE/Pong-v5
   n_envs: 8               # Reduced for better sample efficiency
   policy: 'MlpPolicy'

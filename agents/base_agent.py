@@ -73,8 +73,6 @@ class BaseAgent(pl.LightningModule):
                 "video_length": 100 # TODO: softcode this
             }
         )
-        
-
 
         # Create the models that the agent will require (eg: policy, value function, etc.)
         self.create_models()
@@ -220,9 +218,6 @@ class BaseAgent(pl.LightningModule):
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         # TODO: currently support single environment evaluation
         assert self.validation_env.num_envs == 1, "Evaluation should be run with a single environment instance"
-        
-        # TODO: reset reward windows!!!
-        self.validation_collector.set_seed(random.randint(0, 1000000))  # Set a random seed for evaluation
 
         # Collect until we reach the required number of episodes
         # NOTE: processing/saving video is a bottleneck that will make next training epoch be slower,
@@ -239,7 +234,7 @@ class BaseAgent(pl.LightningModule):
             total_episodes = metrics["total_episodes"]
             target_episodes = total_episodes + self.config.eval_episodes
             while total_episodes < target_episodes:
-                self.validation_collector.collect(deterministic=self.config.eval_deterministic) # TODO: this still won't be as fast as possible because it will have run steps that will not be used 
+                self.validation_collector.collect()#deterministic=self.config.eval_deterministic) # TODO: this still won't be as fast as possible because it will have run steps that will not be used 
                 metrics = self.validation_collector.get_metrics()
                 total_episodes = metrics["total_episodes"]
 

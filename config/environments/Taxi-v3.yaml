@@ -4,34 +4,49 @@ __Taxi-v3:
   project_id: "Taxi-v3"
   env_id: Taxi-v3
   policy: 'MlpPolicy'
+  ent_coef: 0.5
+  gae_lambda: 0.95
+  gamma: 0.99
+  n_envs: 16
+  n_timesteps: !!float 3e5
+  frame_stack: 1
+  eval_episodes: 10
+  eval_deterministic: true
+  eval_recording_freq_epochs: 100
 
 Taxi-v3_ppo:
   inherits: __Taxi-v3
   algo_id: ppo
-  n_envs: 8
-  n_timesteps: !!float 5e5
-  n_steps: 128
-  batch_size: 64
-  n_epochs: 4
-  gae_lambda: 0.95
+  n_steps: 64                  # 16*64 = 1024 samples/update
+  batch_size: 256              # 4 minibatches
+
+  n_epochs: 10
   gamma: 0.99
-  ent_coef: 0.5
-  learning_rate: 0.0003
+  gae_lambda: 0.95
   clip_range: 0.1
-  hidden_dims: [256, 256]
+  vf_coef: 0.5
+  max_grad_norm: 0.5
+  
+  # Learning rate / entropy
+  learning_rate: 0.0003
+  ent_coef: 0.01               # consider decay → 0 over training
+
+  # Network (adjust to encoding)
+  # For 4-D ordinal or 9-bit binary: smaller net is enough
+  hidden_dims: [32, 32]        # or [64, 64] if using 19-d one-hot / embedding
+
+  # Eval
+  eval_episodes: 10
+  eval_deterministic: true
+
 
 Taxi-v3_reinforce:
   inherits: __Taxi-v3
   algo_id: reinforce
-  frame_stack: 1
-  n_envs: 8
   n_epochs: 1
-  ent_coef: 0.01
   n_steps: 256
   batch_size: 32
   gamma: 0.99
   learning_rate: 0.001
   hidden_dims: [256, 256]
   use_baseline: true
-  max_epochs: 1000
-  reward_threshold: 8.0

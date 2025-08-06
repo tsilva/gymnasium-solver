@@ -19,7 +19,8 @@ class PolicyOnly(nn.Module):
 
     def forward(self, obs: torch.Tensor):
         x = self.backbone(obs)
-        dist = Categorical(logits=self.policy_head(x))
+        logits = self.policy_head(x)
+        dist = Categorical(logits=logits)
         return dist, None  # Return None for value to maintain compatibility
 
     @torch.inference_mode()
@@ -45,7 +46,8 @@ class ActorCritic(nn.Module):
 
     def forward(self, obs: torch.Tensor):
         x = self.backbone(obs)
-        dist = Categorical(logits=self.policy_head(x))
+        logits = self.policy_head(x)
+        dist = Categorical(logits=logits)
         value = self.value_head(x).squeeze(-1)
         return dist, value
 

@@ -49,6 +49,8 @@ class Config:
 
     # Evaluation
     eval_freq_epochs: int = 10
+    # TODO: make this match if none
+    # TODO: assert this is always a multiple of eval_freq_epochs
     eval_recording_freq_epochs: int = 10  # Record evaluation videos every 5 epochs
     eval_episodes: int = 10
     eval_async: bool = False  # Default: true (async evaluation)

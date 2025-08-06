@@ -1,5 +1,5 @@
 from wrappers.env_wrapper_registry import EnvWrapperRegistry
-from wrappers.discrete_to_onehot import DiscreteToOneHot
+from wrappers.discrete_to_binary import DiscreteToBinary
 from gymnasium import spaces
 
 def is_alepy_env_id(env_id: str) -> bool:
@@ -54,9 +54,9 @@ def build_env(
         else: 
             env = gym.make(env_id, render_mode=render_mode, **env_kwargs)
 
-        # Automatically apply DiscreteToOneHot wrapper for discrete observation spaces
+        # Automatically apply DiscreteToBinary wrapper for discrete observation spaces
         if isinstance(env.observation_space, spaces.Discrete):
-            env = DiscreteToOneHot(env)
+            env = DiscreteToBinary(env)
 
         # Apply configured env wrappers
         for wrapper in env_wrappers: env = EnvWrapperRegistry.apply(env, wrapper)

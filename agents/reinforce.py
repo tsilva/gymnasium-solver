@@ -26,23 +26,21 @@ class REINFORCE(BaseAgent):
         advantages = batch.advantages
         
         ent_coef = self.config.ent_coef
-        use_baseline = getattr(self.config, 'use_baseline', False)
+        use_baseline = self.config.use_baseline
+        normalize_advantages = self.config.normalize_advantages == "batch"
 
         dist, _ = self.policy_model(states)
         log_probs = dist.log_prob(actions)
       
+        policy_targets = returns
+        
         # Choose between returns (vanilla REINFORCE) or advantages (REINFORCE with baseline)
         if use_baseline:
-            # Use advantages (returns - baseline) for baseline subtraction
             policy_targets = advantages
-            
-            # Batch-level advantage normalization if enabled
-            if getattr(self.config, 'advantage_norm', 'batch') == "batch" and len(policy_targets) > 1:
-                policy_targets = (policy_targets - policy_targets.mean()) / (policy_targets.std() + 1e-8)
-        else:
-            # Use raw returns for vanilla REINFORCE
-            policy_targets = returns
-            
+            # TODO: call this normalize_advantages?
+            # TODO: call this policy_targets?
+            if normalize_advantages: policy_targets = (policy_targets - policy_targets.mean()) / (policy_targets.std() + 1e-8)
+       
         policy_loss = -(log_probs * policy_targets).mean()
 
         entropy = dist.entropy().mean()

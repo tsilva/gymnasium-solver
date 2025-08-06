@@ -36,6 +36,10 @@ class REINFORCE(BaseAgent):
         if use_baseline:
             # Use advantages (returns - baseline) for baseline subtraction
             policy_targets = advantages
+            
+            # Batch-level advantage normalization if enabled
+            if getattr(self.config, 'advantage_norm', 'batch') == "batch" and len(policy_targets) > 1:
+                policy_targets = (policy_targets - policy_targets.mean()) / (policy_targets.std() + 1e-8)
         else:
             # Use raw returns for vanilla REINFORCE
             policy_targets = returns

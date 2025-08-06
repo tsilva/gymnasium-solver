@@ -58,6 +58,7 @@ class Config:
     # Normalization
     normalize_obs: bool = False  # Default: false
     normalize_reward: bool = False  # Default: false
+    advantage_norm: str = "batch"  # Default: "batch" (options: "off", "rollout", "batch")
     
     # Frame stacking
     frame_stack: int = 1  # Default: 1 (no frame stacking)
@@ -320,7 +321,8 @@ class Config:
     def rollout_collector_hyperparams(self) -> Dict[str, Any]:
         return {
             'gamma': self.gamma,
-            'gae_lambda': self.gae_lambda
+            'gae_lambda': self.gae_lambda,
+            'advantage_norm': self.advantage_norm
         }
     
     def validate(self) -> None:

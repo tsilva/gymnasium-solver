@@ -23,9 +23,9 @@ class PPO(BaseAgent):
         advantages = batch.advantages
         returns = batch.returns
         
-        # Normalization does not make sense if mini batchsize == 1, see GH issue #325
-        #if self.normalize_advantage and len(advantages) > 1:
-        #advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+        # Batch-level advantage normalization if enabled
+        if getattr(self.config, 'advantage_norm', 'batch') == "batch" and len(advantages) > 1:
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
         clip_range = self.config.clip_range
         ent_coef = self.config.ent_coef

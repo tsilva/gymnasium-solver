@@ -70,7 +70,32 @@ class VecInfoWrapper(VecEnvWrapper):
         Return the reward_threshold from the env's spec, or None if unavailable.
         """
         spec = self.get_spec()
-        return getattr(spec, "reward_threshold", None)
+        if spec is not None:
+            return getattr(spec, "reward_threshold", None)
+            
+        # Fallback: If we can't get spec from the vectorized environment,
+        # try to create a single instance to get the environment spec
+        try:
+            # Try to get env_id from the first environment
+            base = self._first_base_env()
+            if base is not None:
+                env_id = getattr(base, "id", None) or getattr(getattr(base, "spec", None), "id", None)
+                if env_id:
+                    import gymnasium as gym
+                    # For Atari environments, need to register ALE
+                    if env_id.startswith("ALE/"):
+                        try:
+                            import ale_py
+                            gym.register_envs(ale_py)
+                        except ImportError:
+                            pass
+                    
+                    temp_spec = gym.spec(env_id)
+                    return getattr(temp_spec, "reward_threshold", None)
+        except Exception:
+            pass
+            
+        return None
     
     def get_input_dim(self):
         """

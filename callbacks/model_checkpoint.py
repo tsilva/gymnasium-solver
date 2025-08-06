@@ -184,10 +184,14 @@ class ModelCheckpointCallback(pl.Callback):
     def _handle_early_stopping_and_tracking(self, trainer, pl_module):
         """Handle early stopping logic and best reward tracking that was previously in BaseAgent."""
         # Get reward threshold - use config if provided, otherwise use environment's reward threshold
-        if pl_module.config.reward_threshold is not None: 
-            reward_threshold = pl_module.config.reward_threshold
+        config_threshold = pl_module.config.reward_threshold
+        if config_threshold is not None: 
+            reward_threshold = config_threshold
+            print(f"Using config reward_threshold: {reward_threshold}")
         else: 
             reward_threshold = pl_module.validation_env.get_reward_threshold()
+            if reward_threshold is not None:
+                print(f"Using environment spec reward_threshold: {reward_threshold}")
 
         # Get current eval metrics
         if hasattr(trainer, 'logged_metrics') and "eval/ep_rew_mean" in trainer.logged_metrics:
@@ -208,7 +212,10 @@ class ModelCheckpointCallback(pl.Callback):
                 # Even without reward threshold, update best eval reward for tracking
                 if ep_rew_mean > pl_module.best_eval_reward:
                     pl_module.best_eval_reward = ep_rew_mean
-                print("No reward threshold available (neither in config nor environment spec) - skipping early stopping check")
+                
+                # Provide more informative logging about why reward threshold is not available
+                env_threshold = pl_module.validation_env.get_reward_threshold()
+                print(f"No reward threshold available - config: {config_threshold}, env spec: {env_threshold} - skipping early stopping check")
     
     def on_train_epoch_end(self, trainer, pl_module):
         """Save last checkpoint after each training epoch."""

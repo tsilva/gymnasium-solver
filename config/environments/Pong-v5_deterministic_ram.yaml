@@ -1,0 +1,42 @@
+# Pong with RAM observations challenge configurations
+
+__Pong-v5_deterministic_ram:
+  project_id: "Pong-v5_ram"
+  env_id: ALE/Pong-v5
+  obs_type: "ram"
+  frame_stack: 1           # RAM contains full game state - no stacking needed
+  policy: 'MlpPolicy'
+  normalize_obs: "static"
+  env_kwargs:
+    repeat_action_probability: 0.0  # Makes the environment deterministic
+
+Pong-v5_deterministic_ram_ppo:
+  inherits: __Pong-v5_deterministic_ram
+  algo_id: ppo
+  n_envs: 8               # Reduced for better sample efficiency
+  n_steps: 512             # Reduced for more frequent updates
+  batch_size: 512          # Larger batches for stable gradients
+  n_epochs: 10             # More epochs to better utilize data
+  gae_lambda: 0.95         # Standard GAE lambda for better advantage estimation
+  gamma: 0.99              # Standard Atari discount factor
+  ent_coef: 0.01           # Higher entropy for better exploration
+  clip_range: 0.2          # Standard PPO clipping for better updates
+  learning_rate: 0.0003    # Higher learning rate for faster learning
+  hidden_dims: [64, 64]    # Larger network for complex RAM patterns
+  eval_freq_epochs: 50     # Less frequent eval to focus on training
+  eval_episodes: 10        # More episodes for reliable evaluation
+  vf_coef: 0.5             # Standard value function coefficient
+  max_grad_norm: 0.5       # Gradient clipping for stability
+
+Pong-v5_deterministic_ram_reinforce:
+  inherits: __Pong-v5_deterministic_ram
+  algo_id: reinforce
+  n_envs: 8
+  n_epochs: 1
+  ent_coef: 0.01
+  n_steps: 1024
+  batch_size: 128
+  gamma: 0.99
+  learning_rate: 1e-3
+  hidden_dims: [128, 128]
+  use_baseline: true

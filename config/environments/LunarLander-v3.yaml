@@ -1,6 +1,7 @@
 # LunarLander standard challenge configurations
 
 __LunarLander-v3:
+  project_id: "LunarLander-v3"
   env_id: LunarLander-v3
   policy: 'MlpPolicy'
 

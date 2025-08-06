@@ -1,6 +1,7 @@
 # Taxi standard challenge configurations
 
 __Taxi-v3:
+  project_id: "Taxi-v3"
   env_id: Taxi-v3
   policy: 'MlpPolicy'
 

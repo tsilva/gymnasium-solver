@@ -1,6 +1,7 @@
 # Acrobot standard challenge configurations
 
 __Acrobot-v1:
+  project_id: "Acrobot-v1"
   env_id: Acrobot-v1
   policy: 'MlpPolicy'
 

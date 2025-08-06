@@ -1,6 +1,7 @@
 # Pong with RAM observations challenge configurations
 
 __Pong-v5_ram:
+  project_id: "Pong-v5_ram"
   env_id: ALE/Pong-v5
   obs_type: "ram"
   frame_stack: 1           # RAM contains full game state - no stacking needed

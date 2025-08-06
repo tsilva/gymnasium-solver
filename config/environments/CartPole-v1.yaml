@@ -1,6 +1,7 @@
 # CartPole standard challenge configurations
 
 __CartPole-v1:
+  project_id: "CartPole-v1"
   env_id: CartPole-v1
   frame_stack: 1
   policy: 'MlpPolicy'

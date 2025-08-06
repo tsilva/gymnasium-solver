@@ -9,7 +9,7 @@ from utils.misc import _convert_numeric_strings
 # TODO: review this file again
 @dataclass
 class Config:
-    # Environment
+    # Environment (required fields first)
     env_id: str  # Environment ID string (e.g., 'CartPole-v1')
     algo_id: str  # Algorithm ID string (e.g., 'ppo', 'dqn')
 
@@ -17,6 +17,9 @@ class Config:
     n_steps: int
     batch_size: int
     n_epochs: int
+    
+    # Project identification for logging
+    project_id: str = None  # Project ID for wandb logging (e.g., 'Pong-v5_rgb')
     # Optional fields with defaults
     seed: int = 42  # Default: 42
     n_envs: int = 1  # Number of parallel environments (default: 1)

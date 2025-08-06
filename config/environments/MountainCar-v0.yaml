@@ -1,6 +1,7 @@
 # MountainCar standard challenge configurations
 
 __MountainCar-v0:
+  project_id: "MountainCar-v0"
   env_id: MountainCar-v0
   frame_stack: 1
   policy: 'MlpPolicy'

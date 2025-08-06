@@ -1,3 +1,6 @@
+- FEAT: change logging key to train/total_timesteps?
+- FEAT: improve metric descriptions
+- FEAT: write guide on how to monitor training
 - FEAT: try training on deterministic Pong env
 - FEAT: is REINFORCE well implemented? are we waiting until the end of the episode to update the policy?
 - FEAT: train on cloud server

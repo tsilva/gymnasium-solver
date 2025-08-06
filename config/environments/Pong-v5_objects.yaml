@@ -1,6 +1,7 @@
 # Pong with object-based observations challenge configurations
 
 __Pong-v5_objects:
+  project_id: "Pong-v5_objects"
   env_id: ALE/Pong-v5
   obs_type: "objects"
   frame_stack: 1

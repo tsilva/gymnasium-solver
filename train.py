@@ -22,7 +22,7 @@ def main():
     from utils.run_manager import RunManager
 
     # Use regular WandbLogger to get run ID
-    project_name = config.env_id.replace("/", "-").replace("\\", "-")
+    project_name = config.project_id if config.project_id else config.env_id.replace("/", "-").replace("\\", "-")
     experiment_name = f"{config.algo_id}-{config.seed}"
     wandb_logger = WandbLogger(
         project=project_name,

@@ -1,6 +1,7 @@
 # Pong with RGB observations challenge configurations
 
 __Pong-v5_rgb:
+  project_id: "Pong-v5_rgb"
   env_id: ALE/Pong-v5
   obs_type: "rgb"
   frame_stack: 4  # RGB observations typically benefit from frame stacking

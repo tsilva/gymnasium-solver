@@ -2,7 +2,7 @@ from wrappers.env_wrapper_registry import EnvWrapperRegistry
 from wrappers.discrete_to_onehot import DiscreteToOneHot
 from gymnasium import spaces
 
-def is_atari_env_id(env_id: str) -> bool:
+def is_alepy_env_id(env_id: str) -> bool:
     return env_id.startswith("ALE/")
 
 def build_env(
@@ -32,19 +32,25 @@ def build_env(
         if render_mode != "rgb_array": raise ValueError("Video recording requires render_mode='rgb_array'")
         if subproc: raise ValueError("Subprocess vector environments do not support video recording yet")
 
-    _is_atari = is_atari_env_id(env_id)
+    _is_alepy = is_alepy_env_id(env_id)
 
     def env_fn():
-        if _is_atari: 
-            # Import and register ALE environments in each subprocess
+        # In case this is an ale-based Atari environment
+        if _is_alepy: 
+            # Ensure ale_py is registered with gym (otherwise 
+            # atari environments won't be available)
             import ale_py
             gym.register_envs(ale_py)
-
+            
+            # In case the observation type is objects, use OCAtari 
+            # to extract object-based observations from game RAM
             if obs_type == "objects":
                 from ocatari.core import OCAtari
                 env = OCAtari(env_id, mode="ram", hud=False, render_mode=render_mode, **env_kwargs)
+            # Otherwise, create the standard ALE environment
             else:
                 env = gym.make(env_id, obs_type=obs_type, render_mode=render_mode, **env_kwargs)
+        # Otherwise, create a standard gym environment
         else: 
             env = gym.make(env_id, render_mode=render_mode, **env_kwargs)
 
@@ -61,7 +67,7 @@ def build_env(
     # Vectorize the environment
     vec_env_cls = DummyVecEnv
     if subproc is not None: vec_env_cls = SubprocVecEnv if subproc else DummyVecEnv
-    elif _is_atari: vec_env_cls = SubprocVecEnv if n_envs > 1 else DummyVecEnv
+    elif _is_alepy: vec_env_cls = SubprocVecEnv if n_envs > 1 else DummyVecEnv
 
     vec_env_kwargs = {"start_method": "spawn"} if vec_env_cls == SubprocVecEnv else {}
     env = make_vec_env(env_fn, n_envs=n_envs, seed=seed, vec_env_cls=vec_env_cls, vec_env_kwargs=vec_env_kwargs)

@@ -29,7 +29,7 @@ class BaseAgent(pl.LightningModule):
         # Store core attributes
         self.config = config
 
-
+        # Initialize throughput counters
         self.fit_start_time = None
         self.train_epoch_start_time = None
         self.train_epoch_start_timesteps = None
@@ -38,35 +38,39 @@ class BaseAgent(pl.LightningModule):
         
         self._n_updates = 0 # TODO: is this required?
 
-        # TODO: create this only for training? create on_fit_start() and destroy with on_fit_end()?
+        # Create the environment that will be used for training
         self.train_env = build_env(
             config.env_id,
-            n_envs=config.n_envs,
             seed=config.seed,
+            n_envs=config.n_envs,
+            subproc=config.subproc,
+            obs_type=config.obs_type,
             env_wrappers=config.env_wrappers,
             norm_obs=config.normalize_obs,
             frame_stack=config.frame_stack,
-            obs_type=config.obs_type, # TODO: atari only?
-            render_mode=None, # TODO: should be None for training
-            subproc=config.subproc,
+            render_mode=None,
             env_kwargs=config.env_kwargs
         )
        
+        # Create the environment that will be used for evaluation
+        # - Just 1 environment instance due to current rollout collector limitations
+        # - Different seed to ensure different initial states
+        # - Video recording enabled
         self.validation_env = build_env(
             config.env_id,
+            seed=config.seed + 1000,
             n_envs=1,
-            seed=config.seed + 1000,  # Use a different seed for evaluation
+            subproc=False,
             env_wrappers=config.env_wrappers,
             norm_obs=config.normalize_obs,
             frame_stack=config.frame_stack,
             obs_type=config.obs_type,
+            env_kwargs=config.env_kwargs
             render_mode="rgb_array",
-            subproc=False,
             record_video=True,
             record_video_kwargs={
                 "video_length": 100 # TODO: softcode this
-            },
-            env_kwargs=config.env_kwargs
+            }
         )
         
         # TODO: this should be in callback?
@@ -74,10 +78,12 @@ class BaseAgent(pl.LightningModule):
         self.best_eval_reward = float('-inf')
         self.best_model_path = None
 
-        # Create the agent's models
+        # Create the models that the agent will require (eg: policy, value function, etc.)
         self.create_models()
         assert self.policy_model is not None, "Policy model must be created in create_models()"
-    
+
+        # Create the rollout collector that will be used to 
+        # collect trajectories from the training environment
         self.train_collector = RolloutCollector(
             self.train_env,
             self.policy_model,
@@ -85,13 +91,21 @@ class BaseAgent(pl.LightningModule):
             **self.rollout_collector_hyperparams()
         )
 
+        # Create the rollout collector that will be used to
+        # collect trajectories from the validation environment
         self.validation_collector = RolloutCollector(
             self.validation_env,
             self.policy_model,
             n_steps=self.config.n_steps,
-            **self.rollout_collector_hyperparams() # TODO: softcode
+            **self.rollout_collector_hyperparams()
         )
 
+        # Initialize a dictionary to store epoch metrics
+        # - Used to collect metrics during training and validation epochs
+        # - Metrics are flushed at the end of each epoch
+        # - This avoids performance drops caused by using Lightning's logger
+        #   which can be slow when logging many metrics
+        # - Metrics are logged using self.log_metrics() method
         self._epoch_metrics = {}
     
     def create_models(self):

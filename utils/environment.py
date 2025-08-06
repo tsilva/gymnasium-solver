@@ -16,7 +16,8 @@ def build_env(
     render_mode=None,
     subproc=None,
     record_video=False, 
-    record_video_kwargs={}
+    record_video_kwargs={},
+    env_kwargs={}
 ):
 
     import gymnasium as gym
@@ -41,11 +42,11 @@ def build_env(
 
             if obs_type == "objects":
                 from ocatari.core import OCAtari
-                env = OCAtari(env_id, mode="ram", hud=False, render_mode=render_mode)
+                env = OCAtari(env_id, mode="ram", hud=False, render_mode=render_mode, **env_kwargs)
             else:
-                env = gym.make(env_id, obs_type=obs_type, render_mode=render_mode)
+                env = gym.make(env_id, obs_type=obs_type, render_mode=render_mode, **env_kwargs)
         else: 
-            env = gym.make(env_id, render_mode=render_mode)
+            env = gym.make(env_id, render_mode=render_mode, **env_kwargs)
 
         # Automatically apply DiscreteToOneHot wrapper for discrete observation spaces
         if isinstance(env.observation_space, spaces.Discrete):

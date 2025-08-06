@@ -248,7 +248,8 @@ def main():
             n_envs=1,  # Single environment for playing
             frame_stack=config.frame_stack,
             obs_type=config.obs_type,
-            render_mode="human"  # Human-readable rendering
+            render_mode="human",  # Human-readable rendering
+            env_kwargs=config.env_kwargs
         )
         
         print(f"\nEnvironment: {config.env_id}")

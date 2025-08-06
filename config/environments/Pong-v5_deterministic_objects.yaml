@@ -1,0 +1,48 @@
+# Pong with object-based observations and deterministic environment challenge configurations
+
+__Pong-v5_deterministic_objects:
+  project_id: "Pong-v5_deterministic_objects"
+  env_id: ALE/Pong-v5
+  obs_type: "objects"
+  frame_stack: 1
+  env_wrappers:
+    - id: PongV5_FeatureExtractor
+  env_kwargs:
+    repeat_action_probability: 0.0  # Makes the environment deterministic
+
+Pong-v5_deterministic_objects_ppo:
+  inherits: __Pong-v5_deterministic_objects
+  algo_id: ppo
+  n_envs: 16              
+  policy: 'MlpPolicy'
+  n_steps: 256             # rollout size = 16 * 256 = 4096
+  batch_size: 1024          # 4 minibatches per update
+  n_epochs: 10             # More epochs to better utilize data
+  gae_lambda: 0.95         # Standard GAE lambda for better advantage estimation
+  gamma: 0.99              # Standard Atari discount factor
+  ent_coef: 0.003          # Higher entropy for better exploration
+  clip_range: 0.15         # slightly tighter than 0.2 helps stability
+  # TODO: implement
+  #clip_range_vf: 0.2  # Value function clipping
+  # TODO: ortho init
+  # TODO: lr scheduler
+  learning_rate: 3e-4      # Higher learning rate for faster learning
+  hidden_dims: [128, 128]    # Larger network for complex patterns
+  eval_freq_epochs: 50     # Less frequent eval to focus on training
+  eval_episodes: 10        # More episodes for reliable evaluation
+  vf_coef: 0.5             # Standard value function coefficient
+  max_grad_norm: 0.5       # Gradient clipping for stability
+
+Pong-v5_deterministic_objects_reinforce:
+  inherits: __Pong-v5_deterministic_objects
+  algo_id: reinforce
+  n_envs: 8
+  n_epochs: 1
+  ent_coef: 0.01
+  n_steps: 1024
+  batch_size: 128
+  gamma: 0.99
+  learning_rate: 1e-3
+  hidden_dims: [128, 128]
+  use_baseline: true
+  max_epochs: 2000

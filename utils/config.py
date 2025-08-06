@@ -73,6 +73,7 @@ class Config:
     checkpoint_dir: str = "checkpoints"  # Directory to save/load checkpoints
     
     env_wrappers: list = field(default_factory=list)
+    env_kwargs: dict = field(default_factory=dict)  # Environment creation kwargs
 
     subproc: bool = None
 

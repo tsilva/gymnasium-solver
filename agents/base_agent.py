@@ -48,7 +48,8 @@ class BaseAgent(pl.LightningModule):
             frame_stack=config.frame_stack,
             obs_type=config.obs_type, # TODO: atari only?
             render_mode=None, # TODO: should be None for training
-            subproc=config.subproc
+            subproc=config.subproc,
+            env_kwargs=config.env_kwargs
         )
        
         self.validation_env = build_env(
@@ -64,7 +65,8 @@ class BaseAgent(pl.LightningModule):
             record_video=True,
             record_video_kwargs={
                 "video_length": 100 # TODO: softcode this
-            }
+            },
+            env_kwargs=config.env_kwargs
         )
         
         # TODO: this should be in callback?

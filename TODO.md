@@ -1,13 +1,12 @@
+- FEAT: try training on deterministic Pong env
 - FEAT: reward shaper for Pong-v5, points whenever paddle hits ball
 - FEAT: improve metric descriptions
 - FEAT: write guide on how to monitor training
-- FEAT: try training on deterministic Pong env
 - FEAT: is REINFORCE well implemented? are we waiting until the end of the episode to update the policy?
 - FEAT: train on cloud server
 - FEAT: normalize rewards?
 - FEAT: add normalization support
 - FEAT: add discrete env support
-- Cleanup environment files by using inheritance
 - FEAT: add support for softcoding activations
 - Create benchmarking script to find optimal parallelization for env/machine combo
 - TEST: predict next state to learn faster
@@ -41,8 +40,8 @@ MaxAndSkipEnv
 - BUG: confirm that buffer growth is under control
 - BUG: fix thread safety issues with async eval collector (copy model weights with lock)
 - FEAT: consider computing mean reward by timesteps, this way in eval we just have to request n_steps = reward_threshold * N, this will make it easier to support vectorized envs
-- FEAT: support for softcoding activations
 - FEAT: a2c (only after reinforce/ppo is stable)
+- FEAT: support for softcoding activations
 - FEAT: add same linear decay features as rlzoo
 - FEAT: add interactive mode support
 - CHECK: run rollout through dataloader process, do we always get n_batches? assert it 

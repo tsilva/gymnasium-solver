@@ -49,7 +49,26 @@ class RunManager:
         (self.run_dir / "logs").mkdir(exist_ok=True)
         (self.run_dir / "configs").mkdir(exist_ok=True)
         
+        # Create/update latest-run symlink to point to this run
+        self._update_latest_run_symlink()
+        
         return self.run_dir
+    
+    def _update_latest_run_symlink(self):
+        """Create or update the latest-run symlink to point to the current run directory."""
+        if self.run_dir is None:
+            raise ValueError("Run directory not set up. Call setup_run_directory() first.")
+            
+        latest_run_link = self.base_runs_dir / "latest-run"
+        
+        # Remove existing symlink if it exists
+        if latest_run_link.exists() or latest_run_link.is_symlink():
+            latest_run_link.unlink()
+        
+        # Create new symlink pointing to the current run directory
+        # Use relative path for the symlink target to make it more portable
+        relative_target = Path(self.run_id)
+        latest_run_link.symlink_to(relative_target)
     
     def get_checkpoint_dir(self) -> Path:
         """Get the checkpoint directory for this run."""

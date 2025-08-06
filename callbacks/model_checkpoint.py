@@ -1,11 +1,8 @@
 """Checkpoint management utilities for model saving and resuming training."""
 
-import os
 import torch
 import pytorch_lightning as pl
 from pathlib import Path
-from typing import Optional, Dict, Any
-from dataclasses import asdict
 
 
 class ModelCheckpointCallback(pl.Callback):

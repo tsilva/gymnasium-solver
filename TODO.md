@@ -1,3 +1,4 @@
+- BUG: we may be updating PPO wrong (n_updates for each batch)
 - FEAT: track immediate episode reward
 - FEAT: track learning hyperparams in wandb (train/hyperparams)
 - BUG: No reward threshold available (neither in config nor environment spec) - skipping early stopping check

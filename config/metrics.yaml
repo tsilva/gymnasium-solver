@@ -12,84 +12,84 @@ total_episodes:
   precision: 0
   force_integer: true
   delta_rule: "non_decreasing"  # Should always increase
-  description: "Total number of episodes completed"
+  description: "Cumulative number of episodes completed across all training"
 
 total_timesteps:
   precision: 0
   force_integer: true
   # Note: delta_rule removed because eval/total_timesteps can legitimately decrease
   # between evaluation runs when using different eval strategies or env resets
-  description: "Total number of timesteps processed"
+  description: "Cumulative number of environment steps taken across all training"
 
 rollout_timesteps:
   precision: 0
   force_integer: true
   delta_rule: "non_decreasing"  # Should always increase
-  description: "Total number of timesteps in the current rollout"
+  description: "Number of timesteps collected in the current rollout buffer"
 
 # Episode statistics
 ep_rew_mean:
   precision: 2
-  description: "Mean episode reward"
+  description: "Average episode reward over recent episodes window"
 
 ep_len_mean:
   precision: 2
-  description: "Mean episode length"
+  description: "Average episode length over recent episodes window"
 
 ep_rew_min:
   precision: 2
-  description: "Minimum episode reward"
+  description: "Minimum episode reward observed in recent episodes window"
 
 ep_rew_max:
   precision: 2
-  description: "Maximum episode reward"
+  description: "Maximum episode reward observed in recent episodes window"
 
 ep_len_min:
   precision: 0
   force_integer: true
-  description: "Minimum episode length"
+  description: "Minimum episode length observed in recent episodes window"
 
 ep_len_max:
   precision: 0
   force_integer: true
-  description: "Maximum episode length"
+  description: "Maximum episode length observed in recent episodes window"
 
 ep_rew_std:
   precision: 2
-  description: "Episode reward standard deviation"
+  description: "Standard deviation of episode rewards in recent episodes window"
 
 ep_len_std:
   precision: 2
-  description: "Episode length standard deviation"
+  description: "Standard deviation of episode lengths in recent episodes window"
 
 # Training metrics
 epoch:
   precision: 0
   force_integer: true
   delta_rule: "non_decreasing"  # Should always increase
-  description: "Training epoch"
+  description: "Current training epoch number"
 
 n_updates:
   precision: 0
   force_integer: true
   delta_rule: "non_decreasing"  # Should always increase
-  description: "Number of updates"
+  description: "Total number of parameter updates (gradient steps) performed"
 
 # Time metrics
 time_elapsed:
   precision: 2
   delta_rule: "non_decreasing"  # Time should always increase
-  description: "Elapsed time in seconds"
+  description: "Total elapsed training time in seconds"
 
 fps:
   precision: 0
   force_integer: true
-  description: "Frames per second"
+  description: "Training throughput in frames (environment steps) per second"
 
 # Loss metrics
 policy_loss:
   precision: 4
-  description: "Policy loss"
+  description: "Policy network loss from gradient ascent on expected returns"
   algorithm_rules:
     reinforce:
       threshold: 1000.0
@@ -99,20 +99,20 @@ policy_loss:
 
 value_loss:
   precision: 4
-  description: "Value function loss"
+  description: "Value function loss measuring prediction accuracy of state values"
 
 entropy_loss:
   precision: 4
-  description: "Entropy loss"
+  description: "Negative policy entropy used as regularization term"
 
 total_loss:
   precision: 4
-  description: "Total loss"
+  description: "Combined total loss including policy, value and entropy components"
 
 # Algorithm-specific metrics
 approx_kl:
   precision: 4
-  description: "Approximate KL divergence"
+  description: "Approximate KL divergence between old and new policy distributions"
   algorithm_rules:
     ppo:
       threshold: 0.1
@@ -122,7 +122,7 @@ approx_kl:
 
 kl_div:
   precision: 4
-  description: "KL divergence"
+  description: "KL divergence between old and new policy log probabilities"
   algorithm_rules:
     ppo:
       threshold: 0.1
@@ -132,7 +132,7 @@ kl_div:
 
 clip_fraction:
   precision: 3
-  description: "Clipping fraction"
+  description: "Fraction of probability ratios that were clipped in PPO objective"
   algorithm_rules:
     ppo:
       threshold: 0.5
@@ -142,7 +142,7 @@ clip_fraction:
 
 explained_variance:
   precision: 3
-  description: "Explained variance"
+  description: "How well the value function predicts returns (1.0 = perfect, 0.0 = no better than mean)"
   algorithm_rules:
     ppo:
       threshold: -0.5
@@ -152,7 +152,7 @@ explained_variance:
 
 entropy:
   precision: 4
-  description: "Policy entropy"
+  description: "Policy entropy measuring exploration vs exploitation trade-off"
   algorithm_rules:
     ppo:
       threshold: 0.1
@@ -168,38 +168,38 @@ entropy:
 # Learning rates
 policy_lr:
   precision: 6
-  description: "Policy learning rate"
+  description: "Current learning rate for policy network optimizer"
 
 value_lr:
   precision: 6
-  description: "Value learning rate"
+  description: "Current learning rate for value network optimizer"
 
 learning_rate:
   precision: 6
-  description: "General learning rate"
+  description: "General learning rate for optimizer"
 
 # Gradient metrics
 grad_norm:
   precision: 4
-  description: "Gradient norm"
+  description: "L2 norm of policy network gradients before clipping"
 
 max_grad_norm:
   precision: 4
-  description: "Maximum gradient norm"
+  description: "Maximum allowed gradient norm for gradient clipping"
 
 # Algorithm-specific metrics
 advantage_mean:
   precision: 4
-  description: "Mean advantage"
+  description: "Mean advantage estimate across batch (should be near zero when normalized)"
 
 advantage_std:
   precision: 4
-  description: "Advantage standard deviation"
+  description: "Standard deviation of advantage estimates across batch"
 
 value_mean:
   precision: 4
-  description: "Mean value estimate"
+  description: "Mean value function estimate across states in batch"
 
 value_std:
   precision: 4
-  description: "Value estimate standard deviation"
+  description: "Standard deviation of value function estimates across states in batch"

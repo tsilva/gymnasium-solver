@@ -68,7 +68,6 @@ def build_env(
     vec_env_cls = DummyVecEnv
     if subproc is not None: vec_env_cls = SubprocVecEnv if subproc else DummyVecEnv
     elif _is_alepy: vec_env_cls = SubprocVecEnv if n_envs > 1 else DummyVecEnv
-
     vec_env_kwargs = {"start_method": "spawn"} if vec_env_cls == SubprocVecEnv else {}
     env = make_vec_env(env_fn, n_envs=n_envs, seed=seed, vec_env_cls=vec_env_cls, vec_env_kwargs=vec_env_kwargs)
 

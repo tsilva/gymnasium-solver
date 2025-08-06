@@ -227,15 +227,13 @@ class BaseAgent(pl.LightningModule):
         # Collect until we reach the required number of episodes
         # NOTE: processing/saving video is a bottleneck that will make next training epoch be slower,
         # if you see train/fps drops, make video recording less frequent by adjusting `eval_recording_freq_epochs`
-        record_video = self.current_epoch == 0 or self.current_epoch % self.config.eval_recording_freq_epochs == 0
+        record_video = self.current_epoch == 0 or (self.current_epoch + 1) % self.config.eval_recording_freq_epochs == 0
         
         # Use run-specific video directory if available, otherwise fallback to wandb.run.dir
-        if hasattr(self, 'run_manager') and self.run_manager:
-            video_path = self.run_manager.get_video_dir() / "eval" / "episodes" / f"rollout_epoch_{self.current_epoch}.mp4"
-            video_path.parent.mkdir(parents=True, exist_ok=True)
-            video_path = str(video_path)
-        else:
-            video_path = os.path.join(wandb.run.dir, f"videos/eval/episodes/rollout_epoch_{self.current_epoch}.mp4")
+        video_path = self.run_manager.get_video_dir() / "eval" / "episodes" / f"rollout_epoch_{self.current_epoch}.mp4"
+        video_path.parent.mkdir(parents=True, exist_ok=True)
+        video_path = str(video_path)
+   
         with self.validation_env.recorder(video_path, record_video=record_video): # TODO: make rew window = config.eval_episodes
             metrics = self.validation_collector.get_metrics()
             total_episodes = metrics["total_episodes"]

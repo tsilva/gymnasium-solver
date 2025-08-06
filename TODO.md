@@ -1,6 +1,5 @@
 - FEAT: add ability to switch between rollout vs batch advantage normalization
 - FEAT: reward shaper for Pong-v5, points whenever paddle hits ball
-- FEAT: change logging key to train/total_timesteps?
 - FEAT: improve metric descriptions
 - FEAT: write guide on how to monitor training
 - FEAT: try training on deterministic Pong env

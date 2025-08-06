@@ -280,8 +280,18 @@ class VideoLoggerCallback(pl.Callback):
                 media.append(wandb.Video(str(p), format=format_type))
             
             self._seen.update(map(str, files))
+            # Try to get total_timesteps from the trainer's pl_module for better step alignment
+            step_value = trainer.global_step
+            if hasattr(trainer, 'lightning_module') and hasattr(trainer.lightning_module, 'train_collector'):
+                try:
+                    metrics = trainer.lightning_module.train_collector.get_metrics()
+                    step_value = metrics.get("total_timesteps", trainer.global_step)
+                except:
+                    # Fallback to global_step if we can't get total_timesteps
+                    pass
+            
             # Use Lightning's log_metrics to ensure proper step handling
-            trainer.logger.log_metrics({f"{prefix}/{key}": media}, step=trainer.global_step)
+            trainer.logger.log_metrics({f"{prefix}/{key}": media}, step=step_value)
 
     def _key_for(self, rel: Path) -> str:
         parts = rel.parts[: self.depth] or ("media",)

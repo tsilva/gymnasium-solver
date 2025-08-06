@@ -281,8 +281,8 @@ class BaseAgent(pl.LightningModule):
         
         # Define step-based metrics to ensure proper ordering
         if wandb_logger.experiment:
-            wandb_logger.experiment.define_metric("train/*", step_metric="trainer/global_step")
-            wandb_logger.experiment.define_metric("eval/*", step_metric="trainer/global_step")
+            wandb_logger.experiment.define_metric("train/*", step_metric="train/total_timesteps")
+            wandb_logger.experiment.define_metric("eval/*", step_metric="train/total_timesteps")
         
         # Create video logging callback using run-specific directory
         video_logger_cb = VideoLoggerCallback(

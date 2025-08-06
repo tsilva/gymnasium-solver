@@ -5,7 +5,6 @@
 - FEAT: normalize rewards?
 - FEAT: reward shaper for Pong-v5, points whenever paddle hits ball
 - FEAT: make checkpointing directories be prefixed by challenge_id
-- ✅ FEAT: store all training data in run directory (timestamped) - IMPLEMENTED: runs/runid/ structure
 - FEAT: add normalization support
 - FEAT: add discrete env support
 - Cleanup environment files by using inheritance

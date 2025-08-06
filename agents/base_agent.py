@@ -252,25 +252,32 @@ class BaseAgent(pl.LightningModule):
         from pytorch_lightning.loggers import WandbLogger
         from utils.run_manager import RunManager
 
-        # Use regular WandbLogger
-        project_name = self.config.env_id.replace("/", "-").replace("\\", "-")
-        experiment_name = f"{self.config.algo_id}-{self.config.seed}"
-        wandb_logger = WandbLogger(
-            project=project_name,
-            name=experiment_name,
-            log_model=True,
-            config=asdict(self.config)
-        )
-        
-        # Setup run directory management
-        self.run_manager = RunManager()
-        run_dir = self.run_manager.setup_run_directory(wandb_logger.experiment)
-        
-        # Save configuration to run directory
-        config_path = self.run_manager.save_config(self.config)
-        print(f"Configuration saved to: {config_path}")
-        print(f"Run directory: {run_dir}")
-        print(f"Run ID: {self.run_manager.run_id}")
+        # Check if wandb logger and run manager are already set up (from train.py)
+        if hasattr(self, 'wandb_logger') and hasattr(self, 'run_manager'):
+            # Use existing logger and run manager
+            wandb_logger = self.wandb_logger
+            print(f"Using existing run directory: {self.run_manager.run_dir}")
+            print(f"Using existing run ID: {self.run_manager.run_id}")
+        else:
+            # Fallback: Create new logger and run manager (for backwards compatibility)
+            project_name = self.config.env_id.replace("/", "-").replace("\\", "-")
+            experiment_name = f"{self.config.algo_id}-{self.config.seed}"
+            wandb_logger = WandbLogger(
+                project=project_name,
+                name=experiment_name,
+                log_model=True,
+                config=asdict(self.config)
+            )
+            
+            # Setup run directory management
+            self.run_manager = RunManager()
+            run_dir = self.run_manager.setup_run_directory(wandb_logger.experiment)
+            
+            # Save configuration to run directory
+            config_path = self.run_manager.save_config(self.config)
+            print(f"Configuration saved to: {config_path}")
+            print(f"Run directory: {run_dir}")
+            print(f"Run ID: {self.run_manager.run_id}")
         
         # Define step-based metrics to ensure proper ordering
         if wandb_logger.experiment:

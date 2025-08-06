@@ -1,13 +1,12 @@
+- FEAT: add ability to switch between rollout vs batch advantage normalization
+- FEAT: reward shaper for Pong-v5, points whenever paddle hits ball
 - FEAT: change logging key to train/total_timesteps?
 - FEAT: improve metric descriptions
 - FEAT: write guide on how to monitor training
 - FEAT: try training on deterministic Pong env
 - FEAT: is REINFORCE well implemented? are we waiting until the end of the episode to update the policy?
 - FEAT: train on cloud server
-- FEAT: no deterministic evals in atari envs?
-- FEAT: add challenge_id to configs
 - FEAT: normalize rewards?
-- FEAT: reward shaper for Pong-v5, points whenever paddle hits ball
 - FEAT: make checkpointing directories be prefixed by challenge_id
 - FEAT: add normalization support
 - FEAT: add discrete env support
@@ -27,7 +26,6 @@
 - BUG: metrics are not well sorted yet
 - FEAT: add support for stopping training on reward threshold reached
 - FEAT: add support for fully recording last eval
-- FEAT: create cartpole-v1 reward shaper that prioritizes centering the pole
 - BUG: check that were are matching rlzoo stop criteria
 - Pong-RAM: Add support for byte-selection
 MaxAndSkipEnv

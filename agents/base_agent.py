@@ -8,7 +8,7 @@ import pytorch_lightning as pl
 from utils.environment import build_env
 from utils.rollouts import RolloutCollector
 from utils.misc import prefix_dict_keys
-from callbacks import PrintMetricsCallback, VideoLoggerCallback, ModelCheckpointCallback
+from callbacks import PrintMetricsCallback, VideoLoggerCallback, ModelCheckpointCallback, HyperparameterScheduler
 from torch.utils.data import DataLoader, TensorDataset
 
 n_samples, sample_dim, batch_size = (1, 1, 1)
@@ -323,6 +323,15 @@ class BaseAgent(pl.LightningModule):
             algorithm_metric_rules=algo_metric_rules  # Pass algorithm-specific rules
         )
 
+        # Create hyperparameter scheduler callback
+        hyperparam_cb = HyperparameterScheduler(
+            control_dir=str(self.run_manager.run_dir / "hyperparam_control"),
+            check_interval=2.0,  # Check every 2 seconds
+            enable_lr_scheduling=True,
+            enable_manual_control=True,
+            verbose=True
+        )
+
         trainer = pl.Trainer(
             logger=wandb_logger,
             max_epochs=self.config.max_epochs if self.config.max_epochs is not None else -1,
@@ -331,7 +340,7 @@ class BaseAgent(pl.LightningModule):
             accelerator="cpu",  # Use CPU for training # TODO: softcode this
             reload_dataloaders_every_n_epochs=1,#self.config.n_epochs
             check_val_every_n_epoch=self.config.eval_freq_epochs,  # Run validation every epoch
-            callbacks=[printer_cb, video_logger_cb, checkpoint_cb]  # Add checkpoint callback
+            callbacks=[printer_cb, video_logger_cb, checkpoint_cb, hyperparam_cb]  # Add hyperparameter scheduler
         )
         trainer.fit(self)
 

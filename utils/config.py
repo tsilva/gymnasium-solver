@@ -58,7 +58,7 @@ class Config:
     # Normalization
     normalize_obs: bool = False  # Default: false
     normalize_reward: bool = False  # Default: false
-    advantage_norm: str = "batch"  # Default: "batch" (options: "off", "rollout", "batch")
+    normalize_advantages: str = "batch"  # Default: "batch" (options: "off", "rollout", "batch")
     
     # Frame stacking
     frame_stack: int = 1  # Default: 1 (no frame stacking)
@@ -323,7 +323,7 @@ class Config:
         return {
             'gamma': self.gamma,
             'gae_lambda': self.gae_lambda,
-            'advantage_norm': self.advantage_norm
+            'normalize_advantages': self.normalize_advantages == "rollout"
         }
     
     def validate(self) -> None:

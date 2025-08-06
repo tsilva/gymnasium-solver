@@ -23,9 +23,10 @@ class PPO(BaseAgent):
         advantages = batch.advantages
         returns = batch.returns
         
+        normalize_advantages = self.config.normalize_advantages == "batch"
+
         # Batch-level advantage normalization if enabled
-        if getattr(self.config, 'advantage_norm', 'batch') == "batch" and len(advantages) > 1:
-            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+        if normalize_advantages: advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
         clip_range = self.config.clip_range
         ent_coef = self.config.ent_coef

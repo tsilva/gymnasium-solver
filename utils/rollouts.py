@@ -51,7 +51,7 @@ class RolloutCollector():
                  gamma: float = 0.99, gae_lambda: float = 0.95, 
                  normalize_advantage: bool = True, advantages_norm_eps: float = 1e-8, 
                  use_gae: bool = True,
-                 advantage_norm: str = "batch",
+                 normalize_advantages: bool = False,
                  **kwargs):
         self.env = env
         self.policy_model = policy_model
@@ -62,7 +62,7 @@ class RolloutCollector():
         self.normalize_advantage = normalize_advantage
         self.advantages_norm_eps = advantages_norm_eps
         self.use_gae = use_gae
-        self.advantage_norm = advantage_norm
+        self.normalize_advantages = normalize_advantages
         self.kwargs = kwargs
         
         # State tracking
@@ -295,15 +295,9 @@ class RolloutCollector():
                 # If no baseline history yet, advantages equal returns (no baseline subtraction)
                 advantages_buf = returns_buf.copy()
 
-        # Normalize advantages based on advantage_norm setting
-        if self.advantage_norm == "rollout":
-            # Normalize across the entire rollout (original behavior)
+        if self.normalize_advantages:
             adv_flat = advantages_buf.reshape(-1)
             advantages_buf = (advantages_buf - adv_flat.mean()) / (adv_flat.std() + self.advantages_norm_eps)
-        elif self.advantage_norm == "off":
-            # No normalization
-            pass
-        # For "batch" mode, normalization will be done in the agent's train_on_batch method
 
         # Create final tensors for training - minimize CPU-GPU transfers
         # Use pre-allocated GPU buffers and reshape efficiently

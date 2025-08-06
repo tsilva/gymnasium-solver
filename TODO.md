@@ -5,7 +5,7 @@
 - FEAT: normalize rewards?
 - FEAT: reward shaper for Pong-v5, points whenever paddle hits ball
 - FEAT: make checkpointing directories be prefixed by challenge_id
-- FEAT: store all training data in run directory (timestamped)
+- ✅ FEAT: store all training data in run directory (timestamped) - IMPLEMENTED: runs/runid/ structure
 - FEAT: add normalization support
 - FEAT: add discrete env support
 - Cleanup environment files by using inheritance
@@ -36,7 +36,7 @@ MaxAndSkipEnv
 	•	Try longer training and more seeds; RAM setups often need more steps to stabilize.
 	•	If you can, expose extra emulator registers (RAM+) to reduce partial observability.
 - How to measure advantage of different seeds versus reusing same env.
-- Try creating local run folder with assets, create own run id and assign it to wandb if possible
+- ✅ Try creating local run folder with assets, create own run id and assign it to wandb if possible - IMPLEMENTED: runs/runid/ structure
 - Consider increasing sample efficiency by figuring out how different are transitions between different envs
 - FEAT: add determinism check at beginning to make sure that rollout benefits from multiple envs (eg: Pong, test on PongDeterministic)
 - FEAT: create cartpole reward shaper that prioritizes centering the pole

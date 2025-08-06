@@ -66,9 +66,10 @@ class ModelCheckpointCallback(pl.Callback):
     
     def _get_checkpoint_dir(self, agent) -> Path:
         """Get the checkpoint directory for this specific agent/env combination."""
-        algo_id = agent.config.algo_id
-        env_id = agent.config.env_id.replace('/', '_').replace('\\', '_')
-        checkpoint_path = self.checkpoint_dir / algo_id / env_id
+        # If checkpoint_dir is already a run-specific directory, use it directly
+        checkpoint_path = Path(self.checkpoint_dir)
+        
+        # Ensure the directory exists
         checkpoint_path.mkdir(parents=True, exist_ok=True)
         return checkpoint_path
     

@@ -203,7 +203,14 @@ class BaseAgent(pl.LightningModule):
         # NOTE: processing/saving video is a bottleneck that will make next training epoch be slower,
         # if you see train/fps drops, make video recording less frequent by adjusting `eval_recording_freq_epochs`
         record_video = self.current_epoch == 0 or self.config.eval_recording_freq_epochs % self.current_epoch == 0
-        video_path = os.path.join(wandb.run.dir, f"videos/eval/episodes/rollout_epoch_{self.current_epoch}.mp4")
+        
+        # Use run-specific video directory if available, otherwise fallback to wandb.run.dir
+        if hasattr(self, 'run_manager') and self.run_manager:
+            video_path = self.run_manager.get_video_dir() / "eval" / "episodes" / f"rollout_epoch_{self.current_epoch}.mp4"
+            video_path.parent.mkdir(parents=True, exist_ok=True)
+            video_path = str(video_path)
+        else:
+            video_path = os.path.join(wandb.run.dir, f"videos/eval/episodes/rollout_epoch_{self.current_epoch}.mp4")
         with self.validation_env.recorder(video_path, record_video=record_video): # TODO: make rew window = config.eval_episodes
             metrics = self.validation_collector.get_metrics()
             total_episodes = metrics["total_episodes"]
@@ -243,6 +250,7 @@ class BaseAgent(pl.LightningModule):
     def _run_training(self):
         from dataclasses import asdict
         from pytorch_lightning.loggers import WandbLogger
+        from utils.run_manager import RunManager
 
         # Use regular WandbLogger
         project_name = self.config.env_id.replace("/", "-").replace("\\", "-")
@@ -254,23 +262,33 @@ class BaseAgent(pl.LightningModule):
             config=asdict(self.config)
         )
         
+        # Setup run directory management
+        self.run_manager = RunManager()
+        run_dir = self.run_manager.setup_run_directory(wandb_logger.experiment)
+        
+        # Save configuration to run directory
+        config_path = self.run_manager.save_config(self.config)
+        print(f"Configuration saved to: {config_path}")
+        print(f"Run directory: {run_dir}")
+        print(f"Run ID: {self.run_manager.run_id}")
+        
         # Define step-based metrics to ensure proper ordering
         if wandb_logger.experiment:
             wandb_logger.experiment.define_metric("train/*", step_metric="trainer/global_step")
             wandb_logger.experiment.define_metric("eval/*", step_metric="trainer/global_step")
         
-        # Create video logging callback
+        # Create video logging callback using run-specific directory
         video_logger_cb = VideoLoggerCallback(
-            media_root="videos",        # where you will drop files
+            media_root=str(self.run_manager.get_video_dir()),  # Use run-specific video directory
             namespace_depth=1,          # "episodes" from train/episodes/ or eval/episodes/
             #log_interval_s=5.0,         # scan at most every 5 seconds
             #max_per_key=8,              # avoid spamming the panel
         )
         
         # TODO: review early stopping logic
-        # Create checkpoint callback
+        # Create checkpoint callback using run-specific directory
         checkpoint_cb = ModelCheckpointCallback(
-            checkpoint_dir=getattr(self.config, 'checkpoint_dir', 'checkpoints'),
+            checkpoint_dir=str(self.run_manager.get_checkpoint_dir()),
             monitor="eval/ep_rew_mean",
             mode="max",
             save_last=True,

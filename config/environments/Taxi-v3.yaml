@@ -8,11 +8,12 @@ __Taxi-v3:
   gae_lambda: 0.95
   gamma: 0.99
   n_envs: 16
-  n_timesteps: !!float 3e5
+  #n_timesteps: !!float 3e5
   frame_stack: 1
   eval_episodes: 10
   eval_deterministic: true
-  eval_recording_freq_epochs: 100
+  eval_freq_epochs: 10
+  eval_recording_freq_epochs: 10
 
 Taxi-v3_ppo:
   inherits: __Taxi-v3
@@ -33,7 +34,7 @@ Taxi-v3_ppo:
 
   # Network (adjust to encoding)
   # For 4-D ordinal or 9-bit binary: smaller net is enough
-  hidden_dims: [32, 32]        # or [64, 64] if using 19-d one-hot / embedding
+  hidden_dims: [128]        # or [64, 64] if using 19-d one-hot / embedding
 
   # Eval
   eval_episodes: 10
@@ -47,6 +48,6 @@ Taxi-v3_reinforce:
   n_steps: 256
   batch_size: 32
   gamma: 0.99
-  learning_rate: 0.001
-  hidden_dims: [256, 256]
+  learning_rate: 0.01
+  hidden_dims: [128]
   use_baseline: true

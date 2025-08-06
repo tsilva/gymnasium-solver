@@ -1,10 +1,10 @@
+- BUG: is REINFORCE well implemented? are we waiting until the end of the episode to update the policy?
 - BUG: we may be updating PPO wrong (n_updates for each batch)
-- FEAT: track immediate episode reward
+- FEAT: track immediate episode reward (for monitoring hyperparam change reaction)
 - FEAT: track learning hyperparams in wandb (train/hyperparams)
 - BUG: No reward threshold available (neither in config nor environment spec) - skipping early stopping check
 - FEAT: improve metric descriptions
 - FEAT: write guide on how to monitor training
-- FEAT: is REINFORCE well implemented? are we waiting until the end of the episode to update the policy?
 - FEAT: train on cloud server
 - FEAT: normalize rewards?
 - FEAT: add normalization support
@@ -25,7 +25,6 @@
 - BUG: check that were are matching rlzoo mstop criteria
 - Pong-RAM: Add support for byte-selection
 MaxAndSkipEnv
-- Should I normalize returns for REINFORCE?
 - BUG: video step is still not alligned
 - BUG: step 100 = reward 99
 - Adjust eval policy for atari

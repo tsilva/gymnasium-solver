@@ -3,7 +3,7 @@ from utils.config import load_config
 
 def main():
     parser = argparse.ArgumentParser(description="Train RL agent.")
-    parser.add_argument("--config", type=str, default="Taxi-v3_reinforce", help="Config ID (default: Pong-v5_ram_ppo)")
+    parser.add_argument("--config", type=str, default="Taxi-v3_ppo", help="Config ID (default: Pong-v5_ram_ppo)")
     parser.add_argument("--algo", type=str, default=None, help="Agent type (optional, extracted from config if not provided)")
     parser.add_argument("--resume", action="store_true", help="Resume training from latest checkpoint")
     parser.add_argument("--log-dir", type=str, default="logs", help="Directory for log files (default: logs)")

@@ -44,6 +44,12 @@ class ModelCheckpointCallback(pl.Callback):
         
     def setup(self, trainer, pl_module, stage):
         """Setup callback - called before training starts."""
+        # Initialize best model tracking attributes on the agent for compatibility
+        if not hasattr(pl_module, 'best_eval_reward'):
+            pl_module.best_eval_reward = float('-inf')
+        if not hasattr(pl_module, 'best_model_path'):
+            pl_module.best_model_path = None
+            
         if stage == "fit" and self.resume:
             self._handle_resume(pl_module)
     

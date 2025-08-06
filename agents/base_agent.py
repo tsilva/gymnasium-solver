@@ -74,10 +74,7 @@ class BaseAgent(pl.LightningModule):
             }
         )
         
-        # TODO: this should be in callback?
-        # Best model tracking (maintained for compatibility with checkpoint callback)
-        self.best_eval_reward = float('-inf')
-        self.best_model_path = None
+
 
         # Create the models that the agent will require (eg: policy, value function, etc.)
         self.create_models()

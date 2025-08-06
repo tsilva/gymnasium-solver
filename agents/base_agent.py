@@ -8,6 +8,7 @@ import pytorch_lightning as pl
 from utils.environment import build_env
 from utils.rollouts import RolloutCollector
 from utils.misc import prefix_dict_keys
+from utils.decorators import must_implement
 from callbacks import PrintMetricsCallback, VideoLoggerCallback, ModelCheckpointCallback, HyperparameterScheduler
 from torch.utils.data import DataLoader, TensorDataset
 
@@ -65,7 +66,7 @@ class BaseAgent(pl.LightningModule):
             norm_obs=config.normalize_obs,
             frame_stack=config.frame_stack,
             obs_type=config.obs_type,
-            env_kwargs=config.env_kwargs
+            env_kwargs=config.env_kwargs,
             render_mode="rgb_array",
             record_video=True,
             record_video_kwargs={
@@ -108,11 +109,13 @@ class BaseAgent(pl.LightningModule):
         # - Metrics are logged using self.log_metrics() method
         self._epoch_metrics = {}
     
+    @must_implement
     def create_models(self):
-        raise NotImplementedError("Subclass must implement create_models()")
+        pass
  
+    @must_implement
     def train_on_batch(self, batch, batch_idx):
-        raise NotImplementedError("Subclass must implement train_on_batch()") # TODO: use override_required decorator
+        pass
     
     def rollout_collector_hyperparams(self):
         return {
@@ -125,13 +128,20 @@ class BaseAgent(pl.LightningModule):
         print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}") # TODO: use self.fit_start_time for logging
 
     def train_dataloader(self):
+        # Initialize throughput calculation metrics
         self.train_epoch_start_time = time.time_ns()
         train_metrics = self.train_collector.get_metrics()
         self.train_epoch_start_timesteps = train_metrics["total_timesteps"]
-
+        
+        # Store the epoch when this method was called
+        # (this is used to later assert that train_dataloader is called once 
+        # per epoch, in order to ensure that we train on fresh rollout each epoch)
         self._last_train_dataloader_epoch = self.current_epoch
 
+        # Collect a rollout to train on this epoch
         self.train_collector.collect()
+
+        # Create a dataloader to feed the rollout as shuffled mini-batches
         dataloader = self.train_collector.create_dataloader(
             batch_size=self.config.batch_size,
             shuffle=True
@@ -139,6 +149,7 @@ class BaseAgent(pl.LightningModule):
         return dataloader
       
     def on_train_epoch_start(self):
+        # Training epoch start callback, nothing to do here
         pass
 
     def training_step(self, batch, batch_idx):
@@ -146,6 +157,7 @@ class BaseAgent(pl.LightningModule):
         # (this is the method that is performing the per-epoch rollout)
         assert self._last_train_dataloader_epoch == self.current_epoch, "train_dataloader must be called once per epoch"
         
+        # BUG: should we train on N_epochs with same batch, or should we train on same rollout N_epochs?
         for _ in range(self.config.n_epochs): 
             losses = self.train_on_batch(batch, batch_idx)
             optimizers = self.optimizers()

@@ -253,98 +253,100 @@ class BaseAgent(pl.LightningModule):
         from dataclasses import asdict
         from pytorch_lightning.loggers import WandbLogger
         from utils.run_manager import RunManager
+        from utils.logging import capture_all_output, log_config_details
 
-        # Check if wandb logger and run manager are already set up (from train.py)
-        if hasattr(self, 'wandb_logger') and hasattr(self, 'run_manager'):
-            # Use existing logger and run manager
-            wandb_logger = self.wandb_logger
-            print(f"Using existing run directory: {self.run_manager.run_dir}")
-            print(f"Using existing run ID: {self.run_manager.run_id}")
-        else:
-            # Fallback: Create new logger and run manager (for backwards compatibility)
-            project_name = self.config.env_id.replace("/", "-").replace("\\", "-")
-            experiment_name = f"{self.config.algo_id}-{self.config.seed}"
-            wandb_logger = WandbLogger(
-                project=project_name,
-                name=experiment_name,
-                log_model=True,
-                config=asdict(self.config)
-            )
-            
-            # Setup run directory management
-            self.run_manager = RunManager()
-            run_dir = self.run_manager.setup_run_directory(wandb_logger.experiment)
+        # Create wandb logger and run manager
+        project_name = self.config.project_id if self.config.project_id else self.config.env_id.replace("/", "-").replace("\\", "-")
+        experiment_name = f"{self.config.algo_id}-{self.config.seed}"
+        wandb_logger = WandbLogger(
+            project=project_name,
+            name=experiment_name,
+            log_model=True,
+            config=asdict(self.config)
+        )
+        
+        # Setup run directory management
+        self.run_manager = RunManager()
+        run_dir = self.run_manager.setup_run_directory(wandb_logger.experiment)
+        run_logs_dir = str(self.run_manager.get_logs_dir())
+        
+        print(f"Run directory: {run_dir}")
+        print(f"Run ID: {self.run_manager.run_id}")
+        print(f"Logs will be saved to: {run_logs_dir}")
+        
+        # Set up comprehensive logging using run-specific logs directory
+        with capture_all_output(config=self.config, log_dir=run_logs_dir):
+            # Log configuration details
+            log_config_details(self.config)
             
             # Save configuration to run directory
             config_path = self.run_manager.save_config(self.config)
             print(f"Configuration saved to: {config_path}")
-            print(f"Run directory: {run_dir}")
-            print(f"Run ID: {self.run_manager.run_id}")
-        
-        # Define step-based metrics to ensure proper ordering
-        if wandb_logger.experiment:
-            wandb_logger.experiment.define_metric("train/*", step_metric="train/total_timesteps")
-            wandb_logger.experiment.define_metric("eval/*", step_metric="train/total_timesteps")
-        
-        # Create video logging callback using run-specific directory
-        video_logger_cb = VideoLoggerCallback(
-            media_root=str(self.run_manager.get_video_dir()),  # Use run-specific video directory
-            namespace_depth=1,          # "episodes" from train/episodes/ or eval/episodes/
-            #log_interval_s=5.0,         # scan at most every 5 seconds
-            #max_per_key=8,              # avoid spamming the panel
-        )
-        
-        # TODO: review early stopping logic
-        # Create checkpoint callback using run-specific directory
-        checkpoint_cb = ModelCheckpointCallback(
-            checkpoint_dir=str(self.run_manager.get_checkpoint_dir()),
-            monitor="eval/ep_rew_mean",
-            mode="max",
-            save_last=True,
-            save_threshold_reached=True,
-            resume=getattr(self.config, 'resume', False)
-        )
-        
-        # Create algorithm-specific metric rules from config
-        from utils.config import get_metric_precision_dict, get_metric_delta_rules, get_algorithm_metric_rules
-        metric_precision = get_metric_precision_dict()
-        metric_delta_rules = get_metric_delta_rules()
-        algo_metric_rules = get_algorithm_metric_rules(self.config.algo_id)
-        
-        # TODO: clean this up
-        # TODO: print myself without printer callback?
-        printer_cb = PrintMetricsCallback(
-            # TODO: should this be same as log_every_n_steps?
-            every_n_steps=200,   # print every 200 optimizer steps
-            # TODO: not sure if this is working
-            every_n_epochs=10,    # and at the end of every epoch
-            digits=4, # TODO: is this still needed?
-            # TODO: pass single metric config
-            metric_precision=metric_precision,
-            metric_delta_rules=metric_delta_rules,
-            algorithm_metric_rules=algo_metric_rules  # Pass algorithm-specific rules
-        )
+            
+            # Define step-based metrics to ensure proper ordering
+            if wandb_logger.experiment:
+                wandb_logger.experiment.define_metric("train/*", step_metric="train/total_timesteps")
+                wandb_logger.experiment.define_metric("eval/*", step_metric="train/total_timesteps")
+            
+            # Create video logging callback using run-specific directory
+            video_logger_cb = VideoLoggerCallback(
+                media_root=str(self.run_manager.get_video_dir()),  # Use run-specific video directory
+                namespace_depth=1,          # "episodes" from train/episodes/ or eval/episodes/
+                #log_interval_s=5.0,         # scan at most every 5 seconds
+                #max_per_key=8,              # avoid spamming the panel
+            )
+            
+            # TODO: review early stopping logic
+            # Create checkpoint callback using run-specific directory
+            checkpoint_cb = ModelCheckpointCallback(
+                checkpoint_dir=str(self.run_manager.get_checkpoint_dir()),
+                monitor="eval/ep_rew_mean",
+                mode="max",
+                save_last=True,
+                save_threshold_reached=True,
+                resume=getattr(self.config, 'resume', False)
+            )
+            
+            # Create algorithm-specific metric rules from config
+            from utils.config import get_metric_precision_dict, get_metric_delta_rules, get_algorithm_metric_rules
+            metric_precision = get_metric_precision_dict()
+            metric_delta_rules = get_metric_delta_rules()
+            algo_metric_rules = get_algorithm_metric_rules(self.config.algo_id)
+            
+            # TODO: clean this up
+            # TODO: print myself without printer callback?
+            printer_cb = PrintMetricsCallback(
+                # TODO: should this be same as log_every_n_steps?
+                every_n_steps=200,   # print every 200 optimizer steps
+                # TODO: not sure if this is working
+                every_n_epochs=10,    # and at the end of every epoch
+                digits=4, # TODO: is this still needed?
+                # TODO: pass single metric config
+                metric_precision=metric_precision,
+                metric_delta_rules=metric_delta_rules,
+                algorithm_metric_rules=algo_metric_rules  # Pass algorithm-specific rules
+            )
 
-        # Create hyperparameter scheduler callback
-        hyperparam_cb = HyperparameterScheduler(
-            control_dir=str(self.run_manager.run_dir / "hyperparam_control"),
-            check_interval=2.0,  # Check every 2 seconds
-            enable_lr_scheduling=True,
-            enable_manual_control=True,
-            verbose=True
-        )
+            # Create hyperparameter scheduler callback
+            hyperparam_cb = HyperparameterScheduler(
+                control_dir=str(self.run_manager.run_dir / "hyperparam_control"),
+                check_interval=2.0,  # Check every 2 seconds
+                enable_lr_scheduling=True,
+                enable_manual_control=True,
+                verbose=True
+            )
 
-        trainer = pl.Trainer(
-            logger=wandb_logger,
-            max_epochs=self.config.max_epochs if self.config.max_epochs is not None else -1,
-            enable_progress_bar=False,
-            enable_checkpointing=False,  # Disable built-in checkpointing, use our custom callback
-            accelerator="cpu",  # Use CPU for training # TODO: softcode this
-            reload_dataloaders_every_n_epochs=1,#self.config.n_epochs
-            check_val_every_n_epoch=self.config.eval_freq_epochs,  # Run validation every epoch
-            callbacks=[printer_cb, video_logger_cb, checkpoint_cb, hyperparam_cb]  # Add hyperparameter scheduler
-        )
-        trainer.fit(self)
+            trainer = pl.Trainer(
+                logger=wandb_logger,
+                max_epochs=self.config.max_epochs if self.config.max_epochs is not None else -1,
+                enable_progress_bar=False,
+                enable_checkpointing=False,  # Disable built-in checkpointing, use our custom callback
+                accelerator="cpu",  # Use CPU for training # TODO: softcode this
+                reload_dataloaders_every_n_epochs=1,#self.config.n_epochs
+                check_val_every_n_epoch=self.config.eval_freq_epochs,  # Run validation every epoch
+                callbacks=[printer_cb, video_logger_cb, checkpoint_cb, hyperparam_cb]  # Add hyperparameter scheduler
+            )
+            trainer.fit(self)
 
     def log_metrics(self, metrics, *, prefix=None):
         """

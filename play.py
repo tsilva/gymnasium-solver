@@ -162,34 +162,125 @@ def play_episodes(policy_model, env, num_episodes=5, deterministic=True):
         print(f"Episode {episode + 1} finished after {step_count} steps with reward: {episode_reward:.2f}")
 
 
+def load_config_from_run(run_id: str):
+    """Load configuration from a run's config.json file."""
+    import json
+    from utils.config import Config
+    
+    # Handle latest-run symlink
+    runs_dir = Path("runs")
+    if run_id == "latest-run":
+        run_path = runs_dir / "latest-run"
+        if run_path.is_symlink():
+            run_id = str(run_path.readlink())
+        else:
+            raise FileNotFoundError("latest-run symlink not found")
+    
+    run_path = runs_dir / run_id
+    if not run_path.exists():
+        raise FileNotFoundError(f"Run directory not found: {run_path}")
+    
+    config_file = run_path / "configs" / "config.json"
+    if not config_file.exists():
+        raise FileNotFoundError(f"Config file not found: {config_file}")
+    
+    with open(config_file, 'r') as f:
+        config_dict = json.load(f)
+    
+    # Create Config instance from pldictionary
+    config = Config(**config_dict)
+    return config
+
+
+def find_best_checkpoint_in_run(run_id: str) -> Path:
+    """Find the best checkpoint in a run directory."""
+    runs_dir = Path("runs")
+    
+    # Handle latest-run symlink
+    if run_id == "latest-run":
+        run_path = runs_dir / "latest-run"
+        if run_path.is_symlink():
+            run_id = str(run_path.readlink())
+        else:
+            raise FileNotFoundError("latest-run symlink not found")
+    
+    run_path = runs_dir / run_id
+    if not run_path.exists():
+        raise FileNotFoundError(f"Run directory not found: {run_path}")
+    
+    checkpoints_dir = run_path / "checkpoints"
+    if not checkpoints_dir.exists():
+        raise FileNotFoundError(f"Checkpoints directory not found: {checkpoints_dir}")
+    
+    # Look for best checkpoint first
+    best_checkpoint = checkpoints_dir / "best_checkpoint.ckpt"
+    if best_checkpoint.exists():
+        return best_checkpoint
+    
+    # Fall back to last checkpoint
+    last_checkpoint = checkpoints_dir / "last_checkpoint.ckpt"
+    if last_checkpoint.exists():
+        return last_checkpoint
+    
+    # Look for any checkpoint files
+    checkpoint_files = list(checkpoints_dir.glob("*.ckpt"))
+    if checkpoint_files:
+        # Sort by modification time, return most recent
+        checkpoint_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+        return checkpoint_files[0]
+    
+    raise FileNotFoundError(f"No checkpoint files found in {checkpoints_dir}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Play trained RL agent.")
-    parser.add_argument("--config", type=str, default="CartPole-v1", 
-                       help="Config ID (should match training config)")
-    parser.add_argument("--algo", type=str, default="ppo", 
-                       help="Algorithm used for training")
+    parser.add_argument("--run-id", type=str, default="latest-run",
+                       help="Run ID to load model from (default: latest-run)")
+    parser.add_argument("--config", type=str, default=None, 
+                       help="Config ID (if not provided, load from run)")
+    parser.add_argument("--algo", type=str, default=None, 
+                       help="Algorithm used for training (if not provided, load from run)")
     parser.add_argument("--model", type=str, default=None,
-                       help="Path to saved model (if not provided, auto-detect)")
+                       help="Path to saved model (if not provided, auto-detect from run)")
     parser.add_argument("--episodes", type=int, default=5,
                        help="Number of episodes to play")
-    parser.add_argument("--stochastic", action="store_true",
-                       help="Use stochastic policy (default: deterministic)")
+    parser.add_argument("--stochastic", #action="store_true",
+                       default=False, help="Use stochastic policy (default: deterministic)")
     parser.add_argument("--seed", type=int, default=42,
                        help="Random seed for reproducibility")
     parser.add_argument("--log-dir", type=str, default="logs", help="Directory for log files (default: logs)")
     
     args = parser.parse_args()
     
-    # Load config
-    from utils.config import load_config
-    config = load_config(args.config, args.algo)
+    # Load config - either from run or from provided config/algo
+    if args.config is not None and args.algo is not None:
+        # Legacy mode: load config from config files
+        from utils.config import load_config
+        config = load_config(args.config, args.algo)
+        print(f"Loaded config from files: {args.config}/{args.algo}")
+    else:
+        # New mode: load config from run
+        try:
+            config = load_config_from_run(args.run_id)
+            print(f"Loaded config from run: {args.run_id}")
+            print(f"  Environment: {config.env_id}")
+            print(f"  Algorithm: {config.algo_id}")
+        except FileNotFoundError as e:
+            print(f"Error loading config from run: {e}")
+            if args.config is None or args.algo is None:
+                print("Please provide either --run-id (with config in run) or both --config and --algo")
+                return
+            # Fall back to legacy mode
+            from utils.config import load_config
+            config = load_config(args.config, args.algo)
+            print(f"Falling back to config from files: {args.config}/{args.algo}")
     
     # Set up logging for play session
     from utils.logging import capture_all_output, log_config_details
     
     with capture_all_output(config=config, log_dir=args.log_dir):
         print(f"=== Play Session Started ===")
-        print(f"Command: {' '.join(['python', 'play.py'] + [arg for arg in [args.config, '--algo', args.algo] + (['--model', args.model] if args.model else []) + (['--stochastic'] if args.stochastic else [])])}")
+        print(f"Command: {' '.join(['python', 'play.py'] + ['--run-id', args.run_id] + (['--config', args.config] if args.config else []) + (['--algo', args.algo] if args.algo else []) + (['--model', args.model] if args.model else []) + (['--stochastic'] if args.stochastic else []))}")
         
         # Set random seed
         from stable_baselines3.common.utils import set_random_seed
@@ -197,38 +288,44 @@ def main():
         
         # Determine model path
         if args.model is None:
-            # Auto-detect model path - try new checkpoint system first
-            from utils.checkpoint import find_latest_checkpoint, list_available_checkpoints
-            
-            checkpoint_path = find_latest_checkpoint(config.algo_id, config.env_id)
-            
-            if checkpoint_path:
-                model_path = checkpoint_path
-                print(f"Found checkpoint: {model_path}")
-            else:
-                # Fall back to old saved_models directory
-                model_filename = f"best_model_{config.env_id.replace('/', '_')}_{config.algo_id}.pth"
-                model_path = Path("saved_models") / model_filename
+            # Auto-detect model path from run directory first
+            try:
+                model_path = find_best_checkpoint_in_run(args.run_id)
+                print(f"Found checkpoint in run {args.run_id}: {model_path}")
+            except FileNotFoundError as e:
+                print(f"No checkpoint found in run: {e}")
+                # Fall back to old checkpoint system
+                from utils.checkpoint import find_latest_checkpoint, list_available_checkpoints
                 
-                if not model_path.exists():
-                    print(f"No model found for {config.algo_id}/{config.env_id}")
-                    print("\nAvailable checkpoints:")
-                    checkpoints = list_available_checkpoints()
-                    if checkpoints:
-                        for algo, envs in checkpoints.items():
-                            for env, files in envs.items():
-                                print(f"  {algo}/{env}: {files}")
-                    else:
-                        print("  No checkpoints found")
+                checkpoint_path = find_latest_checkpoint(config.algo_id, config.env_id)
+                
+                if checkpoint_path:
+                    model_path = checkpoint_path
+                    print(f"Found checkpoint: {model_path}")
+                else:
+                    # Fall back to old saved_models directory
+                    model_filename = f"best_model_{config.env_id.replace('/', '_')}_{config.algo_id}.pth"
+                    model_path = Path("saved_models") / model_filename
                     
-                    print("\nAvailable legacy models:")
-                    models_dir = Path("saved_models")
-                    if models_dir.exists():
-                        for model_file in models_dir.glob("*.pth"):
-                            print(f"  {model_file}")
-                    else:
-                        print("  No saved_models directory found")
-                    return
+                    if not model_path.exists():
+                        print(f"No model found for {config.algo_id}/{config.env_id}")
+                        print("\nAvailable checkpoints:")
+                        checkpoints = list_available_checkpoints()
+                        if checkpoints:
+                            for algo, envs in checkpoints.items():
+                                for env, files in envs.items():
+                                    print(f"  {algo}/{env}: {files}")
+                        else:
+                            print("  No checkpoints found")
+                        
+                        print("\nAvailable legacy models:")
+                        models_dir = Path("saved_models")
+                        if models_dir.exists():
+                            for model_file in models_dir.glob("*.pth"):
+                                print(f"  {model_file}")
+                        else:
+                            print("  No saved_models directory found")
+                        return
         else:
             model_path = Path(args.model)
             if not model_path.exists():
@@ -245,12 +342,22 @@ def main():
             seed=args.seed,
             env_wrappers=config.env_wrappers,
             norm_obs=config.normalize_obs,
-            n_envs=1,  # Single environment for playing
+            n_envs=1,  # Force single environment for playing
             frame_stack=config.frame_stack,
             obs_type=config.obs_type,
             render_mode="human",  # Human-readable rendering
-            env_kwargs=config.env_kwargs
+            env_kwargs=config.env_kwargs,
+            subproc=False  # Force DummyVecEnv for playing
         )
+        
+        # Verify we have a single environment with DummyVecEnv
+        from stable_baselines3.common.vec_env import DummyVecEnv
+        if not isinstance(env.venv, DummyVecEnv):
+            print(f"Warning: Expected DummyVecEnv but got {type(env.venv)}")
+        if env.num_envs != 1:
+            print(f"Warning: Expected 1 environment but got {env.num_envs}")
+        else:
+            print(f"✓ Using single environment with DummyVecEnv")
         
         print(f"\nEnvironment: {config.env_id}")
         print(f"Algorithm: {config.algo_id}")

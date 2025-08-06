@@ -1,4 +1,3 @@
-- FEAT: try training on deterministic Pong env
 - FEAT: track immediate episode reward
 - FEAT: track learning hyperparams in wandb (train/hyperparams)
 - BUG: No reward threshold available (neither in config nor environment spec) - skipping early stopping check
@@ -13,7 +12,6 @@
 - Create benchmarking script to find optimal parallelization for env/machine combo
 - TEST: predict next state to learn faster
 - BUG: CartPole-v1/PPO training performance has regressed vs rlzoo
-- FEAT: log ent_coef (may change it mid traingin)
 - TEST: does benchmark script still give expected number of FPS on Pong? test with RAM vs RGB
 - FEAT: add Minatari support
 - BUG: videos not logged at correct timesteps

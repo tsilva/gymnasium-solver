@@ -1,12 +1,15 @@
 # Pong with RGB observations challenge configurations
 
-Pong-v5_rgb_ppo:
+__Pong-v5_rgb:
   env_id: ALE/Pong-v5
-  algo_id: ppo
   obs_type: "rgb"
   frame_stack: 4  # RGB observations typically benefit from frame stacking
-  n_envs: 8
   policy: 'CnnPolicy'      # CNN policy for RGB observations
+
+Pong-v5_rgb_ppo:
+  inherits: __Pong-v5_rgb
+  algo_id: ppo
+  n_envs: 8
   n_steps: 128             # Smaller steps for CNN processing
   batch_size: 256
   n_epochs: 4
@@ -21,12 +24,9 @@ Pong-v5_rgb_ppo:
   max_grad_norm: 0.5
 
 Pong-v5_rgb_reinforce:
-  env_id: ALE/Pong-v5
+  inherits: __Pong-v5_rgb
   algo_id: reinforce
-  obs_type: "rgb"
-  frame_stack: 4
   n_envs: 4                # Fewer envs due to computational complexity
-  policy: 'CnnPolicy'
   n_epochs: 1
   ent_coef: 0.01
   n_steps: 512

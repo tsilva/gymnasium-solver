@@ -1,5 +1,6 @@
-- FEAT: train on cloud server
 - FEAT: try training on deterministic Pong env
+- FEAT: is REINFORCE well implemented? are we waiting until the end of the episode to update the policy?
+- FEAT: train on cloud server
 - FEAT: no deterministic evals in atari envs?
 - FEAT: add challenge_id to configs
 - FEAT: normalize rewards?

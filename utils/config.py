@@ -88,15 +88,17 @@ class Config:
         env_config_path = project_root / config_dir
         
         # Search for config_id in all environment challenge files
+        all_configs = {}
         for challenge_file in env_config_path.glob("*.yaml"):
             try:
                 with open(challenge_file, 'r') as f:
                     challenge_config = yaml.safe_load(f)
-                
-                if config_id in challenge_config:
-                    return cls._load_from_environment_config(challenge_config[config_id])
+                    all_configs.update(challenge_config)
             except Exception:
                 continue  # Skip files that can't be parsed
+        
+        if config_id in all_configs:
+            return cls._load_from_environment_config(all_configs[config_id], all_configs)
         
         # Fall back to legacy format
         if algo_id is None:
@@ -106,8 +108,8 @@ class Config:
         return cls._load_from_legacy_config(config_id, algo_id, config_path)
 
     @classmethod
-    def _load_from_environment_config(cls, config_data: Dict[str, Any]) -> 'Config':
-        """Load configuration from new environment-centric format."""
+    def _load_from_environment_config(cls, config_data: Dict[str, Any], all_configs: Dict[str, Any] = None) -> 'Config':
+        """Load configuration from new environment-centric format with inheritance support."""
         # Start with class defaults
         final_config = {}
         for field in cls.__dataclass_fields__.values():
@@ -116,8 +118,59 @@ class Config:
             elif field.default_factory is not MISSING:  # type: ignore
                 final_config[field.name] = field.default_factory()      # type: ignore
 
-        # Apply all configuration settings
-        final_config.update(config_data)
+        # Handle inheritance
+        if all_configs and 'inherits' in config_data:
+            parent_config_id = config_data['inherits']
+            if parent_config_id in all_configs:
+                # Get parent config data (don't instantiate yet)
+                parent_config_data = all_configs[parent_config_id]
+                # Recursively resolve parent inheritance
+                resolved_parent = cls._resolve_inheritance(parent_config_data, all_configs)
+                # Apply parent settings
+                final_config.update(resolved_parent)
+            else:
+                raise ValueError(f"Parent configuration '{parent_config_id}' not found for inheritance")
+
+        # Apply current configuration settings (override parent)
+        config_data_copy = config_data.copy()
+        config_data_copy.pop('inherits', None)  # Remove inherits key from final config
+        final_config.update(config_data_copy)
+
+        # Convert any numeric strings (like scientific notation)
+        final_config = _convert_numeric_strings(final_config)
+
+        # Handle RLZOO format compatibility
+        cls._handle_legacy_compatibility(final_config)
+
+        # Convert list values to tuples for hidden_dims
+        if 'hidden_dims' in final_config and isinstance(final_config['hidden_dims'], list):
+            final_config['hidden_dims'] = tuple(final_config['hidden_dims'])
+
+        instance = cls(**final_config)
+        instance.validate()
+        return instance
+
+    @classmethod
+    def _resolve_inheritance(cls, config_data: Dict[str, Any], all_configs: Dict[str, Any]) -> Dict[str, Any]:
+        """Recursively resolve inheritance chain without instantiating Config objects."""
+        resolved_config = {}
+        
+        # Handle inheritance first
+        if 'inherits' in config_data:
+            parent_config_id = config_data['inherits']
+            if parent_config_id in all_configs:
+                parent_config_data = all_configs[parent_config_id]
+                resolved_parent = cls._resolve_inheritance(parent_config_data, all_configs)
+                resolved_config.update(resolved_parent)
+            else:
+                raise ValueError(f"Parent configuration '{parent_config_id}' not found for inheritance")
+        
+        # Apply current configuration settings (override parent)
+        config_data_copy = config_data.copy()
+        config_data_copy.pop('inherits', None)  # Remove inherits key
+        resolved_config.update(config_data_copy)
+        
+        return resolved_config
 
         # Convert any numeric strings (like scientific notation)
         final_config = _convert_numeric_strings(final_config)

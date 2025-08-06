@@ -1,12 +1,15 @@
 # Pong with object-based observations challenge configurations
 
-Pong-v5_objects_ppo:
+__Pong-v5_objects:
   env_id: ALE/Pong-v5
-  algo_id: ppo
   obs_type: "objects"
   frame_stack: 1
   env_wrappers:
     - id: PongV5_FeatureExtractor
+
+Pong-v5_objects_ppo:
+  inherits: __Pong-v5_objects
+  algo_id: ppo
   n_envs: 16              
   policy: 'MlpPolicy'
   n_steps: 256             # rollout size = 8 * 512 = 4096
@@ -28,12 +31,8 @@ Pong-v5_objects_ppo:
   max_grad_norm: 0.5       # Gradient clipping for stability
 
 Pong-v5_objects_reinforce:
-  env_id: ALE/Pong-v5
+  inherits: __Pong-v5_objects
   algo_id: reinforce
-  obs_type: "objects"
-  frame_stack: 1
-  env_wrappers:
-    - id: PongV5_FeatureExtractor
   n_envs: 8
   n_epochs: 1
   ent_coef: 0.01

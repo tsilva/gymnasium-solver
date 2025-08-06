@@ -1,12 +1,19 @@
 # CartPole standard challenge configurations
 
-CartPole-v1_ppo:
+__CartPole-v1:
   env_id: CartPole-v1
-  algo_id: ppo
   frame_stack: 1
+  policy: 'MlpPolicy'
+
+__CartPole-v1_normalized:
+  inherits: __CartPole-v1
+  normalize_obs: "static"
+
+CartPole-v1_ppo:
+  inherits: __CartPole-v1
+  algo_id: ppo
   n_envs: 8
   n_timesteps: !!float 1e6
-  policy: 'MlpPolicy'
   n_steps: 32
   batch_size: 256
   gae_lambda: 0.8
@@ -18,9 +25,8 @@ CartPole-v1_ppo:
   hidden_dims: [64]
 
 CartPole-v1_reinforce:
-  env_id: CartPole-v1
+  inherits: __CartPole-v1
   algo_id: reinforce
-  frame_stack: 1
   n_envs: 8
   n_epochs: 1
   ent_coef: 0.01
@@ -34,13 +40,10 @@ CartPole-v1_reinforce:
 # CartPole with normalized observations challenge configurations
 
 CartPole-v1_normalized_ppo:
-  env_id: CartPole-v1
+  inherits: __CartPole-v1_normalized
   algo_id: ppo
-  frame_stack: 1
-  normalize_obs: "static"
   n_envs: 8
   n_timesteps: !!float 1e6
-  policy: 'MlpPolicy'
   n_steps: 32
   batch_size: 256
   gae_lambda: 0.8
@@ -52,10 +55,8 @@ CartPole-v1_normalized_ppo:
   hidden_dims: [64]
 
 CartPole-v1_normalized_reinforce:
-  env_id: CartPole-v1
+  inherits: __CartPole-v1_normalized
   algo_id: reinforce
-  frame_stack: 1
-  normalize_obs: "static"
   n_envs: 8
   n_epochs: 1
   ent_coef: 0.01

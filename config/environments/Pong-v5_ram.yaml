@@ -1,12 +1,16 @@
 # Pong with RAM observations challenge configurations
 
-Pong-v5_ram_ppo:
+__Pong-v5_ram:
   env_id: ALE/Pong-v5
-  algo_id: ppo
   obs_type: "ram"
   frame_stack: 1           # RAM contains full game state - no stacking needed
-  n_envs: 8               # Reduced for better sample efficiency
   policy: 'MlpPolicy'
+  normalize_obs: "static"
+
+Pong-v5_ram_ppo:
+  inherits: __Pong-v5_ram
+  algo_id: ppo
+  n_envs: 8               # Reduced for better sample efficiency
   n_steps: 512             # Reduced for more frequent updates
   batch_size: 512          # Larger batches for stable gradients
   n_epochs: 10             # More epochs to better utilize data
@@ -15,7 +19,6 @@ Pong-v5_ram_ppo:
   ent_coef: 0.01           # Higher entropy for better exploration
   clip_range: 0.2          # Standard PPO clipping for better updates
   learning_rate: 0.0003    # Higher learning rate for faster learning
-  normalize_obs: "static"
   hidden_dims: [64, 64]    # Larger network for complex RAM patterns
   eval_freq_epochs: 50     # Less frequent eval to focus on training
   eval_episodes: 10        # More episodes for reliable evaluation
@@ -23,10 +26,8 @@ Pong-v5_ram_ppo:
   max_grad_norm: 0.5       # Gradient clipping for stability
 
 Pong-v5_ram_reinforce:
-  env_id: ALE/Pong-v5
+  inherits: __Pong-v5_ram
   algo_id: reinforce
-  obs_type: "ram"
-  frame_stack: 1
   n_envs: 8
   n_epochs: 1
   ent_coef: 0.01
@@ -37,4 +38,3 @@ Pong-v5_ram_reinforce:
   hidden_dims: [128, 128]
   use_baseline: true
   max_epochs: 2000
-  normalize_obs: "static"

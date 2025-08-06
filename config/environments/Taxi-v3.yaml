@@ -1,11 +1,14 @@
 # Taxi standard challenge configurations
 
-Taxi-v3_ppo:
+__Taxi-v3:
   env_id: Taxi-v3
+  policy: 'MlpPolicy'
+
+Taxi-v3_ppo:
+  inherits: __Taxi-v3
   algo_id: ppo
   n_envs: 8
   n_timesteps: !!float 5e5
-  policy: 'MlpPolicy'
   n_steps: 128
   batch_size: 64
   n_epochs: 4
@@ -17,7 +20,7 @@ Taxi-v3_ppo:
   hidden_dims: [256, 256]
 
 Taxi-v3_reinforce:
-  env_id: Taxi-v3
+  inherits: __Taxi-v3
   algo_id: reinforce
   frame_stack: 1
   n_envs: 8

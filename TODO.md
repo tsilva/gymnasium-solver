@@ -1,5 +1,4 @@
 - FEAT: try training on deterministic Pong env
-- FEAT: reward shaper for Pong-v5, points whenever paddle hits ball
 - FEAT: improve metric descriptions
 - FEAT: write guide on how to monitor training
 - FEAT: is REINFORCE well implemented? are we waiting until the end of the episode to update the policy?

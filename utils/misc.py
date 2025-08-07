@@ -60,6 +60,10 @@ def inference_ctx(*modules):
         with inference_ctx(actor, critic):
             ... collect trajectories ...
     """
+    # TODO: double check that this isn't causing issues
+    import torch.nn as nn
+    modules = [m for m in modules if isinstance(m, nn.Module)]
+    
     # Filter out Nones and flatten (in case you pass lists/tuples)
     flat = [m for m in itertools.chain.from_iterable(
             (m if isinstance(m, (list, tuple)) else (m,)) for m in modules)
@@ -79,6 +83,7 @@ def inference_ctx(*modules):
 
 # TODO: move this somewhere else?
 def _device_of(module: torch.nn.Module) -> torch.device:
+    if not hasattr(module, 'parameters'): return torch.device('cpu')
     return next(module.parameters()).device
 
 

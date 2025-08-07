@@ -55,8 +55,9 @@ def build_env(
             env = gym.make(env_id, render_mode=render_mode, **env_kwargs)
 
         # Automatically apply DiscreteToBinary wrapper for discrete observation spaces
-        if isinstance(env.observation_space, spaces.Discrete):
-            env = DiscreteToBinary(env)
+        # TODO: softcode
+        #if isinstance(env.observation_space, spaces.Discrete):
+        #    env = DiscreteToBinary(env)
 
         # Apply configured env wrappers
         for wrapper in env_wrappers: env = EnvWrapperRegistry.apply(env, wrapper)

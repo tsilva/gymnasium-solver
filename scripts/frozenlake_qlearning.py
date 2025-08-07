@@ -8,7 +8,7 @@ q_table = np.zeros((env.observation_space.n, env.action_space.n))
 
 episode = 0
 episode_reward = 0
-exploration_rate = 0.99  # epsilon-greedy exploration rate
+exploration_prate = 0.99  # epsilon-greedy exploration rate
 for _ in range(1000000):
     # get argmax from q table
     if np.random.rand() < exploration_rate:  # epsilon-greedy action selection

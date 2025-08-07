@@ -6,5 +6,8 @@ def create_agent(config, *args, **kwargs):
     elif algo_id == "reinforce": 
         from .reinforce import REINFORCE
         return REINFORCE(config, *args, **kwargs)
+    elif algo_id == "qlearning":
+        from .qlearning import QLearning
+        return QLearning(config, *args, **kwargs)
     else: 
         raise ValueError(f"Unsupported algorithm ID: {algo_id}")

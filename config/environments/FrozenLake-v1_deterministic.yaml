@@ -5,18 +5,24 @@ __FrozenLake-v1_deterministic:
   env_id: FrozenLake-v1
   env_kwargs:
     is_slippery: false
-    map_name: "8x8"
+    map_name: "4x4"
   policy: 'MlpPolicy'
-  ent_coef: 0.5
-  gae_lambda: 0.95
   gamma: 0.99
-  n_envs: 16
+  n_envs: 1
   #n_timesteps: !!float 3e5
-  frame_stack: 1
   eval_episodes: 10
   eval_deterministic: true
   eval_freq_epochs: 10
   eval_recording_freq_epochs: 10
+
+FrozenLake-v1_deterministic_qlearning:
+  inherits: __FrozenLake-v1_deterministic
+  algo_id: qlearning
+  n_epochs: 1
+  n_steps: 512
+  batch_size: 64
+  gamma: 0.99
+  learning_rate: 0.01
 
 FrozenLake-v1_deterministic_ppo:
   inherits: __FrozenLake-v1_deterministic
@@ -42,7 +48,6 @@ FrozenLake-v1_deterministic_ppo:
   eval_episodes: 10
   eval_deterministic: true
 
-
 FrozenLake-v1_deterministic_reinforce:
   inherits: __FrozenLake-v1_deterministic
   algo_id: reinforce
@@ -53,3 +58,4 @@ FrozenLake-v1_deterministic_reinforce:
   learning_rate: 0.005
   hidden_dims: [64]
   use_baseline: true
+

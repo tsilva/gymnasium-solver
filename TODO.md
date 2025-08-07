@@ -8,6 +8,7 @@
 - FEAT: train on cloud server
 - FEAT: normalize rewards?
 - FEAT: add normalization support
+- FEAT: add discrete env support
 - FEAT: add support for softcoding activations
 - Create benchmarking script to find optimal parallelization for env/machine combo
 - TEST: predict next state to learn faster

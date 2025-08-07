@@ -1,3 +1,7 @@
+- BUG: PPO can solve FrozenLake-v1, but REINFORCE cannot. REINFORCE is likely not implemented correctly.
+- DONE: Fixed Q-learning implementation to properly use next states in Bellman equation instead of incorrectly using current states
+
+
 - BUG: is REINFORCE well implemented? are we waiting until the end of the episode to update the policy?
 - BUG: we may be updating PPO wrong (n_updates for each batch)
 - FEAT: track immediate episode reward (for monitoring hyperparam change reaction)

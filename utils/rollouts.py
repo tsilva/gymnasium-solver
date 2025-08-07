@@ -18,6 +18,7 @@ class RolloutTrajectory(NamedTuple):
     old_values: torch.Tensor
     advantages: torch.Tensor
     returns: torch.Tensor
+    next_observations: torch.Tensor
 
 class RolloutSample(RolloutTrajectory):
     pass
@@ -42,7 +43,8 @@ class RolloutDataset(TorchDataset):
             old_log_prob=self.trajectories.old_log_prob[idx],
             old_values=self.trajectories.old_values[idx],
             advantages=self.trajectories.advantages[idx],
-            returns=self.trajectories.returns[idx]
+            returns=self.trajectories.returns[idx],
+            next_observations=self.trajectories.next_observations[idx]
         )
     
 # NOTE: Don't perform changes that result in CartPole-v1 with PPO being solvable in more than 100096 steps (around 16 secs)
@@ -115,6 +117,7 @@ class RolloutCollector():
         obs_shape = self.obs.shape[1:] if self.obs.ndim > 1 else (self.obs.shape[0],)
         
         obs_buf = np.zeros((buffer_size, self.n_envs, *obs_shape), dtype=self.obs.dtype)
+        next_obs_buf = np.zeros((buffer_size, self.n_envs, *obs_shape), dtype=self.obs.dtype)
         actions_buf = np.zeros((buffer_size, self.n_envs), dtype=np.int64)
         rewards_buf = np.zeros((buffer_size, self.n_envs), dtype=np.float32)
         values_buf = np.zeros((buffer_size, self.n_envs), dtype=np.float32)
@@ -183,6 +186,7 @@ class RolloutCollector():
 
             # Direct buffer writes
             obs_buf[step_idx] = self.obs.copy()  # defensive copy — some envs mutate obs
+            next_obs_buf[step_idx] = next_obs.copy()  # store next observations for Q-learning
             actions_buf[step_idx] = actions_np
             rewards_buf[step_idx] = rewards
             dones_buf[step_idx] = dones
@@ -319,6 +323,13 @@ class RolloutCollector():
         dones = _flat_env_major_cpu(dones_buf, torch.bool)
         advantages = _flat_env_major_cpu(advantages_buf, torch.float32)
         returns = _flat_env_major_cpu(returns_buf, torch.float32)
+        
+        # Process next observations using the same pattern as regular observations
+        if next_obs_buf.ndim == 2:  # Scalar observations: (T, n_envs) -> (T*n_envs,)
+            next_states = torch.as_tensor(next_obs_buf[:T].transpose(1, 0).reshape(-1), dtype=torch.float32, device=self.device)
+        else:  # Vector observations: (T, n_envs, obs_dim) -> (T*n_envs, obs_dim)
+            next_obs_tensor = torch.as_tensor(next_obs_buf[:T], dtype=torch.float32, device=self.device)
+            next_states = next_obs_tensor.transpose(0, 1).reshape(self.n_envs * T, -1)
 
         # Create trajectories
         trajectories = RolloutTrajectory(
@@ -329,7 +340,8 @@ class RolloutCollector():
             old_log_prob=logps, # TODO: change names
             old_values=values,
             advantages=advantages,
-            returns=returns
+            returns=returns,
+            next_observations=next_states
         )
 
         self.total_rollouts += 1

@@ -321,7 +321,7 @@ class BaseAgent(pl.LightningModule):
                 save_last=True,
                 save_threshold_reached=True,
                 resume=getattr(self.config, 'resume', False)
-            )
+            ) if self.config.algo_id != "qlearning" else None
             
             # Create algorithm-specific metric rules from config
             from utils.config import get_metric_precision_dict, get_metric_delta_rules, get_algorithm_metric_rules
@@ -352,6 +352,8 @@ class BaseAgent(pl.LightningModule):
                 verbose=True
             )
 
+            callbacks = [x for x in [printer_cb, video_logger_cb, checkpoint_cb, hyperparam_cb] if x is not None]  # Filter out None callbacks
+
             trainer = pl.Trainer(
                 logger=wandb_logger,
                 max_epochs=self.config.max_epochs if self.config.max_epochs is not None else -1,
@@ -360,7 +362,7 @@ class BaseAgent(pl.LightningModule):
                 accelerator="cpu",  # Use CPU for training # TODO: softcode this
                 reload_dataloaders_every_n_epochs=1,#self.config.n_epochs
                 check_val_every_n_epoch=self.config.eval_freq_epochs,  # Run validation every epoch
-                callbacks=[printer_cb, video_logger_cb, checkpoint_cb, hyperparam_cb]  # Add hyperparameter scheduler
+                callbacks=callbacks
             )
             trainer.fit(self)
 

@@ -79,7 +79,7 @@ class ModelCheckpointCallback(pl.Callback):
     def _save_checkpoint(self, agent, checkpoint_path: Path, is_best: bool = False, is_last: bool = False, is_threshold: bool = False):
         """Save a checkpoint with all necessary information."""
         from dataclasses import asdict
-        
+
         # Prepare checkpoint data
         checkpoint_data = {
             'model_state_dict': agent.policy_model.state_dict(),

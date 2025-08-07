@@ -349,6 +349,7 @@ class BaseAgent(pl.LightningModule):
                 accelerator="cpu",  # Use CPU for training # TODO: softcode this
                 reload_dataloaders_every_n_epochs=1,#self.config.n_epochs
                 check_val_every_n_epoch=self.config.eval_freq_epochs,  # Run validation every epoch
+                num_sanity_val_steps=0,
                 callbacks=callbacks
             )
             trainer.fit(self)

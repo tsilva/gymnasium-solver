@@ -37,8 +37,6 @@ class BaseAgent(pl.LightningModule):
         self.validation_epoch_start_time = None
         self.validation_epoch_start_timesteps = None
         
-        self._n_updates = 0 # TODO: is this required?
-
         # Create the environment that will be used for training
         self.train_env = build_env(
             config.env_id,
@@ -103,6 +101,8 @@ class BaseAgent(pl.LightningModule):
         #   which can be slow when logging many metrics
         # - Metrics are logged using self.log_metrics() method
         self._epoch_metrics = {}
+
+        self._train_dataloader = None  # Placeholder for training dataloader
     
     @must_implement
     def create_models(self):
@@ -128,44 +128,33 @@ class BaseAgent(pl.LightningModule):
         train_metrics = self.train_collector.get_metrics()
         self.train_epoch_start_timesteps = train_metrics["total_timesteps"]
         
-        # Store the epoch when this method was called
-        # (this is used to later assert that train_dataloader is called once 
-        # per epoch, in order to ensure that we train on fresh rollout each epoch)
-        self._last_train_dataloader_epoch = self.current_epoch
+        if self.current_epoch == 0 or self.current_epoch % self.config.n_epochs == 0:
+            # Collect a rollout to train on this epoch
+            self.train_collector.collect()
 
-        # Collect a rollout to train on this epoch
-        self.train_collector.collect()
-
-        # Create a dataloader to feed the rollout as shuffled mini-batches
-        dataloader = self.train_collector.create_dataloader(
-            batch_size=self.config.batch_size,
-            shuffle=True
-        )
-        return dataloader
+            # Create a dataloader to feed the rollout as shuffled mini-batches
+            self._train_dataloader = self.train_collector.create_dataloader(
+                batch_size=self.config.batch_size,
+                shuffle=True
+            )
+        
+        return self._train_dataloader
       
     def on_train_epoch_start(self):
         # Training epoch start callback, nothing to do here
         pass
 
     def training_step(self, batch, batch_idx):
-        # Assert that train_dataloader is called once per epoch
-        # (this is the method that is performing the per-epoch rollout)
-        assert self._last_train_dataloader_epoch == self.current_epoch, "train_dataloader must be called once per epoch"
-        
-        # BUG: should we train on N_epochs with same batch, or should we train on same rollout N_epochs?
-        for _ in range(self.config.n_epochs): 
-            losses = self.train_on_batch(batch, batch_idx)
-            optimizers = self.optimizers()
-            if not type(losses) in (list, tuple): losses = [losses]
-            if not type(optimizers) in (list, tuple): optimizers = [optimizers]
-            for idx, optimizer in enumerate(optimizers):
-                loss = losses[idx]
-                optimizer.zero_grad()
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.policy_model.parameters(), self.config.max_grad_norm) # TODO: review impact, figure out why
-                optimizer.step()
-
-            self._n_updates += 1
+        losses = self.train_on_batch(batch, batch_idx)
+        optimizers = self.optimizers()
+        if not type(losses) in (list, tuple): losses = [losses]
+        if not type(optimizers) in (list, tuple): optimizers = [optimizers]
+        for idx, optimizer in enumerate(optimizers):
+            loss = losses[idx]
+            optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.policy_model.parameters(), self.config.max_grad_norm) # TODO: review impact, figure out why
+            optimizer.step()
     
     # TODO: aggregate logging
     def on_train_epoch_end(self):
@@ -174,7 +163,6 @@ class BaseAgent(pl.LightningModule):
         rollout_metrics = self.train_collector.get_metrics()
         total_timesteps = rollout_metrics["total_timesteps"]
         timesteps_elapsed = total_timesteps - self.train_epoch_start_timesteps
-        assert timesteps_elapsed == self.config.n_steps * self.config.n_envs, f"Timesteps elapsed should match n_steps * n_envs ({timesteps_elapsed} != {self.config.n_steps} * {self.config.n_envs})"
         epoch_fps = int(timesteps_elapsed / time_elapsed)
         
         # TODO: temporary, remove this
@@ -189,7 +177,6 @@ class BaseAgent(pl.LightningModule):
         self.log_metrics({
             **rollout_metrics,
             "epoch": self.current_epoch, # TODO: is this the same value as in epoch_start?
-            "n_updates": self._n_updates,
             "epoch_fps": epoch_fps,
         }, prefix="train")
         

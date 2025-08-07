@@ -1,9 +1,8 @@
-- BUG: PPO can solve FrozenLake-v1, but REINFORCE cannot. REINFORCE is likely not implemented correctly.
-- DONE: Fixed Q-learning implementation to properly use next states in Bellman equation instead of incorrectly using current states
-
-
-- BUG: is REINFORCE well implemented? are we waiting until the end of the episode to update the policy?
+- BUG: CartPole-v1/PPO training performance has regressed vs rlzoo
 - BUG: we may be updating PPO wrong (n_updates for each batch)
+
+- BUG: PPO can solve FrozenLake-v1, but REINFORCE cannot. REINFORCE is likely not implemented correctly.
+- BUG: is REINFORCE well implemented? are we waiting until the end of the episode to update the policy?
 - FEAT: track immediate episode reward (for monitoring hyperparam change reaction)
 - FEAT: track learning hyperparams in wandb (train/hyperparams)
 - BUG: No reward threshold available (neither in config nor environment spec) - skipping early stopping check
@@ -16,7 +15,6 @@
 - FEAT: add support for softcoding activations
 - Create benchmarking script to find optimal parallelization for env/machine combo
 - TEST: predict next state to learn faster
-- BUG: CartPole-v1/PPO training performance has regressed vs rlzoo
 - TEST: does benchmark script still give expected number of FPS on Pong? test with RAM vs RGB
 - FEAT: add Minatari support
 - BUG: videos not logged at correct timesteps

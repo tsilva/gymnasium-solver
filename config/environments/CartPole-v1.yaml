@@ -14,7 +14,7 @@ CartPole-v1_ppo:
   inherits: __CartPole-v1
   algo_id: ppo
   n_envs: 8
-  n_timesteps: !!float 1e6
+  n_timesteps: !!float 1e5
   n_steps: 32
   batch_size: 256
   gae_lambda: 0.8
@@ -22,7 +22,9 @@ CartPole-v1_ppo:
   ent_coef: 0.0
   n_epochs: 20
   learning_rate: 1e-3
+  #learning_rate: lin_0.001
   clip_range: 0.2
+  #clip_range: lin_0.2
   hidden_dims: [64]
 
 CartPole-v1_reinforce:

@@ -37,12 +37,16 @@ class BaseAgent(pl.LightningModule):
         self.validation_epoch_start_time = None
         self.validation_epoch_start_timesteps = None
         
+        # Use subprocesses for parallel environments to improve performance,
+        # but only if more than one environment is used.
+        use_subproc = config.n_envs > 1
+
         # Create the environment that will be used for training
         self.train_env = build_env(
             config.env_id,
             seed=config.seed,
             n_envs=config.n_envs,
-            subproc=config.subproc,
+            subproc=use_subproc,
             obs_type=config.obs_type,
             env_wrappers=config.env_wrappers,
             norm_obs=config.normalize_obs,

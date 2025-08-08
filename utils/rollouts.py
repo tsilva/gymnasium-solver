@@ -116,7 +116,6 @@ class RolloutCollector():
         buffer_size = self.n_steps
         obs_shape = self.obs.shape[1:] if self.obs.ndim > 1 else (self.obs.shape[0],)
         
-        obs_buf = np.zeros((buffer_size, self.n_envs, *obs_shape), dtype=self.obs.dtype)
         next_obs_buf = np.zeros((buffer_size, self.n_envs, *obs_shape), dtype=self.obs.dtype)
         actions_buf = np.zeros((buffer_size, self.n_envs), dtype=np.int64)
         rewards_buf = np.zeros((buffer_size, self.n_envs), dtype=np.float32)
@@ -185,8 +184,7 @@ class RolloutCollector():
                         terminal_obs_info.append((step_idx, idx, info["terminal_observation"]))
 
             # Direct buffer writes
-            obs_buf[step_idx] = self.obs.copy()  # defensive copy — some envs mutate obs
-            next_obs_buf[step_idx] = next_obs.copy()  # store next observations for Q-learning
+            next_obs_buf[step_idx] = next_obs  # No copy needed for standard VecEnvs
             actions_buf[step_idx] = actions_np
             rewards_buf[step_idx] = rewards
             dones_buf[step_idx] = dones
@@ -210,12 +208,12 @@ class RolloutCollector():
         
         # Collect observation and reward statistics from this rollout
         # Flatten observations and rewards across time and environments for statistics
-        obs_flat = obs_buf[:T].reshape(-1, *obs_buf.shape[2:])  # Shape: (T*n_envs, *obs_shape)
+        obs_flat_numpy = obs_tensor_buf[:T].reshape(-1, *obs_tensor_buf.shape[2:]).cpu().numpy()
         rewards_flat = rewards_buf[:T].flatten()  # Shape: (T*n_envs,)
         actions_flat = actions_buf[:T].flatten()  # Shape: (T*n_envs,)
         
         # Store flattened observations, rewards, and actions for windowed statistics
-        self.obs_values_deque.extend(obs_flat)
+        self.obs_values_deque.extend(obs_flat_numpy)
         self.reward_values_deque.extend(rewards_flat)
         self.action_values_deque.extend(actions_flat)
         
@@ -261,21 +259,24 @@ class RolloutCollector():
         non_terminal = (~real_terminal).astype(np.float32)
 
         if self.use_gae:
-            # Calculate the advantages using GAE(λ):
-            advantages_buf = np.zeros_like(rewards_buf, dtype=np.float32)
-            gae = np.zeros(self.n_envs, dtype=np.float32)
-            for t in reversed(range(T)):
-                # Calculate the Temporal Difference (TD) residual (the error 
-                # between the predicted value of a state and a better estimate of it)
-                delta = rewards_buf[t] + self.gamma * next_values_buf[t] * non_terminal[t] - values_buf[t]
+            # Calculate the advantages using GAE(λ) with PyTorch for potential speedup
+            rewards = torch.from_numpy(rewards_buf[:T]).to(self.device)
+            values = torch.from_numpy(values_buf[:T]).to(self.device)
+            next_values = torch.from_numpy(next_values_buf[:T]).to(self.device)
+            non_terminal = torch.from_numpy(non_terminal[:T]).to(self.device)
 
-                # The TD residual is a 1-step advantage estimate, by taking future advantage 
-                # estimates into account the advantage estimate becomes more stable
-                gae = delta + self.gamma * self.gae_lambda * gae * non_terminal[t]
-                advantages_buf[t] = gae
+            deltas = rewards + self.gamma * next_values * non_terminal - values
+
+            advantages = torch.zeros_like(rewards)
+            gae = torch.zeros(self.n_envs, device=self.device)
+            for t in reversed(range(T)):
+                gae = deltas[t] + self.gamma * self.gae_lambda * gae * non_terminal[t]
+                advantages[t] = gae
+
+            returns = advantages + values
             
-            # For GAE, returns are advantages + value estimates
-            returns_buf = advantages_buf + values_buf
+            advantages_buf = advantages.cpu().numpy()
+            returns_buf = returns.cpu().numpy()
         else:
             # Monte Carlo returns for REINFORCE
             returns_buf = np.zeros_like(rewards_buf, dtype=np.float32)

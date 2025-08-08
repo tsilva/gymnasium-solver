@@ -105,8 +105,6 @@ class BaseAgent(pl.LightningModule):
         # - Metrics are logged using self.log_metrics() method
         self._epoch_metrics = {}
 
-        self._train_dataloader = None  # Placeholder for training dataloader
-    
     @must_implement
     def create_models(self):
         pass
@@ -127,25 +125,19 @@ class BaseAgent(pl.LightningModule):
         print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}") # TODO: use self.fit_start_time for logging
 
     def train_dataloader(self):
-        # Initialize throughput calculation metrics
-        self.train_epoch_start_time = time.time_ns()
-        train_metrics = self.train_collector.get_metrics()
-        self.train_epoch_start_timesteps = train_metrics["total_timesteps"]
-
-        if self.current_epoch == 0 or self.current_epoch % self.config.n_epochs == 0:
-            # Collect a rollout to train on this epoch
-            self.train_collector.collect()
+        # Collect a rollout to train on this epoch
+        self.train_collector.collect()
 
         # Create a dataloader to feed the rollout as shuffled mini-batches
-        self._train_dataloader = self.train_collector.create_dataloader(
-            batch_size=self.config.batch_size,
-            shuffle=True
-        )
-    
+        if not hasattr(self, '_train_dataloader'):
+            self._train_dataloader = self.train_collector.create_dataloader(
+                batch_size=self.config.batch_size,
+                shuffle=True
+            )
+        
         return self._train_dataloader
       
     def on_train_epoch_start(self):
-        # Training epoch start callback, nothing to do here
         pass
 
     def training_step(self, batch, batch_idx):
@@ -164,41 +156,25 @@ class BaseAgent(pl.LightningModule):
     
     # TODO: aggregate logging
     def on_train_epoch_end(self):
-         if self.current_epoch == 0 or self.current_epoch % self.config.n_epochs == 0:
-                
-            # Calculate FPS
-            epoch_time_elapsed = max((time.time_ns() - self.train_epoch_start_time) / 1e9, sys.float_info.epsilon)
-            rollout_metrics = self.train_collector.get_metrics()
-            total_timesteps = rollout_metrics["total_timesteps"]
-            timesteps_elapsed = total_timesteps - self.train_epoch_start_timesteps
-            epoch_fps = int(timesteps_elapsed / epoch_time_elapsed)
-            
-            # TODO: temporary, remove this
-            if epoch_fps < 1000:
-                print(f"Warning: Training FPS is low ({epoch_fps}). Consider reducing n_envs or n_steps to improve performance.")
-                pass
+        rollout_metrics = self.train_collector.get_metrics()
+        rollout_metrics.pop("action_distribution", None)
 
-            # TODO: softcode this
-            rollout_metrics.pop("action_distribution")
+        total_timesteps = rollout_metrics["total_timesteps"]
+        time_elapsed = max((time.time_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
+        fps = total_timesteps / time_elapsed
+        self.log_metrics({
+            **rollout_metrics,
+            "time_elapsed": time_elapsed,
+            "epoch": self.current_epoch, # TODO: is this the same value as in epoch_start?
+            "fps" : fps
+        }, prefix="train")
+        
+        # In case we have reached the maximum number of training timesteps then stop training
+        if self.config.n_timesteps is not None and total_timesteps >= self.config.n_timesteps:
+            print(f"Stopping training at epoch {self.current_epoch} with {total_timesteps} timesteps >= limit {self.config.n_timesteps}")
+            self.trainer.should_stop = True
 
-            # Log metrics 
-            time_elapsed = max((time.time_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
-            fps = total_timesteps / time_elapsed
-            self.log_metrics({
-                **rollout_metrics,
-                "time_elapsed": time_elapsed,
-                "epoch_time_elapsed": epoch_time_elapsed,
-                "epoch": self.current_epoch, # TODO: is this the same value as in epoch_start?
-                "epoch_fps": epoch_fps,
-                "fps" : fps
-            }, prefix="train")
-            
-            # In case we have reached the maximum number of training timesteps then stop training
-            if self.config.n_timesteps is not None and total_timesteps >= self.config.n_timesteps:
-                print(f"Stopping training at epoch {self.current_epoch} with {total_timesteps} timesteps >= limit {self.config.n_timesteps}")
-                self.trainer.should_stop = True
-
-            self._flush_metrics()
+        self._flush_metrics()
         
     def val_dataloader(self):
         return validation_dataloader
@@ -355,15 +331,15 @@ class BaseAgent(pl.LightningModule):
             callbacks = [x for x in [printer_cb, video_logger_cb, checkpoint_cb, hyperparam_cb] if x is not None]  # Filter out None callbacks
 
             trainer = pl.Trainer(
-                #logger=wandb_logger,
+                logger=wandb_logger,
                 max_epochs=self.config.max_epochs if self.config.max_epochs is not None else -1,
                 enable_progress_bar=False,
                 enable_checkpointing=False,  # Disable built-in checkpointing, use our custom callback
                 accelerator="cpu",  # Use CPU for training # TODO: softcode this
-                reload_dataloaders_every_n_epochs=1,#self.config.n_epochs
+                reload_dataloaders_every_n_epochs=self.config.n_epochs,
                 check_val_every_n_epoch=self.config.eval_freq_epochs,  # Run validation every epoch
                 num_sanity_val_steps=0,
-                #callbacks=callbacks
+                callbacks=callbacks
             )
             trainer.fit(self)
 
@@ -386,6 +362,4 @@ class BaseAgent(pl.LightningModule):
             mean = sum(values) / len(values) if values else 0
             means[key] = mean
         self.log_dict(means)
-        import json
-        print(json.dumps(means, indent=4))
         self._epoch_metrics.clear()  # Clear metrics after logging to prevent accumulation

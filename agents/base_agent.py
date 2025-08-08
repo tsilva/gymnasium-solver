@@ -17,8 +17,7 @@ n_samples, sample_dim, batch_size = (1, 1, 1)
 dummy_data = torch.zeros(n_samples, sample_dim)
 dummy_target = torch.zeros(n_samples, sample_dim)
 dataset = TensorDataset(dummy_data, dummy_target)
-num_workers = os.cpu_count() - 1
-validation_dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=num_workers, persistent_workers=True)
+validation_dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=0)
 
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class BaseAgent(pl.LightningModule):

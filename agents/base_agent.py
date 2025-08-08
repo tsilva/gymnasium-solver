@@ -11,6 +11,7 @@ from utils.misc import prefix_dict_keys
 from utils.decorators import must_implement
 from callbacks import PrintMetricsCallback, VideoLoggerCallback, ModelCheckpointCallback, HyperparameterScheduler
 from torch.utils.data import DataLoader, TensorDataset
+from utils.samplers import MultiPassRandomSampler
 
 n_samples, sample_dim, batch_size = (1, 1, 1)
 dummy_data = torch.zeros(n_samples, sample_dim)
@@ -125,17 +126,18 @@ class BaseAgent(pl.LightningModule):
         print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}") # TODO: use self.fit_start_time for logging
 
     def train_dataloader(self):
-        # Collect a rollout to train on this epoch
-        self.train_collector.collect()
-
         # Create a dataloader to feed the rollout as shuffled mini-batches
-        if not hasattr(self, '_train_dataloader'):
-            self._train_dataloader = self.train_collector.create_dataloader(
-                batch_size=self.config.batch_size,
-                shuffle=True
-            )
-        
-        return self._train_dataloader
+        # Repeat the same rollout K times within one Lightning epoch using a sampler
+        self.train_collector.collect() # TODO: return dataset
+        return DataLoader(
+            self.train_collector.dataset,
+            batch_size=self.config.batch_size,
+            sampler=MultiPassRandomSampler( # NOTE: reloading dataloader every epoch and using sampler to show dataset N times during same epoch is 3x faster than doing multiple epochs over same dataloader/dataset
+                data_len=len(self.train_collector.dataset), 
+                num_passes=self.config.n_epochs
+            ),
+            shuffle=False
+        )
       
     def on_train_epoch_start(self):
         pass
@@ -210,7 +212,7 @@ class BaseAgent(pl.LightningModule):
             total_episodes = metrics["total_episodes"]
             target_episodes = total_episodes + self.config.eval_episodes
             while total_episodes < target_episodes:
-                self.validation_collector.collect()#deterministic=self.config.eval_deterministic) # TODO: this still won't be as fast as possible because it will have run steps that will not be used 
+                self.validation_collector.collect(deterministic=self.config.eval_deterministic) # TODO: this still won't be as fast as possible because it will have run steps that will not be used 
                 metrics = self.validation_collector.get_metrics()
                 total_episodes = metrics["total_episodes"]
 
@@ -336,7 +338,7 @@ class BaseAgent(pl.LightningModule):
                 enable_progress_bar=False,
                 enable_checkpointing=False,  # Disable built-in checkpointing, use our custom callback
                 accelerator="cpu",  # Use CPU for training # TODO: softcode this
-                reload_dataloaders_every_n_epochs=self.config.n_epochs,
+                reload_dataloaders_every_n_epochs=1,
                 check_val_every_n_epoch=self.config.eval_freq_epochs,  # Run validation every epoch
                 num_sanity_val_steps=0,
                 callbacks=callbacks

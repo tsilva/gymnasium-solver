@@ -353,15 +353,6 @@ class RolloutCollector():
         self.dataset.update(trajectories)
 
         return trajectories
-        
-    def create_dataloader(self, batch_size=None, shuffle=None):
-        assert batch_size is not None, "batch_size must be specified for create_dataloader"
-        assert shuffle is not None, "shuffle must be specified for create_dataloader"
-        return DataLoader(
-            self.dataset, 
-            batch_size=batch_size, 
-            shuffle=shuffle
-        )
 
     def get_metrics(self):
         ep_rew_mean = float(np.mean(self.episode_reward_deque)) if self.episode_reward_deque else 0.0

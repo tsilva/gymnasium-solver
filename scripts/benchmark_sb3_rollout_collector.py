@@ -1,11 +1,12 @@
 """Benchmark Stable-Baselines3 rollout collection throughput.
 
 This measures steps-per-second for SB3's PPO rollout collection, using
-hyperparameters that match the CartPole-v1_ppo config in this repo by default.
+hyperparameters and environment setup that mirror the project's RolloutCollector
+benchmark for a fair comparison.
 
 Examples:
-  python scripts/benchmark_sb3_rollout_collector.py --rollouts 50 --print_each
-  python scripts/benchmark_sb3_rollout_collector.py --duration 10
+    python scripts/benchmark_sb3_rollout_collector.py --rollouts 50 --print_each
+    python scripts/benchmark_sb3_rollout_collector.py --duration 10
 """
 from __future__ import annotations
 
@@ -28,10 +29,9 @@ if _LOCAL_SB3.exists() and str(_LOCAL_SB3) not in _sys.path:
     _sys.path.insert(0, str(_LOCAL_SB3))
 
 from stable_baselines3 import PPO
-from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines3.common.callbacks import BaseCallback
 import torch.nn as nn
+from utils.environment import build_env
 
 
 class _NullCallback(BaseCallback):
@@ -46,7 +46,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--duration", type=float, default=None, help="Duration in seconds to run instead of fixed rollouts")
     p.add_argument("--warmup", type=int, default=3, help="Warmup rollouts before measuring")
     p.add_argument("--print_each", action="store_true", help="Print per-rollout FPS")
-    p.add_argument("--subproc", action="store_true", help="Use SubprocVecEnv instead of DummyVecEnv")
+    # Match flags with benchmark_rollout_collector.py for parity
+    p.add_argument("--deterministic", action="store_true", help="(Parity flag) Actions during collection; SB3 collect_rollouts uses stochastic actions; flag is accepted for API parity but has no effect")
+    p.add_argument("--subproc", dest="subproc", type=lambda v: v.lower() in ("1","true","yes"), nargs="?", const=True, default=None, help="Override vectorization with subprocess (true/false). Defaults to config if omitted.")
     return p.parse_args()
 
 
@@ -58,10 +60,21 @@ def main() -> None:
     print(f"Config: {args.config} | Env: {cfg.env_id}")
     print(f"n_envs={cfg.n_envs} n_steps={cfg.n_steps} gamma={cfg.gamma} gae_lambda={cfg.gae_lambda} lr={cfg.policy_lr}")
 
-    # Build env similar to our project defaults (no recording/normalize by default for CartPole config)
-    vec_cls = SubprocVecEnv if args.subproc else DummyVecEnv
-    vec_kwargs = {"start_method": "spawn"} if args.subproc else {}
-    vec_env = make_vec_env(cfg.env_id, n_envs=cfg.n_envs, vec_env_cls=vec_cls, vec_env_kwargs=vec_kwargs)
+    # Build env using the same helper used by the custom RolloutCollector for a fair comparison
+    # CLI --subproc overrides config if provided; otherwise use cfg.subproc
+    effective_subproc = args.subproc if args.subproc is not None else getattr(cfg, "subproc", None)
+    vec_env = build_env(
+        cfg.env_id,
+        seed=cfg.seed,
+        n_envs=cfg.n_envs,
+        subproc=effective_subproc,
+        obs_type=cfg.obs_type,
+        env_wrappers=cfg.env_wrappers,
+        norm_obs=cfg.normalize_obs,
+        frame_stack=cfg.frame_stack,
+        render_mode=None,
+        env_kwargs=cfg.env_kwargs,
+    )
 
     # Build SB3 PPO with matching hyperparams
     policy_kwargs = dict(net_arch=[cfg.hidden_dims if isinstance(cfg.hidden_dims, int) else list(cfg.hidden_dims)], activation_fn=nn.ReLU)
@@ -91,7 +104,7 @@ def main() -> None:
     cb = _NullCallback()
     cb.init_callback(model)
 
-    # Warmup
+    # Warmup (note: SB3 collect_rollouts always uses stochastic actions; --deterministic is a no-op)
     for _ in range(max(0, args.warmup)):
         model.rollout_buffer.reset()
         model.collect_rollouts(model.env, cb, model.rollout_buffer, n_rollout_steps=cfg.n_steps)

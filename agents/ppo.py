@@ -69,7 +69,9 @@ class PPO(BaseAgent):
             'approx_kl': approx_kl.detach().item(),
             'explained_variance': explained_var.detach().item()
         }, prefix="train")
+
         return loss
     
     def configure_optimizers(self):
-        return torch.optim.Adam(self.policy_model.parameters(), lr=self.config.policy_lr)#
+        # Match SB3's Adam defaults more closely by setting eps=1e-5
+        return torch.optim.Adam(self.policy_model.parameters(), lr=self.config.policy_lr, eps=1e-5)

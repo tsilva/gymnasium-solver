@@ -73,4 +73,5 @@ class PPO(BaseAgent):
         return loss
     
     def configure_optimizers(self):
-        return torch.optim.Adam(self.policy_model.parameters(), lr=self.config.policy_lr)#
+        # Match SB3's Adam defaults more closely by setting eps=1e-5
+        return torch.optim.Adam(self.policy_model.parameters(), lr=self.config.policy_lr, eps=1e-5)

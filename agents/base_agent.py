@@ -24,11 +24,14 @@ class BaseAgent(pl.LightningModule):
     
     def __init__(self, config):
         super().__init__()
-        
+
         self.save_hyperparameters()
 
         # Store core attributes
         self.config = config
+
+        # We'll handle optimization manually in training_step
+        self.automatic_optimization = False
 
         # Initialize throughput counters
         self.fit_start_time = None
@@ -36,7 +39,7 @@ class BaseAgent(pl.LightningModule):
         self.train_epoch_start_timesteps = None
         self.validation_epoch_start_time = None
         self.validation_epoch_start_timesteps = None
-        
+
         # Create the environment that will be used for training
         self.train_env = build_env(
             config.env_id,
@@ -48,9 +51,9 @@ class BaseAgent(pl.LightningModule):
             norm_obs=config.normalize_obs,
             frame_stack=config.frame_stack,
             render_mode=None,
-            env_kwargs=config.env_kwargs
+            env_kwargs=config.env_kwargs,
         )
-       
+
         # Create the environment that will be used for evaluation
         # - Just 1 environment instance due to current rollout collector limitations
         # - Different seed to ensure different initial states
@@ -68,21 +71,21 @@ class BaseAgent(pl.LightningModule):
             render_mode="rgb_array",
             record_video=True,
             record_video_kwargs={
-                "video_length": 100 # TODO: softcode this
-            }
+                "video_length": 100,  # TODO: softcode this
+            },
         )
 
         # Create the models that the agent will require (eg: policy, value function, etc.)
         self.create_models()
         assert self.policy_model is not None, "Policy model must be created in create_models()"
 
-        # Create the rollout collector that will be used to 
+        # Create the rollout collector that will be used to
         # collect trajectories from the training environment
         self.train_collector = RolloutCollector(
             self.train_env,
             self.policy_model,
             n_steps=self.config.n_steps,
-            **self.rollout_collector_hyperparams()
+            **self.rollout_collector_hyperparams(),
         )
 
         # Create the rollout collector that will be used to
@@ -91,7 +94,7 @@ class BaseAgent(pl.LightningModule):
             self.validation_env,
             self.policy_model,
             n_steps=self.config.n_steps,
-            **self.rollout_collector_hyperparams()
+            **self.rollout_collector_hyperparams(),
         )
 
         # Initialize a dictionary to store epoch metrics
@@ -114,6 +117,7 @@ class BaseAgent(pl.LightningModule):
     
     def rollout_collector_hyperparams(self):
         return {
+            **self.config.rollout_collector_hyperparams(),
             'gamma': self.config.gamma,
             'gae_lambda': self.config.gae_lambda
         }
@@ -145,16 +149,17 @@ class BaseAgent(pl.LightningModule):
         pass
 
     def training_step(self, batch, batch_idx):
-        return
         losses = self.train_on_batch(batch, batch_idx)
         optimizers = self.optimizers()
-        if not type(losses) in (list, tuple): losses = [losses]
-        if not type(optimizers) in (list, tuple): optimizers = [optimizers]
+        if not type(losses) in (list, tuple):
+            losses = [losses]
+        if not type(optimizers) in (list, tuple):
+            optimizers = [optimizers]
         for idx, optimizer in enumerate(optimizers):
             loss = losses[idx]
             optimizer.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.policy_model.parameters(), self.config.max_grad_norm) # TODO: review impact, figure out why
+            self.manual_backward(loss)
+            torch.nn.utils.clip_grad_norm_(self.policy_model.parameters(), self.config.max_grad_norm)
             optimizer.step()
     
     # TODO: aggregate logging

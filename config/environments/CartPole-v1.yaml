@@ -25,8 +25,8 @@ CartPole-v1_ppo:
   #learning_rate: lin_0.001
   clip_range: 0.2
   #clip_range: lin_0.2
-  hidden_dims: [64]
-  eval_freq_epochs: 99999
+  #normalize_advantages: rollout
+  #eval_freq_epochs: 3000
 
 CartPole-v1_reinforce:
   inherits: __CartPole-v1

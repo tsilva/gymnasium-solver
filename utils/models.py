@@ -3,6 +3,7 @@
 import torch
 import torch.nn as nn
 from torch.distributions import Categorical
+import math
 
 def mlp(in_dim, hidden, act=nn.ReLU):
     layers, last = [], in_dim
@@ -16,6 +17,17 @@ class PolicyOnly(nn.Module):
         super().__init__()
         self.backbone = mlp(state_dim, hidden, nn.ReLU)
         self.policy_head = nn.Linear(hidden[-1], action_dim)
+        self._init_weights()
+
+    def _init_weights(self):
+        # Orthogonal init for backbone
+        for m in self.backbone.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.orthogonal_(m.weight, gain=math.sqrt(2))
+                nn.init.constant_(m.bias, 0.0)
+        # Small init for policy head
+        nn.init.orthogonal_(self.policy_head.weight, gain=0.01)
+        nn.init.constant_(self.policy_head.bias, 0.0)
 
     def forward(self, obs: torch.Tensor):
         x = self.backbone(obs)
@@ -43,6 +55,20 @@ class ActorCritic(nn.Module):
         self.backbone = mlp(state_dim, hidden, nn.ReLU)
         self.policy_head = nn.Linear(hidden[-1], action_dim)
         self.value_head  = nn.Linear(hidden[-1], 1)
+        self._init_weights()
+
+    def _init_weights(self):
+        # Orthogonal init for backbone
+        for m in self.backbone.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.orthogonal_(m.weight, gain=math.sqrt(2))
+                nn.init.constant_(m.bias, 0.0)
+        # Small init for policy head helps PPO stability
+        nn.init.orthogonal_(self.policy_head.weight, gain=0.01)
+        nn.init.constant_(self.policy_head.bias, 0.0)
+        # Value head with unit gain
+        nn.init.orthogonal_(self.value_head.weight, gain=1.0)
+        nn.init.constant_(self.value_head.bias, 0.0)
 
     def forward(self, obs: torch.Tensor):
         x = self.backbone(obs)

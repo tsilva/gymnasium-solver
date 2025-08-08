@@ -166,9 +166,9 @@ class BaseAgent(pl.LightningModule):
         epoch_fps = int(timesteps_elapsed / time_elapsed)
         
         # TODO: temporary, remove this
-        if epoch_fps < 1000:
-            print(f"Warning: Training FPS is low ({epoch_fps}). Consider reducing n_envs or n_steps to improve performance.")
-            pass
+       # if epoch_fps < 1000:
+       #    print(f"Warning: Training FPS is low ({epoch_fps}). Consider reducing n_envs or n_steps to improve performance.")
+       #     pass
 
         # TODO: softcode this
         rollout_metrics.pop("action_distribution")

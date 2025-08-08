@@ -183,12 +183,14 @@ class BaseAgent(pl.LightningModule):
 
             # Log metrics 
             time_elapsed = max((time.time_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
+            fps = total_timesteps / time_elapsed
             self.log_metrics({
                 **rollout_metrics,
                 "time_elapsed": time_elapsed,
                 "epoch_time_elapsed": epoch_time_elapsed,
                 "epoch": self.current_epoch, # TODO: is this the same value as in epoch_start?
                 "epoch_fps": epoch_fps,
+                "fps" : fps
             }, prefix="train")
             
             # In case we have reached the maximum number of training timesteps then stop training

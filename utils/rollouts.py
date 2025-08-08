@@ -388,7 +388,7 @@ class RolloutCollector():
             "total_rollouts": self.total_rollouts,
             "rollout_timesteps": self.rollout_steps,
             "rollout_episodes": self.rollout_episodes,  # Renamed to avoid conflict with video logging
-            "rollout_fps": rollout_fps, # TODO: better name?
+            "rollout_fps": rollout_fps, # TODO: this is a mean, it shouln't be
             "ep_rew_mean": ep_rew_mean,
             "ep_len_mean": ep_len_mean,
             "obs_mean": obs_mean,

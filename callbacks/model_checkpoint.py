@@ -15,9 +15,8 @@ class ModelCheckpointCallback(pl.Callback):
                  save_last: bool = True,
                  save_threshold_reached: bool = True,
                  resume: bool = False):
-        """
-        Initialize the checkpoint callback.
-        
+        """Initialize the checkpoint callback.
+
         Args:
             checkpoint_dir: Base directory for checkpoints
             monitor: Metric to monitor for saving best checkpoints
@@ -33,6 +32,7 @@ class ModelCheckpointCallback(pl.Callback):
         self.save_last = save_last
         self.save_threshold_reached = save_threshold_reached
         self.resume = resume
+        self._threshold_checkpoint_saved = False  # avoid duplicate threshold saves
         
         self.best_metric_value = float('-inf') if mode == 'max' else float('inf')
         self.best_checkpoint_path = None
@@ -114,74 +114,79 @@ class ModelCheckpointCallback(pl.Callback):
         """Save checkpoints when validation ends (after eval) and handle early stopping."""
         if not hasattr(trainer, 'logged_metrics'):
             return
-            
-        logged_metrics = trainer.logged_metrics
         
-        # Get the monitored metric value
+        logged_metrics = trainer.logged_metrics
         current_metric_value = None
         if self.monitor in logged_metrics:
             current_metric_value = float(logged_metrics[self.monitor])
-        
-        if current_metric_value is not None:
-            checkpoint_dir = self._get_checkpoint_dir(pl_module)
-            
-            # Check if this is the best model so far
-            is_best = self._should_save_best(current_metric_value)
-            
-            if is_best:
-                self.best_metric_value = current_metric_value
-                
-                # Save timestamped checkpoint with epoch-step format
-                epoch = pl_module.current_epoch
-                step = pl_module.global_step
-                timestamped_path = checkpoint_dir / f"epoch={epoch:02d}-step={step:04d}.ckpt"
-                self._save_checkpoint(
-                    pl_module, timestamped_path, is_best=True
-                )
-                checkpoint_data = torch.load(timestamped_path)
-                checkpoint_data['current_eval_reward'] = current_metric_value
-                torch.save(checkpoint_data, timestamped_path)
-                
-                # Also save/overwrite the best checkpoint
-                best_path = checkpoint_dir / "best_checkpoint.ckpt"
-                self.best_checkpoint_path = self._save_checkpoint(
-                    pl_module, best_path, is_best=True
-                )
-                checkpoint_data = torch.load(best_path)
-                checkpoint_data['current_eval_reward'] = current_metric_value
-                torch.save(checkpoint_data, best_path)
-                
-                print(f"New best model saved with {self.monitor}={current_metric_value:.4f}")
-                print(f"  Timestamped: {timestamped_path}")
-                print(f"  Best: {best_path}")
-                
-                # Update the agent's best model path for compatibility
-                pl_module.best_model_path = str(best_path)
-                pl_module.best_eval_reward = current_metric_value
-            
-            # Check if reward threshold is reached and save threshold checkpoint
-            if (self.save_threshold_reached and 
-                hasattr(pl_module.config, 'reward_threshold') and 
-                pl_module.config.reward_threshold is not None and
-                current_metric_value >= pl_module.config.reward_threshold):
-                
-                epoch = pl_module.current_epoch
-                step = pl_module.global_step
-                threshold_path = checkpoint_dir / f"threshold-epoch={epoch:02d}-step={step:04d}.ckpt"
-                self._save_checkpoint(
-                    pl_module, threshold_path, is_threshold=True
-                )
-                checkpoint_data = torch.load(threshold_path)
-                checkpoint_data['current_eval_reward'] = current_metric_value
-                torch.save(checkpoint_data, threshold_path)
-                
-                print(f"Threshold reached! Saved model with reward {current_metric_value:.4f} at {threshold_path}")
-                
-                # Early stopping when threshold is reached
-                print(f"Early stopping at epoch {pl_module.current_epoch} with eval mean reward {current_metric_value:.2f} >= threshold {pl_module.config.reward_threshold}")
+
+        if current_metric_value is None:
+            # Nothing to monitor this epoch
+            self._handle_early_stopping_and_tracking(trainer, pl_module)
+            return
+
+        checkpoint_dir = self._get_checkpoint_dir(pl_module)
+
+        # Best model logic
+        is_best = self._should_save_best(current_metric_value)
+        if is_best:
+            self.best_metric_value = current_metric_value
+            epoch = pl_module.current_epoch
+            step = pl_module.global_step
+            timestamped_path = checkpoint_dir / f"epoch={epoch:02d}-step={step:04d}.ckpt"
+            self._save_checkpoint(pl_module, timestamped_path, is_best=True)
+            checkpoint_data = torch.load(timestamped_path)
+            checkpoint_data['current_eval_reward'] = current_metric_value
+            torch.save(checkpoint_data, timestamped_path)
+
+            best_path = checkpoint_dir / "best_checkpoint.ckpt"
+            self.best_checkpoint_path = self._save_checkpoint(pl_module, best_path, is_best=True)
+            checkpoint_data = torch.load(best_path)
+            checkpoint_data['current_eval_reward'] = current_metric_value
+            torch.save(checkpoint_data, best_path)
+
+            print(f"New best model saved with {self.monitor}={current_metric_value:.4f}")
+            print(f"  Timestamped: {timestamped_path}")
+            print(f"  Best: {best_path}")
+            pl_module.best_model_path = str(best_path)
+            pl_module.best_eval_reward = current_metric_value
+
+        # Unified reward threshold (config overrides env spec, then gym.spec fallback)
+        cfg_thr = getattr(pl_module.config, 'reward_threshold', None)
+        effective_threshold = cfg_thr
+        if effective_threshold is None:
+            try:
+                effective_threshold = pl_module.validation_env.get_reward_threshold()
+            except Exception:
+                effective_threshold = None
+        if effective_threshold is None:
+            try:
+                import gymnasium as gym
+                spec = gym.spec(pl_module.config.env_id)
+                if spec and hasattr(spec, 'reward_threshold'):
+                    effective_threshold = getattr(spec, 'reward_threshold')
+            except Exception:
+                effective_threshold = None
+
+        if (self.save_threshold_reached and
+            effective_threshold is not None and
+            current_metric_value >= effective_threshold and
+            not self._threshold_checkpoint_saved):
+            epoch = pl_module.current_epoch
+            step = pl_module.global_step
+            threshold_path = checkpoint_dir / f"threshold-epoch={epoch:02d}-step={step:04d}.ckpt"
+            self._save_checkpoint(pl_module, threshold_path, is_threshold=True)
+            checkpoint_data = torch.load(threshold_path)
+            checkpoint_data['current_eval_reward'] = current_metric_value
+            checkpoint_data['threshold_value'] = effective_threshold
+            torch.save(checkpoint_data, threshold_path)
+            self._threshold_checkpoint_saved = True
+            print(f"Threshold reached! Saved model with {self.monitor}={current_metric_value:.4f} (threshold={effective_threshold}) at {threshold_path}")
+            if not trainer.should_stop:
+                print(f"Early stopping at epoch {pl_module.current_epoch} with eval mean reward {current_metric_value:.2f} >= threshold {effective_threshold}")
                 trainer.should_stop = True
-        
-        # Handle early stopping logic and best reward tracking that was in BaseAgent
+
+        # Delegate to legacy tracking (will early stop if missed above)
         self._handle_early_stopping_and_tracking(trainer, pl_module)
     
     def _handle_early_stopping_and_tracking(self, trainer, pl_module):
@@ -192,9 +197,24 @@ class ModelCheckpointCallback(pl.Callback):
             reward_threshold = config_threshold
             print(f"Using config reward_threshold: {reward_threshold}")
         else: 
-            reward_threshold = pl_module.validation_env.get_reward_threshold()
+            # Attempt retrieval through wrapper
+            try:
+                reward_threshold = pl_module.validation_env.get_reward_threshold()
+            except Exception:
+                reward_threshold = None
             if reward_threshold is not None:
                 print(f"Using environment spec reward_threshold: {reward_threshold}")
+            else:
+                # Fallback to direct gym spec lookup
+                try:
+                    import gymnasium as gym
+                    spec = gym.spec(pl_module.config.env_id)
+                    if spec and hasattr(spec, 'reward_threshold'):
+                        reward_threshold = getattr(spec, 'reward_threshold')
+                        if reward_threshold is not None:
+                            print(f"Using gym.spec reward_threshold fallback: {reward_threshold}")
+                except Exception:
+                    reward_threshold = None
 
         # Get current eval metrics
         if hasattr(trainer, 'logged_metrics') and "eval/ep_rew_mean" in trainer.logged_metrics:

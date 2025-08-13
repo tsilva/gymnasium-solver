@@ -338,6 +338,11 @@ class BaseAgent(pl.LightningModule):
 
             callbacks = [x for x in [printer_cb, video_logger_cb, checkpoint_cb, hyperparam_cb] if x is not None]  # Filter out None callbacks
 
+            # Determine validation controls based on configuration
+            eval_freq = getattr(self.config, 'eval_freq_epochs', None)
+            limit_val_batches = 0 if eval_freq is None else 1.0  # disable validation entirely if None
+            check_val_every_n_epoch = eval_freq if eval_freq is not None else 1  # value won't matter when limit_val_batches=0
+
             trainer = pl.Trainer(
                 logger=wandb_logger,
                 max_epochs=self.config.max_epochs if self.config.max_epochs is not None else -1,
@@ -345,7 +350,9 @@ class BaseAgent(pl.LightningModule):
                 enable_checkpointing=False,  # Disable built-in checkpointing, use our custom callback
                 accelerator="cpu",  # Use CPU for training # TODO: softcode this
                 reload_dataloaders_every_n_epochs=1,
-                check_val_every_n_epoch=self.config.eval_freq_epochs,  # Run validation every epoch
+                val_check_interval=None,  # Disable built-in validation check interval
+                check_val_every_n_epoch=check_val_every_n_epoch,
+                limit_val_batches=limit_val_batches,
                 num_sanity_val_steps=0,
                 callbacks=callbacks
             )

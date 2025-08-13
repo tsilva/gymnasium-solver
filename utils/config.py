@@ -55,11 +55,11 @@ class Config:
     policy_kwargs: str = None  # Policy kwargs as string
 
     # Evaluation
-    eval_freq_epochs: int = 10
+    eval_freq_epochs: int = None
     # TODO: make this match if none
     # TODO: assert this is always a multiple of eval_freq_epochs
-    eval_recording_freq_epochs: int = 10  # Record evaluation videos every 5 epochs
-    eval_episodes: int = 10
+    eval_recording_freq_epochs: int = None  # Record evaluation videos every 5 epochs
+    eval_episodes: int = None
     eval_async: bool = False  # Default: true (async evaluation)
     eval_deterministic: bool = True  # Default: true (deterministic evaluation)
     reward_threshold: Optional[float] = None  # Default: None (use environment's reward threshold)

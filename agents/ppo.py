@@ -57,21 +57,23 @@ class PPO(BaseAgent):
         loss = policy_loss + vf_coef * value_loss + ent_coef * entropy_loss
 
         # Metrics (detached for logging)
-        clip_fraction = ((ratio < 1.0 - self.clip_range) | (ratio > 1.0 + self.clip_range)).float().mean()
-        kl_div = (old_logprobs - new_logps).mean()
-        approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
-        explained_var = 1 - torch.var(returns - value.detach()) / torch.var(returns)
+        # inside train_on_batch
+        with torch.no_grad():
+            clip_fraction = ((ratio < 1.0 - self.clip_range) | (ratio > 1.0 + self.clip_range)).float().mean()
+            kl_div = (old_logprobs - new_logps).mean()
+            approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
+            explained_var = 1 - torch.var(returns - value) / torch.var(returns)
 
         self.log_metrics({
-            'loss': loss.detach().item(),
-            'policy_loss': policy_loss.item(),
-            'entropy_loss': entropy_loss.item(),
-            'value_loss': value_loss.item(),
-            'entropy': entropy.detach().item(),
-            'clip_fraction': clip_fraction.detach().item(),
-            'kl_div': kl_div.detach().item(),
-            'approx_kl': approx_kl.detach().item(),
-            'explained_variance': explained_var.detach().item()
+            'loss': loss.detach(),
+            'policy_loss': policy_loss.detach(),
+            'entropy_loss': entropy_loss.detach(),
+            'value_loss': value_loss.detach(),
+            'entropy': entropy.detach(),
+            'clip_fraction': clip_fraction.detach(),
+            'kl_div': kl_div.detach(),
+            'approx_kl': approx_kl.detach(),
+            'explained_variance': explained_var.detach()
         }, prefix="train")
 
         return loss

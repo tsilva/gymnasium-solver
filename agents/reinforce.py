@@ -49,10 +49,10 @@ class REINFORCE(BaseAgent):
         loss = policy_loss + (ent_coef * entropy_loss)
         
         self.log_metrics({
-            'loss' : loss.detach().item(),
-            'policy_loss': policy_loss.detach().item(),
-            'entropy_loss': entropy_loss.detach().item(),
-            'entropy': entropy.detach().item()
+            'loss' : loss.detach(),
+            'policy_loss': policy_loss.detach(),
+            'entropy_loss': entropy_loss.detach(),
+            'entropy': entropy.detach()
         }, prefix="train")
         return loss
         

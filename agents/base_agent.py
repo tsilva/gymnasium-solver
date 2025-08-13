@@ -135,11 +135,14 @@ class BaseAgent(pl.LightningModule):
                 data_len=len(self.train_collector.dataset), 
                 num_passes=self.config.n_epochs
             ),
+            # Don't shuffle the dataset, as we will use MultiPassRandomSampler to control sampling
             shuffle=False
         )
       
     def on_train_epoch_start(self):
+        # Nothing to do do
         pass
+        self.epoch_time = time.time_ns()
 
     def training_step(self, batch, batch_idx):
         losses = self.train_on_batch(batch, batch_idx)
@@ -155,9 +158,10 @@ class BaseAgent(pl.LightningModule):
             torch.nn.utils.clip_grad_norm_(self.policy_model.parameters(), self.config.max_grad_norm)
             optimizer.step()
 
-
     # TODO: aggregate logging
     def on_train_epoch_end(self):
+        print(f"Training epoch {self.current_epoch} completed in {(time.time_ns() - self.epoch_time) / 1e6:.2f} ms")
+
         rollout_metrics = self.train_collector.get_metrics()
         rollout_metrics.pop("action_distribution", None)
 

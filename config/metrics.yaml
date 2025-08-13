@@ -7,6 +7,16 @@
 _global:
   default_precision: 4  # Default precision for metrics not explicitly configured
 
+clip_range:
+  precision: 4
+  description: "PPO clip range for policy updates"
+  algorithm_rules:
+    ppo:
+      threshold: 0.2
+      condition: "greater_than"
+      message: "High clip range ({current_value:.4f}) may lead to unstable training. Consider reducing."
+      level: "warning"
+      
 # Episode and timestep counts (integers)
 total_episodes:
   precision: 0

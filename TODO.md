@@ -1,4 +1,5 @@
 - BUG: CartPole-v1/PPO training performance has regressed vs rlzoo
+- BUG: clip_range metric warning is being triggered incorrectly
 - TODO: Figure out why CartPole-v1/PPO works better with Tahn activation than ReLU
 - BUG: PPO can solve FrozenLake-v1, but REINFORCE cannot. REINFORCE is likely not implemented correctly.
 - BUG: is REINFORCE well implemented? are we waiting until the end of the episode to update the policy?

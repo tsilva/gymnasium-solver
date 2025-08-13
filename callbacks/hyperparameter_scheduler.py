@@ -31,7 +31,7 @@ class HyperparameterScheduler(pl.Callback):
         self,
         control_dir: Optional[str] = None,
         check_interval: float = 5.0,
-        enable_lr_scheduling: bool = True,
+        enable_lr_scheduling: bool = False,
         enable_manual_control: bool = True,
         verbose: bool = True
     ):

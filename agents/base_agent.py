@@ -215,7 +215,6 @@ class BaseAgent(pl.LightningModule):
                 metrics = self.validation_collector.get_metrics()
                 total_episodes = metrics["total_episodes"]
 
-    def on_validation_epoch_end(self):
         assert self.current_epoch == 0 or (self.current_epoch + 1) % self.config.eval_freq_epochs == 0, f"Validation epoch {self.current_epoch} is not a multiple of eval_freq_epochs {self.config.eval_freq_epochs}"
        
         # Calculate FPS
@@ -236,6 +235,9 @@ class BaseAgent(pl.LightningModule):
         }, prefix="eval")
 
         self._flush_metrics()
+
+    def on_validation_epoch_end(self):
+        pass
 
     def on_fit_end(self):
         time_elapsed = max((time.time_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
@@ -324,7 +326,7 @@ class BaseAgent(pl.LightningModule):
             hyperparam_cb = HyperparameterScheduler(
                 control_dir=str(self.run_manager.run_dir / "hyperparam_control"),
                 check_interval=2.0,  # Check every 2 seconds
-                enable_lr_scheduling=True,
+                enable_lr_scheduling=False,
                 enable_manual_control=True,
                 verbose=True
             )

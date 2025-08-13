@@ -1,3 +1,4 @@
+- NOTE: converging fine but not early stopping... we are misisng value clipping, and clipping/learning rate decay; we are currently decaying learning rate...
 - BUG: CartPole-v1/PPO training performance has regressed vs rlzoo
 - BUG: we may be updating PPO wrong (n_updates for each batch)
 - BUG: CartPole-v1 run with n_envs=1 in sb3; save model and make sure I can repro all values in our implementation

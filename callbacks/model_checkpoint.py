@@ -12,7 +12,7 @@ class ModelCheckpointCallback(pl.Callback):
                  checkpoint_dir: str = "checkpoints",
                  monitor: str = "eval/ep_rew_mean",
                  mode: str = "max",
-                 save_last: bool = True,
+                 save_last: bool = False,
                  save_threshold_reached: bool = True,
                  resume: bool = False):
         """Initialize the checkpoint callback.
@@ -112,10 +112,10 @@ class ModelCheckpointCallback(pl.Callback):
     
     def on_validation_epoch_end(self, trainer, pl_module):
         """Save checkpoints when validation ends (after eval) and handle early stopping."""
-        if not hasattr(trainer, 'logged_metrics'):
-            return
-        
+
         logged_metrics = trainer.logged_metrics
+        assert self.monitor in logged_metrics, f"Monitor metric '{self.monitor}' not found in logged metrics: {trainer.logged_metrics.keys()}"
+        
         current_metric_value = None
         if self.monitor in logged_metrics:
             current_metric_value = float(logged_metrics[self.monitor])

@@ -362,7 +362,7 @@ class Config:
 
         # Evaluation
         if self.eval_freq_epochs is not None and self.eval_freq_epochs <= 0:
-            raise ValueError("eval_freq_epochs must be a positive integer.")
+            raise ValueError("eval_freq must be a positive integer.")
         if self.eval_episodes is not None and self.eval_episodes <= 0:
             raise ValueError("eval_episodes must be a positive integer.")
         if self.reward_threshold is not None and self.reward_threshold <= 0:

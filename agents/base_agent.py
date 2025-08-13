@@ -141,7 +141,6 @@ class BaseAgent(pl.LightningModule):
       
     def on_train_epoch_start(self):
         # Nothing to do do
-        pass
         self.epoch_time = time.time_ns()
 
     def training_step(self, batch, batch_idx):

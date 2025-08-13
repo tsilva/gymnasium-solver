@@ -338,6 +338,7 @@ class HyperparameterScheduler(pl.Callback):
         """Clean up monitoring when training ends."""
         self.stop_monitoring_thread()
         
+        # TODO: this is innacurate
         if self.verbose:
             print(f"\n📊 Final hyperparameters:")
             print(f"   Learning rate: {pl_module.config.policy_lr:.2e}")

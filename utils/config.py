@@ -30,7 +30,11 @@ class Config:
     hidden_dims: Union[int, Tuple[int, ...]] = (64,)  # Default: [64]
     # TODO: default learning rates should be in algo classes
     policy_lr: float = 0.0003  # Default: 0.0003
-    learning_rate: float = None  # RLZOO format learning rate (overrides policy_lr if set)
+
+
+    learning_rate_schedule: Optional[str] = "static"
+    learning_rate: float = None
+    
     #value_lr: float = 0.001  # Default: 0.001
     ent_coef: float = 0.01  # Default: 0.01
     vf_coef: float = 0.5  # Default: 0.5 (for PPO)
@@ -41,7 +45,10 @@ class Config:
     max_epochs: int = None  # Default: -1
     gamma: float = 0.99  # Default: 0.99
     gae_lambda: float = 0.95  # Default: 0.95
-    clip_range: float = 0.2  # Default: 0.2
+
+
+    clip_range_schedule: Optional[str] = 'static'
+    clip_range: Optional[float] = 0.2
 
     # Additional RLZOO format parameters
     normalize: bool = None  # RLZOO format normalization flag
@@ -146,6 +153,9 @@ class Config:
         # Convert any numeric strings (like scientific notation)
         final_config = _convert_numeric_strings(final_config)
 
+        # Parse potential schedule specs before legacy compatibility so that override logic keeps initial
+        cls._parse_schedules(final_config)
+
         # Handle RLZOO format compatibility
         cls._handle_legacy_compatibility(final_config)
 
@@ -179,19 +189,7 @@ class Config:
         
         return resolved_config
 
-        # Convert any numeric strings (like scientific notation)
-        final_config = _convert_numeric_strings(final_config)
-
-        # Handle RLZOO format compatibility
-        cls._handle_legacy_compatibility(final_config)
-
-        # Convert list values to tuples for hidden_dims
-        if 'hidden_dims' in final_config and isinstance(final_config['hidden_dims'], list):
-            final_config['hidden_dims'] = tuple(final_config['hidden_dims'])
-
-        instance = cls(**final_config)
-        instance.validate()
-        return instance
+    # (Dead code path removed)
 
     @classmethod
     def _load_from_legacy_config(cls, config_id: str, algo_id: str, config_path: Path) -> 'Config':
@@ -320,6 +318,16 @@ class Config:
         
         if 'vf_coef' in config and config['vf_coef'] is not None:
             config['vf_coef'] = config['vf_coef']
+
+    @classmethod
+    def _parse_schedules(cls, config: Dict[str, Any]) -> None:
+        for key, value in config.items():
+            value = config[key]
+            if not isinstance(value, str): continue
+            if not value.lower().startswith('lin_'): continue
+            key_schedule = f"{key}_schedule"
+            config[key_schedule] = 'linear'
+            config[key] = float(value.lower().split('lin_')[1])
         
     def rollout_collector_hyperparams(self) -> Dict[str, Any]:
         return {

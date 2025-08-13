@@ -154,7 +154,8 @@ class BaseAgent(pl.LightningModule):
             self.manual_backward(loss)
             torch.nn.utils.clip_grad_norm_(self.policy_model.parameters(), self.config.max_grad_norm)
             optimizer.step()
-    
+
+
     # TODO: aggregate logging
     def on_train_epoch_end(self):
         rollout_metrics = self.train_collector.get_metrics()
@@ -163,6 +164,8 @@ class BaseAgent(pl.LightningModule):
         total_timesteps = rollout_metrics["total_timesteps"]
         time_elapsed = max((time.time_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
         fps = total_timesteps / time_elapsed
+
+        # Include recomputed learning rate and clip range in epoch metrics
         self.log_metrics({
             **rollout_metrics,
             "time_elapsed": time_elapsed,
@@ -170,13 +173,15 @@ class BaseAgent(pl.LightningModule):
             "fps" : fps
         }, prefix="train")
         
+        self._flush_metrics()
+        
+        self._update_schedules()
+
         # In case we have reached the maximum number of training timesteps then stop training
         if self.config.n_timesteps is not None and total_timesteps >= self.config.n_timesteps:
             print(f"Stopping training at epoch {self.current_epoch} with {total_timesteps} timesteps >= limit {self.config.n_timesteps}")
             self.trainer.should_stop = True
-
-        self._flush_metrics()
-        
+    
     def val_dataloader(self):
         return validation_dataloader
 
@@ -345,6 +350,34 @@ class BaseAgent(pl.LightningModule):
                 callbacks=callbacks
             )
             trainer.fit(self)
+
+    def _get_training_progress(self):
+        # TODO: use get_metrics, but make it fast
+        total_steps = self.train_collector.total_steps
+        progress = min(max(total_steps / self.config.n_timesteps, 0.0), 1.0)
+        return progress
+    
+    def _update_schedules(self):
+        self._update_schedules__learning_rate()
+
+    # TODO: generalize scheduling support
+    def _update_schedules__learning_rate(self):
+        if self.config.learning_rate_schedule != 'linear': return
+        progress = self._get_training_progress()
+        new_learning_rate = max(self.config.learning_rate * (1.0 - progress), 0.0)
+        self._change_optimizers_learning_rate(new_learning_rate)
+        
+        # TODO: this should not be logged here
+        self.log_metrics({
+            'learning_rate': new_learning_rate
+        }, prefix="train")
+    
+    def _change_optimizers_learning_rate(self, learning_rate):
+        optimizers = self.optimizers()
+        if not isinstance(optimizers, (list, tuple)): optimizers = [optimizers]
+        for opt in optimizers:
+            for pg in opt.param_groups:
+                pg['lr'] = learning_rate
 
     def log_metrics(self, metrics, *, prefix=None):
         """

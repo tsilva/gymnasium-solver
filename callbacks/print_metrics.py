@@ -71,6 +71,22 @@ class PrintMetricsCallback(pl.Callback):
             "eval/rollout_fps"
         ]
         self.previous_metrics: Dict[str, Any] = {}  # Store previous values for delta validation
+        self._last_printed_metrics = None  # For change detection
+        self._change_tol = 1e-12
+
+        # Dedicated table printer to preserve state across prints (avoids global resets)
+        from utils.misc import NamespaceTablePrinter
+        self._printer = NamespaceTablePrinter(
+            # Keep numbers compact and colored like before
+            compact_numbers=True,
+            color=True,
+            # In-place update to avoid repeated full prints scrolling the log
+            use_ansi_inplace=False,
+            # Respect configured value formatting and layout
+            metric_precision=self.metric_precision,
+            min_val_width=self.min_val_width,
+            key_priority=self.key_priority,
+        )
 
     # ---------- hooks ----------
     def on_train_batch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", outputs, batch, batch_idx):
@@ -104,9 +120,13 @@ class PrintMetricsCallback(pl.Callback):
         if not metrics:
             return
 
+        # Skip if nothing changed materially since last print
+        if not self._metrics_changed(metrics):
+            return
+
         # Validate metric delta rules before printing
         self._validate_metric_deltas(metrics)
-        
+
         # Check algorithm-specific metric rules and log warnings
         self._check_algorithm_metric_rules(metrics)
 
@@ -117,6 +137,7 @@ class PrintMetricsCallback(pl.Callback):
 
         # Update previous metrics for next comparison
         self.previous_metrics.update(metrics)
+        self._last_printed_metrics = dict(metrics)
 
     def _validate_metric_deltas(self, current_metrics: Dict[str, Any]) -> None:
         """Validate that metric deltas follow specified rules."""
@@ -251,8 +272,28 @@ class PrintMetricsCallback(pl.Callback):
             return x
 
     def _print_table(self, metrics: Dict[str, Any], header: str):
-        from utils.misc import print_namespaced_dict
-        print_namespaced_dict(metrics, metric_precision=self.metric_precision, min_val_width=self.min_val_width, key_priority=self.key_priority)
+        # Use the dedicated printer instance so deltas compare with previous call reliably
+        # Header remains available for future use if we want to render it in the table
+        _ = header  # currently unused in rendering
+        self._printer.update(metrics)
+
+    def _metrics_changed(self, metrics: Dict[str, Any]) -> bool:
+        """Return True if any metric changed beyond tolerance or new keys appeared."""
+        prev = self._last_printed_metrics
+        if prev is None:
+            return True
+        # If key sets differ, consider it changed
+        if set(metrics.keys()) != set(prev.keys()):
+            return True
+        for k, v in metrics.items():
+            pv = prev.get(k)
+            if self._is_number(v) and self._is_number(pv):
+                if abs(float(v) - float(pv)) > self._change_tol:
+                    return True
+            else:
+                if v != pv:
+                    return True
+        return False
 
     def _format_val(self, v: Any) -> str:
         if isinstance(v, float):

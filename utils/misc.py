@@ -240,6 +240,9 @@ class NamespaceTablePrinter:
         lines = []
         lines.append(border)
         for ns in ns_order:
+            # Skip empty sections (no metrics under this namespace)
+            if not formatted.get(ns):
+                continue
             header = ns + "/"
             # Header: flush-left (no indent visually), but occupy same key field width
             header_line = f"| {header:<{indent + key_width}} | {'':>{val_width}} |"
@@ -254,7 +257,7 @@ class NamespaceTablePrinter:
                 lines.append(f"| {' ' * indent}{sub_disp:<{key_width}} | {val_padded} |")
         lines.append(border)
 
-        # In-place reprint without flicker
+        # Print the lines (either in-place or full redraw based on configuration)
         self._render_lines(lines)
 
         # Save state
@@ -329,9 +332,71 @@ class NamespaceTablePrinter:
         else:
             # If no preference, color by sign
             color = "green" if delta > 0 else "red"
-        # format delta magnitude compactly
-        mag = _humanize_num(abs(delta), self.float_fmt) if self.compact_numbers else _fmt_plain(abs(delta), self.float_fmt)
+        # Format delta magnitude using per-metric precision when available, with dynamic fallback
+        mag = self._format_delta_magnitude(abs(delta), full_key)
         return (f"{arrow}{mag}", color)
+
+    def _format_delta_magnitude(self, delta: numbers.Number, full_key: str) -> str:
+        """Format delta magnitude so small but real changes don't round to 0.
+
+        Rules:
+        - For integer-like values, reuse compact human formatting (k/M/B) when enabled.
+        - For floats, prefer metric-specific precision (if provided via metric_precision).
+          If that precision would round to 0, increase precision by 2 decimals.
+          If still 0, fall back to scientific notation.
+        """
+        # Integers keep current compact behavior
+        if isinstance(delta, int):
+            return _humanize_num(delta, self.float_fmt) if self.compact_numbers else _fmt_plain(delta, self.float_fmt)
+
+        # Some libraries may give numpy scalars; normalize types
+        try:
+            import numpy as _np  # local import to avoid top-level dependency
+            if isinstance(delta, (_np.generic,)):
+                delta = delta.item()
+        except Exception:
+            pass
+
+        # Float formatting path
+        if isinstance(delta, float):
+            # Determine desired precision for this metric (value precision as proxy)
+            precision = self.metric_precision.get(full_key)
+
+            # Extract default decimals from self.float_fmt (e.g. ".2f" -> 2)
+            def _decimals_from_fmt(fmt: str) -> int:
+                try:
+                    if fmt and fmt.startswith(".") and fmt.endswith("f"):
+                        return int(fmt[1:-1])
+                except Exception:
+                    pass
+                return 2
+
+            default_decimals = _decimals_from_fmt(self.float_fmt)
+            decimals = int(precision) if isinstance(precision, int) and precision >= 0 else default_decimals
+
+            # First attempt with chosen decimals
+            first = f"{delta:.{decimals}f}"
+            if first.strip("0").strip(".") != "":
+                # If compact requested and number is large enough, keep humanized style
+                try:
+                    as_float = float(first)
+                except ValueError:
+                    as_float = delta
+                if self.compact_numbers and abs(as_float) >= 1000:
+                    return _humanize_num(as_float, self.float_fmt)
+                return first
+
+            # If it still rounds to 0, increase precision
+            more_decimals = decimals + 2
+            second = f"{delta:.{more_decimals}f}"
+            if second.strip("0").strip(".") != "":
+                return second
+
+            # Last resort: scientific notation
+            return f"{delta:.2e}"
+
+        # Fallback for other numeric types
+        return _fmt_plain(delta, self.float_fmt)
 
     def _get_sort_key(self, namespace: str, subkey: str) -> tuple:
         """Generate a sort key that prioritizes specified keys, then alphabetical order."""

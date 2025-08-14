@@ -6,85 +6,111 @@ from dataclasses import dataclass, field, MISSING
 from typing import Union, Tuple, Dict, Any, Optional
 from utils.misc import _convert_numeric_strings
 
-# TODO: review this file again
 @dataclass
 class Config:
-    # Environment (required fields first)
-    env_id: str  # Environment ID string (e.g., 'CartPole-v1')
-    algo_id: str  # Algorithm ID string (e.g., 'ppo', 'dqn')
+    # ===== Core identifiers (mandatory) =====
+    # Gymnasium environment ID (e.g., 'CartPole-v1', 'ALE/Pong-v5')
+    env_id: str
+    # Algorithm identifier used to select the agent implementation (e.g., 'ppo', 'reinforce', 'qlearning')
+    algo_id: str
 
-    # Training (required fields first)
+    # ===== Training data collection (mandatory) =====
+    # Number of environment steps to collect per rollout before an update
     n_steps: int
+    # Batch size used when sampling from the collected rollout data
     batch_size: int
-    n_epochs: int
-    
-    # Project identification for logging
-    project_id: str = None  # Project ID for wandb logging (e.g., 'Pong-v5_rgb')
-    # Optional fields with defaults
-    seed: int = 42  # Default: 42
-    n_envs: int = 1  # Number of parallel environments (default: 1)
-    n_timesteps: float = None  # Total timesteps for training (RLZOO format)
-    policy: str = 'MlpPolicy'  # Policy type (RLZOO format)
 
-    # Networks
-    hidden_dims: Union[int, Tuple[int, ...]] = (64,)  # Default: [64]
-    # TODO: default learning rates should be in algo classes
-    policy_lr: float = 0.0003  # Default: 0.0003
+    # ===== Training loop (optional) =====
+    # Number of passes (epochs) over the rollout buffer per training epoch
+    n_epochs: int = 1
+    # Maximum number of trainer epochs (-1 or None means unlimited; training may stop earlier via n_timesteps)
+    max_epochs: Optional[int] = None
+    # Optional cap on total environment timesteps processed; when reached, training stops
+    n_timesteps: Optional[float] = None
 
+    # ===== Reproducibility & vectorization (optional) =====
+    # Random seed for envs, torch, numpy, etc.
+    seed: int = 42
+    # Number of parallel vectorized environments
+    n_envs: int = 1
+    # Force a specific vectorization backend: True=SubprocVecEnv, False=DummyVecEnv, None=auto
+    subproc: Optional[bool] = None
 
-    learning_rate_schedule: Optional[str] = "static"
-    learning_rate: float = None
-    
-    #value_lr: float = 0.001  # Default: 0.001
-    ent_coef: float = 0.01  # Default: 0.01
-    vf_coef: float = 0.5  # Default: 0.5 (for PPO)
-
-    max_grad_norm: float = 0.5  # Default: 0.5 (for gradient clipping)
-    
-    # Training
-    max_epochs: int = None  # Default: -1
-    gamma: float = 0.99  # Default: 0.99
-    gae_lambda: float = 0.95  # Default: 0.95
-
-
-    clip_range_schedule: Optional[str] = 'static'
-    clip_range: Optional[float] = 0.2
-
-    # Additional RLZOO format parameters
-    normalize: bool = None  # RLZOO format normalization flag
-    policy_kwargs: str = None  # Policy kwargs as string
-
-    # Evaluation
-    eval_freq_epochs: int = None
-    # TODO: make this match if none
-    # TODO: assert this is always a multiple of eval_freq_epochs
-    eval_recording_freq_epochs: int = None  # Record evaluation videos every 5 epochs
-    eval_episodes: int = None
-    eval_async: bool = False  # Default: true (async evaluation)
-    eval_deterministic: bool = True  # Default: true (deterministic evaluation)
-    reward_threshold: Optional[float] = None  # Default: None (use environment's reward threshold)
-
-    # Normalization
-    normalize_obs: bool = False  # Default: false
-    normalize_reward: bool = False  # Default: false
-    normalize_advantages: str = "batch"  # Default: "batch" (options: "off", "rollout", "batch")
-    
-    # Frame stacking
-    frame_stack: int = 1  # Default: 1 (no frame stacking)
-    
-    # Atari-specific settings
-    obs_type: str = "rgb"  # Default: "rgb" (other options: "ram", "grayscale")
-
-    use_baseline: bool = False  # Use baseline subtraction for REINFORCE (default: false)
-    
-    # Checkpointing and resuming
-    resume: bool = False  # Whether to resume training from the latest checkpoint
-    checkpoint_dir: str = "checkpoints"  # Directory to save/load checkpoints
-    
+    # ===== Environment preprocessing (optional) =====
+    # List of custom wrapper names registered in EnvWrapperRegistry to apply to each env instance
     env_wrappers: list = field(default_factory=list)
-    env_kwargs: dict = field(default_factory=dict)  # Environment creation kwargs
+    # Environment-specific keyword args forwarded to gym.make()/OCAtari
+    env_kwargs: dict = field(default_factory=dict)
+    # Enable observation normalization: False=off, True=running norm, 'static'=fixed statistics
+    normalize_obs: bool = False
+    # Enable reward normalization (currently for completeness; may be unused in some algorithms)
+    normalize_reward: bool = False
+    # Stack the last N frames along the channel dimension (useful for pixel/ram-based envs)
+    frame_stack: int = 1
+    # Observation type for ALE environments: 'rgb' (default), 'ram', 'grayscale', or 'objects'
+    obs_type: str = "rgb"
 
-    subproc: bool = None
+    # ===== Model architecture (optional) =====
+    # Hidden layer dimensions for policy/value networks (tuple or single int)
+    hidden_dims: Union[int, Tuple[int, ...]] = (64, 64)
+    # Optional policy kwargs string (legacy compatibility or advanced wiring)
+    policy_kwargs: Optional[str] = None
+
+    # ===== Optimization (optional) =====
+    # Base learning rate for optimizer (used unless 'learning_rate' override/schedule is provided)
+    policy_lr: float = 3e-4
+    # Optional learning rate value that can be scheduled (e.g., set via 'lin_3e-4')
+    learning_rate: Optional[float] = None
+    # Learning rate schedule strategy: None or 'linear' (when using 'learning_rate')
+    learning_rate_schedule: Optional[str] = None
+    # Gradient clipping max norm (applied per optimizer step)
+    max_grad_norm: float = 0.5
+
+    # ===== Algorithm hyperparameters (optional; sensible defaults) =====
+    # Discount factor for future rewards
+    gamma: float = 0.99
+    # GAE lambda parameter (advantage estimation smoothing); ignored by some algos
+    gae_lambda: float = 0.95
+    # Entropy coefficient encouraging exploration
+    ent_coef: float = 0.01
+    # Value function loss coefficient (used by PPO/actor-critic methods)
+    vf_coef: float = 0.5
+    # PPO clip range base value (used by PPO); also supports scheduling
+    clip_range: Optional[float] = 0.2
+    # PPO clip range schedule strategy: None or 'linear'
+    clip_range_schedule: Optional[str] = None
+    # Advantage normalization behavior: 'off', 'rollout', or 'batch'
+    normalize_advantages: str = "batch"
+    # When True, REINFORCE uses a learned baseline (advantages) instead of raw returns
+    use_baseline: bool = False
+
+    # ===== Evaluation (optional; disabled unless eval_freq_epochs is set) =====
+    # Run evaluation every N training epochs; None disables evaluation entirely
+    eval_freq_epochs: Optional[int] = None
+    # Number of episodes to run during each evaluation window
+    eval_episodes: Optional[int] = None
+    # Record evaluation videos every N evaluation epochs; defaults to eval_freq_epochs when not set
+    eval_recording_freq_epochs: Optional[int] = None
+    # Whether to decouple evaluation from training using async workers (not yet implemented)
+    eval_async: bool = False
+    # Use deterministic actions during evaluation (greedy for stochastic policies)
+    eval_deterministic: bool = True
+    # Optional target reward threshold to drive early-stopping or checkpointing heuristics
+    reward_threshold: Optional[float] = None
+
+    # ===== Experiment tracking (optional) =====
+    # Project identifier for logging (e.g., W&B project); defaults to a name derived from env_id
+    project_id: Optional[str] = None
+    # Directory for saving/loading checkpoints (used by custom checkpoint callback)
+    checkpoint_dir: str = "checkpoints"
+    # If True, attempt to resume from the latest checkpoint for this algo/env
+    resume: bool = False
+
+    # ===== Legacy compatibility (do not rely on these directly) =====
+    # RL Zoo compatibility flag mapped to normalize_obs/reward
+    normalize: Optional[bool] = None
+    # RL Zoo policy type placeholder (unused by current implementation)
+    policy: str = 'MlpPolicy'
 
     @classmethod
     def load_from_yaml(cls, config_id: str, algo_id: str = None, config_dir: str = "config/environments") -> 'Config':
@@ -164,6 +190,7 @@ class Config:
             final_config['hidden_dims'] = tuple(final_config['hidden_dims'])
 
         instance = cls(**final_config)
+        instance._post_init_defaults()
         instance.validate()
         return instance
 
@@ -301,6 +328,7 @@ class Config:
             final_config['hidden_dims'] = tuple(final_config['hidden_dims'])
 
         instance = cls(**final_config)
+        instance._post_init_defaults()
         instance.validate()
         return instance
 
@@ -328,6 +356,23 @@ class Config:
             key_schedule = f"{key}_schedule"
             config[key_schedule] = 'linear'
             config[key] = float(value.lower().split('lin_')[1])
+
+    # Derived defaults and cross-field normalization
+    def _post_init_defaults(self) -> None:
+        # If evaluation is enabled, ensure sensible episode/recording defaults
+        if self.eval_freq_epochs is not None:
+            if self.eval_episodes is None:
+                self.eval_episodes = 10  # safe default evaluation horizon
+            if self.eval_recording_freq_epochs is None:
+                self.eval_recording_freq_epochs = self.eval_freq_epochs  # record when we evaluate
+        # Map RL Zoo fields to internal ones if provided at construction-time
+        if self.normalize is not None:
+            self.normalize_obs = self.normalize
+            self.normalize_reward = self.normalize
+        # If a scheduled learning_rate is provided, prefer it for scheduling base
+        # while keeping policy_lr as the optimizer's initial value
+        if self.learning_rate is not None and self.policy_lr is None:
+            self.policy_lr = self.learning_rate
         
     def rollout_collector_hyperparams(self) -> Dict[str, Any]:
         return {
@@ -349,7 +394,7 @@ class Config:
         # Networks
         if isinstance(self.hidden_dims, tuple) and not all(isinstance(x, int) for x in self.hidden_dims):
             raise ValueError("All elements of hidden_dims tuple must be ints.")
-        if self.policy_lr <= 0:
+        if self.policy_lr is None or self.policy_lr <= 0:
             raise ValueError("policy_lr must be a positive float.")
         if self.ent_coef < 0:
             raise ValueError("ent_coef must be a non-negative float.")
@@ -361,18 +406,22 @@ class Config:
             raise ValueError("n_steps must be a positive integer.")
         if self.batch_size <= 0:
             raise ValueError("batch_size must be a positive integer.")
+        if self.n_timesteps is not None and self.n_timesteps <= 0:
+            raise ValueError("n_timesteps must be a positive number when set.")
         if not (0 < self.gamma <= 1):
             raise ValueError("gamma must be in (0, 1].")
         if not (0 <= self.gae_lambda <= 1):
             raise ValueError("gae_lambda must be in [0, 1].")
-        if not (0 < self.clip_range < 1):
+        if self.clip_range is not None and not (0 < self.clip_range < 1):
             raise ValueError("clip_range must be in (0, 1).")
 
         # Evaluation
         if self.eval_freq_epochs is not None and self.eval_freq_epochs <= 0:
-            raise ValueError("eval_freq must be a positive integer.")
+            raise ValueError("eval_freq_epochs must be a positive integer when set.")
         if self.eval_episodes is not None and self.eval_episodes <= 0:
-            raise ValueError("eval_episodes must be a positive integer.")
+            raise ValueError("eval_episodes must be a positive integer when set.")
+        if self.eval_recording_freq_epochs is not None and self.eval_recording_freq_epochs <= 0:
+            raise ValueError("eval_recording_freq_epochs must be a positive integer when set.")
         if self.reward_threshold is not None and self.reward_threshold <= 0:
             raise ValueError("reward_threshold must be a positive float.")
 

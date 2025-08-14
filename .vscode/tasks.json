@@ -16,6 +16,19 @@
 			"problemMatcher": [
 				"$python"
 			]
+		},
+		{
+			"label": "Run Tests",
+			"type": "shell",
+			"command": "python",
+			"args": [
+				"-m",
+				"pytest",
+				"tests/tests.py",
+				"-v"
+			],
+			"isBackground": false,
+			"group": "test"
 		}
 	]
 }

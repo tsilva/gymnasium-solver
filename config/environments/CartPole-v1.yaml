@@ -21,12 +21,12 @@ CartPole-v1_ppo:
   gamma: 0.98
   ent_coef: 0.0
   n_epochs: 20
-  learning_rate: 0.001
-  #learning_rate: lin_0.001
-  clip_range: 0.2
-  #clip_range: lin_0.2
+  #learning_rate: 0.001
+  learning_rate: lin_0.001
+  #clip_range: 0.2
+  clip_range: lin_0.2
   hidden_dims: [64, 64]
-  normalize_advantages: "rollout"
+  normalize_advantages: "batch"
 
  # eval_freq_epochs: 10
  # eval_episodes: 5

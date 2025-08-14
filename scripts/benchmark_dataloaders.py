@@ -137,6 +137,37 @@ def time_it(fn):
 def run_benchmark(cfg: BenchmarkConfig) -> Dict[str, Any]:
     env, dataset, passes, batch_size = make_rollout_dataset(cfg)
 
+    # 0) Plain Python batching over underlying tensors (no DataLoader)
+    def run_plain_python_multipass():
+        traj = dataset.trajectories  # RolloutTrajectory of tensors
+        n = len(dataset)
+        # Build a single index list representing `passes` random passes over the data
+        # to mirror MultiPassRandomSampler behavior
+        idx_list = []
+        for _ in range(passes):
+            perm = torch.randperm(n).tolist()
+            idx_list.extend(perm)
+
+        total_batches, total_samples = 0, 0
+        # Manual batching
+        for i in range(0, len(idx_list), batch_size):
+            idxs = idx_list[i:i + batch_size]
+            # Slice each field to form a batch tuple (match first-dim semantics)
+            batch = (
+                traj.observations[idxs],
+                traj.actions[idxs],
+                traj.rewards[idxs],
+                traj.dones[idxs],
+                traj.old_log_prob[idxs],
+                traj.old_values[idxs],
+                traj.advantages[idxs],
+                traj.returns[idxs],
+                traj.next_observations[idxs],
+            )
+            total_batches += 1
+            total_samples += count_batch_samples(batch)
+        return total_batches, total_samples
+
     # 1) Shuffle=True, recreate DataLoader per epoch
     def run_shuffle_true():
         total_batches, total_samples = 0, 0
@@ -233,10 +264,12 @@ def run_benchmark(cfg: BenchmarkConfig) -> Dict[str, Any]:
 
     (shuffle_true_stats, shuffle_true_time) = time_it(run_shuffle_true)
     (shuffle_false_stats, shuffle_false_time) = time_it(run_shuffle_false)
+    (plain_python_stats, plain_python_time) = time_it(run_plain_python_multipass)
     (multipass_stats, multipass_time) = time_it(run_multipass_sampler)
     (lightning_stats, lightning_time) = time_it(run_lightning_multipass_epoch)
 
     keys = [
+        ("plain_python_multipass", plain_python_stats, plain_python_time),
         ("shuffle_true", shuffle_true_stats, shuffle_true_time),
         ("shuffle_false", shuffle_false_stats, shuffle_false_time),
         ("multipass_sampler", multipass_stats, multipass_time),

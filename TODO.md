@@ -1,4 +1,6 @@
-- BUG: training epoch is taking as much as 50ms with no optimization step; benchmark iterator vs rollout buffer from sb3
+- REFACTOR: rollout buffer can be much more efficient (review how sb3 does it)
+- BUG: our FPS is still 1000 below SB3, investigate why
+
 - BUG: CartPole-v1/PPO training performance has regressed vs rlzoo
 - BUG: clip_range metric warning is being triggered incorrectly
 - TODO: Figure out why CartPole-v1/PPO works better with Tahn activation than ReLU

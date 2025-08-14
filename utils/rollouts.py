@@ -20,32 +20,6 @@ class RolloutTrajectory(NamedTuple):
     returns: torch.Tensor
     next_observations: torch.Tensor
 
-class RolloutSample(RolloutTrajectory):
-    pass
-
-class RolloutDataset(TorchDataset):
-    def __init__(self): # TODO: make sure dataset is not being tampered with during collection
-        self.trajectories = None
-
-    def update(self, trajectories):
-        self.trajectories = trajectories
-
-    def __len__(self):
-        length = len(self.trajectories.observations)
-        return length
-
-    def __getitem__(self, idx):
-        return RolloutSample(
-            observations=self.trajectories.observations[idx],
-            actions=self.trajectories.actions[idx],
-            rewards=self.trajectories.rewards[idx],
-            dones=self.trajectories.dones[idx],
-            old_log_prob=self.trajectories.old_log_prob[idx],
-            old_values=self.trajectories.old_values[idx],
-            advantages=self.trajectories.advantages[idx],
-            returns=self.trajectories.returns[idx],
-            next_observations=self.trajectories.next_observations[idx]
-        )
     
 # NOTE: Don't perform changes that result in CartPole-v1 with PPO being solvable in more than 100096 steps (around 16 secs)
 class RolloutCollector():
@@ -93,8 +67,6 @@ class RolloutCollector():
         self.total_episodes: int = 0
         self.rollout_steps: int = 0
         self.rollout_episodes: int = 0
-        
-        self.dataset = RolloutDataset()
 
         # Current observations - initialize on first collect
         self.obs = None
@@ -350,9 +322,6 @@ class RolloutCollector():
         rollout_elapsed = time.time() - rollout_start
         fps = len(states) / rollout_elapsed  # steps per second
         self.rollout_fpss.append(fps)
-
-        # TODO: do I need to copy the tuple?
-        self.dataset.update(trajectories)
 
         return trajectories
 

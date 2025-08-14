@@ -127,6 +127,54 @@ def build_loader(dataset, *, batch_size: int, cfg: BenchmarkConfig, shuffle: boo
     return DataLoader(**kwargs)
 
 
+def build_index_collate_loader(dataset, *, batch_size: int, cfg: BenchmarkConfig, shuffle: bool = False, sampler=None) -> DataLoader:
+    """DataLoader that avoids per-sample __getitem__ and default_collate.
+
+    It wraps the length of the dataset with an index-only Dataset and uses a custom
+    collate_fn to slice all rollout tensors once per batch using the provided indices.
+    This mirrors the plain-Python batching performance while keeping DataLoader plumbing.
+    """
+    class _IndexDataset(torch.utils.data.Dataset):
+        def __init__(self, length: int):
+            self._len = length
+        def __len__(self) -> int:
+            return self._len
+        def __getitem__(self, idx: int) -> int:
+            return idx
+
+    traj = dataset.trajectories
+
+    def _collate_fn(idxs: list[int]):
+        # Slice each tensor once using advanced indexing for maximum efficiency
+        return (
+            traj.observations[idxs],
+            traj.actions[idxs],
+            traj.rewards[idxs],
+            traj.dones[idxs],
+            traj.old_log_prob[idxs],
+            traj.old_values[idxs],
+            traj.advantages[idxs],
+            traj.returns[idxs],
+            traj.next_observations[idxs],
+        )
+
+    index_ds = _IndexDataset(len(dataset))
+    kwargs: Dict[str, Any] = dict(
+        dataset=index_ds,
+        batch_size=batch_size,
+        num_workers=cfg.num_workers,
+        shuffle=shuffle if sampler is None else False,
+        sampler=sampler,
+        pin_memory=cfg.pin_memory,
+        persistent_workers=cfg.persistent_workers if cfg.num_workers > 0 else False,
+        drop_last=False,
+        collate_fn=_collate_fn,
+    )
+    if cfg.prefetch_factor is not None and cfg.num_workers > 0:
+        kwargs["prefetch_factor"] = cfg.prefetch_factor
+    return DataLoader(**kwargs)
+
+
 def time_it(fn):
     t0 = time.perf_counter()
     result = fn()
@@ -193,6 +241,22 @@ def run_benchmark(cfg: BenchmarkConfig) -> Dict[str, Any]:
         sampler = MultiPassRandomSampler(data_len=len(dataset), num_passes=passes)
         loader = build_loader(dataset, batch_size=batch_size, cfg=cfg, shuffle=False, sampler=sampler)
         return iterate_loader(loader)
+
+    # 3b) MultiPassRandomSampler with index-collate (single DataLoader)
+    def run_indexcollate_multipass_sampler():
+        sampler = MultiPassRandomSampler(data_len=len(dataset), num_passes=passes)
+        loader = build_index_collate_loader(dataset, batch_size=batch_size, cfg=cfg, shuffle=False, sampler=sampler)
+        return iterate_loader(loader)
+
+    # 1b) shuffle=True with index-collate (recreate per epoch)
+    def run_indexcollate_shuffle_true():
+        total_batches, total_samples = 0, 0
+        loader = build_index_collate_loader(dataset, batch_size=batch_size, cfg=cfg, shuffle=True)
+        for _ in range(passes):
+            b, s = iterate_loader(loader)
+            total_batches += b
+            total_samples += s
+        return total_batches, total_samples
 
     # 4) Lightning 1-epoch loop with MultiPassRandomSampler (measure framework overhead)
     class NoOpLightningModule(LightningModule):
@@ -266,6 +330,8 @@ def run_benchmark(cfg: BenchmarkConfig) -> Dict[str, Any]:
     (shuffle_false_stats, shuffle_false_time) = time_it(run_shuffle_false)
     (plain_python_stats, plain_python_time) = time_it(run_plain_python_multipass)
     (multipass_stats, multipass_time) = time_it(run_multipass_sampler)
+    (idxcol_shuffle_stats, idxcol_shuffle_time) = time_it(run_indexcollate_shuffle_true)
+    (idxcol_multipass_stats, idxcol_multipass_time) = time_it(run_indexcollate_multipass_sampler)
     (lightning_stats, lightning_time) = time_it(run_lightning_multipass_epoch)
 
     keys = [
@@ -273,6 +339,8 @@ def run_benchmark(cfg: BenchmarkConfig) -> Dict[str, Any]:
         ("shuffle_true", shuffle_true_stats, shuffle_true_time),
         ("shuffle_false", shuffle_false_stats, shuffle_false_time),
         ("multipass_sampler", multipass_stats, multipass_time),
+        ("indexcollate_shuffle_true", idxcol_shuffle_stats, idxcol_shuffle_time),
+        ("indexcollate_multipass_sampler", idxcol_multipass_stats, idxcol_multipass_time),
         ("lightning_multipass_epoch", lightning_stats, lightning_time),
     ]
 

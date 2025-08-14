@@ -125,50 +125,62 @@ class BaseAgent(pl.LightningModule):
 
     def on_fit_start(self):
         self.fit_start_time = time.time_ns()
-        self.train_collector.collect()
+        self.trajectories = self.train_collector.collect()
         print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}") # TODO: use self.fit_start_time for logging
 
     def train_dataloader(self):
-        # Lazily create the dataloader once and reuse it across all Lightning epochs.
-        # We only refresh the underlying dataset contents between epochs to avoid worker respawns.
-        if self._train_dataloader is None:
-            # Collect an initial rollout to initialize dataset length and contents
-            #self.train_collector.collect()
+        assert self.current_epoch == 0, "train_dataloader should only be called once at the start of training"
 
-            # Create a stable generator for reproducible shuffles if a seed is provided
-            gen = torch.Generator()
-            if getattr(self.config, 'seed', None) is not None:
-                gen.manual_seed(int(self.config.seed))
+        # Create a stable generator for reproducible shuffles if a seed is provided
+        gen = torch.Generator()
+        if getattr(self.config, 'seed', None) is not None:
+            gen.manual_seed(int(self.config.seed))
 
-            self._train_dataloader = DataLoader(
-                self.train_collector.dataset,
-                batch_size=self.config.batch_size,
-                sampler=MultiPassRandomSampler(
-                    data_len=len(self.train_collector.dataset),
-                    num_passes=self.config.n_epochs,
-                    generator=gen
-                ),
-                shuffle=False,  # MultiPassRandomSampler controls ordering
-                num_workers=0,
-                pin_memory=False,  # Pinning memory is not needed for CPU training
-                persistent_workers=False
+        data_len = len(self.trajectories.observations)
+        sampler = MultiPassRandomSampler(
+            data_len=data_len,
+            num_passes=self.config.n_epochs, generator=gen
+        )
+
+        class _IndexDataset(torch.utils.data.Dataset):
+            def __init__(self, length: int):
+                self._len = length
+            def __len__(self) -> int:
+                return self._len
+            def __getitem__(self, idx: int) -> int:
+                return idx
+
+        from utils.rollouts import RolloutTrajectory
+        def _collate_fn(idxs: list[int]):
+            return RolloutTrajectory(
+                observations=self.trajectories.observations[idxs],
+                actions=self.trajectories.actions[idxs],
+                rewards=self.trajectories.rewards[idxs],
+                dones=self.trajectories.dones[idxs],
+                old_log_prob=self.trajectories.old_log_prob[idxs], # TODO: change names
+                old_values=self.trajectories.old_values[idxs],
+                advantages=self.trajectories.advantages[idxs],
+                returns=self.trajectories.returns[idxs],
+                next_observations=self.trajectories.next_observations[idxs]
             )
 
-        return self._train_dataloader
+        index_ds = _IndexDataset(data_len)
+        return DataLoader(
+            dataset=index_ds,
+            batch_size=self.config.batch_size,
+            sampler=sampler,
+            collate_fn=_collate_fn,
+            shuffle=False,  # MultiPassRandomSampler controls ordering
+            num_workers=0,
+            pin_memory=False,  # Pinning memory is not needed for CPU training
+            persistent_workers=False
+        )
       
     def on_train_epoch_start(self):
-        # Refresh underlying dataset with a new rollout while keeping the same DataLoader/workers
         self.epoch_time = time.time_ns()
-        #self.train_collector.collect()
-        # If dataset size changed, update sampler to reflect new data length
-        #if self._train_dataloader is not None:
-        #    sampler = getattr(self._train_dataloader, 'sampler', None)
-        #    if hasattr(sampler, 'data_len'):
-        #        sampler.data_len = len(self.train_collector.dataset)
+        self.trajectories = self.train_collector.collect()
 
     def training_step(self, batch, batch_idx):
-       #print(batch_idx) # TODO: getting 14 bataches, expected 20; must benchmark sb3 sampling batch 20 times
-        return None
         losses = self.train_on_batch(batch, batch_idx)
         optimizers = self.optimizers()
         if not type(losses) in (list, tuple):
@@ -184,8 +196,8 @@ class BaseAgent(pl.LightningModule):
 
     # TODO: aggregate logging
     def on_train_epoch_end(self):
-        print(f"Training epoch {self.current_epoch} completed in {(time.time_ns() - self.epoch_time) / 1e6:.2f} ms")
-        return
+        #print(f"Training epoch {self.current_epoch} completed in {(time.time_ns() - self.epoch_time) / 1e6:.2f} ms")
+        #return
         rollout_metrics = self.train_collector.get_metrics()
         rollout_metrics.pop("action_distribution", None)
 

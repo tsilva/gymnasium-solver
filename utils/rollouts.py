@@ -5,7 +5,7 @@ import time
 import numpy as np
 import torch
 
-from utils.misc import inference_ctx, _device_of, calculate_deque_stats
+from utils.misc import inference_ctx, _device_of
 
 class RolloutTrajectory(NamedTuple):
     observations: torch.Tensor
@@ -188,15 +188,23 @@ class RolloutCollector():
         self.env_episode_reward_deques = [deque(maxlen=stats_window_size) for _ in range(self.n_envs)]
         self.env_episode_length_deques = [deque(maxlen=stats_window_size) for _ in range(self.n_envs)]
 
-        # Observation and reward statistics tracking
-        self.obs_values_deque = deque(maxlen=stats_window_size)
-        self.reward_values_deque = deque(maxlen=stats_window_size)
+        # Lightweight running statistics (avoid per-sample Python overhead)
+        # Obs/reward running stats over all seen samples (scalar over all dims)
+        self._obs_count = 0
+        self._obs_sum = 0.0
+        self._obs_sumsq = 0.0
 
-        # Action statistics tracking
-        self.action_values_deque = deque(maxlen=stats_window_size)
+        self._rew_count = 0
+        self._rew_sum = 0.0
+        self._rew_sumsq = 0.0
 
-        # Baseline tracking for REINFORCE (rolling average of returns)
-        self.baseline_deque = deque(maxlen=stats_window_size)
+        # Action histogram (discrete); grows dynamically as needed
+        self._action_counts = None
+
+        # Baseline stats for REINFORCE (global running mean/std over returns)
+        self._base_count = 0
+        self._base_sum = 0.0
+        self._base_sumsq = 0.0
 
         self.total_rollouts = 0
         self.total_steps = 0
@@ -209,6 +217,9 @@ class RolloutCollector():
 
         # Persistent rollout buffer (lazy init when first obs is known)
         self._buffer = None
+
+        # Reusable arrays to avoid per-step allocations
+        self._step_timeouts = np.zeros(self.n_envs, dtype=bool)
 
     @torch.inference_mode()
     def collect(self, *args, **kwargs):
@@ -263,8 +274,9 @@ class RolloutCollector():
             # Perform next actions on environment
             next_obs, rewards, dones, infos = self.env.step(actions_np)
 
-            # Fast episode info processing - just collect data, delay computation
-            timeouts = np.zeros(self.n_envs, dtype=bool)
+            # Fast episode info processing - reuse timeout array
+            timeouts = self._step_timeouts
+            timeouts.fill(False)
 
             # Find all done environments at once
             done_indices = np.where(dones)[0]
@@ -309,16 +321,33 @@ class RolloutCollector():
         # Use buffers directly from persistent storage for this slice
         T = step_idx
 
-        # Collect observation and reward statistics from this rollout
-        # Flatten observations and rewards across time and environments for statistics
-        obs_flat = self._buffer.obs_buf[start:end].reshape(-1, *self._buffer.obs_buf.shape[2:])
-        rewards_flat = self._buffer.rewards_buf[start:end].flatten()
-        actions_flat = self._buffer.actions_buf[start:end].flatten()
+        # Collect observation, reward and action statistics with low overhead
+        # Observations: aggregate scalar stats across all dims
+        obs_block = self._buffer.obs_buf[start:end]
+        obs_vals = obs_block.astype(np.float32).ravel()
+        self._obs_count += obs_vals.size
+        self._obs_sum += float(obs_vals.sum())
+        self._obs_sumsq += float((obs_vals * obs_vals).sum())
 
-        # Store flattened observations, rewards, and actions for windowed statistics
-        self.obs_values_deque.extend(obs_flat)
-        self.reward_values_deque.extend(rewards_flat)
-        self.action_values_deque.extend(actions_flat)
+        # Rewards
+        rewards_flat = self._buffer.rewards_buf[start:end].ravel()
+        self._rew_count += rewards_flat.size
+        self._rew_sum += float(rewards_flat.sum())
+        self._rew_sumsq += float((rewards_flat * rewards_flat).sum())
+
+        # Actions: maintain a histogram of encountered actions
+        actions_flat = self._buffer.actions_buf[start:end].ravel()
+        if actions_flat.size:
+            amax = int(actions_flat.max())
+            if self._action_counts is None:
+                self._action_counts = np.zeros(amax + 1, dtype=np.int64)
+            elif amax >= self._action_counts.shape[0]:
+                # grow counts array
+                new_counts = np.zeros(amax + 1, dtype=np.int64)
+                new_counts[: self._action_counts.shape[0]] = self._action_counts
+                self._action_counts = new_counts
+            binc = np.bincount(actions_flat, minlength=self._action_counts.shape[0])
+            self._action_counts[: len(binc)] += binc
 
         # Single batch transfer of GPU tensors to CPU after rollout collection for this slice
         self._buffer.copy_tensors_to_cpu(start, end)
@@ -390,17 +419,17 @@ class RolloutCollector():
                 returns = self._buffer.rewards_buf[start:end][t] + self.gamma * returns * non_terminal[t]
                 returns_buf[t] = returns
 
-            # Always calculate baseline (rolling average of returns) and advantages
-            # Flatten returns across time and environments for baseline update
-            returns_flat = returns_buf.flatten()
-            self.baseline_deque.extend(returns_flat)
+            # Always calculate baseline and advantages using global running mean
+            returns_flat = returns_buf.ravel()
+            # Update baseline running stats (global over samples)
+            self._base_count += returns_flat.size
+            self._base_sum += float(returns_flat.sum())
+            self._base_sumsq += float((returns_flat * returns_flat).sum())
 
-            # Calculate baseline from rolling average
-            if len(self.baseline_deque) > 0:
-                baseline = float(np.mean(self.baseline_deque))
+            if self._base_count > 0:
+                baseline = self._base_sum / self._base_count
                 advantages_buf = returns_buf - baseline
             else:
-                # If no baseline history yet, advantages equal returns (no baseline subtraction)
                 advantages_buf = returns_buf.copy()
 
         if self.normalize_advantages:
@@ -435,19 +464,43 @@ class RolloutCollector():
         ep_len_mean = int(np.mean(self.episode_length_deque)) if self.episode_length_deque else 0
         rollout_fps = float(np.mean(self.rollout_fpss)) if self.rollout_fpss else 0.0
 
-        # Calculate observation statistics
-        obs_mean, obs_std, _ = calculate_deque_stats(self.obs_values_deque)
-        
-        # Calculate reward statistics
-        reward_mean, reward_std, _ = calculate_deque_stats(self.reward_values_deque)
+        # Observation statistics from running aggregates
+        if self._obs_count > 0:
+            obs_mean = self._obs_sum / self._obs_count
+            obs_var = max(0.0, self._obs_sumsq / self._obs_count - obs_mean * obs_mean)
+            obs_std = float(np.sqrt(obs_var))
+        else:
+            obs_mean = 0.0
+            obs_std = 0.0
 
-        # Calculate action statistics
-        action_mean, action_std, action_distribution = calculate_deque_stats(
-            self.action_values_deque, return_distribution=True
-        )
+        # Reward statistics
+        if self._rew_count > 0:
+            reward_mean = self._rew_sum / self._rew_count
+            reward_var = max(0.0, self._rew_sumsq / self._rew_count - reward_mean * reward_mean)
+            reward_std = float(np.sqrt(reward_var))
+        else:
+            reward_mean = 0.0
+            reward_std = 0.0
 
-        # Calculate baseline statistics (always calculated now)
-        baseline_mean, baseline_std, _ = calculate_deque_stats(self.baseline_deque)
+        # Action statistics: derive mean/std from histogram if available
+        if self._action_counts is not None and self._action_counts.sum() > 0:
+            idxs = np.arange(self._action_counts.shape[0], dtype=np.float32)
+            total = float(self._action_counts.sum())
+            mean_a = float((idxs * self._action_counts).sum() / total)
+            var_a = float(((idxs - mean_a) ** 2 * self._action_counts).sum() / total)
+            action_mean = mean_a
+            action_std = float(np.sqrt(max(0.0, var_a)))
+            action_distribution = None  # keep optional distribution disabled to avoid large logs
+        else:
+            action_mean, action_std, action_distribution = 0.0, 0.0, None
+
+        # Baseline statistics from global aggregates
+        if self._base_count > 0:
+            baseline_mean = self._base_sum / self._base_count
+            base_var = max(0.0, self._base_sumsq / self._base_count - baseline_mean * baseline_mean)
+            baseline_std = float(np.sqrt(base_var))
+        else:
+            baseline_mean, baseline_std = 0.0, 0.0
 
         return {
             "total_timesteps": self.total_steps, # TODO: steps vs timesteps

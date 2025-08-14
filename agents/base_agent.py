@@ -125,18 +125,20 @@ class BaseAgent(pl.LightningModule):
 
     def on_fit_start(self):
         self.fit_start_time = time.time_ns()
-        self.trajectories = self.train_collector.collect()
-        print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}") # TODO: use self.fit_start_time for logging
 
     def train_dataloader(self):
         assert self.current_epoch == 0, "train_dataloader should only be called once at the start of training"
 
+        # Collec the first rollout
+        self._trajectories = self.train_collector.collect()
+
+        # TODO: test if shuffles are consistent with and without this
         # Create a stable generator for reproducible shuffles if a seed is provided
         gen = torch.Generator()
         if getattr(self.config, 'seed', None) is not None:
             gen.manual_seed(int(self.config.seed))
 
-        data_len = len(self.trajectories.observations)
+        data_len = len(self._trajectories.observations)
         sampler = MultiPassRandomSampler(
             data_len=data_len,
             num_passes=self.config.n_epochs, generator=gen
@@ -150,35 +152,26 @@ class BaseAgent(pl.LightningModule):
             def __getitem__(self, idx: int) -> int:
                 return idx
 
-        from utils.rollouts import RolloutTrajectory
-        def _collate_fn(idxs: list[int]):
-            return RolloutTrajectory(
-                observations=self.trajectories.observations[idxs],
-                actions=self.trajectories.actions[idxs],
-                rewards=self.trajectories.rewards[idxs],
-                dones=self.trajectories.dones[idxs],
-                old_log_prob=self.trajectories.old_log_prob[idxs], # TODO: change names
-                old_values=self.trajectories.old_values[idxs],
-                advantages=self.trajectories.advantages[idxs],
-                returns=self.trajectories.returns[idxs],
-                next_observations=self.trajectories.next_observations[idxs]
-            )
-
         index_ds = _IndexDataset(data_len)
         return DataLoader(
-            dataset=index_ds,
             batch_size=self.config.batch_size,
+            # Use dummy dataset that returns the requested indexes instead of the item and then use 
+            # the custom collator to pick batch from shuffled indices in one pass
+            # (without this, sampling would be much slower because items would be picked one by one)
+            dataset=index_ds,
+            collate_fn=lambda idxs: self.train_collector.slice_trajectories(self._trajectories, idxs),
+            # We use the multi-pass sampler to ensure that the same 
+            # rollout data is seen N times per epoch, otherwise we would have
+            # to deal with only collecting rollouts every N epochs
             sampler=sampler,
-            collate_fn=_collate_fn,
-            shuffle=False,  # MultiPassRandomSampler controls ordering
             num_workers=0,
             pin_memory=False,  # Pinning memory is not needed for CPU training
             persistent_workers=False
         )
       
     def on_train_epoch_start(self):
-        self.epoch_time = time.time_ns()
-        self.trajectories = self.train_collector.collect()
+        # Collect fresh trajectories at the start of each training epoch
+        self._trajectories = self.train_collector.collect()
 
     def training_step(self, batch, batch_idx):
         # Calculate batch losses
@@ -198,7 +191,10 @@ class BaseAgent(pl.LightningModule):
     def on_train_epoch_end(self):
         rollout_metrics = self.train_collector.get_metrics()
         rollout_metrics.pop("action_distribution", None)
-
+        
+        # TODO: distinguish between instant and start
+        # Calculate how many simulation timesteps are being 
+        # processed per second (includes model training)
         total_timesteps = rollout_metrics["total_timesteps"]
         time_elapsed = max((time.time_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
         fps = total_timesteps / time_elapsed

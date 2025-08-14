@@ -417,6 +417,19 @@ class RolloutCollector():
 
         return trajectories
 
+    def slice_trajectories(self, trajectories, idxs):
+        return RolloutTrajectory(
+            observations=trajectories.observations[idxs],
+            actions=trajectories.actions[idxs],
+            rewards=trajectories.rewards[idxs],
+            dones=trajectories.dones[idxs],
+            old_log_prob=trajectories.old_log_prob[idxs], # TODO: change names
+            old_values=trajectories.old_values[idxs],
+            advantages=trajectories.advantages[idxs],
+            returns=trajectories.returns[idxs],
+            next_observations=trajectories.next_observations[idxs]
+        )
+    
     def get_metrics(self):
         ep_rew_mean = float(np.mean(self.episode_reward_deque)) if self.episode_reward_deque else 0.0
         ep_len_mean = int(np.mean(self.episode_length_deque)) if self.episode_length_deque else 0

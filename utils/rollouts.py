@@ -150,8 +150,10 @@ class RolloutCollector():
             obs_tensor_buf[step_idx] = obs_t
             
             # Determine next actions using the policy model (already on GPU)
+            #actions_t, values_t, logps_t = self.policy_model(obs_t)
             actions_t, logps_t, values_t = self.policy_model.act(obs_t, deterministic=deterministic)
-            
+            #values_t = values_t.view(-1)
+           
             # Store GPU tensors directly in pre-allocated buffers
             actions_tensor_buf[step_idx] = actions_t
             logprobs_tensor_buf[step_idx] = logps_t  

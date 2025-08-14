@@ -113,7 +113,7 @@ class BaseAgent(pl.LightningModule):
         pass
  
     @must_implement
-    def train_on_batch(self, batch, batch_idx):
+    def losses_for_batch(self, batch, batch_idx):
         pass
     
     def rollout_collector_hyperparams(self):
@@ -181,23 +181,21 @@ class BaseAgent(pl.LightningModule):
         self.trajectories = self.train_collector.collect()
 
     def training_step(self, batch, batch_idx):
-        losses = self.train_on_batch(batch, batch_idx)
-        optimizers = self.optimizers()
-        if not type(losses) in (list, tuple):
-            losses = [losses]
-        if not type(optimizers) in (list, tuple):
-            optimizers = [optimizers]
-        for idx, optimizer in enumerate(optimizers):
-            loss = losses[idx]
-            optimizer.zero_grad()
-            self.manual_backward(loss)
-            torch.nn.utils.clip_grad_norm_(self.policy_model.parameters(), self.config.max_grad_norm)
-            optimizer.step()
+        # Calculate batch losses
+        losses = self.losses_for_batch(batch, batch_idx)
+        
+        # Backpropagate losses and update model 
+        # parameters according to computed gradients
+        self._backpropagate_and_step(losses)
+
+        # We purposely return None here to avoid
+        # triggering Lightning's default optimization logic
+        # which would interfere with our manual optimization process
+        # (we may need to train multiple models with different optimizers))
+        return None
 
     # TODO: aggregate logging
     def on_train_epoch_end(self):
-        #print(f"Training epoch {self.current_epoch} completed in {(time.time_ns() - self.epoch_time) / 1e6:.2f} ms")
-        #return
         rollout_metrics = self.train_collector.get_metrics()
         rollout_metrics.pop("action_distribution", None)
 
@@ -282,9 +280,12 @@ class BaseAgent(pl.LightningModule):
         self._flush_metrics()
 
     def on_validation_epoch_end(self):
+        # Validation epoch end is called after all validation steps are done
+        # (nothing to do because we already did everything in the validation step)
         pass
 
     def on_fit_end(self):
+        # Log training completion time
         time_elapsed = max((time.time_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
         
@@ -398,6 +399,17 @@ class BaseAgent(pl.LightningModule):
                 callbacks=callbacks
             )
             trainer.fit(self)
+
+    def _backpropagate_and_step(self, losses):
+        optimizers = self.optimizers()
+        if not type(losses) in (list, tuple): losses = [losses]
+        if not type(optimizers) in (list, tuple): optimizers = [optimizers]
+        for idx, optimizer in enumerate(optimizers):
+            loss = losses[idx]
+            optimizer.zero_grad()
+            self.manual_backward(loss)
+            torch.nn.utils.clip_grad_norm_(self.policy_model.parameters(), self.config.max_grad_norm)
+            optimizer.step()
 
     def _get_training_progress(self):
         # TODO: use get_metrics, but make it fast

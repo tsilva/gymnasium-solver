@@ -19,7 +19,7 @@ class REINFORCE(BaseAgent):
         base_params['use_gae'] = False
         return base_params
     
-    def train_on_batch(self, batch, batch_idx):
+    def losses_for_batch(self, batch, batch_idx):
         states = batch.observations
         actions = batch.actions
         returns = batch.returns

@@ -20,7 +20,7 @@ class PPO(BaseAgent):
             hidden=self.config.hidden_dims
         )
     
-    def train_on_batch(self, batch, batch_idx):
+    def losses_for_batch(self, batch, batch_idx):
         # use type for this? check sb3
         states = batch.observations
         actions = batch.actions

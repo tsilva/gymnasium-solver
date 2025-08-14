@@ -39,7 +39,7 @@ class QLearning(BaseAgent):
         self.policy_model = QLearningPolicyModel(self.q_table, self.train_env.action_space)
     
     # TODO: handle truncattions as well
-    def train_on_batch(self, batch, batch_idx):
+    def losses_for_batch(self, batch, batch_idx):
         states = batch.observations.long()   # Ensure they're usable as indices
         actions = batch.actions.long()
         rewards = batch.rewards

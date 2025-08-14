@@ -1,19 +1,12 @@
 from typing import Iterator, Optional
-
 import torch
 from torch.utils.data import Sampler
 
-
 class MultiPassRandomSampler(Sampler[int]):
     """
-    Yields indices for `num_passes` independent random permutations of a dataset.
-
-    This effectively repeats the dataset `num_passes` times per DataLoader epoch,
-    shuffling the order for each pass. Useful for PPO where we want K optimization
-    epochs over the same rollout within a single Lightning epoch.
+    Yields indices for `num_passes` independent random permutations of a dataset,
+    concatenated together. Faster than per-index yielding.
     """
-    
-    # TODO: make sure generator is provided
     def __init__(
         self,
         data_len: int,
@@ -24,13 +17,19 @@ class MultiPassRandomSampler(Sampler[int]):
         if num_passes <= 0: raise ValueError("num_passes must be > 0")
         self.data_len = int(data_len)
         self.num_passes = int(num_passes)
-        self.generator = generator
+        self.generator = generator or torch.Generator()
+        self._base_seed = int(torch.initial_seed())
+
+    def set_epoch(self, epoch: int) -> None:
+        # Call this from your training loop (like DistributedSampler does)
+        self.generator.manual_seed(self._base_seed + int(epoch))
 
     def __iter__(self) -> Iterator[int]:
-        for _ in range(self.num_passes):
-            perm = torch.randperm(self.data_len, generator=self.generator)
-            for idx in perm.tolist():
-                yield int(idx)
+        # Single allocation + single iterator; avoids per-item Python overhead.
+        # Using argsort(rand) to produce K permutations in one go.
+        scores = torch.rand((self.num_passes, self.data_len), generator=self.generator)
+        order = torch.argsort(scores, dim=1).reshape(-1).tolist()
+        return iter(order)
 
     def __len__(self) -> int:
         return self.data_len * self.num_passes

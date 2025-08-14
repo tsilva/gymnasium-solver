@@ -105,6 +105,9 @@ class BaseAgent(pl.LightningModule):
         # - Metrics are logged using self.log_metrics() method
         self._epoch_metrics = {}
 
+        # Internal holder to persist and reuse the train dataloader across epochs
+        self._train_dataloader = None
+
     @must_implement
     def create_models(self):
         pass
@@ -122,28 +125,50 @@ class BaseAgent(pl.LightningModule):
 
     def on_fit_start(self):
         self.fit_start_time = time.time_ns()
+        self.train_collector.collect()
         print(f"Training started at {time.strftime('%Y-%m-%d %H:%M:%S')}") # TODO: use self.fit_start_time for logging
 
     def train_dataloader(self):
-        # Create a dataloader to feed the rollout as shuffled mini-batches
-        # Repeat the same rollout K times within one Lightning epoch using a sampler
-        self.train_collector.collect() # TODO: return dataset
-        return DataLoader(
-            self.train_collector.dataset,
-            batch_size=self.config.batch_size,
-            sampler=MultiPassRandomSampler( # NOTE: reloading dataloader every epoch and using sampler to show dataset N times during same epoch is 3x faster than doing multiple epochs over same dataloader/dataset
-                data_len=len(self.train_collector.dataset), 
-                num_passes=self.config.n_epochs
-            ),
-            # Don't shuffle the dataset, as we will use MultiPassRandomSampler to control sampling
-            shuffle=False
-        )
+        # Lazily create the dataloader once and reuse it across all Lightning epochs.
+        # We only refresh the underlying dataset contents between epochs to avoid worker respawns.
+        if self._train_dataloader is None:
+            # Collect an initial rollout to initialize dataset length and contents
+            #self.train_collector.collect()
+
+            # Create a stable generator for reproducible shuffles if a seed is provided
+            gen = torch.Generator()
+            if getattr(self.config, 'seed', None) is not None:
+                gen.manual_seed(int(self.config.seed))
+
+            self._train_dataloader = DataLoader(
+                self.train_collector.dataset,
+                batch_size=self.config.batch_size,
+                sampler=MultiPassRandomSampler(
+                    data_len=len(self.train_collector.dataset),
+                    num_passes=self.config.n_epochs,
+                    generator=gen
+                ),
+                shuffle=False,  # MultiPassRandomSampler controls ordering
+                num_workers=0,
+                pin_memory=False,  # Pinning memory is not needed for CPU training
+                persistent_workers=False
+            )
+
+        return self._train_dataloader
       
     def on_train_epoch_start(self):
-        # Nothing to do do
+        # Refresh underlying dataset with a new rollout while keeping the same DataLoader/workers
         self.epoch_time = time.time_ns()
+        #self.train_collector.collect()
+        # If dataset size changed, update sampler to reflect new data length
+        #if self._train_dataloader is not None:
+        #    sampler = getattr(self._train_dataloader, 'sampler', None)
+        #    if hasattr(sampler, 'data_len'):
+        #        sampler.data_len = len(self.train_collector.dataset)
 
     def training_step(self, batch, batch_idx):
+       #print(batch_idx) # TODO: getting 14 bataches, expected 20; must benchmark sb3 sampling batch 20 times
+        return None
         losses = self.train_on_batch(batch, batch_idx)
         optimizers = self.optimizers()
         if not type(losses) in (list, tuple):
@@ -160,7 +185,7 @@ class BaseAgent(pl.LightningModule):
     # TODO: aggregate logging
     def on_train_epoch_end(self):
         print(f"Training epoch {self.current_epoch} completed in {(time.time_ns() - self.epoch_time) / 1e6:.2f} ms")
-
+        return
         rollout_metrics = self.train_collector.get_metrics()
         rollout_metrics.pop("action_distribution", None)
 
@@ -352,7 +377,8 @@ class BaseAgent(pl.LightningModule):
                 enable_progress_bar=False,
                 enable_checkpointing=False,  # Disable built-in checkpointing, use our custom callback
                 accelerator="cpu",  # Use CPU for training # TODO: softcode this
-                reload_dataloaders_every_n_epochs=1,
+                # Reuse dataloaders across epochs to avoid worker respawn and construction overhead
+                reload_dataloaders_every_n_epochs=0,
                 val_check_interval=None,  # Disable built-in validation check interval
                 check_val_every_n_epoch=check_val_every_n_epoch,
                 limit_val_batches=limit_val_batches,
@@ -364,7 +390,8 @@ class BaseAgent(pl.LightningModule):
     def _get_training_progress(self):
         # TODO: use get_metrics, but make it fast
         total_steps = self.train_collector.total_steps
-        progress = min(max(total_steps / self.config.n_timesteps, 0.0), 1.0)
+        total = float(self.config.n_timesteps or 1.0)
+        progress = min(max(total_steps / total, 0.0), 1.0)
         return progress
     
     def _update_schedules(self):

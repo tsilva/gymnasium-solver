@@ -4,10 +4,11 @@ Benchmark DataLoader configurations on a real CartPole-v1 rollout:
 1) Regular DataLoader with shuffle=True (recreate per pass)
 2) Regular DataLoader with shuffle=False (recreate per pass)
 3) DataLoader with MultiPassRandomSampler (shuffle=False; single loader with num_passes)
+4) PyTorch Lightning 1-epoch train loop using MultiPassRandomSampler (measure Lightning overhead)
 
 We first load the CartPole-v1_ppo config, build the vec env, create an ActorCritic
 policy with matching hidden_dims, collect a single rollout using RolloutCollector,
-then benchmark iterating that dataset with the three strategies.
+then benchmark iterating that dataset with the strategies above.
 
 Usage:
     python scripts/benchmark_dataloaders.py --config-id CartPole-v1_ppo --num-workers 2 --passes 20
@@ -16,6 +17,7 @@ Notes:
 - Each rollout produces n_envs * n_steps samples (e.g., 8*32=256 for CartPole-v1_ppo).
 - Set --num-workers to your CPU. Persistent workers are enabled by default.
 - Use --pin-memory to enable pinned memory.
+- For overhead comparison, set --passes 20 to iterate each rollout 20 times in a single epoch.
 """
 
 from __future__ import annotations
@@ -30,6 +32,9 @@ from typing import Dict, Any, Tuple
 
 import torch
 from torch.utils.data import DataLoader, TensorDataset
+import logging
+import warnings
+from pytorch_lightning import LightningModule, Trainer
 
 # Ensure repository root is on sys.path when running this file directly
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -158,6 +163,69 @@ def run_benchmark(cfg: BenchmarkConfig) -> Dict[str, Any]:
         loader = build_loader(dataset, batch_size=batch_size, cfg=cfg, shuffle=False, sampler=sampler)
         return iterate_loader(loader)
 
+    # 4) Lightning 1-epoch loop with MultiPassRandomSampler (measure framework overhead)
+    class NoOpLightningModule(LightningModule):
+        def __init__(self, dataset, batch_size: int, cfg: BenchmarkConfig, passes: int):
+            super().__init__()
+            self.dataset = dataset
+            self.batch_size = batch_size
+            self.cfg = cfg
+            self.passes = passes
+            self.batches = 0
+            self.samples = 0
+            self.automatic_optimization = False  # measure dataloader+loop overhead only
+            # Dummy parameter to attach an optimizer and avoid Trainer warnings
+            self._noop = torch.nn.Parameter(torch.zeros(1), requires_grad=True)
+
+        def train_dataloader(self):
+            sampler = MultiPassRandomSampler(data_len=len(self.dataset), num_passes=self.passes)
+            return build_loader(self.dataset, batch_size=self.batch_size, cfg=self.cfg, shuffle=False, sampler=sampler)
+
+        def on_train_epoch_start(self):
+            self._start = time.time_ns()
+
+        def training_step(self, batch, batch_idx):
+            # Count batches/samples; no backward/optimizer for pure loop overhead
+            bsz = count_batch_samples(batch)
+            self.batches += 1
+            self.samples += bsz
+            return None
+
+        def on_train_epoch_end(self):
+            elapsed = (time.time_ns() - self._start) / 1e6
+            print(f"Lightning epoch {self.current_epoch} completed in {elapsed:.2f}ms")
+
+        def configure_optimizers(self):
+            # Provide a no-op optimizer to suppress "no optimizer" warnings
+            return torch.optim.SGD([self._noop], lr=0.0)
+
+    # Silence Lightning info logs to avoid console overhead in timing
+    logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
+    try:
+        import lightning as _lt  # PL 2.x unifies under lightning namespace
+        logging.getLogger("lightning.pytorch").setLevel(logging.ERROR)
+    except Exception:
+        pass
+    warnings.filterwarnings("ignore", message=".*does not have many workers.*")
+
+    # Pre-build model and trainer so the timer measures the epoch loop, not setup
+    _lt_model = NoOpLightningModule(dataset, batch_size, cfg, passes)
+    _lt_trainer = Trainer(
+        max_epochs=1,
+        logger=False,
+        enable_checkpointing=False,
+        enable_progress_bar=False,
+        enable_model_summary=False,
+        accelerator="cpu",
+        devices=1,
+        num_sanity_val_steps=0,
+        log_every_n_steps=50,
+    )
+
+    def run_lightning_multipass_epoch():
+        _lt_trainer.fit(_lt_model)
+        return _lt_model.batches, _lt_model.samples
+
     # Warmup: a short pass to spawn workers and stabilize timings
     warmup_loader = build_loader(dataset, batch_size=batch_size, cfg=cfg, shuffle=False)
     for _ in range(min(5, len(warmup_loader))):
@@ -166,11 +234,13 @@ def run_benchmark(cfg: BenchmarkConfig) -> Dict[str, Any]:
     (shuffle_true_stats, shuffle_true_time) = time_it(run_shuffle_true)
     (shuffle_false_stats, shuffle_false_time) = time_it(run_shuffle_false)
     (multipass_stats, multipass_time) = time_it(run_multipass_sampler)
+    (lightning_stats, lightning_time) = time_it(run_lightning_multipass_epoch)
 
     keys = [
         ("shuffle_true", shuffle_true_stats, shuffle_true_time),
         ("shuffle_false", shuffle_false_stats, shuffle_false_time),
         ("multipass_sampler", multipass_stats, multipass_time),
+        ("lightning_multipass_epoch", lightning_stats, lightning_time),
     ]
 
     results: Dict[str, Any] = {
@@ -218,6 +288,10 @@ def parse_args() -> BenchmarkConfig:
 
 def main():
     cfg = parse_args()
+    cfg.config_id = "CartPole-v1_ppo"  # Ensure we use a known config for benchmarking
+    cfg.num_workers = 0
+    cfg.passes = 20  # Set a fixed number of passes for benchmarking
+
     results = run_benchmark(cfg)
     # Pretty print table-like summary
     print("\n=== DataLoader Benchmark Results ===")

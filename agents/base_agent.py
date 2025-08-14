@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from utils.samplers import MultiPassRandomSampler
 from utils.datasets import IndexDataset
 
+# TODO: extract to dataloaders.py
 n_samples, sample_dim, batch_size = (1, 1, 1)
 dummy_data = torch.zeros(n_samples, sample_dim)
 dummy_target = torch.zeros(n_samples, sample_dim)
@@ -136,7 +137,8 @@ class BaseAgent(pl.LightningModule):
         # Create a sampler that will yield indices for `num_passes` 
         # independent random permutations of the dataset
         data_len = len(self._trajectories.observations) # TODO: better way to get length?
-      
+
+        # TODO: extract to dataloaders.py
         return DataLoader(
             batch_size=self.config.batch_size,
             # Use dummy dataset that returns the requested indexes instead of the item and then use 

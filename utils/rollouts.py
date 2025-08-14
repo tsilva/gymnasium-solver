@@ -4,8 +4,6 @@ from typing import NamedTuple, Deque
 import time
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
-from torch.utils.data import Dataset as TorchDataset
 
 from utils.misc import inference_ctx, _device_of, calculate_deque_stats
 
@@ -20,8 +18,6 @@ class RolloutTrajectory(NamedTuple):
     returns: torch.Tensor
     next_observations: torch.Tensor
 
-    
-# NOTE: Don't perform changes that result in CartPole-v1 with PPO being solvable in more than 100096 steps (around 16 secs)
 class RolloutCollector():
     def __init__(self, env, policy_model, n_steps, stats_window_size=100, 
                  gamma: float = 0.99, gae_lambda: float = 0.95, 

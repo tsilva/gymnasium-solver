@@ -105,9 +105,6 @@ class BaseAgent(pl.LightningModule):
         # - Metrics are logged using self.log_metrics() method
         self._epoch_metrics = {}
 
-        # Internal holder to persist and reuse the train dataloader across epochs
-        self._train_dataloader = None
-
     @must_implement
     def create_models(self):
         pass
@@ -450,9 +447,14 @@ class BaseAgent(pl.LightningModule):
             self._epoch_metrics[key] = _list
 
     def _flush_metrics(self):
+        # Calculate means for each metric
         means = {}
         for key, values in self._epoch_metrics.items():
             mean = sum(values) / len(values) if values else 0
             means[key] = mean
+
+        # Log the means to the lightning logger
         self.log_dict(means)
-        self._epoch_metrics.clear()  # Clear metrics after logging to prevent accumulation
+
+        # Clear the epoch metrics after flushing
+        self._epoch_metrics.clear()

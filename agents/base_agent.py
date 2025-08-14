@@ -333,8 +333,8 @@ class BaseAgent(pl.LightningModule):
                 resume=getattr(self.config, 'resume', False)
             ) if self.config.algo_id != "qlearning" else None
             
-            # Create algorithm-specific metric rules from config
-            from utils.config import get_metric_precision_dict, get_metric_delta_rules, get_algorithm_metric_rules
+            # Create algorithm-specific metric rules from metrics config
+            from utils.metrics import get_metric_precision_dict, get_metric_delta_rules, get_algorithm_metric_rules
             metric_precision = get_metric_precision_dict()
             metric_delta_rules = get_metric_delta_rules()
             algo_metric_rules = get_algorithm_metric_rules(self.config.algo_id)

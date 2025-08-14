@@ -9,6 +9,7 @@ from utils.decorators import must_implement
 from callbacks import PrintMetricsCallback, VideoLoggerCallback, ModelCheckpointCallback, HyperparameterScheduler
 from torch.utils.data import DataLoader, TensorDataset
 from utils.samplers import MultiPassRandomSampler
+from utils.datasets import IndexDataset
 
 n_samples, sample_dim, batch_size = (1, 1, 1)
 dummy_data = torch.zeros(n_samples, sample_dim)
@@ -128,38 +129,32 @@ class BaseAgent(pl.LightningModule):
 
         # TODO: test if shuffles are consistent with and without this
         # Create a stable generator for reproducible shuffles if a seed is provided
-        gen = torch.Generator()
+        generator = torch.Generator()
         if getattr(self.config, 'seed', None) is not None:
-            gen.manual_seed(int(self.config.seed))
+            generator.manual_seed(int(self.config.seed))
 
-        data_len = len(self._trajectories.observations)
-        sampler = MultiPassRandomSampler(
-            data_len=data_len,
-            num_passes=self.config.n_epochs, generator=gen
-        )
-
-        class _IndexDataset(torch.utils.data.Dataset):
-            def __init__(self, length: int):
-                self._len = length
-            def __len__(self) -> int:
-                return self._len
-            def __getitem__(self, idx: int) -> int:
-                return idx
-
-        index_ds = _IndexDataset(data_len)
+        # Create a sampler that will yield indices for `num_passes` 
+        # independent random permutations of the dataset
+        data_len = len(self._trajectories.observations) # TODO: better way to get length?
+      
         return DataLoader(
             batch_size=self.config.batch_size,
             # Use dummy dataset that returns the requested indexes instead of the item and then use 
             # the custom collator to pick batch from shuffled indices in one pass
             # (without this, sampling would be much slower because items would be picked one by one)
-            dataset=index_ds,
+            dataset=IndexDataset(data_len),
             collate_fn=lambda idxs: self.train_collector.slice_trajectories(self._trajectories, idxs),
             # We use the multi-pass sampler to ensure that the same 
             # rollout data is seen N times per epoch, otherwise we would have
             # to deal with only collecting rollouts every N epochs
-            sampler=sampler,
+            sampler=MultiPassRandomSampler(
+                data_len=data_len,
+                num_passes=self.config.n_epochs, 
+                generator=generator
+            ),
+            # TODO: add support for n_workers
             num_workers=0,
-            pin_memory=False,  # Pinning memory is not needed for CPU training
+            pin_memory=False,
             persistent_workers=False
         )
       

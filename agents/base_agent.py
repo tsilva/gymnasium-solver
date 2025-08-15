@@ -4,7 +4,7 @@ import torch
 import pytorch_lightning as pl
 from utils.environment import build_env
 from utils.rollouts import RolloutCollector
-from utils.misc import prefix_dict_keys
+from utils.misc import prefix_dict_keys, get_global_torch_generator
 from utils.decorators import must_implement
 from callbacks import PrintMetricsCallback, VideoLoggerCallback, ModelCheckpointCallback, HyperparameterScheduler
 from torch.utils.data import DataLoader
@@ -120,11 +120,8 @@ class BaseAgent(pl.LightningModule):
         # Collec the first rollout
         self._trajectories = self.train_collector.collect()
 
-        # TODO: test if shuffles are consistent with and without this
-        # Create a stable generator for reproducible shuffles if a seed is provided
-        generator = torch.Generator()
-        if getattr(self.config, 'seed', None) is not None:
-            generator.manual_seed(int(self.config.seed))
+        # Use a shared generator for reproducible shuffles across the app
+        generator = get_global_torch_generator(getattr(self.config, 'seed', None))
 
         # Build efficient index-collate dataloader backed by MultiPassRandomSampler
         # Use a getter to ensure fresh trajectories are used by the collate function
@@ -257,8 +254,7 @@ class BaseAgent(pl.LightningModule):
         time_elapsed = max((time.time_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
         
-    # TODO: should we change method name?
-    def _run_training(self):
+    def train(self):
         from dataclasses import asdict
         from pytorch_lightning.loggers import WandbLogger
         from utils.run_manager import RunManager

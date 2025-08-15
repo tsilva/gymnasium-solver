@@ -33,7 +33,7 @@ def main():
     print(str(agent))
 
     print("Starting training...")
-    agent._run_training()
+    agent.train()
     print("Training completed.")
         
 if __name__ == "__main__":

@@ -19,6 +19,7 @@ except Exception:  # pragma: no cover - skip if dependency missing
 from tests.test_index_dataset import *  # noqa: F401,F403
 from tests.test_logging_utils import *  # noqa: F401,F403
 from tests.test_models import *  # noqa: F401,F403
+from tests.test_ppo import *  # noqa: F401,F403
 from tests.test_multipass_random_sampler import *  # noqa: F401,F403
 from tests.test_rollouts import *  # noqa: F401,F403
 from tests.test_rollout_buffer import *  # noqa: F401,F403

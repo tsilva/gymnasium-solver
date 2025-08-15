@@ -194,8 +194,6 @@ class BaseAgent(pl.LightningModule):
     # TODO: check how sb3 does eval_async
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
-    # TODO: consider making recording a rollout collector concern again (cleaner separation of concerns)
-    # TODO: consider using rollout_ep
     # TODO: there are train/fps drops caused by running the collector N times (its not only the video recording); cause currently unknown
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         # TODO: currently support single environment evaluation

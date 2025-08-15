@@ -1,11 +1,12 @@
 # benchmark_sb3_vecenv_make.py
 import os
 import time
-import gymnasium as gym
-from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.vec_env import SubprocVecEnv, DummyVecEnv
+
 import ale_py
 import gymnasium  # needed for register_envs
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
+
 gymnasium.register_envs(ale_py)
 
 # ---------- Config ----------

@@ -1,6 +1,6 @@
-from pathlib import Path
-import io
 import sys
+from pathlib import Path
+
 import pytest
 
 from utils.logging import LogFileManager, capture_all_output, log_config_details

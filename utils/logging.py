@@ -2,14 +2,12 @@
 Comprehensive logging utilities that ensure all stdout output is also logged to files.
 """
 
-import os
 import sys
-import time
-import logging
-from contextlib import contextmanager
-from typing import Optional, TextIO, Union
 import threading
+import time
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Optional, TextIO
 
 
 class TeeStream:

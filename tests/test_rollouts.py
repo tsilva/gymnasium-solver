@@ -1,7 +1,7 @@
+
 import numpy as np
-import torch
-import types
 import pytest
+import torch
 
 from utils.rollouts import RolloutBuffer, RolloutCollector
 

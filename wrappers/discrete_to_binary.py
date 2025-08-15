@@ -1,7 +1,8 @@
-import numpy as np
-import gymnasium as gym
-from gymnasium import spaces
 import math
+
+import gymnasium as gym
+import numpy as np
+from gymnasium import spaces
 
 
 class DiscreteToBinary(gym.ObservationWrapper):

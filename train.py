@@ -1,5 +1,7 @@
 import argparse
+
 from utils.config import load_config
+
 
 def main():
     parser = argparse.ArgumentParser(description="Train RL agent.")

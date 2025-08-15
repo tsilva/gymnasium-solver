@@ -18,12 +18,13 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import sys as _sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable, Optional
+from typing import Callable, Optional
+
 import numpy as np
-import sys as _sys
 
 # Ensure project root is on sys.path when running as a script
 _ROOT = Path(__file__).resolve().parents[1]
@@ -44,9 +45,9 @@ from utils.rollouts import RolloutCollector
 
 # SB3 imports (optional)
 try:
+    import torch.nn as nn  # noqa: F401
     from stable_baselines3 import PPO
     from stable_baselines3.common.callbacks import BaseCallback
-    import torch.nn as nn  # noqa: F401
     _HAS_SB3 = True
 except Exception:
     PPO = None  # type: ignore

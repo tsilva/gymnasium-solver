@@ -11,12 +11,13 @@ Notes:
 """
 
 import json
-import time
-import pytorch_lightning as pl
-from typing import Dict, Any, Optional
-from pathlib import Path
-import threading
 import queue
+import threading
+import time
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+import pytorch_lightning as pl
 
 
 class HyperparameterScheduler(pl.Callback):

@@ -1,9 +1,9 @@
 """Checkpoint management utilities for model saving and resuming training."""
 
-import os
-import torch
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
+import torch
 
 
 def find_latest_checkpoint(algo_id: str, env_id: str, checkpoint_dir: str = "checkpoints") -> Optional[Path]:

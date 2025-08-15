@@ -1,7 +1,10 @@
 import torch
 import torch.nn.functional as F
-from .base_agent import BaseAgent
+
 from utils.models import ActorCritic
+
+from .base_agent import BaseAgent
+
 
 class PPO(BaseAgent):
     

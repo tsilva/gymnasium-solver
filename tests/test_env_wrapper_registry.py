@@ -1,5 +1,4 @@
 import types
-import pytest
 
 from wrappers.env_wrapper_registry import EnvWrapperRegistry
 

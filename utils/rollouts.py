@@ -1,11 +1,12 @@
-from collections import deque
-from typing import NamedTuple, Deque, Tuple, Optional
-
 import time
+from collections import deque
+from typing import NamedTuple, Optional, Tuple
+
 import numpy as np
 import torch
 
-from utils.misc import inference_ctx, _device_of
+from utils.misc import _device_of, inference_ctx
+
 
 class RolloutTrajectory(NamedTuple):
     observations: torch.Tensor

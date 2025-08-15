@@ -24,27 +24,27 @@ from __future__ import annotations
 
 import argparse
 import json
-import time
+import logging
 import sys
-from pathlib import Path
+import time
+import warnings
 from dataclasses import dataclass
-from typing import Dict, Any, Tuple
+from pathlib import Path
+from typing import Any, Dict, Tuple
 
 import torch
-from torch.utils.data import DataLoader, TensorDataset
-import logging
-import warnings
 from pytorch_lightning import LightningModule, Trainer
+from torch.utils.data import DataLoader
 
 # Ensure repository root is on sys.path when running this file directly
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from utils.samplers import MultiPassRandomSampler
-from utils.environment import build_env
 from utils.config import load_config
+from utils.environment import build_env
 from utils.models import ActorCritic
+from utils.samplers import MultiPassRandomSampler
 
 
 @dataclass
@@ -297,7 +297,6 @@ def run_benchmark(cfg: BenchmarkConfig) -> Dict[str, Any]:
     # Silence Lightning info logs to avoid console overhead in timing
     logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
     try:
-        import lightning as _lt  # PL 2.x unifies under lightning namespace
         logging.getLogger("lightning.pytorch").setLevel(logging.ERROR)
     except Exception:
         pass

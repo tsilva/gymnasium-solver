@@ -1,14 +1,13 @@
-import torch
 import itertools
-from typing import Dict, Any
-from contextlib import contextmanager
+import numbers
 import os
 import sys
-from typing import Dict, Any, Iterable, Optional, List, Tuple
-import numbers
-import torch
-import numpy as np
 from collections import deque
+from contextlib import contextmanager
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+import numpy as np
+import torch
 
 # ========= Randomness helpers =========
 

@@ -1,6 +1,7 @@
 import gymnasium as gym
 from stable_baselines3.common.vec_env.base_vec_env import VecEnvWrapper
 
+
 class VecInfoWrapper(VecEnvWrapper):
     def reset(self):
         return self.venv.reset()

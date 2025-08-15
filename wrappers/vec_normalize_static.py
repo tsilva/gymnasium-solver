@@ -1,7 +1,12 @@
 
 import numpy as np
 from gymnasium import spaces
-from stable_baselines3.common.vec_env.base_vec_env import VecEnv, VecEnvWrapper, VecEnvStepReturn
+from stable_baselines3.common.vec_env.base_vec_env import (
+    VecEnv,
+    VecEnvStepReturn,
+    VecEnvWrapper,
+)
+
 
 class VecNormalizeStatic(VecEnvWrapper):
     def __init__(self, venv: VecEnv):

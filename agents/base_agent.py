@@ -1,6 +1,7 @@
 import sys
 import time
 import types
+
 import torch
 
 # Optional dependency: PyTorch Lightning
@@ -361,6 +362,7 @@ class BaseAgent(pl.LightningModule):
 
     def _create_wandb_logger(self):
         from dataclasses import asdict
+
         from pytorch_lightning.loggers import WandbLogger
 
         project_name = self.config.project_id if self.config.project_id else self._sanitize_name(self.config.env_id)
@@ -384,10 +386,10 @@ class BaseAgent(pl.LightningModule):
     def _build_callbacks(self):
         # Lazy imports to avoid heavy deps at module import time
         from callbacks import (
+            HyperparameterScheduler,
+            ModelCheckpointCallback,
             PrintMetricsCallback,
             VideoLoggerCallback,
-            ModelCheckpointCallback,
-            HyperparameterScheduler,
         )
 
         # Create video logging callback using run-specific directory
@@ -410,9 +412,9 @@ class BaseAgent(pl.LightningModule):
 
         # Create algorithm-specific metric rules from metrics config
         from utils.metrics import (
-            get_metric_precision_dict,
-            get_metric_delta_rules,
             get_algorithm_metric_rules,
+            get_metric_delta_rules,
+            get_metric_precision_dict,
         )
 
         metric_precision = get_metric_precision_dict()

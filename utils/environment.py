@@ -1,6 +1,6 @@
+
 from wrappers.env_wrapper_registry import EnvWrapperRegistry
-from wrappers.discrete_to_binary import DiscreteToBinary
-from gymnasium import spaces
+
 
 def is_alepy_env_id(env_id: str) -> bool:
     return env_id.startswith("ALE/")
@@ -22,10 +22,16 @@ def build_env(
 
     import gymnasium as gym
     from stable_baselines3.common.env_util import make_vec_env
-    from stable_baselines3.common.vec_env import VecNormalize, VecFrameStack, DummyVecEnv, SubprocVecEnv
+    from stable_baselines3.common.vec_env import (
+        DummyVecEnv,
+        SubprocVecEnv,
+        VecFrameStack,
+        VecNormalize,
+    )
+
     from wrappers.vec_info import VecInfoWrapper
-    from wrappers.vec_video_recorder import VecVideoRecorder
     from wrappers.vec_normalize_static import VecNormalizeStatic
+    from wrappers.vec_video_recorder import VecVideoRecorder
     
     # If recording video was requrested, assert valid render mode and subproc disabled 
     if record_video:

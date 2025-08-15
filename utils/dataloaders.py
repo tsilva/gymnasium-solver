@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Callable, Any
+from typing import Any, Callable, Optional
 
 import torch
 from torch.utils.data import DataLoader, TensorDataset

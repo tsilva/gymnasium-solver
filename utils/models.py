@@ -1,9 +1,11 @@
 """Neural network model utilities."""
 
+import math
+
 import torch
 import torch.nn as nn
 from torch.distributions import Categorical
-import math
+
 
 def mlp(in_dim, hidden, act=nn.Tanh):
     layers, last = [], in_dim

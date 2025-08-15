@@ -1,5 +1,6 @@
 import os
 import time
+
 import numpy as np
 from ale_py.vector_env import AtariVectorEnv
 

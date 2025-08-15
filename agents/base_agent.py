@@ -5,6 +5,8 @@ import pytorch_lightning as pl
 from utils.environment import build_env
 from utils.rollouts import RolloutCollector
 from utils.misc import prefix_dict_keys, get_global_torch_generator
+from utils.metrics_buffer import MetricsBuffer
+from utils.trainer_factory import build_trainer
 from utils.decorators import must_implement
 from callbacks import PrintMetricsCallback, VideoLoggerCallback, ModelCheckpointCallback, HyperparameterScheduler
 from torch.utils.data import DataLoader
@@ -88,13 +90,8 @@ class BaseAgent(pl.LightningModule):
             **self.rollout_collector_hyperparams(),
         )
 
-        # Initialize a dictionary to store epoch metrics
-        # - Used to collect metrics during training and validation epochs
-        # - Metrics are flushed at the end of each epoch
-        # - This avoids performance drops caused by using Lightning's logger
-        #   which can be slow when logging many metrics
-        # - Metrics are logged using self.log_metrics() method
-        self._epoch_metrics = {}
+        # Encapsulated metrics buffer used across train/eval epochs
+        self._metrics_buffer = MetricsBuffer()
 
     @must_implement
     def create_models(self):
@@ -282,7 +279,13 @@ class BaseAgent(pl.LightningModule):
             # Build callbacks and trainer
             callbacks = self._build_callbacks()
             validation_controls = self._get_validation_controls()
-            trainer = self._build_trainer(wandb_logger, callbacks, validation_controls)
+            trainer = build_trainer(
+                logger=wandb_logger,
+                callbacks=callbacks,
+                validation_controls=validation_controls,
+                max_epochs=self.config.max_epochs,
+                accelerator="cpu",  # TODO: softcode
+            )
 
             trainer.fit(self)
 
@@ -393,21 +396,14 @@ class BaseAgent(pl.LightningModule):
         }
 
     def _build_trainer(self, wandb_logger, callbacks, validation_controls):
-        trainer = pl.Trainer(
+        # Backward-compat shim; delegate to factory. Kept to avoid breaking imports/tests.
+        return build_trainer(
             logger=wandb_logger,
-            max_epochs=self.config.max_epochs if self.config.max_epochs is not None else -1,
-            enable_progress_bar=False,
-            enable_checkpointing=False,  # Disable built-in checkpointing, use our custom callback
-            accelerator="cpu",  # Use CPU for training # TODO: softcode this
-            # Reuse dataloaders across epochs to avoid worker respawn and construction overhead
-            reload_dataloaders_every_n_epochs=0,
-            val_check_interval=None,  # Disable built-in validation check interval
-            check_val_every_n_epoch=validation_controls["check_val_every_n_epoch"],
-            limit_val_batches=validation_controls["limit_val_batches"],
-            num_sanity_val_steps=0,
             callbacks=callbacks,
+            validation_controls=validation_controls,
+            max_epochs=self.config.max_epochs,
+            accelerator="cpu",
         )
-        return trainer
 
     def _backpropagate_and_step(self, losses):
         optimizers = self.optimizers()
@@ -454,23 +450,8 @@ class BaseAgent(pl.LightningModule):
         Lightning logger caused significant performance drops, as much as 2x slower train/fps.
         Using custom metric collection / flushing logic to avoid this issue.
         """
-        
-        _metrics = metrics
-        if prefix: _metrics = prefix_dict_keys(metrics, prefix)
-        for key, value in _metrics.items():
-            _list = self._epoch_metrics.get(key, [])
-            _list.append(value)
-            self._epoch_metrics[key] = _list
+        self._metrics_buffer.log(metrics, prefix=prefix)
 
     def _flush_metrics(self):
-        # Calculate means for each metric
-        means = {}
-        for key, values in self._epoch_metrics.items():
-            mean = sum(values) / len(values) if values else 0
-            means[key] = mean
-
-        # Log the means to the lightning logger
-        self.log_dict(means)
-
-        # Clear the epoch metrics after flushing
-        self._epoch_metrics.clear()
+        # Flush via buffer abstraction
+        self._metrics_buffer.flush_to(self.log_dict)

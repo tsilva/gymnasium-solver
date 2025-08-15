@@ -7,16 +7,9 @@ from utils.rollouts import RolloutCollector
 from utils.misc import prefix_dict_keys
 from utils.decorators import must_implement
 from callbacks import PrintMetricsCallback, VideoLoggerCallback, ModelCheckpointCallback, HyperparameterScheduler
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader
+from utils.dataloaders import build_dummy_loader, build_index_collate_loader_from_collector
 from utils.samplers import MultiPassRandomSampler
-from utils.datasets import IndexDataset
-
-# TODO: extract to dataloaders.py
-n_samples, sample_dim, batch_size = (1, 1, 1)
-dummy_data = torch.zeros(n_samples, sample_dim)
-dummy_target = torch.zeros(n_samples, sample_dim)
-dataset = TensorDataset(dummy_data, dummy_target)
-validation_dataloader = DataLoader(dataset, batch_size=batch_size, num_workers=0)
 
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class BaseAgent(pl.LightningModule):
@@ -134,30 +127,24 @@ class BaseAgent(pl.LightningModule):
         if getattr(self.config, 'seed', None) is not None:
             generator.manual_seed(int(self.config.seed))
 
-        # Create a sampler that will yield indices for `num_passes` 
-        # independent random permutations of the dataset
-        data_len = len(self._trajectories.observations) # TODO: better way to get length?
-
-        # TODO: extract to dataloaders.py
-        return DataLoader(
+        # Build efficient index-collate dataloader backed by MultiPassRandomSampler
+        # Use a getter to ensure fresh trajectories are used by the collate function
+        self._train_sampler = MultiPassRandomSampler(
+            data_len=len(self._trajectories.observations),
+            num_passes=self.config.n_epochs,
+            generator=generator,
+        )
+        return build_index_collate_loader_from_collector(
+            collector=self.train_collector,
+            trajectories_getter=lambda: self._trajectories,
             batch_size=self.config.batch_size,
-            # Use dummy dataset that returns the requested indexes instead of the item and then use 
-            # the custom collator to pick batch from shuffled indices in one pass
-            # (without this, sampling would be much slower because items would be picked one by one)
-            dataset=IndexDataset(data_len),
-            collate_fn=lambda idxs: self.train_collector.slice_trajectories(self._trajectories, idxs),
-            # We use the multi-pass sampler to ensure that the same 
-            # rollout data is seen N times per epoch, otherwise we would have
-            # to deal with only collecting rollouts every N epochs
-            sampler=MultiPassRandomSampler(
-                data_len=data_len,
-                num_passes=self.config.n_epochs, 
-                generator=generator
-            ),
-            # TODO: add support for n_workers
+            num_passes=self.config.n_epochs,
+            generator=generator,
+            sampler=self._train_sampler,
+            # TODO: add support for n_workers and memory options in config if needed
             num_workers=0,
             pin_memory=False,
-            persistent_workers=False
+            persistent_workers=False,
         )
       
     def on_train_epoch_start(self):
@@ -208,7 +195,8 @@ class BaseAgent(pl.LightningModule):
             self.trainer.should_stop = True
     
     def val_dataloader(self):
-        return validation_dataloader
+        # Validation dataloader is a dummy; actual evaluation uses env rollouts.
+        return build_dummy_loader()
 
     def on_validation_epoch_start(self):
         assert self.current_epoch == 0 or (self.current_epoch + 1) % self.config.eval_freq_epochs == 0, f"Validation epoch {self.current_epoch} is not a multiple of eval_freq_epochs {self.config.eval_freq_epochs}"

@@ -255,13 +255,50 @@ class BaseAgent(pl.LightningModule):
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
         
     def train(self):
-        from dataclasses import asdict
-        from pytorch_lightning.loggers import WandbLogger
-        from utils.run_manager import RunManager
         from utils.logging import capture_all_output, log_config_details
 
         # Create wandb logger and run manager
-        project_name = self.config.project_id if self.config.project_id else self.config.env_id.replace("/", "-").replace("\\", "-")
+        wandb_logger = self._create_wandb_logger()
+
+        # Setup run directory management
+        run_dir, run_logs_dir = self._init_run_manager(wandb_logger)
+
+        print(f"Run directory: {run_dir}")
+        print(f"Run ID: {self.run_manager.run_id}")
+        print(f"Logs will be saved to: {run_logs_dir}")
+
+        # Set up comprehensive logging using run-specific logs directory
+        with capture_all_output(config=self.config, log_dir=run_logs_dir):
+            # Log configuration details
+            log_config_details(self.config)
+
+            # Save configuration to run directory
+            config_path = self.run_manager.save_config(self.config)
+            print(f"Configuration saved to: {config_path}")
+
+            # Define step-based metrics to ensure proper ordering
+            self._define_wandb_metrics(wandb_logger)
+
+            # Build callbacks and trainer
+            callbacks = self._build_callbacks()
+            validation_controls = self._get_validation_controls()
+            trainer = self._build_trainer(wandb_logger, callbacks, validation_controls)
+
+            trainer.fit(self)
+
+    # -------------------------
+    # Helper methods for train()
+    # -------------------------
+
+    @staticmethod
+    def _sanitize_name(name: str) -> str:
+        return name.replace("/", "-").replace("\\", "-")
+
+    def _create_wandb_logger(self):
+        from dataclasses import asdict
+        from pytorch_lightning.loggers import WandbLogger
+
+        project_name = self.config.project_id if self.config.project_id else self._sanitize_name(self.config.env_id)
         experiment_name = f"{self.config.algo_id}-{self.config.seed}"
         wandb_logger = WandbLogger(
             project=project_name,
@@ -269,40 +306,31 @@ class BaseAgent(pl.LightningModule):
             log_model=True,
             config=asdict(self.config)
         )
-        
-        # Setup run directory management
+        return wandb_logger
+
+    def _init_run_manager(self, wandb_logger):
+        from utils.run_manager import RunManager
+
         self.run_manager = RunManager()
         run_dir = self.run_manager.setup_run_directory(wandb_logger.experiment)
         run_logs_dir = str(self.run_manager.get_logs_dir())
-        
-        print(f"Run directory: {run_dir}")
-        print(f"Run ID: {self.run_manager.run_id}")
-        print(f"Logs will be saved to: {run_logs_dir}")
-        
-        # Set up comprehensive logging using run-specific logs directory
-        with capture_all_output(config=self.config, log_dir=run_logs_dir):
-            # Log configuration details
-            log_config_details(self.config)
-            
-            # Save configuration to run directory
-            config_path = self.run_manager.save_config(self.config)
-            print(f"Configuration saved to: {config_path}")
-            
-            # Define step-based metrics to ensure proper ordering
-            if wandb_logger.experiment:
-                wandb_logger.experiment.define_metric("train/*", step_metric="train/total_timesteps")
-                wandb_logger.experiment.define_metric("eval/*", step_metric="train/total_timesteps")
-            
-            # Create video logging callback using run-specific directory
-            video_logger_cb = VideoLoggerCallback(
-                media_root=str(self.run_manager.get_video_dir()),  # Use run-specific video directory
-                namespace_depth=1,          # "episodes" from train/episodes/ or eval/episodes/
-                #log_interval_s=5.0,         # scan at most every 5 seconds
-                #max_per_key=8,              # avoid spamming the panel
-            )
-            
-            # TODO: review early stopping logic
-            # Create checkpoint callback using run-specific directory
+        return run_dir, run_logs_dir
+
+    def _define_wandb_metrics(self, wandb_logger):
+        if wandb_logger.experiment:
+            wandb_logger.experiment.define_metric("train/*", step_metric="train/total_timesteps")
+            wandb_logger.experiment.define_metric("eval/*", step_metric="train/total_timesteps")
+
+    def _build_callbacks(self):
+        # Create video logging callback using run-specific directory
+        video_logger_cb = VideoLoggerCallback(
+            media_root=str(self.run_manager.get_video_dir()),  # Use run-specific video directory
+            namespace_depth=1,
+        )
+
+        # Create checkpoint callback using run-specific directory (skip for qlearning)
+        checkpoint_cb = None
+        if self.config.algo_id != "qlearning":
             checkpoint_cb = ModelCheckpointCallback(
                 checkpoint_dir=str(self.run_manager.get_checkpoint_dir()),
                 monitor="eval/ep_rew_mean",
@@ -310,59 +338,76 @@ class BaseAgent(pl.LightningModule):
                 save_last=True,
                 save_threshold_reached=True,
                 resume=getattr(self.config, 'resume', False)
-            ) if self.config.algo_id != "qlearning" else None
-            
-            # Create algorithm-specific metric rules from metrics config
-            from utils.metrics import get_metric_precision_dict, get_metric_delta_rules, get_algorithm_metric_rules
-            metric_precision = get_metric_precision_dict()
-            metric_delta_rules = get_metric_delta_rules()
-            algo_metric_rules = get_algorithm_metric_rules(self.config.algo_id)
-            
-            # TODO: clean this up
-            # TODO: print myself without printer callback?
-            printer_cb = PrintMetricsCallback(
-                # TODO: should this be same as log_every_n_steps?
-                every_n_steps=200,   # print every 200 optimizer steps
-                # TODO: not sure if this is working
-                every_n_epochs=10,    # and at the end of every epoch
-                digits=4, # TODO: is this still needed?
-                # TODO: pass single metric config
-                metric_precision=metric_precision,
-                metric_delta_rules=metric_delta_rules,
-                algorithm_metric_rules=algo_metric_rules  # Pass algorithm-specific rules
             )
 
-            # Create hyperparameter scheduler callback
-            hyperparam_cb = HyperparameterScheduler(
-                control_dir=str(self.run_manager.run_dir / "hyperparam_control"),
-                check_interval=2.0,  # Check every 2 seconds
-                enable_lr_scheduling=False,
-                enable_manual_control=True,
-                verbose=True
-            )
+        # Create algorithm-specific metric rules from metrics config
+        from utils.metrics import (
+            get_metric_precision_dict,
+            get_metric_delta_rules,
+            get_algorithm_metric_rules,
+        )
+        metric_precision = get_metric_precision_dict()
+        metric_delta_rules = get_metric_delta_rules()
+        algo_metric_rules = get_algorithm_metric_rules(self.config.algo_id)
 
-            callbacks = [x for x in [printer_cb, video_logger_cb, checkpoint_cb, hyperparam_cb] if x is not None]  # Filter out None callbacks
+        # Print metrics callback
+        printer_cb = PrintMetricsCallback(
+            every_n_steps=200,
+            every_n_epochs=10,
+            digits=4,
+            metric_precision=metric_precision,
+            metric_delta_rules=metric_delta_rules,
+            algorithm_metric_rules=algo_metric_rules,
+        )
 
-            # Determine validation controls based on configuration
-            eval_freq = getattr(self.config, 'eval_freq_epochs', None)
-            limit_val_batches = 0 if eval_freq is None else 1.0  # disable validation entirely if None
-            check_val_every_n_epoch = eval_freq if eval_freq is not None else 1  # value won't matter when limit_val_batches=0
+        # Hyperparameter scheduler callback
+        hyperparam_cb = HyperparameterScheduler(
+            control_dir=str(self.run_manager.run_dir / "hyperparam_control"),
+            check_interval=2.0,
+            enable_lr_scheduling=False,
+            enable_manual_control=True,
+            verbose=True,
+        )
 
-            trainer = pl.Trainer(
-                logger=wandb_logger,
-                max_epochs=self.config.max_epochs if self.config.max_epochs is not None else -1,
-                enable_progress_bar=False,
-                enable_checkpointing=False,  # Disable built-in checkpointing, use our custom callback
-                accelerator="cpu",  # Use CPU for training # TODO: softcode this
-                # Reuse dataloaders across epochs to avoid worker respawn and construction overhead
-                reload_dataloaders_every_n_epochs=0,
-                val_check_interval=None,  # Disable built-in validation check interval
-                check_val_every_n_epoch=check_val_every_n_epoch,
-                limit_val_batches=limit_val_batches,
-                num_sanity_val_steps=0,
-                callbacks=callbacks
-            )
-            trainer.fit(self)
+        callbacks = [x for x in [printer_cb, video_logger_cb, checkpoint_cb, hyperparam_cb] if x is not None]
+        return callbacks
+
+    def _get_validation_controls(self):
+        eval_freq = getattr(self.config, 'eval_freq_epochs', None)
+        return self._compute_validation_controls(eval_freq)
+
+    @staticmethod
+    def _compute_validation_controls(eval_freq_epochs):
+        """Pure helper: map eval frequency to PL validation controls.
+
+        Args:
+            eval_freq_epochs: int | None
+        Returns:
+            dict with keys 'limit_val_batches' and 'check_val_every_n_epoch'
+        """
+        limit_val_batches = 0 if eval_freq_epochs is None else 1.0
+        check_val_every_n_epoch = eval_freq_epochs if eval_freq_epochs is not None else 1
+        return {
+            "limit_val_batches": limit_val_batches,
+            "check_val_every_n_epoch": check_val_every_n_epoch,
+        }
+
+    def _build_trainer(self, wandb_logger, callbacks, validation_controls):
+        trainer = pl.Trainer(
+            logger=wandb_logger,
+            max_epochs=self.config.max_epochs if self.config.max_epochs is not None else -1,
+            enable_progress_bar=False,
+            enable_checkpointing=False,  # Disable built-in checkpointing, use our custom callback
+            accelerator="cpu",  # Use CPU for training # TODO: softcode this
+            # Reuse dataloaders across epochs to avoid worker respawn and construction overhead
+            reload_dataloaders_every_n_epochs=0,
+            val_check_interval=None,  # Disable built-in validation check interval
+            check_val_every_n_epoch=validation_controls["check_val_every_n_epoch"],
+            limit_val_batches=validation_controls["limit_val_batches"],
+            num_sanity_val_steps=0,
+            callbacks=callbacks,
+        )
+        return trainer
 
     def _backpropagate_and_step(self, losses):
         optimizers = self.optimizers()

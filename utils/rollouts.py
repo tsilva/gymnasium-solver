@@ -48,12 +48,6 @@ class RolloutBuffer:
         self.timeouts_buf = np.zeros((self.maxsize, self.n_envs), dtype=bool)
         self.bootstrapped_values_buf = np.zeros((self.maxsize, self.n_envs), dtype=np.float32)
 
-        # GPU buffers
-        self.obs_tensor_buf = torch.zeros((self.maxsize, self.n_envs, *self.obs_shape), dtype=torch.float32, device=self.device)
-        self.actions_tensor_buf = torch.zeros((self.maxsize, self.n_envs), dtype=torch.int64, device=self.device)
-        self.logprobs_tensor_buf = torch.zeros((self.maxsize, self.n_envs), dtype=torch.float32, device=self.device)
-        self.values_tensor_buf = torch.zeros((self.maxsize, self.n_envs), dtype=torch.float32, device=self.device)
-
         # write position tracking
         self.pos: int = 0
         self.size: int = 0  # number of valid steps currently stored (for info)
@@ -74,10 +68,23 @@ class RolloutBuffer:
 
     # -------- Per-step storage helpers --------
     def store_tensors(self, idx: int, obs_t: torch.Tensor, actions_t: torch.Tensor, logps_t: torch.Tensor, values_t: torch.Tensor) -> None:
-        self.obs_tensor_buf[idx] = obs_t
-        self.actions_tensor_buf[idx] = actions_t
-        self.logprobs_tensor_buf[idx] = logps_t
-        self.values_tensor_buf[idx] = values_t
+        """Store per-step tensors by converting to NumPy and writing CPU buffers.
+
+        This keeps collection in NumPy primitives; conversion back to torch
+        happens only when flattening for returned trajectories.
+        """
+        # Observations
+        obs_np = obs_t.detach().cpu().numpy()
+        if obs_np.shape == (self.n_envs, *self.obs_shape):
+            self.obs_buf[idx] = obs_np
+        else:
+            # Attempt to reshape if model returned flat observations
+            self.obs_buf[idx] = obs_np.reshape(self.n_envs, *self.obs_shape)
+
+        # Actions, logprobs, values
+        self.actions_buf[idx] = actions_t.detach().cpu().numpy().astype(np.int64)
+        self.logprobs_buf[idx] = logps_t.detach().cpu().numpy().astype(np.float32)
+        self.values_buf[idx] = values_t.detach().cpu().numpy().astype(np.float32)
 
     def store_cpu_step(
         self,
@@ -97,9 +104,8 @@ class RolloutBuffer:
         self.timeouts_buf[idx] = timeouts_np
 
     def copy_tensors_to_cpu(self, start: int, end: int) -> None:
-        """Batch transfer GPU tensors to CPU numpy buffers for [start, end)."""
-        self.logprobs_buf[start:end] = self.logprobs_tensor_buf[start:end].detach().cpu().numpy()
-        self.values_buf[start:end] = self.values_tensor_buf[start:end].detach().cpu().numpy()
+        """No-op for compatibility; data are already stored in CPU buffers."""
+        return
 
     # -------- Flatten helpers --------
     def flatten_slice_env_major(
@@ -113,24 +119,24 @@ class RolloutBuffer:
         T = end - start
         n_envs = self.n_envs
 
-        # Observations already on GPU
-        obs_slice = self.obs_tensor_buf[start:end]
-        states = obs_slice.transpose(0, 1).reshape(n_envs * T, -1)
+        # Observations: use CPU buffers and convert at return time
+        obs_np = self.obs_buf[start:end]  # (T, N, *obs_shape)
+        obs_t = torch.as_tensor(obs_np, dtype=torch.float32, device=self.device)
+        states = obs_t.transpose(0, 1).reshape(n_envs * T, -1)
 
-        def _flat_env_major_gpu(tensor_buf: torch.Tensor) -> torch.Tensor:
-            return tensor_buf[start:end].transpose(0, 1).reshape(-1)
-
-        actions = _flat_env_major_gpu(self.actions_tensor_buf).to(torch.int64)
-        logps = _flat_env_major_gpu(self.logprobs_tensor_buf).to(torch.float32)
-        values = _flat_env_major_gpu(self.values_tensor_buf).to(torch.float32)
-
-        def _flat_env_major_cpu(arr: np.ndarray, dtype: torch.dtype) -> torch.Tensor:
+        def _flat_env_major_cpu_to_torch(arr: np.ndarray, dtype: torch.dtype) -> torch.Tensor:
             return torch.as_tensor(arr[start:end].transpose(1, 0).reshape(-1), dtype=dtype, device=self.device)
 
-        rewards = _flat_env_major_cpu(self.rewards_buf, torch.float32)
-        dones = _flat_env_major_cpu(self.dones_buf, torch.bool)
-        advantages = _flat_env_major_cpu(advantages_buf, torch.float32)
-        returns = _flat_env_major_cpu(returns_buf, torch.float32)
+        actions = _flat_env_major_cpu_to_torch(self.actions_buf, torch.int64)
+        logps = _flat_env_major_cpu_to_torch(self.logprobs_buf, torch.float32)
+        values = _flat_env_major_cpu_to_torch(self.values_buf, torch.float32)
+
+        def _flat_env_major_cpu_only(arr: np.ndarray) -> np.ndarray:
+            return arr[start:end].transpose(1, 0).reshape(-1)
+        rewards = torch.as_tensor(_flat_env_major_cpu_only(self.rewards_buf), dtype=torch.float32, device=self.device)
+        dones = torch.as_tensor(_flat_env_major_cpu_only(self.dones_buf), dtype=torch.bool, device=self.device)
+        advantages = torch.as_tensor(_flat_env_major_cpu_only(advantages_buf), dtype=torch.float32, device=self.device)
+        returns = torch.as_tensor(_flat_env_major_cpu_only(returns_buf), dtype=torch.float32, device=self.device)
 
         # Next observations
         if self.next_obs_buf.ndim == 2:

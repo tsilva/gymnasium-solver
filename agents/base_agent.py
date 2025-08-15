@@ -472,7 +472,8 @@ class BaseAgent(pl.LightningModule):
             callbacks=callbacks,
             validation_controls=validation_controls,
             max_epochs=self.config.max_epochs,
-            accelerator="cpu",
+            accelerator=getattr(self.config, "accelerator", "cpu"),
+            devices=getattr(self.config, "devices", None),
         )
 
     def _backpropagate_and_step(self, losses):

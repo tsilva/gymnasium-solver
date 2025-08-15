@@ -109,6 +109,12 @@ class Config:
     # If True, attempt to resume from the latest checkpoint for this algo/env
     resume: bool = False
 
+    # ===== Runtime / hardware (optional) =====
+    # Device accelerator for PyTorch Lightning: 'cpu' or 'auto' (auto-detect GPU/MPS if available)
+    accelerator: str = "cpu"
+    # Number of devices to use or 'auto' (forwarded to Lightning as-is); None lets Lightning decide
+    devices: Optional[Union[int, str]] = None
+
     # ===== Legacy compatibility (do not rely on these directly) =====
     # RL Zoo compatibility flag mapped to normalize_obs/reward
     normalize: Optional[bool] = None
@@ -427,6 +433,15 @@ class Config:
             raise ValueError("eval_recording_freq_epochs must be a positive integer when set.")
         if self.reward_threshold is not None and self.reward_threshold <= 0:
             raise ValueError("reward_threshold must be a positive float.")
+
+        # Runtime / hardware
+        allowed_accelerators = {"auto", "cpu", "gpu", "mps", "tpu", "ipu", "hpu"}
+        if self.accelerator not in allowed_accelerators:
+            raise ValueError(
+                f"accelerator must be one of {sorted(allowed_accelerators)}; got '{self.accelerator}'"
+            )
+        if isinstance(self.devices, str) and self.devices != "auto":
+            raise ValueError("devices may be an int, 'auto', or None")
 
 def load_config(config_id: str, algo_id: str = None, config_dir: str = "config/environments") -> Config:
     """Convenience function to load configuration."""

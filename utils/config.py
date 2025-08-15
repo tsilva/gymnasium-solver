@@ -6,7 +6,17 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import yaml
 
-from utils.misc import _convert_numeric_strings
+def _convert_numeric_strings(config_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert string representations of numbers back to numeric types."""
+    for key, value in config_dict.items():
+        if isinstance(value, str):
+            # Try to convert scientific notation strings to float
+            try:
+                if 'e' in value.lower() or 'E' in value:
+                    config_dict[key] = float(value)
+            except Exception:
+                pass
+    return config_dict
 
 
 @dataclass

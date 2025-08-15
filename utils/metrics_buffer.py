@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Callable, Dict, Mapping, MutableMapping
 
-from .misc import prefix_dict_keys
+from .dict_utils import prefix_dict_keys
 
 
 class MetricsBuffer:

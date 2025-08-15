@@ -163,8 +163,7 @@ class BaseAgent(pl.LightningModule):
         self._trajectories = self.train_collector.collect()
 
         # Use a shared generator for reproducible shuffles across the app
-        from utils.misc import get_global_torch_generator
-
+        from utils.random_utils import get_global_torch_generator
         generator = get_global_torch_generator(getattr(self.config, "seed", None))
 
         # Build efficient index-collate dataloader backed by MultiPassRandomSampler

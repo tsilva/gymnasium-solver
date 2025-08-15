@@ -85,7 +85,7 @@ class PrintMetricsCallback(pl.Callback):
         self._change_tol = 1e-12
 
         # Dedicated table printer to preserve state across prints (avoids global resets)
-        from utils.misc import NamespaceTablePrinter
+        from utils.table_printer import NamespaceTablePrinter
         self._printer = NamespaceTablePrinter(
             # Keep numbers compact and colored like before
             compact_numbers=True,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Optional, Callable, Any
 
 import torch
-from torch.utils.data import DataLoader, TensorDataset, Sampler
+from torch.utils.data import DataLoader, TensorDataset
 
 from .datasets import IndexDataset
 from .samplers import MultiPassRandomSampler
@@ -29,7 +29,6 @@ def build_index_collate_loader_from_collector(
     batch_size: int,
     num_passes: int,
     generator: Optional[torch.Generator] = None,
-    sampler: Optional[Sampler[int]] = None,
     num_workers: int = 0,
     pin_memory: bool = False,
     persistent_workers: bool = False,
@@ -54,8 +53,8 @@ def build_index_collate_loader_from_collector(
     # Determine dataset length from trajectories (observations is authoritative)
     data_len = len(_traj.observations)
 
-    # Sampler that yields indices for `num_passes` independent permutations
-    _sampler = sampler or MultiPassRandomSampler(data_len=data_len, num_passes=num_passes, generator=generator)
+    # Always use a MultiPassRandomSampler for index generation
+    _sampler = MultiPassRandomSampler(data_len=data_len, num_passes=num_passes, generator=generator)
 
     # Index-only dataset; collate slices tensors once per batch
     index_ds = IndexDataset(data_len)
@@ -68,7 +67,7 @@ def build_index_collate_loader_from_collector(
         batch_size=batch_size,
         num_workers=num_workers,
         shuffle=False,
-    sampler=_sampler,
+        sampler=_sampler,
         pin_memory=pin_memory,
         persistent_workers=persistent_workers if num_workers > 0 else False,
         drop_last=False,

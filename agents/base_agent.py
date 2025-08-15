@@ -9,7 +9,6 @@ from utils.decorators import must_implement
 from callbacks import PrintMetricsCallback, VideoLoggerCallback, ModelCheckpointCallback, HyperparameterScheduler
 from torch.utils.data import DataLoader
 from utils.dataloaders import build_dummy_loader, build_index_collate_loader_from_collector
-from utils.samplers import MultiPassRandomSampler
 
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class BaseAgent(pl.LightningModule):
@@ -129,18 +128,12 @@ class BaseAgent(pl.LightningModule):
 
         # Build efficient index-collate dataloader backed by MultiPassRandomSampler
         # Use a getter to ensure fresh trajectories are used by the collate function
-        self._train_sampler = MultiPassRandomSampler(
-            data_len=len(self._trajectories.observations),
-            num_passes=self.config.n_epochs,
-            generator=generator,
-        )
         return build_index_collate_loader_from_collector(
             collector=self.train_collector,
             trajectories_getter=lambda: self._trajectories,
             batch_size=self.config.batch_size,
             num_passes=self.config.n_epochs,
             generator=generator,
-            sampler=self._train_sampler,
             # TODO: add support for n_workers and memory options in config if needed
             num_workers=0,
             pin_memory=False,

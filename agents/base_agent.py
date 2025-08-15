@@ -135,6 +135,11 @@ class BaseAgent(pl.LightningModule):
         )
       
     def on_train_epoch_start(self):
+        # Mark epoch start for instant FPS calculation
+        self.train_epoch_start_time = time.time_ns()
+        start_metrics = self.train_collector.get_metrics()
+        self.train_epoch_start_timesteps = start_metrics["total_timesteps"]
+
         # Collect fresh trajectories at the start of each training epoch
         self._trajectories = self.train_collector.collect()
 
@@ -163,13 +168,18 @@ class BaseAgent(pl.LightningModule):
         total_timesteps = rollout_metrics["total_timesteps"]
         time_elapsed = max((time.time_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
         fps = total_timesteps / time_elapsed
-
+        # Per-epoch instant FPS (since on_train_epoch_start)
+        epoch_time_elapsed = max((time.time_ns() - self.train_epoch_start_time) / 1e9, sys.float_info.epsilon)
+        epoch_timesteps_elapsed = max(0, total_timesteps - int(self.train_epoch_start_timesteps))
+        fps_instant = epoch_timesteps_elapsed / epoch_time_elapsed
+       
         # Include recomputed learning rate and clip range in epoch metrics
         self.log_metrics({
             **rollout_metrics,
             "time_elapsed": time_elapsed,
             "epoch": self.current_epoch, # TODO: is this the same value as in epoch_start?
-            "fps" : fps
+            "fps" : fps,
+            "fps_instant": fps_instant
         }, prefix="train")
         
         self._flush_metrics()

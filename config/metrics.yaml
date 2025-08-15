@@ -17,6 +17,7 @@ _global:
     - "train/total_rollouts"
     - "train/rollout_timesteps"
     - "train/rollout_episodes"
+    - "train/fps_instant"
     - "train/epoch_fps"
     - "train/rollout_fps"
     - "train/loss"
@@ -122,6 +123,11 @@ fps:
   precision: 0
   force_integer: true
   description: "Training throughput in frames (environment steps) per second"
+
+fps_instant:
+  precision: 0
+  force_integer: true
+  description: "Instant training throughput in frames per second measured within the current epoch"
 
 # Loss metrics
 policy_loss:

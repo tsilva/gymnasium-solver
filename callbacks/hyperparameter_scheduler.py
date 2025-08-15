@@ -1,16 +1,19 @@
 """
-Dynamic hyperparameter adjustment callback for RL training.
+Manual hyperparameter control callback for RL training.
 
-This callback allows for on-the-fly adjustment of hyperparameters based on
-training metrics, manual triggers, or predefined schedules.
+This callback enables on-the-fly adjustment of selected hyperparameters via a
+control JSON file. Any change to the control file is detected and applied at
+the start of the next training epoch.
+
+Notes:
+- Automatic/metric-based scheduling has been removed. This utility is solely
+    for manual control during experiments.
 """
 
-import os
 import json
 import time
-import torch
 import pytorch_lightning as pl
-from typing import Dict, Any, Optional, Callable, List
+from typing import Dict, Any, Optional
 from pathlib import Path
 import threading
 import queue
@@ -18,13 +21,11 @@ import queue
 
 class HyperparameterScheduler(pl.Callback):
     """
-    Callback that enables dynamic hyperparameter adjustment during training.
-    
+    Callback that enables manual hyperparameter adjustment during training.
+
     Features:
     - Real-time hyperparameter adjustment via file monitoring
-    - Metric-based automatic adjustments
-    - Manual triggers through control files
-    - Learning rate scheduling based on performance
+    - Manual triggers through a control JSON file
     """
     
     def __init__(
@@ -36,18 +37,19 @@ class HyperparameterScheduler(pl.Callback):
         verbose: bool = True
     ):
         """
-        Initialize the hyperparameter scheduler.
+        Initialize the manual hyperparameter controller.
         
         Args:
             control_dir: Directory to monitor for control files. If None, uses run directory.
             check_interval: How often to check for control files (seconds)
-            enable_lr_scheduling: Enable automatic learning rate adjustments
+            enable_lr_scheduling: Deprecated; retained for backward-compatibility (ignored)
             enable_manual_control: Enable manual control via files
             verbose: Print adjustment messages
         """
         super().__init__()
         self.control_dir = control_dir
         self.check_interval = check_interval
+        # Deprecated: kept for backward-compatibility; no automatic scheduling is performed
         self.enable_lr_scheduling = enable_lr_scheduling
         self.enable_manual_control = enable_manual_control
         self.verbose = verbose
@@ -57,12 +59,6 @@ class HyperparameterScheduler(pl.Callback):
         
         # Last modification time for file monitoring
         self.last_check_time = 0
-        
-        # Performance tracking for automatic adjustments
-        self.performance_history = []
-        self.plateau_counter = 0
-        self.plateau_threshold = 5  # Number of epochs without improvement
-        self.min_improvement = 0.01  # Minimum improvement to reset plateau counter
         
         # Original hyperparameters for reference
         self.original_hyperparams = {}
@@ -105,11 +101,10 @@ class HyperparameterScheduler(pl.Callback):
             self.start_monitoring()
         
         if self.verbose:
-            print(f"\n🎛️  Hyperparameter control enabled!")
+            print(f"\n🎛️  Hyperparameter manual control enabled!")
             print(f"   Control directory: {self.control_dir}")
             print(f"   Control file: {self.control_file.name}")
             print(f"   Edit this file to adjust hyperparameters during training.")
-            print(f"   Use the CLI tool: python hyperparam_control.py status")
     
     def _create_control_file(self, pl_module: pl.LightningModule) -> None:
         """Create the unified control file with current values."""
@@ -123,15 +118,6 @@ class HyperparameterScheduler(pl.Callback):
             "clip_range": getattr(pl_module.config, 'clip_range', None),
             "vf_coef": getattr(pl_module.config, 'vf_coef', None),
             
-            # Automatic scheduling configuration
-            "schedule": {
-                "enable_adaptive_lr": True,
-                "lr_schedule": "plateau",  # "plateau", "linear", "exponential", "cosine"
-                "plateau_patience": 10,
-                "plateau_factor": 0.5,
-                "plateau_min_lr": 1e-6
-            },
-            
             # Metadata
             "description": "Modify any hyperparameter in this file. Changes are applied at the start of the next epoch.",
             "supported_params": [
@@ -139,8 +125,7 @@ class HyperparameterScheduler(pl.Callback):
                 "ent_coef - Entropy coefficient", 
                 "max_grad_norm - Maximum gradient norm for clipping",
                 "clip_range - PPO clipping range (PPO only)",
-                "vf_coef - Value function coefficient (PPO only)",
-                "schedule - Automatic learning rate scheduling config"
+                "vf_coef - Value function coefficient (PPO only)"
             ],
             "last_modified": time.time()
         }
@@ -208,10 +193,6 @@ class HyperparameterScheduler(pl.Callback):
             except Exception as e:
                 if self.verbose:
                     print(f"⚠️  Error applying adjustment: {e}")
-        
-        # Apply automatic learning rate scheduling
-        if self.enable_lr_scheduling:
-            self._apply_automatic_scheduling(trainer, pl_module)
     
     def _apply_adjustments(self, trainer: pl.Trainer, pl_module: pl.LightningModule, data: Dict[str, Any]) -> None:
         """Apply hyperparameter adjustments from control file."""
@@ -256,10 +237,6 @@ class HyperparameterScheduler(pl.Callback):
                 pl_module.config.vf_coef = new_val
                 changes.append(f"vf_coef: {old_val:.3f} → {new_val:.3f}")
         
-        # Schedule configuration
-        if "schedule" in data:
-            self._update_schedule_config(data["schedule"])
-        
         if changes and self.verbose:
             print(f"🎛️  Hyperparameters updated (epoch {trainer.current_epoch}): {', '.join(changes)}")
     
@@ -281,58 +258,6 @@ class HyperparameterScheduler(pl.Callback):
         if self.verbose and abs(new_lr - old_lr) > 1e-8:
             print(f"📈 Learning rate updated: {old_lr:.2e} → {new_lr:.2e} (epoch {trainer.current_epoch})")
     
-    def _update_schedule_config(self, data: Dict[str, Any]) -> None:
-        """Update scheduling configuration."""
-        # Store schedule configuration for automatic adjustments
-        self.schedule_config = data
-        if self.verbose:
-            print(f"📅 Schedule configuration updated")
-    
-    def _apply_automatic_scheduling(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
-        """Apply automatic learning rate scheduling based on performance."""
-        # Try to get recent performance metrics from various sources
-        current_reward = None
-        
-        # Try logged metrics first
-        if hasattr(trainer, 'logged_metrics') and 'eval/ep_rew_mean' in trainer.logged_metrics:
-            current_reward = float(trainer.logged_metrics['eval/ep_rew_mean'])
-        # Try callback metrics as backup
-        elif hasattr(trainer, 'callback_metrics') and 'eval/ep_rew_mean' in trainer.callback_metrics:
-            current_reward = float(trainer.callback_metrics['eval/ep_rew_mean'])
-        
-        if current_reward is not None:
-            self.performance_history.append(current_reward)
-            
-            # Keep only recent history
-            if len(self.performance_history) > 20:
-                self.performance_history = self.performance_history[-20:]
-            
-            # Check for plateau (requires at least 5 evaluations)
-            if len(self.performance_history) >= 5:
-                recent_best = max(self.performance_history[-5:])
-                overall_best = max(self.performance_history)
-                
-                # Check if we're on a plateau
-                if recent_best < overall_best - self.min_improvement:
-                    self.plateau_counter += 1
-                else:
-                    self.plateau_counter = 0
-                
-                # Apply learning rate reduction if on plateau
-                schedule_config = getattr(self, 'schedule_config', {})
-                if (self.plateau_counter >= schedule_config.get('plateau_patience', self.plateau_threshold) and
-                    schedule_config.get('enable_adaptive_lr', True)):
-                    
-                    factor = schedule_config.get('plateau_factor', 0.5)
-                    min_lr = schedule_config.get('plateau_min_lr', 1e-6)
-                    current_lr = pl_module.config.policy_lr
-                    new_lr = max(current_lr * factor, min_lr)
-                    
-                    if new_lr < current_lr:
-                        self._update_learning_rate(trainer, pl_module, new_lr)
-                        self.plateau_counter = 0  # Reset counter after adjustment
-                        if self.verbose:
-                            print(f"🔄 Automatic LR reduction due to plateau (patience: {self.plateau_counter})")
     
     def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         """Clean up monitoring when training ends."""

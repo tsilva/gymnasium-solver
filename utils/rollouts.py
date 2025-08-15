@@ -23,12 +23,13 @@ class RolloutBuffer:
     """
     Persistent rollout storage to avoid reallocating buffers every collect.
 
-    - Preallocates CPU and GPU buffers of size (maxsize, n_envs, ...)
-    - begin_rollout(T) ensures a contiguous slice is available; if not, resets
-      write position to 0 so the rollout fits contiguously.
-    - Collector stores per-step data using store_* methods.
-    - Provides utilities to copy GPU->CPU for a slice and to flatten a slice
-      into env-major tensors suitable for training.
+    - Preallocates CPU buffers of size (maxsize, n_envs, ...).
+    - begin_rollout(T) ensures a contiguous slice is available; if not, wraps
+      the write position to 0 so the rollout fits contiguously.
+    - Collector stores per-step data using store_* methods (tensors are
+      converted to NumPy on write; conversion back to torch happens on read).
+    - Provides utilities to flatten a slice into env-major tensors suitable
+      for training.
     """
 
     def __init__(self, n_envs: int, obs_shape: Tuple[int, ...], obs_dtype: np.dtype, device: torch.device, maxsize: int) -> None:
@@ -50,8 +51,8 @@ class RolloutBuffer:
         self.bootstrapped_values_buf = np.zeros((self.maxsize, self.n_envs), dtype=np.float32)
 
         # write position tracking
-        self.pos: int = 0
-        self.size: int = 0  # number of valid steps currently stored (for info)
+        self.pos = 0
+        self.size = 0  # number of valid steps currently stored (for info)
 
     def begin_rollout(self, T: int) -> int:
         """Ensure there is contiguous space for T steps; reset to 0 if needed.
@@ -105,7 +106,7 @@ class RolloutBuffer:
         self.timeouts_buf[idx] = timeouts_np
 
     def copy_tensors_to_cpu(self, start: int, end: int) -> None:
-        """No-op for compatibility; data are already stored in CPU buffers."""
+        """Compatibility no-op (historical: tensors already live on CPU)."""
         return
 
     # -------- Flatten helpers --------
@@ -178,9 +179,10 @@ class RolloutCollector():
         self.stats_window_size = stats_window_size
         self.gamma = gamma
         self.gae_lambda = gae_lambda
-        self.normalize_advantage = normalize_advantage
         self.advantages_norm_eps = advantages_norm_eps
         self.use_gae = use_gae
+        # Keep both flags for backward-compat; use normalize_advantages in logic
+        self.normalize_advantage = normalize_advantage
         self.normalize_advantages = normalize_advantages
         self.kwargs = kwargs
         self.buffer_maxsize = buffer_maxsize
@@ -188,6 +190,46 @@ class RolloutCollector():
         # State tracking
         self.device = _device_of(policy_model)
         self.n_envs = env.num_envs
+
+        # Running average stats (windowed)
+        self.rollout_fpss = deque(maxlen=stats_window_size)
+        self.episode_reward_deque = deque(maxlen=stats_window_size)
+        self.episode_length_deque = deque(maxlen=stats_window_size)
+        self.env_episode_reward_deques = [deque(maxlen=stats_window_size) for _ in range(self.n_envs)]
+        self.env_episode_length_deques = [deque(maxlen=stats_window_size) for _ in range(self.n_envs)]
+
+        # Lightweight running statistics (avoid per-sample Python overhead)
+        # Obs/reward running stats over all seen samples (scalar over all dims)
+        self._obs_count = 0
+        self._obs_sum = 0.0
+        self._obs_sumsq = 0.0
+
+        self._rew_count = 0
+        self._rew_sum = 0.0
+        self._rew_sumsq = 0.0
+
+        # Action histogram (discrete); grows dynamically as needed
+        self._action_counts = None
+
+        # Baseline stats for REINFORCE (global running mean/std over returns)
+        self._base_count = 0
+        self._base_sum = 0.0
+        self._base_sumsq = 0.0
+
+        self.total_rollouts = 0
+        self.total_steps = 0
+        self.total_episodes = 0
+        self.rollout_steps = 0
+        self.rollout_episodes = 0
+
+        # Current observations - initialize on first collect
+        self.obs = None
+
+        # Persistent rollout buffer (lazy init when first obs is known)
+        self._buffer = None
+
+        # Reusable arrays to avoid per-step allocations
+        self._step_timeouts = np.zeros(self.n_envs, dtype=bool)
 
         # Running average stats (windowed)
         self.rollout_fpss = deque(maxlen=stats_window_size)
@@ -267,19 +309,19 @@ class RolloutCollector():
         rollout_start = time.time()
         step_idx = 0
         while env_step_calls < self.n_steps:
-            # Store observations directly in GPU tensor buffer
+            # Current observations as torch tensor (model device)
             obs_t = torch.as_tensor(self.obs, dtype=torch.float32, device=self.device)
 
-            # Determine next actions using the policy model (already on GPU)
+            # Policy step
             actions_t, logps_t, values_t = self.policy_model.act(obs_t, deterministic=deterministic)
 
-            # Store GPU tensors directly in persistent buffers
+            # Persist per-step tensors (converted to NumPy inside)
             self._buffer.store_tensors(start + step_idx, obs_t, actions_t, logps_t, values_t)
 
             # Only transfer actions to CPU for environment step
             actions_np = actions_t.detach().cpu().numpy()
 
-            # Perform next actions on environment
+            # Environment step
             next_obs, rewards, dones, infos = self.env.step(actions_np)
 
             # Fast episode info processing - reuse timeout array
@@ -304,7 +346,7 @@ class RolloutCollector():
                         timeouts[idx] = True
                         terminal_obs_info.append((step_idx, idx, info["terminal_observation"]))
 
-            # Direct CPU buffer writes (persistent)
+            # Persist environment outputs for this step
             self._buffer.store_cpu_step(
                 start + step_idx,
                 self.obs.copy(),
@@ -377,10 +419,12 @@ class RolloutCollector():
             for i, (step_idx_term, env_idx, _) in enumerate(terminal_obs_info):
                 self._buffer.bootstrapped_values_buf[start + step_idx_term, env_idx] = batch_values[i]
 
-        # Create a next values array to use for GAE(λ), by shifting the critic
-        # values on steps (discards first value estimation, which is not used),
-        # and estimating the last value using the value model)
+        # Build next_values by shifting critic values and estimating the last
         values_slice = self._buffer.values_buf[start:end]
+        rewards_slice = self._buffer.rewards_buf[start:end]
+        dones_slice = self._buffer.dones_buf[start:end]
+        timeouts_slice = self._buffer.timeouts_buf[start:end]
+
         next_values_buf = np.zeros_like(values_slice, dtype=np.float32)
         next_values_buf[:-1] = values_slice[1:]
         last_obs_t = torch.as_tensor(last_obs, dtype=torch.float32, device=self.device)
@@ -391,27 +435,23 @@ class RolloutCollector():
         # - by default last obs is next state from unfinished episode
         # - if episode is done and truncated, value will be replaced by value from terminal observation (as last obs here will be the next states' first observation)
         # - if episode is done but not truncated, value will later be ignored in GAE calculation by this being considered a terminal state
-        timeouts_slice = self._buffer.timeouts_buf[start:end]
         bootstrapped_slice = self._buffer.bootstrapped_values_buf[start:end]
         next_values_buf = np.where(timeouts_slice, bootstrapped_slice, next_values_buf)
 
         # Real terminal states are only the dones where environment finished but not due to a timeout
         # (for timeout we must estimate next state value as if episode continued)
-        dones_slice = self._buffer.dones_buf[start:end]
         real_terminal = np.logical_and(dones_slice.astype(bool), ~timeouts_slice)
         non_terminal = (~real_terminal).astype(np.float32)
 
         if self.use_gae:
             # Calculate the advantages using GAE(λ):
-            advantages_buf = np.zeros_like(self._buffer.rewards_buf[start:end], dtype=np.float32)
+            advantages_buf = np.zeros_like(rewards_slice, dtype=np.float32)
             gae = np.zeros(self.n_envs, dtype=np.float32)
             for t in reversed(range(T)):
-                # Calculate the Temporal Difference (TD) residual (the error
-                # between the predicted value of a state and a better estimate of it)
-                delta = self._buffer.rewards_buf[start:end][t] + self.gamma * next_values_buf[t] * non_terminal[t] - values_slice[t]
+                # Calculate the Temporal Difference (TD) residual
+                delta = rewards_slice[t] + self.gamma * next_values_buf[t] * non_terminal[t] - values_slice[t]
 
-                # The TD residual is a 1-step advantage estimate, by taking future advantage
-                # estimates into account the advantage estimate becomes more stable
+                # Accumulate GAE
                 gae = delta + self.gamma * self.gae_lambda * gae * non_terminal[t]
                 advantages_buf[t] = gae
 
@@ -419,12 +459,12 @@ class RolloutCollector():
             returns_buf = advantages_buf + values_slice
         else:
             # Monte Carlo returns for REINFORCE
-            returns_buf = np.zeros_like(self._buffer.rewards_buf[start:end], dtype=np.float32)
+            returns_buf = np.zeros_like(rewards_slice, dtype=np.float32)
             returns = np.zeros(self.n_envs, dtype=np.float32)
 
             for t in reversed(range(T)):
                 # For terminal states, return is just the reward; for non-terminal, accumulate discounted future returns
-                returns = self._buffer.rewards_buf[start:end][t] + self.gamma * returns * non_terminal[t]
+                returns = rewards_slice[t] + self.gamma * returns * non_terminal[t]
                 returns_buf[t] = returns
 
             # Always calculate baseline and advantages using global running mean

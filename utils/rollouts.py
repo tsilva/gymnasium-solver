@@ -141,8 +141,9 @@ class RolloutBuffer:
 
         # Next observations
         if self.next_obs_buf.ndim == 2:
+            # Ensure shape matches observations: (n_envs*T, 1)
             next_states = torch.as_tensor(
-                self.next_obs_buf[start:end].transpose(1, 0).reshape(-1),
+                self.next_obs_buf[start:end].transpose(1, 0).reshape(-1, 1),
                 dtype=torch.float32,
                 device=self.device,
             )

@@ -1,20 +1,66 @@
 import sys
 import time
+import types
 import torch
-import pytorch_lightning as pl
-from utils.environment import build_env
-from utils.rollouts import RolloutCollector
-from utils.misc import prefix_dict_keys, get_global_torch_generator
+
+# Optional dependency: PyTorch Lightning
+try:
+    import pytorch_lightning as pl
+except Exception:  # pragma: no cover - lightweight test stub when PL isn't installed
+    class _LightningModuleStub:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        # Methods used indirectly by BaseAgent
+        def save_hyperparameters(self, *args, **kwargs):
+            pass
+
+        def log_dict(self, *args, **kwargs):
+            pass
+
+        def manual_backward(self, *args, **kwargs):
+            pass
+
+        def optimizers(self):
+            return []
+
+        # Properties accessed in a few places
+        @property
+        def current_epoch(self):
+            return 0
+
+        @property
+        def trainer(self):
+            # Minimal shape to satisfy .should_stop assignment in tests if reached
+            return types.SimpleNamespace(should_stop=False)
+
+    class _PLStub:
+        LightningModule = _LightningModuleStub
+
+    pl = _PLStub()  # type: ignore
+
+# Optional decorator (lightweight). Fallback to pass-through if missing.
+try:
+    from utils.decorators import must_implement
+except Exception:  # pragma: no cover
+    def must_implement(fn):
+        return fn
+
+# Safe/lightweight import
 from utils.metrics_buffer import MetricsBuffer
-from utils.trainer_factory import build_trainer
-from utils.decorators import must_implement
-from callbacks import PrintMetricsCallback, VideoLoggerCallback, ModelCheckpointCallback, HyperparameterScheduler
-from torch.utils.data import DataLoader
-from utils.dataloaders import build_dummy_loader, build_index_collate_loader_from_collector
+
 
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class BaseAgent(pl.LightningModule):
-    
+    """Base class for RL agents orchestrating envs, rollouts, and training.
+
+    Responsibilities:
+    - Build training/eval environments and collectors
+    - Provide Lightning hooks for train/eval loops with manual optimization
+    - Aggregate and flush metrics efficiently via MetricsBuffer
+    - Delegate algorithm-specific pieces to subclasses (models, losses)
+    """
+
     def __init__(self, config):
         super().__init__()
 
@@ -33,7 +79,10 @@ class BaseAgent(pl.LightningModule):
         self.validation_epoch_start_time = None
         self.validation_epoch_start_timesteps = None
 
-        # Create the environment that will be used for training
+        # Create the environments (lazy import of heavy deps)
+        from utils.environment import build_env
+
+        # Training env(s)
         self.train_env = build_env(
             config.env_id,
             seed=config.seed,
@@ -47,10 +96,7 @@ class BaseAgent(pl.LightningModule):
             env_kwargs=config.env_kwargs,
         )
 
-        # Create the environment that will be used for evaluation
-        # - Just 1 environment instance due to current rollout collector limitations
-        # - Different seed to ensure different initial states
-        # - Video recording enabled
+        # Evaluation env (single env; different seed)
         self.validation_env = build_env(
             config.env_id,
             seed=config.seed + 1000,
@@ -68,12 +114,12 @@ class BaseAgent(pl.LightningModule):
             },
         )
 
-        # Create the models that the agent will require (eg: policy, value function, etc.)
+        # Create required models (subclasses must set self.policy_model)
         self.create_models()
         assert self.policy_model is not None, "Policy model must be created in create_models()"
 
-        # Create the rollout collector that will be used to
-        # collect trajectories from the training environment
+        # Rollout collectors
+        from utils.rollouts import RolloutCollector
         self.train_collector = RolloutCollector(
             self.train_env,
             self.policy_model,
@@ -81,8 +127,6 @@ class BaseAgent(pl.LightningModule):
             **self.rollout_collector_hyperparams(),
         )
 
-        # Create the rollout collector that will be used to
-        # collect trajectories from the validation environment
         self.validation_collector = RolloutCollector(
             self.validation_env,
             self.policy_model,
@@ -90,22 +134,22 @@ class BaseAgent(pl.LightningModule):
             **self.rollout_collector_hyperparams(),
         )
 
-        # Encapsulated metrics buffer used across train/eval epochs
+        # Shared metrics buffer across epochs
         self._metrics_buffer = MetricsBuffer()
 
     @must_implement
     def create_models(self):
         pass
- 
+
     @must_implement
     def losses_for_batch(self, batch, batch_idx):
         pass
-    
+
     def rollout_collector_hyperparams(self):
         return {
             **self.config.rollout_collector_hyperparams(),
-            'gamma': self.config.gamma,
-            'gae_lambda': self.config.gae_lambda
+            "gamma": self.config.gamma,
+            "gae_lambda": self.config.gae_lambda,
         }
 
     def on_fit_start(self):
@@ -114,14 +158,18 @@ class BaseAgent(pl.LightningModule):
     def train_dataloader(self):
         assert self.current_epoch == 0, "train_dataloader should only be called once at the start of training"
 
-        # Collec the first rollout
+        # Collect the first rollout
         self._trajectories = self.train_collector.collect()
 
         # Use a shared generator for reproducible shuffles across the app
-        generator = get_global_torch_generator(getattr(self.config, 'seed', None))
+        from utils.misc import get_global_torch_generator
+
+        generator = get_global_torch_generator(getattr(self.config, "seed", None))
 
         # Build efficient index-collate dataloader backed by MultiPassRandomSampler
         # Use a getter to ensure fresh trajectories are used by the collate function
+        from utils.dataloaders import build_index_collate_loader_from_collector
+
         return build_index_collate_loader_from_collector(
             collector=self.train_collector,
             trajectories_getter=lambda: self._trajectories,
@@ -133,7 +181,7 @@ class BaseAgent(pl.LightningModule):
             pin_memory=False,
             persistent_workers=False,
         )
-      
+
     def on_train_epoch_start(self):
         # Mark epoch start for instant FPS calculation
         self.train_epoch_start_time = time.time_ns()
@@ -146,8 +194,8 @@ class BaseAgent(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         # Calculate batch losses
         losses = self.losses_for_batch(batch, batch_idx)
-        
-        # Backpropagate losses and update model 
+
+        # Backpropagate losses and update model
         # parameters according to computed gradients
         self._backpropagate_and_step(losses)
 
@@ -161,9 +209,9 @@ class BaseAgent(pl.LightningModule):
     def on_train_epoch_end(self):
         rollout_metrics = self.train_collector.get_metrics()
         rollout_metrics.pop("action_distribution", None)
-        
+
         # TODO: distinguish between instant and start
-        # Calculate how many simulation timesteps are being 
+        # Calculate how many simulation timesteps are being
         # processed per second (includes model training)
         total_timesteps = rollout_metrics["total_timesteps"]
         time_elapsed = max((time.time_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
@@ -172,31 +220,43 @@ class BaseAgent(pl.LightningModule):
         epoch_time_elapsed = max((time.time_ns() - self.train_epoch_start_time) / 1e9, sys.float_info.epsilon)
         epoch_timesteps_elapsed = max(0, total_timesteps - int(self.train_epoch_start_timesteps))
         fps_instant = epoch_timesteps_elapsed / epoch_time_elapsed
-       
+
         # Include recomputed learning rate and clip range in epoch metrics
-        self.log_metrics({
-            **rollout_metrics,
-            "time_elapsed": time_elapsed,
-            "epoch": self.current_epoch, # TODO: is this the same value as in epoch_start?
-            "fps" : fps,
-            "fps_instant": fps_instant
-        }, prefix="train")
-        
+        self.log_metrics(
+            {
+                **rollout_metrics,
+                "time_elapsed": time_elapsed,
+                "epoch": self.current_epoch,  # TODO: is this the same value as in epoch_start?
+                "fps": fps,
+                "fps_instant": fps_instant,
+            },
+            prefix="train",
+        )
+
         self._flush_metrics()
-        
+
         self._update_schedules()
 
         # In case we have reached the maximum number of training timesteps then stop training
         if self.config.n_timesteps is not None and total_timesteps >= self.config.n_timesteps:
-            print(f"Stopping training at epoch {self.current_epoch} with {total_timesteps} timesteps >= limit {self.config.n_timesteps}")
+            print(
+                f"Stopping training at epoch {self.current_epoch} with {total_timesteps} timesteps >= limit {self.config.n_timesteps}"
+            )
             self.trainer.should_stop = True
-    
+
     def val_dataloader(self):
         # Validation dataloader is a dummy; actual evaluation uses env rollouts.
+        from utils.dataloaders import build_dummy_loader
+
         return build_dummy_loader()
 
     def on_validation_epoch_start(self):
-        assert self.current_epoch == 0 or (self.current_epoch + 1) % self.config.eval_freq_epochs == 0, f"Validation epoch {self.current_epoch} is not a multiple of eval_freq_epochs {self.config.eval_freq_epochs}"
+        assert (
+            self.current_epoch == 0
+            or (self.current_epoch + 1) % self.config.eval_freq_epochs == 0
+        ), (
+            f"Validation epoch {self.current_epoch} is not a multiple of eval_freq_epochs {self.config.eval_freq_epochs}"
+        )
         self.validation_epoch_start_time = time.time_ns()
         validation_metrics = self.validation_collector.get_metrics()
         self.validation_epoch_start_timesteps = validation_metrics["total_timesteps"]
@@ -213,23 +273,27 @@ class BaseAgent(pl.LightningModule):
         # NOTE: processing/saving video is a bottleneck that will make next training epoch be slower,
         # if you see train/fps drops, make video recording less frequent by adjusting `eval_recording_freq_epochs`
         record_video = self.current_epoch == 0 or (self.current_epoch + 1) % self.config.eval_recording_freq_epochs == 0
-        
+
         # Use run-specific video directory if available, otherwise fallback to wandb.run.dir
         video_path = self.run_manager.get_video_dir() / "eval" / "episodes" / f"rollout_epoch_{self.current_epoch}.mp4"
         video_path.parent.mkdir(parents=True, exist_ok=True)
         video_path = str(video_path)
-   
-        with self.validation_env.recorder(video_path, record_video=record_video): # TODO: make rew window = config.eval_episodes
+
+        with self.validation_env.recorder(
+            video_path, record_video=record_video
+        ):  # TODO: make rew window = config.eval_episodes
             metrics = self.validation_collector.get_metrics()
             total_episodes = metrics["total_episodes"]
             target_episodes = total_episodes + self.config.eval_episodes
             while total_episodes < target_episodes:
-                self.validation_collector.collect(deterministic=self.config.eval_deterministic) # TODO: this still won't be as fast as possible because it will have run steps that will not be used 
+                self.validation_collector.collect(
+                    deterministic=self.config.eval_deterministic
+                )  # TODO: this still won't be as fast as possible because it will have run steps that will not be used
                 metrics = self.validation_collector.get_metrics()
                 total_episodes = metrics["total_episodes"]
 
-        assert self.current_epoch == 0 or (self.current_epoch + 1) % self.config.eval_freq_epochs == 0, f"Validation epoch {self.current_epoch} is not a multiple of eval_freq_epochs {self.config.eval_freq_epochs}"
-       
+        # Frequency check is already enforced in on_validation_epoch_start
+
         # Calculate FPS
         time_elapsed = max((time.time_ns() - self.validation_epoch_start_time) / 1e9, sys.float_info.epsilon)
         rollout_metrics = self.validation_collector.get_metrics()
@@ -241,11 +305,7 @@ class BaseAgent(pl.LightningModule):
         rollout_metrics.pop("action_distribution", None)  # Remove action distribution if present
 
         # Log metrics
-        self.log_metrics({
-            **rollout_metrics,
-            "epoch": int(self.current_epoch),
-            "epoch_fps": epoch_fps
-        }, prefix="eval")
+        self.log_metrics({"epoch": int(self.current_epoch), "epoch_fps": epoch_fps, **rollout_metrics}, prefix="eval")
 
         self._flush_metrics()
 
@@ -258,7 +318,7 @@ class BaseAgent(pl.LightningModule):
         # Log training completion time
         time_elapsed = max((time.time_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
-        
+
     def train(self):
         from utils.logging import capture_all_output, log_config_details
 
@@ -287,13 +347,7 @@ class BaseAgent(pl.LightningModule):
             # Build callbacks and trainer
             callbacks = self._build_callbacks()
             validation_controls = self._get_validation_controls()
-            trainer = build_trainer(
-                logger=wandb_logger,
-                callbacks=callbacks,
-                validation_controls=validation_controls,
-                max_epochs=self.config.max_epochs,
-                accelerator="cpu",  # TODO: softcode
-            )
+            trainer = self._build_trainer(wandb_logger, callbacks, validation_controls)
 
             trainer.fit(self)
 
@@ -311,12 +365,7 @@ class BaseAgent(pl.LightningModule):
 
         project_name = self.config.project_id if self.config.project_id else self._sanitize_name(self.config.env_id)
         experiment_name = f"{self.config.algo_id}-{self.config.seed}"
-        wandb_logger = WandbLogger(
-            project=project_name,
-            name=experiment_name,
-            log_model=True,
-            config=asdict(self.config)
-        )
+        wandb_logger = WandbLogger(project=project_name, name=experiment_name, log_model=True, config=asdict(self.config))
         return wandb_logger
 
     def _init_run_manager(self, wandb_logger):
@@ -333,6 +382,14 @@ class BaseAgent(pl.LightningModule):
             wandb_logger.experiment.define_metric("eval/*", step_metric="train/total_timesteps")
 
     def _build_callbacks(self):
+        # Lazy imports to avoid heavy deps at module import time
+        from callbacks import (
+            PrintMetricsCallback,
+            VideoLoggerCallback,
+            ModelCheckpointCallback,
+            HyperparameterScheduler,
+        )
+
         # Create video logging callback using run-specific directory
         video_logger_cb = VideoLoggerCallback(
             media_root=str(self.run_manager.get_video_dir()),  # Use run-specific video directory
@@ -348,7 +405,7 @@ class BaseAgent(pl.LightningModule):
                 mode="max",
                 save_last=True,
                 save_threshold_reached=True,
-                resume=getattr(self.config, 'resume', False)
+                resume=getattr(self.config, "resume", False),
             )
 
         # Create algorithm-specific metric rules from metrics config
@@ -357,6 +414,7 @@ class BaseAgent(pl.LightningModule):
             get_metric_delta_rules,
             get_algorithm_metric_rules,
         )
+
         metric_precision = get_metric_precision_dict()
         metric_delta_rules = get_metric_delta_rules()
         algo_metric_rules = get_algorithm_metric_rules(self.config.algo_id)
@@ -384,7 +442,7 @@ class BaseAgent(pl.LightningModule):
         return callbacks
 
     def _get_validation_controls(self):
-        eval_freq = getattr(self.config, 'eval_freq_epochs', None)
+        eval_freq = getattr(self.config, "eval_freq_epochs", None)
         return self._compute_validation_controls(eval_freq)
 
     @staticmethod
@@ -405,6 +463,8 @@ class BaseAgent(pl.LightningModule):
 
     def _build_trainer(self, wandb_logger, callbacks, validation_controls):
         # Backward-compat shim; delegate to factory. Kept to avoid breaking imports/tests.
+        from utils.trainer_factory import build_trainer
+
         return build_trainer(
             logger=wandb_logger,
             callbacks=callbacks,
@@ -415,8 +475,10 @@ class BaseAgent(pl.LightningModule):
 
     def _backpropagate_and_step(self, losses):
         optimizers = self.optimizers()
-        if not type(losses) in (list, tuple): losses = [losses]
-        if not type(optimizers) in (list, tuple): optimizers = [optimizers]
+        if not isinstance(losses, (list, tuple)):
+            losses = [losses]
+        if not isinstance(optimizers, (list, tuple)):
+            optimizers = [optimizers]
         for idx, optimizer in enumerate(optimizers):
             loss = losses[idx]
             optimizer.zero_grad()
@@ -430,28 +492,28 @@ class BaseAgent(pl.LightningModule):
         total = float(self.config.n_timesteps or 1.0)
         progress = min(max(total_steps / total, 0.0), 1.0)
         return progress
-    
+
     def _update_schedules(self):
         self._update_schedules__learning_rate()
 
     # TODO: generalize scheduling support
     def _update_schedules__learning_rate(self):
-        if self.config.learning_rate_schedule != 'linear': return
+        if self.config.learning_rate_schedule != "linear":
+            return
         progress = self._get_training_progress()
         new_learning_rate = max(self.config.learning_rate * (1.0 - progress), 0.0)
         self._change_optimizers_learning_rate(new_learning_rate)
-        
+
         # TODO: this should not be logged here
-        self.log_metrics({
-            'learning_rate': new_learning_rate
-        }, prefix="train")
-    
+        self.log_metrics({"learning_rate": new_learning_rate}, prefix="train")
+
     def _change_optimizers_learning_rate(self, learning_rate):
         optimizers = self.optimizers()
-        if not isinstance(optimizers, (list, tuple)): optimizers = [optimizers]
+        if not isinstance(optimizers, (list, tuple)):
+            optimizers = [optimizers]
         for opt in optimizers:
             for pg in opt.param_groups:
-                pg['lr'] = learning_rate
+                pg["lr"] = learning_rate
 
     def log_metrics(self, metrics, *, prefix=None):
         """

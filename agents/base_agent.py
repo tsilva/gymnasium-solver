@@ -321,7 +321,14 @@ class BaseAgent(pl.LightningModule):
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
 
     def train(self):
-        from utils.logging import capture_all_output, log_config_details
+        from utils.logging import capture_all_output
+
+        # Ask for confirmation before any heavy setup (keep prior prints grouped)
+        if not self._confirm_proceed():
+            print("Training aborted by user before start.")
+            return
+
+        print("Starting training...")
 
         # Create wandb logger and run manager
         wandb_logger = self._create_wandb_logger()
@@ -335,9 +342,6 @@ class BaseAgent(pl.LightningModule):
 
         # Set up comprehensive logging using run-specific logs directory
         with capture_all_output(config=self.config, log_dir=run_logs_dir):
-            # Log configuration details
-            log_config_details(self.config)
-
             # Save configuration to run directory
             config_path = self.run_manager.save_config(self.config)
             print(f"Configuration saved to: {config_path}")
@@ -528,3 +532,38 @@ class BaseAgent(pl.LightningModule):
     def _flush_metrics(self):
         # Flush via buffer abstraction
         self._metrics_buffer.flush_to(self.log_dict)
+
+    # -------------------------
+    # Pre-training summary & confirmation helpers
+    # -------------------------
+
+    def _print_pretraining_summary(self):
+        # Keep output concise and avoid duplication: config and model details were already printed.
+        print("\nReview the configuration and model above.")
+
+    def _confirm_proceed(self) -> bool:
+        """Ask user to confirm proceeding. Default to Yes on empty input or non-interactive sessions."""
+        prompt = "Proceed with training? [Y/n]: "
+        try:
+            # If not a TTY (e.g., running in CI), default-accept
+            import sys
+            if not sys.stdin or not sys.stdin.isatty():
+                print(f"{prompt}Y (auto)")
+                return True
+        except Exception:
+            # On any introspection failure, default-accept
+            print(f"{prompt}Y (auto)")
+            return True
+
+        try:
+            resp = input(prompt).strip().lower()
+        except EOFError:
+            # Default to yes if input cannot be read
+            print("Y")
+            return True
+        if resp == "" or resp.startswith("y"):
+            return True
+        if resp.startswith("n"):
+            return False
+        # Unrecognized input: default to Yes
+        return True

@@ -6,6 +6,33 @@
 # Global configuration
 _global:
   default_precision: 4  # Default precision for metrics not explicitly configured
+  # Preferred display order for key metrics in the stdout table
+  # Keys not listed here will follow alphabetically within their section
+  key_priority:
+    - "train/ep_rew_mean"
+    - "train/ep_len_mean"
+    - "train/epoch"
+    - "train/total_timesteps"
+    - "train/total_episodes"
+    - "train/total_rollouts"
+    - "train/rollout_timesteps"
+    - "train/rollout_episodes"
+    - "train/epoch_fps"
+    - "train/rollout_fps"
+    - "train/loss"
+    - "train/policy_loss"
+    - "train/value_loss"
+    - "train/entropy_loss"
+    - "eval/ep_rew_mean"
+    - "eval/ep_len_mean"
+    - "eval/epoch"
+    - "eval/total_timesteps"
+    - "eval/total_episodes"
+    - "eval/total_rollouts"
+    - "eval/rollout_timesteps"
+    - "eval/rollout_episodes"
+    - "eval/epoch_fps"
+    - "eval/rollout_fps"
 
 clip_range:
   precision: 4

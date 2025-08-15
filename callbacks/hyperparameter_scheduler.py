@@ -362,3 +362,6 @@ class HyperparameterScheduler(pl.Callback):
         for key, value in self.original_hyperparams.items():
             if value is not None and hasattr(pl_module.config, key.replace('learning_rate', 'policy_lr')):
                 setattr(pl_module.config, key.replace('learning_rate', 'policy_lr'), value)
+
+
+# TODO: remove scheduling concerns this is just to support manual control

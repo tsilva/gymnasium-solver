@@ -160,3 +160,26 @@ def get_algorithm_metric_rules(algo_id: str, metrics_config: Optional[Dict[str, 
             rules[full_metric_name] = rule_dict
 
     return rules
+
+
+def get_key_priority(metrics_config: Optional[Dict[str, Any]] = None) -> Optional[list]:
+    """Return preferred key ordering from metrics config (_global.key_priority) if available.
+
+    Args:
+        metrics_config: Optional preloaded metrics config dict
+
+    Returns:
+        A list of metric keys in preferred order, or None if not configured.
+    """
+    if metrics_config is None:
+        try:
+            metrics_config = load_metrics_config()
+        except Exception:
+            return None
+
+    global_cfg = metrics_config.get('_global', {}) if isinstance(metrics_config, dict) else {}
+    kp = global_cfg.get('key_priority')
+    # Ensure it's a list of strings
+    if isinstance(kp, list) and all(isinstance(x, str) for x in kp):
+        return kp
+    return None

@@ -43,33 +43,42 @@ class PrintMetricsCallback(pl.Callback):
         self.metric_delta_rules = metric_delta_rules or {}
         self.algorithm_metric_rules = algorithm_metric_rules or {}
         self.min_val_width = min_val_width
-        # TODO: softcode this
-        self.key_priority = key_priority or [
-            "train/ep_rew_mean",
-            "train/ep_len_mean",
-            "train/epoch",
-            "train/total_timesteps", 
-            "train/total_episodes", 
-            "train/total_rollouts",
-            "train/rollout_timesteps",
-            "train/rollout_episodes",
-            "train/epoch_fps",
-            "train/rollout_fps",
-            "train/loss",
-            "train/policy_loss",
-            "train/value_loss",
-            "train/entropy_loss",
-            "eval/ep_rew_mean",
-            "eval/ep_len_mean",
-            "eval/epoch",
-            "eval/total_timesteps", 
-            "eval/total_episodes", 
-            "eval/total_rollouts",
-            "eval/rollout_timesteps",
-            "eval/rollout_episodes",
-            "eval/epoch_fps",
-            "eval/rollout_fps"
-        ]
+        # Load key priority from config unless explicitly provided
+        if key_priority is not None:
+            self.key_priority = key_priority
+        else:
+            try:
+                from utils.metrics import get_key_priority
+                cfg_key_priority = get_key_priority()
+            except Exception:
+                cfg_key_priority = None
+            # Fallback to previous hardcoded defaults if config not present
+            self.key_priority = cfg_key_priority or [
+                "train/ep_rew_mean",
+                "train/ep_len_mean",
+                "train/epoch",
+                "train/total_timesteps", 
+                "train/total_episodes", 
+                "train/total_rollouts",
+                "train/rollout_timesteps",
+                "train/rollout_episodes",
+                "train/epoch_fps",
+                "train/rollout_fps",
+                "train/loss",
+                "train/policy_loss",
+                "train/value_loss",
+                "train/entropy_loss",
+                "eval/ep_rew_mean",
+                "eval/ep_len_mean",
+                "eval/epoch",
+                "eval/total_timesteps", 
+                "eval/total_episodes", 
+                "eval/total_rollouts",
+                "eval/rollout_timesteps",
+                "eval/rollout_episodes",
+                "eval/epoch_fps",
+                "eval/rollout_fps"
+            ]
         self.previous_metrics: Dict[str, Any] = {}  # Store previous values for delta validation
         self._last_printed_metrics = None  # For change detection
         self._change_tol = 1e-12

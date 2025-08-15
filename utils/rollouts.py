@@ -98,6 +98,11 @@ class RolloutBuffer:
         dones_np: np.ndarray,
         timeouts_np: np.ndarray,
     ) -> None:
+        # Ensure 2D shape for observations
+        if obs_np.ndim == 1:
+            obs_np = obs_np.reshape(-1, 1)
+        if next_obs_np.ndim == 1:
+            next_obs_np = next_obs_np.reshape(-1, 1)
         self.obs_buf[idx] = obs_np
         self.next_obs_buf[idx] = next_obs_np
         self.actions_buf[idx] = actions_np
@@ -284,7 +289,12 @@ class RolloutCollector():
 
         # Lazy-init persistent buffer once we know obs shape/dtype
         if self._buffer is None:
-            obs_shape = self.obs.shape[1:] if self.obs.ndim > 1 else (self.obs.shape[0],)
+            # For discrete observations, VecEnv returns (n_envs,)
+            # Treat them as 1-feature vectors
+            if self.obs.ndim == 1:
+                obs_shape = (1,)
+            else:
+                obs_shape = self.obs.shape[1:]
             maxsize = self.buffer_maxsize if self.buffer_maxsize is not None else self.n_steps
             self._buffer = RolloutBuffer(
                 n_envs=self.n_envs,

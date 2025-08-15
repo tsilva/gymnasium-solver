@@ -1,4 +1,3 @@
-
 from wrappers.env_wrapper_registry import EnvWrapperRegistry
 
 
@@ -60,13 +59,14 @@ def build_env(
         else: 
             env = gym.make(env_id, render_mode=render_mode, **env_kwargs)
 
-        # Automatically apply DiscreteToBinary wrapper for discrete observation spaces
-        # TODO: softcode
-        #if isinstance(env.observation_space, spaces.Discrete):
-        #    env = DiscreteToBinary(env)
+    # NOTE: Do not auto-wrap discrete observation spaces here to avoid
+    # impacting tabular algorithms (e.g., Q-Learning) that rely on
+    # Discrete observation IDs. Instead, VecInfoWrapper exposes an
+    # input_dim for Discrete spaces (1), enabling MLP policies to work.
 
         # Apply configured env wrappers
-        for wrapper in env_wrappers: env = EnvWrapperRegistry.apply(env, wrapper)
+        for wrapper in env_wrappers:
+            env = EnvWrapperRegistry.apply(env, wrapper)
 
         # Return the environment
         return env

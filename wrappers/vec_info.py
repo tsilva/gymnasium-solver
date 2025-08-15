@@ -1,4 +1,5 @@
 import gymnasium as gym
+import numpy as np
 from stable_baselines3.common.vec_env.base_vec_env import VecEnvWrapper
 
 
@@ -100,11 +101,54 @@ class VecInfoWrapper(VecEnvWrapper):
     
     def get_input_dim(self):
         """
-        Return the input dimension (observation space shape).
+        Return a reasonable flat input dimension for the observation space.
+
+        - Discrete: return 1 (use scalar ID as input)
+        - Box: return first dimension (assumes flat features or 1D vector)
+        - MultiDiscrete: return number of subspaces
+        - Tuple: sum of subspace flat dims when possible
         """
+        from gymnasium import spaces
+
         obs_space = self.venv.observation_space
+
+        # Discrete spaces (e.g., Taxi-v3): use scalar state id as a single feature
+        if isinstance(obs_space, spaces.Discrete):
+            return 1
+
+        # Box spaces: favor 1D vectors; otherwise return first dim as a heuristic
+        if isinstance(obs_space, spaces.Box):
+            if len(obs_space.shape) == 1:
+                return int(obs_space.shape[0])
+            # For 2D/3D observations, fallback to product if small, else first dim
+            try:
+                prod = int(1)
+                for s in obs_space.shape:
+                    prod *= int(s)
+                # Avoid very large flatten sizes silently; caller may choose CNN
+                return prod
+            except Exception:
+                return int(obs_space.shape[0]) if obs_space.shape else None
+
+        # MultiDiscrete: number of discrete components
+        if isinstance(obs_space, spaces.MultiDiscrete):
+            return int(obs_space.nvec.size)
+
+        # Tuple: sum of component flat dims when possible
+        if isinstance(obs_space, spaces.Tuple):
+            dims = []
+            for s in obs_space.spaces:
+                if isinstance(s, spaces.Discrete):
+                    dims.append(1)
+                elif hasattr(s, 'shape') and s.shape:
+                    dims.append(int(np.prod(s.shape)))
+                else:
+                    dims.append(0)
+            return int(sum(dims)) if dims else None
+
+        # Fallback
         if hasattr(obs_space, 'shape') and obs_space.shape:
-            return obs_space.shape[0]
+            return int(obs_space.shape[0])
         return None
 
     def get_output_dim(self):

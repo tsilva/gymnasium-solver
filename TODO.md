@@ -1,7 +1,4 @@
-- FEAT: Add support for specifying minimum number of epochs to wait before starting evaluations. The purpose of this is that evaluations bottleneck training throughput, so we don't want to run evaluations until it's worth it.
 
-
-- FEAT: We currently only stop training when eval reward threshold is reached. But we also want to allow early stopping when the train/ep_reward_mean breaches treshold. Both early stopping on train and eval should be config flags.
 
 
 - FEAT: Our models currently have tanh as their activation function. We should allow softcoding them through the config along with the hidden dims.

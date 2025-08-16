@@ -183,7 +183,7 @@ class ModelCheckpointCallback(pl.Callback):
             torch.save(checkpoint_data, threshold_path)
             self._threshold_checkpoint_saved = True
             print(f"Threshold reached! Saved model with {self.monitor}={current_metric_value:.4f} (threshold={effective_threshold}) at {threshold_path}")
-            if not trainer.should_stop:
+            if not trainer.should_stop and getattr(pl_module.config, 'early_stop_on_eval_threshold', True):
                 print(f"Early stopping at epoch {pl_module.current_epoch} with eval mean reward {current_metric_value:.2f} >= threshold {effective_threshold}")
                 trainer.should_stop = True
 
@@ -229,7 +229,7 @@ class ModelCheckpointCallback(pl.Callback):
                 
                 # Note: Early stopping for threshold is already handled above in checkpoint saving
                 # This is just for the case where threshold stopping wasn't triggered by checkpoint saving
-                if ep_rew_mean >= reward_threshold and not trainer.should_stop:
+                if ep_rew_mean >= reward_threshold and not trainer.should_stop and getattr(pl_module.config, 'early_stop_on_eval_threshold', True):
                     print(f"Early stopping at epoch {pl_module.current_epoch} with eval mean reward {ep_rew_mean:.2f} >= threshold {reward_threshold}")
                     trainer.should_stop = True
             else:
@@ -243,6 +243,36 @@ class ModelCheckpointCallback(pl.Callback):
     
     def on_train_epoch_end(self, trainer, pl_module):
         """Save last checkpoint after each training epoch."""
+        # Train-side early stopping on threshold if enabled
+        try:
+            train_ep_rew_mean = float(trainer.logged_metrics.get("train/ep_rew_mean")) if hasattr(trainer, 'logged_metrics') else None
+        except Exception:
+            train_ep_rew_mean = None
+
+        # Determine threshold using config first, then env/gym if needed
+        threshold = getattr(pl_module.config, 'reward_threshold', None)
+        if threshold is None:
+            try:
+                threshold = pl_module.train_env.get_reward_threshold()
+            except Exception:
+                threshold = None
+        if threshold is None:
+            try:
+                import gymnasium as gym
+                spec = gym.spec(pl_module.config.env_id)
+                if spec and hasattr(spec, 'reward_threshold'):
+                    threshold = getattr(spec, 'reward_threshold')
+            except Exception:
+                threshold = None
+
+        if (getattr(pl_module.config, 'early_stop_on_train_threshold', False) and
+            threshold is not None and
+            train_ep_rew_mean is not None and
+            not getattr(trainer, 'should_stop', False) and
+            train_ep_rew_mean >= float(threshold)):
+            print(f"Early stopping at epoch {pl_module.current_epoch} with train mean reward {train_ep_rew_mean:.2f} >= threshold {threshold}")
+            trainer.should_stop = True
+
         if self.save_last:
             checkpoint_dir = self._get_checkpoint_dir(pl_module)
             last_path = checkpoint_dir / "last_checkpoint.ckpt"

@@ -1,9 +1,10 @@
 """Run directory management utilities for organizing all run assets."""
 
 import json
+from dataclasses import asdict
 from pathlib import Path
 from typing import Optional
-from dataclasses import asdict
+
 import wandb
 
 

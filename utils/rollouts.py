@@ -1,11 +1,12 @@
-from collections import deque
-from typing import NamedTuple, Deque, Tuple, Optional
-
 import time
+from collections import deque
+from typing import NamedTuple, Optional, Tuple
+
 import numpy as np
 import torch
 
-from utils.misc import inference_ctx, _device_of
+from utils.torch_utils import _device_of, inference_ctx
+
 
 class RolloutTrajectory(NamedTuple):
     observations: torch.Tensor
@@ -22,12 +23,13 @@ class RolloutBuffer:
     """
     Persistent rollout storage to avoid reallocating buffers every collect.
 
-    - Preallocates CPU and GPU buffers of size (maxsize, n_envs, ...)
-    - begin_rollout(T) ensures a contiguous slice is available; if not, resets
-      write position to 0 so the rollout fits contiguously.
-    - Collector stores per-step data using store_* methods.
-    - Provides utilities to copy GPU->CPU for a slice and to flatten a slice
-      into env-major tensors suitable for training.
+    - Preallocates CPU buffers of size (maxsize, n_envs, ...).
+    - begin_rollout(T) ensures a contiguous slice is available; if not, wraps
+      the write position to 0 so the rollout fits contiguously.
+    - Collector stores per-step data using store_* methods (tensors are
+      converted to NumPy on write; conversion back to torch happens on read).
+    - Provides utilities to flatten a slice into env-major tensors suitable
+      for training.
     """
 
     def __init__(self, n_envs: int, obs_shape: Tuple[int, ...], obs_dtype: np.dtype, device: torch.device, maxsize: int) -> None:
@@ -48,15 +50,9 @@ class RolloutBuffer:
         self.timeouts_buf = np.zeros((self.maxsize, self.n_envs), dtype=bool)
         self.bootstrapped_values_buf = np.zeros((self.maxsize, self.n_envs), dtype=np.float32)
 
-        # GPU buffers
-        self.obs_tensor_buf = torch.zeros((self.maxsize, self.n_envs, *self.obs_shape), dtype=torch.float32, device=self.device)
-        self.actions_tensor_buf = torch.zeros((self.maxsize, self.n_envs), dtype=torch.int64, device=self.device)
-        self.logprobs_tensor_buf = torch.zeros((self.maxsize, self.n_envs), dtype=torch.float32, device=self.device)
-        self.values_tensor_buf = torch.zeros((self.maxsize, self.n_envs), dtype=torch.float32, device=self.device)
-
         # write position tracking
-        self.pos: int = 0
-        self.size: int = 0  # number of valid steps currently stored (for info)
+        self.pos = 0
+        self.size = 0  # number of valid steps currently stored (for info)
 
     def begin_rollout(self, T: int) -> int:
         """Ensure there is contiguous space for T steps; reset to 0 if needed.
@@ -74,10 +70,23 @@ class RolloutBuffer:
 
     # -------- Per-step storage helpers --------
     def store_tensors(self, idx: int, obs_t: torch.Tensor, actions_t: torch.Tensor, logps_t: torch.Tensor, values_t: torch.Tensor) -> None:
-        self.obs_tensor_buf[idx] = obs_t
-        self.actions_tensor_buf[idx] = actions_t
-        self.logprobs_tensor_buf[idx] = logps_t
-        self.values_tensor_buf[idx] = values_t
+        """Store per-step tensors by converting to NumPy and writing CPU buffers.
+
+        This keeps collection in NumPy primitives; conversion back to torch
+        happens only when flattening for returned trajectories.
+        """
+        # Observations
+        obs_np = obs_t.detach().cpu().numpy()
+        if obs_np.shape == (self.n_envs, *self.obs_shape):
+            self.obs_buf[idx] = obs_np
+        else:
+            # Attempt to reshape if model returned flat observations
+            self.obs_buf[idx] = obs_np.reshape(self.n_envs, *self.obs_shape)
+
+        # Actions, logprobs, values
+        self.actions_buf[idx] = actions_t.detach().cpu().numpy().astype(np.int64)
+        self.logprobs_buf[idx] = logps_t.detach().cpu().numpy().astype(np.float32)
+        self.values_buf[idx] = values_t.detach().cpu().numpy().astype(np.float32)
 
     def store_cpu_step(
         self,
@@ -89,6 +98,11 @@ class RolloutBuffer:
         dones_np: np.ndarray,
         timeouts_np: np.ndarray,
     ) -> None:
+        # Ensure 2D shape for observations
+        if obs_np.ndim == 1:
+            obs_np = obs_np.reshape(-1, 1)
+        if next_obs_np.ndim == 1:
+            next_obs_np = next_obs_np.reshape(-1, 1)
         self.obs_buf[idx] = obs_np
         self.next_obs_buf[idx] = next_obs_np
         self.actions_buf[idx] = actions_np
@@ -97,9 +111,8 @@ class RolloutBuffer:
         self.timeouts_buf[idx] = timeouts_np
 
     def copy_tensors_to_cpu(self, start: int, end: int) -> None:
-        """Batch transfer GPU tensors to CPU numpy buffers for [start, end)."""
-        self.logprobs_buf[start:end] = self.logprobs_tensor_buf[start:end].detach().cpu().numpy()
-        self.values_buf[start:end] = self.values_tensor_buf[start:end].detach().cpu().numpy()
+        """Compatibility no-op (historical: tensors already live on CPU)."""
+        return
 
     # -------- Flatten helpers --------
     def flatten_slice_env_major(
@@ -113,29 +126,30 @@ class RolloutBuffer:
         T = end - start
         n_envs = self.n_envs
 
-        # Observations already on GPU
-        obs_slice = self.obs_tensor_buf[start:end]
-        states = obs_slice.transpose(0, 1).reshape(n_envs * T, -1)
+        # Observations: use CPU buffers and convert at return time
+        obs_np = self.obs_buf[start:end]  # (T, N, *obs_shape)
+        obs_t = torch.as_tensor(obs_np, dtype=torch.float32, device=self.device)
+        states = obs_t.transpose(0, 1).reshape(n_envs * T, -1)
 
-        def _flat_env_major_gpu(tensor_buf: torch.Tensor) -> torch.Tensor:
-            return tensor_buf[start:end].transpose(0, 1).reshape(-1)
-
-        actions = _flat_env_major_gpu(self.actions_tensor_buf).to(torch.int64)
-        logps = _flat_env_major_gpu(self.logprobs_tensor_buf).to(torch.float32)
-        values = _flat_env_major_gpu(self.values_tensor_buf).to(torch.float32)
-
-        def _flat_env_major_cpu(arr: np.ndarray, dtype: torch.dtype) -> torch.Tensor:
+        def _flat_env_major_cpu_to_torch(arr: np.ndarray, dtype: torch.dtype) -> torch.Tensor:
             return torch.as_tensor(arr[start:end].transpose(1, 0).reshape(-1), dtype=dtype, device=self.device)
 
-        rewards = _flat_env_major_cpu(self.rewards_buf, torch.float32)
-        dones = _flat_env_major_cpu(self.dones_buf, torch.bool)
-        advantages = _flat_env_major_cpu(advantages_buf, torch.float32)
-        returns = _flat_env_major_cpu(returns_buf, torch.float32)
+        actions = _flat_env_major_cpu_to_torch(self.actions_buf, torch.int64)
+        logps = _flat_env_major_cpu_to_torch(self.logprobs_buf, torch.float32)
+        values = _flat_env_major_cpu_to_torch(self.values_buf, torch.float32)
+
+        def _flat_env_major_cpu_only(arr: np.ndarray) -> np.ndarray:
+            return arr[start:end].transpose(1, 0).reshape(-1)
+        rewards = torch.as_tensor(_flat_env_major_cpu_only(self.rewards_buf), dtype=torch.float32, device=self.device)
+        dones = torch.as_tensor(_flat_env_major_cpu_only(self.dones_buf), dtype=torch.bool, device=self.device)
+        advantages = torch.as_tensor(_flat_env_major_cpu_only(advantages_buf), dtype=torch.float32, device=self.device)
+        returns = torch.as_tensor(_flat_env_major_cpu_only(returns_buf), dtype=torch.float32, device=self.device)
 
         # Next observations
         if self.next_obs_buf.ndim == 2:
+            # Ensure shape matches observations: (n_envs*T, 1)
             next_states = torch.as_tensor(
-                self.next_obs_buf[start:end].transpose(1, 0).reshape(-1),
+                self.next_obs_buf[start:end].transpose(1, 0).reshape(-1, 1),
                 dtype=torch.float32,
                 device=self.device,
             )
@@ -170,9 +184,10 @@ class RolloutCollector():
         self.stats_window_size = stats_window_size
         self.gamma = gamma
         self.gae_lambda = gae_lambda
-        self.normalize_advantage = normalize_advantage
         self.advantages_norm_eps = advantages_norm_eps
         self.use_gae = use_gae
+        # Keep both flags for backward-compat; use normalize_advantages in logic
+        self.normalize_advantage = normalize_advantage
         self.normalize_advantages = normalize_advantages
         self.kwargs = kwargs
         self.buffer_maxsize = buffer_maxsize
@@ -180,6 +195,46 @@ class RolloutCollector():
         # State tracking
         self.device = _device_of(policy_model)
         self.n_envs = env.num_envs
+
+        # Running average stats (windowed)
+        self.rollout_fpss = deque(maxlen=stats_window_size)
+        self.episode_reward_deque = deque(maxlen=stats_window_size)
+        self.episode_length_deque = deque(maxlen=stats_window_size)
+        self.env_episode_reward_deques = [deque(maxlen=stats_window_size) for _ in range(self.n_envs)]
+        self.env_episode_length_deques = [deque(maxlen=stats_window_size) for _ in range(self.n_envs)]
+
+        # Lightweight running statistics (avoid per-sample Python overhead)
+        # Obs/reward running stats over all seen samples (scalar over all dims)
+        self._obs_count = 0
+        self._obs_sum = 0.0
+        self._obs_sumsq = 0.0
+
+        self._rew_count = 0
+        self._rew_sum = 0.0
+        self._rew_sumsq = 0.0
+
+        # Action histogram (discrete); grows dynamically as needed
+        self._action_counts = None
+
+        # Baseline stats for REINFORCE (global running mean/std over returns)
+        self._base_count = 0
+        self._base_sum = 0.0
+        self._base_sumsq = 0.0
+
+        self.total_rollouts = 0
+        self.total_steps = 0
+        self.total_episodes = 0
+        self.rollout_steps = 0
+        self.rollout_episodes = 0
+
+        # Current observations - initialize on first collect
+        self.obs = None
+
+        # Persistent rollout buffer (lazy init when first obs is known)
+        self._buffer = None
+
+        # Reusable arrays to avoid per-step allocations
+        self._step_timeouts = np.zeros(self.n_envs, dtype=bool)
 
         # Running average stats (windowed)
         self.rollout_fpss = deque(maxlen=stats_window_size)
@@ -234,7 +289,12 @@ class RolloutCollector():
 
         # Lazy-init persistent buffer once we know obs shape/dtype
         if self._buffer is None:
-            obs_shape = self.obs.shape[1:] if self.obs.ndim > 1 else (self.obs.shape[0],)
+            # For discrete observations, VecEnv returns (n_envs,)
+            # Treat them as 1-feature vectors
+            if self.obs.ndim == 1:
+                obs_shape = (1,)
+            else:
+                obs_shape = self.obs.shape[1:]
             maxsize = self.buffer_maxsize if self.buffer_maxsize is not None else self.n_steps
             self._buffer = RolloutBuffer(
                 n_envs=self.n_envs,
@@ -259,19 +319,19 @@ class RolloutCollector():
         rollout_start = time.time()
         step_idx = 0
         while env_step_calls < self.n_steps:
-            # Store observations directly in GPU tensor buffer
+            # Current observations as torch tensor (model device)
             obs_t = torch.as_tensor(self.obs, dtype=torch.float32, device=self.device)
 
-            # Determine next actions using the policy model (already on GPU)
+            # Policy step
             actions_t, logps_t, values_t = self.policy_model.act(obs_t, deterministic=deterministic)
 
-            # Store GPU tensors directly in persistent buffers
+            # Persist per-step tensors (converted to NumPy inside)
             self._buffer.store_tensors(start + step_idx, obs_t, actions_t, logps_t, values_t)
 
             # Only transfer actions to CPU for environment step
             actions_np = actions_t.detach().cpu().numpy()
 
-            # Perform next actions on environment
+            # Environment step
             next_obs, rewards, dones, infos = self.env.step(actions_np)
 
             # Fast episode info processing - reuse timeout array
@@ -296,7 +356,7 @@ class RolloutCollector():
                         timeouts[idx] = True
                         terminal_obs_info.append((step_idx, idx, info["terminal_observation"]))
 
-            # Direct CPU buffer writes (persistent)
+            # Persist environment outputs for this step
             self._buffer.store_cpu_step(
                 start + step_idx,
                 self.obs.copy(),
@@ -369,10 +429,12 @@ class RolloutCollector():
             for i, (step_idx_term, env_idx, _) in enumerate(terminal_obs_info):
                 self._buffer.bootstrapped_values_buf[start + step_idx_term, env_idx] = batch_values[i]
 
-        # Create a next values array to use for GAE(λ), by shifting the critic
-        # values on steps (discards first value estimation, which is not used),
-        # and estimating the last value using the value model)
+        # Build next_values by shifting critic values and estimating the last
         values_slice = self._buffer.values_buf[start:end]
+        rewards_slice = self._buffer.rewards_buf[start:end]
+        dones_slice = self._buffer.dones_buf[start:end]
+        timeouts_slice = self._buffer.timeouts_buf[start:end]
+
         next_values_buf = np.zeros_like(values_slice, dtype=np.float32)
         next_values_buf[:-1] = values_slice[1:]
         last_obs_t = torch.as_tensor(last_obs, dtype=torch.float32, device=self.device)
@@ -383,27 +445,23 @@ class RolloutCollector():
         # - by default last obs is next state from unfinished episode
         # - if episode is done and truncated, value will be replaced by value from terminal observation (as last obs here will be the next states' first observation)
         # - if episode is done but not truncated, value will later be ignored in GAE calculation by this being considered a terminal state
-        timeouts_slice = self._buffer.timeouts_buf[start:end]
         bootstrapped_slice = self._buffer.bootstrapped_values_buf[start:end]
         next_values_buf = np.where(timeouts_slice, bootstrapped_slice, next_values_buf)
 
         # Real terminal states are only the dones where environment finished but not due to a timeout
         # (for timeout we must estimate next state value as if episode continued)
-        dones_slice = self._buffer.dones_buf[start:end]
         real_terminal = np.logical_and(dones_slice.astype(bool), ~timeouts_slice)
         non_terminal = (~real_terminal).astype(np.float32)
 
         if self.use_gae:
             # Calculate the advantages using GAE(λ):
-            advantages_buf = np.zeros_like(self._buffer.rewards_buf[start:end], dtype=np.float32)
+            advantages_buf = np.zeros_like(rewards_slice, dtype=np.float32)
             gae = np.zeros(self.n_envs, dtype=np.float32)
             for t in reversed(range(T)):
-                # Calculate the Temporal Difference (TD) residual (the error
-                # between the predicted value of a state and a better estimate of it)
-                delta = self._buffer.rewards_buf[start:end][t] + self.gamma * next_values_buf[t] * non_terminal[t] - values_slice[t]
+                # Calculate the Temporal Difference (TD) residual
+                delta = rewards_slice[t] + self.gamma * next_values_buf[t] * non_terminal[t] - values_slice[t]
 
-                # The TD residual is a 1-step advantage estimate, by taking future advantage
-                # estimates into account the advantage estimate becomes more stable
+                # Accumulate GAE
                 gae = delta + self.gamma * self.gae_lambda * gae * non_terminal[t]
                 advantages_buf[t] = gae
 
@@ -411,12 +469,12 @@ class RolloutCollector():
             returns_buf = advantages_buf + values_slice
         else:
             # Monte Carlo returns for REINFORCE
-            returns_buf = np.zeros_like(self._buffer.rewards_buf[start:end], dtype=np.float32)
+            returns_buf = np.zeros_like(rewards_slice, dtype=np.float32)
             returns = np.zeros(self.n_envs, dtype=np.float32)
 
             for t in reversed(range(T)):
                 # For terminal states, return is just the reward; for non-terminal, accumulate discounted future returns
-                returns = self._buffer.rewards_buf[start:end][t] + self.gamma * returns * non_terminal[t]
+                returns = rewards_slice[t] + self.gamma * returns * non_terminal[t]
                 returns_buf[t] = returns
 
             # Always calculate baseline and advantages using global running mean

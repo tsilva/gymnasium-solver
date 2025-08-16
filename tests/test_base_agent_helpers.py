@@ -1,6 +1,6 @@
+import importlib
 import sys
 import types
-import importlib
 
 # Provide a lightweight stub for the 'callbacks' module to avoid optional deps (e.g., watchdog)
 module = types.ModuleType("callbacks")

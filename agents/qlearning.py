@@ -1,6 +1,9 @@
-import torch
 import random
+
+import torch
+
 from .base_agent import BaseAgent
+
 
 # TODO: should we get rid of models.py and move models next to agents?
 class QLearningPolicyModel():

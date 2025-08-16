@@ -1,6 +1,9 @@
 import torch
-from .base_agent import BaseAgent
+
 from utils.models import PolicyOnly
+
+from .base_agent import BaseAgent
+
 
 class REINFORCE(BaseAgent):
     

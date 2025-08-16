@@ -1,9 +1,10 @@
 """Print metrics callback for displaying training progress in a formatted table."""
 
-from typing import Iterable, Optional, Dict, Any, List
 import re
-import torch
+from typing import Any, Dict, Iterable, List, Optional
+
 import pytorch_lightning as pl
+import torch
 
 
 class PrintMetricsCallback(pl.Callback):
@@ -84,7 +85,7 @@ class PrintMetricsCallback(pl.Callback):
         self._change_tol = 1e-12
 
         # Dedicated table printer to preserve state across prints (avoids global resets)
-        from utils.misc import NamespaceTablePrinter
+        from utils.table_printer import NamespaceTablePrinter
         self._printer = NamespaceTablePrinter(
             # Keep numbers compact and colored like before
             compact_numbers=True,
@@ -178,7 +179,6 @@ class PrintMetricsCallback(pl.Callback):
 
     def _check_algorithm_metric_rules(self, current_metrics: Dict[str, Any]) -> None:
         """Check algorithm-specific metric rules and log warnings when violated."""
-        import warnings
         
         for metric_name, rule_config in self.algorithm_metric_rules.items():
             if metric_name in current_metrics:

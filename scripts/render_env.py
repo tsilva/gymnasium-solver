@@ -1,8 +1,9 @@
 import argparse
-import gymnasium as gym
 import time
-import sys
 import traceback
+
+import gymnasium as gym
+
 
 # BipedalWalker-v3
 # CarRacing-v3

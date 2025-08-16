@@ -1,11 +1,14 @@
-from pathlib import Path
-import shutil
-import json
-import torch
 import types
-import pytest
+from pathlib import Path
 
-from utils.checkpoint import find_latest_checkpoint, list_available_checkpoints, load_checkpoint
+import pytest
+import torch
+
+from utils.checkpoint import (
+    find_latest_checkpoint,
+    list_available_checkpoints,
+    load_checkpoint,
+)
 
 
 class DummyAgent:

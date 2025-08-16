@@ -1,5 +1,6 @@
-import numpy as np
 import gymnasium as gym
+import numpy as np
+
 
 class MountainCarV0_RewardShaper(gym.Wrapper):
     """

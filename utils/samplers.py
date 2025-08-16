@@ -1,6 +1,8 @@
 from typing import Iterator, Optional
+
 import torch
 from torch.utils.data import Sampler
+
 
 class MultiPassRandomSampler(Sampler[int]):
     """

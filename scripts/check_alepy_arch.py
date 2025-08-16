@@ -1,8 +1,10 @@
-import ale_py
+import glob
 import os
 import platform
 import subprocess
-import glob
+
+import ale_py
+
 
 def check_ale_arch():
     ale_dir = os.path.dirname(ale_py.__file__)

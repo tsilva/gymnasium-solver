@@ -1,7 +1,7 @@
-import torch
 import pytest
+import torch
 
-from utils.models import PolicyOnly, ActorCritic
+from utils.models import ActorCritic, PolicyOnly
 
 
 @pytest.mark.unit

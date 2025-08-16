@@ -1,5 +1,7 @@
 import argparse
+
 from utils.config import load_config
+
 
 def main():
     parser = argparse.ArgumentParser(description="Train RL agent.")
@@ -15,24 +17,21 @@ def main():
     if args.resume:
         config.resume = True
     
-    print(f"=== Training Session Started ===")
-    # Build command string, only include --algo if it was explicitly provided
-    cmd_parts = ['python', 'train.py', '--config', args.config]
-    if args.algo is not None:
-        cmd_parts.extend(['--algo', args.algo])
-    if args.resume:
-        cmd_parts.append('--resume')
-    print(f"Command: {' '.join(cmd_parts)}")
+    # Group session header and config/agent details neatly once
+    print("=== Training Session Started ===")
     
     from stable_baselines3.common.utils import set_random_seed
     set_random_seed(config.seed)
 
     from agents import create_agent
     agent = create_agent(config)
-    
-    print(str(agent))
 
-    print("Starting training...")
+    # Print config details once here (will also be captured to logs)
+    from utils.logging import log_config_details
+    log_config_details(config)
+
+    # Print model details once
+    print(str(agent))
     agent.train()
     print("Training completed.")
         

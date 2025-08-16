@@ -1,6 +1,8 @@
+- BUG: action distributions are note being logged correctly (how will I log this along with our current per epoch system?)
+- FEAT: ask copilot to create its own isntructrions namely to generate its own techical documentation that it keeps up to date
 - REFACTOR: rollout buffer can be much more efficient (review how sb3 does it)
 - BUG: our FPS is still 1000 below SB3, investigate why
-
+- FEAT: add ability for the cursor agent to be able to run and adjust hyperparams by itself
 - BUG: CartPole-v1/PPO training performance has regressed vs rlzoo
 - BUG: clip_range metric warning is being triggered incorrectly
 - TODO: Figure out why CartPole-v1/PPO works better with Tahn activation than ReLU

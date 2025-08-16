@@ -7,16 +7,16 @@ allowing you to see the trained policy in action.
 """
 
 import argparse
-import torch
-import time
-import numpy as np
 from pathlib import Path
+
+import numpy as np
+import torch
 
 
 def load_model(model_path, config):
     """Load a saved model and return the policy."""
+
     from agents import create_agent
-    from pathlib import Path
     
     # Create agent with the same config
     agent = create_agent(config)
@@ -165,6 +165,7 @@ def play_episodes(policy_model, env, num_episodes=5, deterministic=True):
 def load_config_from_run(run_id: str):
     """Load configuration from a run's config.json file."""
     import json
+
     from utils.config import Config
     
     # Handle latest-run symlink
@@ -276,7 +277,7 @@ def main():
             print(f"Falling back to config from files: {args.config}/{args.algo}")
     
     # Set up logging for play session
-    from utils.logging import capture_all_output, log_config_details
+    from utils.logging import capture_all_output
     
     with capture_all_output(config=config, log_dir=args.log_dir):
         print(f"=== Play Session Started ===")
@@ -295,7 +296,10 @@ def main():
             except FileNotFoundError as e:
                 print(f"No checkpoint found in run: {e}")
                 # Fall back to old checkpoint system
-                from utils.checkpoint import find_latest_checkpoint, list_available_checkpoints
+                from utils.checkpoint import (
+                    find_latest_checkpoint,
+                    list_available_checkpoints,
+                )
                 
                 checkpoint_path = find_latest_checkpoint(config.algo_id, config.env_id)
                 

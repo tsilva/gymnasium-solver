@@ -1,5 +1,6 @@
 import torch
 
+
 class IndexDataset(torch.utils.data.Dataset):
     def __init__(self, length: int):
         self._len = length

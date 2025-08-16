@@ -4,13 +4,17 @@
 
 import os
 import os.path
-from typing import Optional, Tuple
 from contextlib import contextmanager
+from typing import Optional, Tuple
 
 import numpy as np
 from gymnasium import error, logger
-
-from stable_baselines3.common.vec_env.base_vec_env import VecEnv, VecEnvObs, VecEnvStepReturn, VecEnvWrapper
+from stable_baselines3.common.vec_env.base_vec_env import (
+    VecEnv,
+    VecEnvObs,
+    VecEnvStepReturn,
+    VecEnvWrapper,
+)
 from stable_baselines3.common.vec_env.dummy_vec_env import DummyVecEnv
 from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
 

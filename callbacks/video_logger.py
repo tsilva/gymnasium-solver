@@ -5,10 +5,11 @@ import time
 from pathlib import Path
 from typing import Iterable
 
-import wandb
 import pytorch_lightning as pl
-from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
+
+import wandb
 
 
 class VideoLoggerCallback(pl.Callback):

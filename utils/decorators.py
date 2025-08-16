@@ -3,7 +3,7 @@ Utility decorators for the gymnasium-solver project.
 """
 
 import functools
-from typing import Callable, Any
+from typing import Callable
 
 
 def must_implement(func: Callable) -> Callable:

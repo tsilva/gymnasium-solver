@@ -305,12 +305,77 @@ def infer_repo_name(meta: dict, run_dir: Path, explicit: Optional[str]) -> str:
 
 
 def build_model_card(meta: dict, run_dir: Path) -> str:
+    """Build a README.md model card with a valid YAML front matter block.
+
+    Includes license, library, tags, and a minimal model-index section so the Hub
+    doesn't warn about missing metadata. Also embeds a video preview when available.
+    """
     cfg = meta.get("config", {})
     algo = cfg.get("algo_id", "unknown")
     env_id = cfg.get("env_id", "unknown")
     run_id = run_dir.name
     config_id = meta.get("config_id") or f"{env_id}_{algo}"
+
+    # Compose YAML front matter (keep it simple but non-empty)
+    tags = [
+        "reinforcement-learning",
+        "gymnasium",
+        str(env_id) if env_id else "env",
+        str(algo) if algo else "algo",
+        "pytorch",
+    ]
+
+    # Optional metrics for model-index
+    metrics_yaml = []
+    m = meta.get("metrics") or {}
+    def _num(x):
+        try:
+            return float(x)
+        except Exception:
+            return None
+    if isinstance(m, dict):
+        if _num(m.get("best_eval_reward")) is not None:
+            metrics_yaml.append({"name": "Best Eval Reward", "type": "reward", "value": _num(m.get("best_eval_reward"))})
+        if _num(m.get("current_eval_reward")) is not None:
+            metrics_yaml.append({"name": "Current Eval Reward", "type": "reward", "value": _num(m.get("current_eval_reward"))})
+        if _num(m.get("epoch")) is not None:
+            metrics_yaml.append({"name": "Epoch", "type": "epoch", "value": _num(m.get("epoch"))})
+        if _num(m.get("total_timesteps")) is not None:
+            metrics_yaml.append({"name": "Total Timesteps", "type": "timesteps", "value": _num(m.get("total_timesteps"))})
+
+    # Build front matter
+    front_lines: List[str] = []
+    front_lines.append("---")
+    front_lines.append("license: mit")
+    front_lines.append("library_name: pytorch")
+    # optional language for better discoverability
+    front_lines.append("language:")
+    front_lines.append("  - en")
+    front_lines.append("tags:")
+    for t in tags:
+        front_lines.append(f"  - {t}")
+    # Minimal model-index if we have any metrics
+    if metrics_yaml:
+        front_lines.append("model-index:")
+        front_lines.append("  - name: " + str(config_id))
+        front_lines.append("    results:")
+        front_lines.append("      - task:")
+        front_lines.append("          type: reinforcement-learning")
+        front_lines.append("          name: Reinforcement Learning")
+        front_lines.append("        dataset:")
+        front_lines.append("          name: " + str(env_id))
+        front_lines.append("          type: gymnasium")
+        front_lines.append("        metrics:")
+        for item in metrics_yaml:
+            # Each metric is a simple flat mapping
+            front_lines.append("          - name: " + str(item["name"]))
+            front_lines.append("            type: " + str(item["type"]))
+            front_lines.append("            value: " + str(item["value"]))
+    front_lines.append("---")
+
     lines = []
+    lines.extend(front_lines)
+    lines.append("")
     lines.append(f"# {config_id}")
     lines.append("")
     lines.append(f"Run: `{run_id}` — Env: `{env_id}` — Algo: `{algo}`")

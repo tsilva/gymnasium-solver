@@ -311,7 +311,7 @@ class BaseAgent(pl.LightningModule):
         time_elapsed = max((time.time_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
 
-    def train(self):
+    def learn(self):
         from utils.logging import capture_all_output
 
         # Ask for confirmation before any heavy setup (keep prior prints grouped)

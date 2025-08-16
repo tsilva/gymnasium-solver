@@ -32,7 +32,7 @@ def main():
 
     # Print model details once
     print(str(agent))
-    agent.train()
+    agent.learn()
     print("Training completed.")
         
 if __name__ == "__main__":

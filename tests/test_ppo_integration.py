@@ -172,7 +172,7 @@ def test_full_ppo_train_tiny_loop_progress(monkeypatch):
     from agents import create_agent
 
     agent = create_agent(cfg)
-    agent.train()
+    agent.fit()
 
     # Verify progress was recorded and loop didn't crash
     m = agent.train_collector.get_metrics()

@@ -1,28 +1,29 @@
-- Remove 
+- FEAT: add sensible eval frequency defaults to config, make sure training is stopping when eval threshold is reached, make sure best checkpoint is saved when that happens, 
+- FEAT: Add support for softcoding activations
+- FEAT: add support CNN Policy, softcode config to pick the right one, make policy kwargs be propagated from config
+- FEAT: Train on CartPole-v1 with rgb
+
+- Generalized scheduling for metrics, make those be logged
+- FEAT: track learning hyperparams in wandb (train/hyperparams)
+
 - FEAT: When training ends show ascii plot of all metrics
 - Add support for creating file report of training run
 - BUG: action distributions are note being logged correctly (how will I log this along with our current per epoch system?)
 - FEAT: ask copilot to create its own isntructrions namely to generate its own techical documentation that it keeps up to date
 - REFACTOR: rollout buffer can be much more efficient (review how sb3 does it) -- our fps is still 1000 below sb3
 - FEAT: add ability for the cursor agent to be able to run and adjust hyperparams by itself
-- BUG: CartPole-v1/PPO training performance has regressed vs rlzoo
-- BUG: clip_range metric warning is being triggered incorrectly
 - TODO: Figure out why CartPole-v1/PPO works better with Tahn activation than ReLU
 - BUG: PPO can solve FrozenLake-v1, but REINFORCE cannot. REINFORCE is likely not implemented correctly.
 - BUG: is REINFORCE well implemented? are we waiting until the end of the episode to update the policy?
 - FEAT: track immediate episode reward (for monitoring hyperparam change reaction)
-- FEAT: track learning hyperparams in wandb (train/hyperparams)
-- BUG: No reward threshold available (neither in config nor environment spec) - skipping early stopping check
 - FEAT: improve metric descriptions
 - FEAT: write guide on how to monitor training
 - FEAT: train on cloud server
 - FEAT: normalize rewards?
 - FEAT: add normalization support
 - FEAT: add discrete env support
-- FEAT: add support for softcoding activations
 - Create benchmarking script to find optimal parallelization for env/machine combo
 - TEST: predict next state to learn faster
-- TEST: does benchmark script still give expected number of FPS on Pong? test with RAM vs RGB
 - FEAT: add Minatari support
 - BUG: videos not logged at correct timesteps
 - FEAT: improve config structurtee
@@ -46,7 +47,6 @@ MaxAndSkipEnv
 - FEAT: add determinism check at beginning to make sure that rollout benefits from multiple envs (eg: Pong, test on PongDeterministic)
 - FEAT: create cartpole reward shaper that prioritizes centering the pole
 - FEAT: track output distribution
-- BUG: confirm that buffer growth is under control
 - BUG: fix thread safety issues with async eval collector (copy model weights with lock)
 - FEAT: consider computing mean reward by timesteps, this way in eval we just have to request n_steps = reward_threshold * N, this will make it easier to support vectorized envs
 - FEAT: a2c (only after reinforce/ppo is stable)

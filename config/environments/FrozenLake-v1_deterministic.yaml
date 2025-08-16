@@ -6,22 +6,15 @@ __FrozenLake-v1_deterministic:
   env_kwargs:
     is_slippery: false
     map_name: "4x4"
-  policy: 'MlpPolicy'
-  gamma: 0.99
-  n_envs: 1
-  #n_timesteps: !!float 3e5
   eval_episodes: 10
-  eval_deterministic: true
   eval_freq_epochs: 10
   eval_recording_freq_epochs: 10
 
 FrozenLake-v1_deterministic_qlearning:
   inherits: __FrozenLake-v1_deterministic
   algo_id: qlearning
-  n_epochs: 1
   n_steps: 512
   batch_size: 64
-  gamma: 0.99
   learning_rate: 0.01
 
 FrozenLake-v1_deterministic_ppo:
@@ -31,30 +24,16 @@ FrozenLake-v1_deterministic_ppo:
   batch_size: 256              # 8 minibatches
 
   n_epochs: 10
-  gamma: 0.99
-  gae_lambda: 0.95
-  clip_range: 0.2
-  vf_coef: 0.5
-  max_grad_norm: 0.5
-  
-  # Learning rate / entropy
   learning_rate: 0.0003
-  ent_coef: 0.01               # consider decay → 0 over training
-
-  # Network (small for discrete observation space)
   hidden_dims: [64]            # Simple network for 16-state discrete environment
 
   # Eval
   eval_episodes: 10
-  eval_deterministic: true
-
 FrozenLake-v1_deterministic_reinforce:
   inherits: __FrozenLake-v1_deterministic
   algo_id: reinforce
-  n_epochs: 1
   n_steps: 512
   batch_size: 64
-  gamma: 0.99
   learning_rate: 0.005
   hidden_dims: [64]
   use_baseline: true

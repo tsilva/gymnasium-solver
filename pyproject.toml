@@ -17,6 +17,7 @@ dependencies = [
     "torchvision",
     "pytest",
     "pyyaml",
+    "ruamel.yaml",
     "watchdog",
     "setuptools<80"
 ]

@@ -1,6 +1,8 @@
-- FEAT: eval min epochs support
-- FEAT: add sensible eval frequency defaults to config, make sure training is stopping when eval threshold is reached, make sure best checkpoint is saved when that happens, 
-- FEAT: Add support for softcoding activations
+- FEAT: Add support for specifying minimum number of epochs to wait before starting evaluations. The purpose of this is that evaluations bottleneck training throughput, so we don't want to run evaluations until it's worth it.
+
+
+- FEAT: Our models currently have tanh as their activation function. We should allow softcoding them through the config along with the hidden dims.
+
 - FEAT: add support CNN Policy, softcode config to pick the right one, make policy kwargs be propagated from config
 - FEAT: Train on CartPole-v1 with rgb
 
@@ -26,7 +28,7 @@
 - FEAT: add discrete env support
 - Create benchmarking script to find optimal parallelization for env/machine combo
 - TEST: predict next state to learn faster
-- FEAT: add Minatari support
+- FEAT: add [Minari support](https://minari.farama.org/)
 - BUG: videos not logged at correct timesteps
 - FEAT: improve config structurtee
 - FEAT : Normalize returns for REINFORCE
@@ -66,3 +68,5 @@ MaxAndSkipEnv
 - FEAT: add multitask heads support (eg: Atari, Sega Genesis) -- consider large output space
 - Ask agent for next learning steps/tasks (prompt file)
 - REFACTOR: add type hints where applicable
+
+- REINFORCE:

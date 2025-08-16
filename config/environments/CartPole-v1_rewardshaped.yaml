@@ -9,7 +9,7 @@ __CartPole-v1_rewardshaping:
   env_wrappers:
     - id: CartPoleV1_RewardShaper
       angle_reward_scale: 1.0
-      position_reward_scpale: 0.25
+    position_reward_scale: 0.25
       clip_potential: true
 
 CartPole-v1_rewardshaping_ppo:
@@ -17,11 +17,11 @@ CartPole-v1_rewardshaping_ppo:
   algo_id: ppo
   n_envs: 8
   n_timesteps: 1e5
-  n_steps: 64
+  n_steps: 32
   batch_size: 256
-  gae_lambda: 0.9
-  gamma: 0.99
+  gae_lambda: 0.8
+  gamma: 0.98
   ent_coef: 0.0
-  n_epochs: 10
+  n_epochs: 20
   learning_rate: lin_0.001
   clip_range: lin_0.2

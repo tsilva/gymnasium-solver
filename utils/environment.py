@@ -86,6 +86,7 @@ def build_env(
     if frame_stack and frame_stack > 1: env = VecFrameStack(env, n_stack=frame_stack)
     
     # Enable video recording if requested
+    # record_video_kwargs may include: video_length, record_env_idx (to record a single env)
     if record_video:
         env = VecVideoRecorder(
             env,

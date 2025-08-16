@@ -127,6 +127,7 @@ class BaseAgent(pl.LightningModule):
             record_video=True,
             record_video_kwargs={
                 "video_length": 100,  # TODO: softcode this
+                "record_env_idx": 0,  # Record only first env by default
             },
         )
 

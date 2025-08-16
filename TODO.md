@@ -1,9 +1,7 @@
-- BUG: the eval video is showing N videos one for each env, it should show only I just want to record one of the envs, default to first one
-
 - FEAT: gradio app that allows running a given run id and see the frames, actions, rewards, etc. This will allow us to debug runs and see how the agent behaves in different scenarios. This feature should be implemented in a file called inspect.py. You can call it by providing the run id as an argument, defaulting to the latest run. The app should allow selecting the checkpoint step to inspect and should display the frames, actions, rewards, etc. in a user-friendly way. By default use the best checkpoint, if not available use the latest.
 - FEAT: Whenever a better checkpoint is found, make sure we run one extra episode and now record it.
 - FEAT: Whenever we record a checkpoint we need to store all metrics at that point.
-
+- FEAT: call challenges instead of environments
 - FEAT: Add support for specifyingpo extra reward metrics for each environment, then make the reward shaper assign value for each of those rewards
 
 - FEAT: add support for creating publishable video for youtube

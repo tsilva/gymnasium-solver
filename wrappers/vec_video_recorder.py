@@ -42,12 +42,15 @@ class VecVideoRecorder(VecEnvWrapper):
     :param text_color: RGB color tuple for the text
     :param stroke_color: RGB color tuple for the text outline
     :param stroke_width: Width of the text outline in pixels
+    :param record_env_idx: If set, record only this env index from a VecEnv (defaults to 0).
+                           When None, falls back to the default VecEnv tiled render of all envs.
     """
 
     def __init__(
         self,
         venv: VecEnv,
         video_length: Optional[int] = 200,
+    record_env_idx: Optional[int] = 0,
         # Text overlay options
         enable_overlay: bool = True,
         font_size: int = 24,
@@ -79,6 +82,11 @@ class VecVideoRecorder(VecEnvWrapper):
 
         self.step_id = 0
         self.video_length = video_length
+        self.record_env_idx = record_env_idx
+        try:
+            self.num_envs = getattr(self.env, "num_envs", None)
+        except Exception:
+            self.num_envs = None
 
         self.recording = False
         self.recorded_frames: list[np.ndarray] = []
@@ -194,19 +202,30 @@ class VecVideoRecorder(VecEnvWrapper):
         self.step_id += 1 # TODO: should this be incremented ever?
         self.current_step += 1
         
-        # Accumulate reward (for single env, use first reward)
+        # Accumulate reward for the selected env (default to first)
         if isinstance(rewards, np.ndarray):
-            self.accumulated_reward += rewards[0]
+            idx = int(self.record_env_idx or 0)
+            idx = max(0, min(idx, rewards.shape[0] - 1))
+            self.accumulated_reward += float(rewards[idx])
         else:
-            self.accumulated_reward += rewards
+            # Non-vector case
+            self.accumulated_reward += float(rewards)
         
         self._capture_frame()
 
-        # Reset step counter if any environment is done
-        if np.any(dones):
-            self.current_step = 0
-            self.current_episode += 1 # TODO: doesnt work for multiple envs
-            self.accumulated_reward = 0.0
+        # Reset step counter if the selected environment is done
+        if isinstance(dones, np.ndarray):
+            idx = int(self.record_env_idx or 0)
+            idx = max(0, min(idx, dones.shape[0] - 1))
+            if bool(dones[idx]):
+                self.current_step = 0
+                self.current_episode += 1
+                self.accumulated_reward = 0.0
+        else:
+            if bool(dones):
+                self.current_step = 0
+                self.current_episode += 1
+                self.accumulated_reward = 0.0
 
         return obs, rewards, dones, infos
 
@@ -217,7 +236,26 @@ class VecVideoRecorder(VecEnvWrapper):
         if self.video_length is not None and len(self.recorded_frames) >= self.video_length:
             return
         
-        frame = self.env.render()
+        frame = None
+
+        # Prefer capturing a single env image if requested and available
+        if self.record_env_idx is not None:
+            try:
+                images = self.env.get_images()
+                if isinstance(images, (list, tuple)) and len(images) > 0:
+                    idx = int(self.record_env_idx)
+                    # Clamp index to valid range
+                    idx = max(0, min(idx, len(images) - 1))
+                    img = images[idx]
+                    if isinstance(img, np.ndarray):
+                        frame = img
+            except Exception:
+                # Fall back to tiled render below
+                frame = None
+
+        # Fallback: use the VecEnv tiled render (all envs)
+        if frame is None:
+            frame = self.env.render()
 
         assert isinstance(frame, np.ndarray)
         frame_with_overlay = self._add_overlay_to_frame(frame)

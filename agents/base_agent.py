@@ -97,11 +97,13 @@ class BaseAgent(pl.LightningModule):
             env_kwargs=config.env_kwargs,
         )
 
-        # Evaluation env (single env; different seed)
+        # Evaluation env (vectorized; separate seed)
+        # Use the same level of vectorization as training for fair evaluation when desired.
+        # Keep subproc=False to enable video recording.
         self.validation_env = build_env(
             config.env_id,
             seed=config.seed + 1000,
-            n_envs=1,
+            n_envs=config.n_envs,
             subproc=False,
             env_wrappers=config.env_wrappers,
             norm_obs=config.normalize_obs,
@@ -258,54 +260,44 @@ class BaseAgent(pl.LightningModule):
             f"Validation epoch {self.current_epoch} is not a multiple of eval_freq_epochs {self.config.eval_freq_epochs}"
         )
         self.validation_epoch_start_time = time.time_ns()
-        validation_metrics = self.validation_collector.get_metrics()
-        self.validation_epoch_start_timesteps = validation_metrics["total_timesteps"]
+        # We'll compute eval FPS based on per-call totals from evaluate_policy
+        self.validation_epoch_start_timesteps = 0
 
     # TODO: check how sb3 does eval_async
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
     # TODO: there are train/fps drops caused by running the collector N times (its not only the video recording); cause currently unknown
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
-        # TODO: currently support single environment evaluation
-        assert self.validation_env.num_envs == 1, "Evaluation should be run with a single environment instance"
+        # New evaluation using vectorized env policy runner
+        from utils.evaluation import evaluate_policy
 
-        # Collect until we reach the required number of episodes
-        # NOTE: processing/saving video is a bottleneck that will make next training epoch be slower,
-        # if you see train/fps drops, make video recording less frequent by adjusting `eval_recording_freq_epochs`
+        # Decide if we record a video this eval epoch
         record_video = self.current_epoch == 0 or (self.current_epoch + 1) % self.config.eval_recording_freq_epochs == 0
 
-        # Use run-specific video directory if available, otherwise fallback to wandb.run.dir
+        # Use run-specific video directory if available
         video_path = self.run_manager.get_video_dir() / "eval" / "episodes" / f"rollout_epoch_{self.current_epoch}.mp4"
         video_path.parent.mkdir(parents=True, exist_ok=True)
         video_path = str(video_path)
 
-        with self.validation_env.recorder(
-            video_path, record_video=record_video
-        ):  # TODO: make rew window = config.eval_episodes
-            metrics = self.validation_collector.get_metrics()
-            total_episodes = metrics["total_episodes"]
-            target_episodes = total_episodes + self.config.eval_episodes
-            while total_episodes < target_episodes:
-                self.validation_collector.collect(
-                    deterministic=self.config.eval_deterministic
-                )  # TODO: this still won't be as fast as possible because it will have run steps that will not be used
-                metrics = self.validation_collector.get_metrics()
-                total_episodes = metrics["total_episodes"]
+        # Run evaluation with optional recording
+        with self.validation_env.recorder(video_path, record_video=record_video):
+            eval_metrics = evaluate_policy(
+                self.validation_env,
+                self.policy_model,
+                n_episodes=int(self.config.eval_episodes),
+                deterministic=self.config.eval_deterministic,
+            )
 
         # Frequency check is already enforced in on_validation_epoch_start
 
         # Calculate FPS
         time_elapsed = max((time.time_ns() - self.validation_epoch_start_time) / 1e9, sys.float_info.epsilon)
-        rollout_metrics = self.validation_collector.get_metrics()
-        total_timesteps = rollout_metrics["total_timesteps"]
+        total_timesteps = int(eval_metrics.get("total_timesteps", 0))
         timesteps_elapsed = total_timesteps - self.validation_epoch_start_timesteps
         epoch_fps = int(timesteps_elapsed / time_elapsed)
 
-        # TODO: softcode this
-        rollout_metrics.pop("action_distribution", None)  # Remove action distribution if present
-
         # Log metrics
-        self.log_metrics({"epoch": int(self.current_epoch), "epoch_fps": epoch_fps, **rollout_metrics}, prefix="eval")
+        self.log_metrics({"epoch": int(self.current_epoch), "epoch_fps": epoch_fps, **eval_metrics}, prefix="eval")
 
         self._flush_metrics()
 

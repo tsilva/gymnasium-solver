@@ -1,12 +1,13 @@
-- FEAT: create debugger stremio app that given a run id, allows running with a chosen checkpont step by step and see frames and computed values, eg: action distribution, reward, predicted value, etc. The way this works is that the full rollout is collected with frames and then we can run through them, this so that we can see all values namely monte carlo returns, GAE estimates, etc.
 
+- FEAT: when the training starts, when we show all details before starting, we should also be showing all environment details we know about, namely observation space, action space, reward range, reward threshold, etc.
+- FEAT: gradio app that allows running a given run id and see the frames, actions, rewards, etc. This will allow us to debug runs and see how the agent behaves in different scenarios. This feature should be implemented in a file called inspect.py. You can call it by providing the run id as an argument, defaulting to the latest run. The app should allow selecting the checkpoint step to inspect and should display the frames, actions, rewards, etc. in a user-friendly way. By default use the best checkpoint, if not available use the latest.
+- FEAT: Add support for uploading run to hugging face, upload it using publish.py script. Uploading should receive the run id as an argument, defaulting to the latest run, and upload all relevant files (config, model, metrics, etc). This will allow us to share our runs with the community and get feedback on our work. Upload videos as previews when available as well.
 - FEAT: Whenever a better checkpoint is found, make sure we run one extra episode and now record it.
 
 - FEAT: we currently only support MLPPolicy, add support for CNN Policy, softcode config to pick the right one, make policy kwargs be propagated from config; add support for training CartPoel'v1 from rgb pixels with that CNNPolicy, to do so, you'll need to create a new hyperparam file callec CartPole-v1_rgb.py
 
-- FEAT: Add support for uploading run to hugging face, upload it using publish.py script. Uploading should receive the run id as an argument, defaulting to the latest run, and upload all relevant files (config, model, metrics, etc). This will allow us to share our runs with the community and get feedback on our work. Upload videos as previews when available as well.
 
-- FEAT: Add support for specifying extra reward metrics for each environment, then make the reward shaper assign value for each of those rewards
+- FEAT: Add support for specifyingpo extra reward metrics for each environment, then make the reward shaper assign value for each of those rewards
 
 - FEAT: add support for creating publishable video for youtube
 

@@ -18,8 +18,8 @@ class PPO(BaseAgent):
         input_dim = self.train_env.get_input_dim()
         output_dim = self.train_env.get_output_dim()
         policy_type = getattr(self.config, 'policy', 'MlpPolicy')
-        policy_kwargs = getattr(self.config, 'policy_kwargs', None) or {}
-        activation = getattr(self.config, 'activation', 'tanh')
+        policy_kwargs = dict(getattr(self.config, 'policy_kwargs', None) or {})
+        activation = policy_kwargs.pop('activation', getattr(self.config, 'activation', 'tanh'))
 
         if isinstance(policy_type, str) and policy_type.lower() == 'cnnpolicy':
             # Derive HWC shape from observation space

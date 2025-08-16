@@ -84,6 +84,19 @@ class BaseAgent(pl.LightningModule):
         from utils.environment import build_env
 
         # Training env(s)
+        # If using pixel observations, Gymnasium's PixelObservationWrapper requires the
+        # base env to be created with render_mode='rgb_array'. Detect that case here.
+        _uses_pixel_obs = False
+        try:
+            _uses_pixel_obs = any(
+                isinstance(w, dict) and str(w.get("id")) == "PixelObservationWrapper"
+                for w in (config.env_wrappers or [])
+            )
+        except Exception:
+            _uses_pixel_obs = False
+
+        train_render_mode = "rgb_array" if _uses_pixel_obs else None
+
         self.train_env = build_env(
             config.env_id,
             seed=config.seed,
@@ -93,7 +106,7 @@ class BaseAgent(pl.LightningModule):
             env_wrappers=config.env_wrappers,
             norm_obs=config.normalize_obs,
             frame_stack=config.frame_stack,
-            render_mode=None,
+            render_mode=train_render_mode,
             env_kwargs=config.env_kwargs,
         )
 

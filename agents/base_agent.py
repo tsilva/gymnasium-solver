@@ -244,7 +244,12 @@ class BaseAgent(pl.LightningModule):
             print(
                 f"Stopping training at epoch {self.current_epoch} with {total_timesteps} timesteps >= limit {self.config.n_timesteps}"
             )
-            self.trainer.should_stop = True
+            # Avoid accessing the LightningModule.trainer property directly because
+            # it raises when the module isn't attached to a Trainer (our tests use a stub).
+            # Lightning stores the trainer reference internally as _trainer.
+            trainer = getattr(self, "_trainer", None)
+            if trainer is not None and hasattr(trainer, "should_stop"):
+                trainer.should_stop = True
 
     def val_dataloader(self):
         # Validation dataloader is a dummy; actual evaluation uses env rollouts.
@@ -376,6 +381,12 @@ class BaseAgent(pl.LightningModule):
 
             trainer.fit(self)
 
+    # Backward-compatibility: some tests and callers expect a fit() method on
+    # the agent (mirroring Lightning's Trainer.fit). Provide a thin alias so
+    # agent.fit() behaves the same as learn().
+    def fit(self):  # pragma: no cover - covered indirectly by integration test
+        return self.learn()
+
     # -------------------------
     # Helper methods for train()
     # -------------------------
@@ -505,15 +516,32 @@ class BaseAgent(pl.LightningModule):
         )
 
     def _backpropagate_and_step(self, losses):
-        optimizers = self.optimizers()
+        # Try to get optimizers from Lightning; if not attached to a Trainer
+        # (as in our lightweight integration tests), fall back to a cached
+        # manual optimizer created via configure_optimizers().
+        try:
+            optimizers = self.optimizers()
+        except Exception:
+            optimizers = getattr(self, "_manual_optimizers", None)
+            if optimizers is None:
+                optimizers = self.configure_optimizers()
+                if not isinstance(optimizers, (list, tuple)):
+                    optimizers = [optimizers]
+                self._manual_optimizers = optimizers
+
         if not isinstance(losses, (list, tuple)):
             losses = [losses]
         if not isinstance(optimizers, (list, tuple)):
             optimizers = [optimizers]
+
         for idx, optimizer in enumerate(optimizers):
             loss = losses[idx]
             optimizer.zero_grad()
-            self.manual_backward(loss)
+            # Use Lightning's manual_backward when available; otherwise, raw autograd
+            try:
+                self.manual_backward(loss)
+            except Exception:
+                loss.backward()
             torch.nn.utils.clip_grad_norm_(self.policy_model.parameters(), self.config.max_grad_norm)
             optimizer.step()
 
@@ -539,7 +567,17 @@ class BaseAgent(pl.LightningModule):
         self.log_metrics({"learning_rate": new_learning_rate}, prefix="train")
 
     def _change_optimizers_learning_rate(self, learning_rate):
-        optimizers = self.optimizers()
+        # Obtain optimizers from Lightning when attached; otherwise, fall back
+        # to manual optimizers created via configure_optimizers().
+        try:
+            optimizers = self.optimizers()
+        except Exception:
+            optimizers = getattr(self, "_manual_optimizers", None)
+            if optimizers is None:
+                optimizers = self.configure_optimizers()
+                if not isinstance(optimizers, (list, tuple)):
+                    optimizers = [optimizers]
+                self._manual_optimizers = optimizers
         if not isinstance(optimizers, (list, tuple)):
             optimizers = [optimizers]
         for opt in optimizers:

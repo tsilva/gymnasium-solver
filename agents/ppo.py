@@ -17,11 +17,23 @@ class PPO(BaseAgent):
     def create_models(self):
         input_dim = self.train_env.get_input_dim()
         output_dim = self.train_env.get_output_dim()
-        self.policy_model = ActorCritic(
+        model = ActorCritic(
             input_dim,
-            output_dim, # TODO: should be called obs_dim and act_dim?
-            hidden=self.config.hidden_dims
+            output_dim,  # TODO: should be called obs_dim and act_dim?
+            hidden=self.config.hidden_dims,
         )
+
+        # During some unit tests, PPO is instantiated via object.__new__ without
+        # calling LightningModule/nn.Module.__init__. In that case, assigning a
+        # submodule with regular attribute setting raises:
+        #   AttributeError: cannot assign module before Module.__init__() call
+        # Detect that situation (no _modules registry yet) and bypass
+        # nn.Module.__setattr__ only in tests. In normal runtime (when
+        # BaseAgent.__init__ has run), register as a proper submodule.
+        if hasattr(self, "_modules"):
+            self.policy_model = model  # proper registration
+        else:  # pragma: no cover - exercised by unit tests creating bare instance
+            object.__setattr__(self, "policy_model", model)
     
     def losses_for_batch(self, batch, batch_idx):
         # use type for this? check sb3

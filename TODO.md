@@ -1,5 +1,3 @@
-- BUG: Some tests are failing. For all failing tests, find root bug and fix it. Keep doing this until all tests pass.
-
 - FEAT: Add support for specifying minimum number of epochs to wait before starting evaluations. The purpose of this is that evaluations bottleneck training throughput, so we don't want to run evaluations until it's worth it.
 
 

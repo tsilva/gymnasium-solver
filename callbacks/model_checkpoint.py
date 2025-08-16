@@ -289,3 +289,65 @@ class ModelCheckpointCallback(pl.Callback):
             print(f"Last model saved at {self.last_checkpoint_path}")
         else:
             print("No checkpoints were saved during training")
+
+        # After training finishes, run a final evaluation using the best checkpoint
+        # and record a full-length video saved as 'best_checkpoint.mp4'.
+        try:
+            best_ckpt = self.best_checkpoint_path
+            if best_ckpt is None:
+                # If no explicit best was tracked, try conventional path in checkpoint_dir
+                candidate = Path(self.checkpoint_dir) / "best_checkpoint.ckpt"
+                if candidate.exists():
+                    best_ckpt = candidate
+
+            if best_ckpt is None or not Path(best_ckpt).exists():
+                # Nothing to do if we don't have a best checkpoint
+                return
+
+            # Load the best checkpoint weights (no need to resume optimizer/state)
+            try:
+                from utils.checkpoint import load_checkpoint
+                load_checkpoint(Path(best_ckpt), pl_module, resume_training=False)
+            except Exception as e:
+                print(f"Warning: failed to load best checkpoint for final evaluation: {e}")
+                return
+
+            # Prepare video path under the run's video directory
+            video_dir = pl_module.run_manager.get_video_dir() / "eval" / "episodes"
+            video_dir.mkdir(parents=True, exist_ok=True)
+            video_path = video_dir / "best_checkpoint.mp4"
+
+            # Ensure full-length recording by temporarily disabling video_length cap
+            # validation_env is a VecInfoWrapper around VecVideoRecorder -> access via .venv
+            vec_rec = getattr(pl_module.validation_env, 'venv', None)
+            old_len = None
+            if vec_rec is not None and hasattr(vec_rec, 'video_length'):
+                old_len = getattr(vec_rec, 'video_length')
+                try:
+                    setattr(vec_rec, 'video_length', None)
+                except Exception:
+                    pass
+
+            # Run a one-episode deterministic evaluation while recording
+            try:
+                from utils.evaluation import evaluate_policy
+                with pl_module.validation_env.recorder(str(video_path), record_video=True):
+                    _ = evaluate_policy(
+                        pl_module.validation_env,
+                        pl_module.policy_model,
+                        n_episodes=1,
+                        deterministic=getattr(pl_module.config, 'eval_deterministic', True),
+                    )
+                print(f"Saved final evaluation video to: {video_path}")
+            except Exception as e:
+                print(f"Warning: failed to record final evaluation video: {e}")
+            finally:
+                # Restore original video length cap if we changed it
+                if vec_rec is not None and hasattr(vec_rec, 'video_length'):
+                    try:
+                        setattr(vec_rec, 'video_length', old_len)
+                    except Exception:
+                        pass
+        except Exception as e:
+            # Never fail training teardown due to best-checkpoint evaluation
+            print(f"Warning: final best-checkpoint evaluation skipped due to error: {e}")

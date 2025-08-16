@@ -1,3 +1,4 @@
+- FEAT: eval min epochs support
 - FEAT: add sensible eval frequency defaults to config, make sure training is stopping when eval threshold is reached, make sure best checkpoint is saved when that happens, 
 - FEAT: Add support for softcoding activations
 - FEAT: add support CNN Policy, softcode config to pick the right one, make policy kwargs be propagated from config
@@ -8,6 +9,7 @@
 
 - FEAT: When training ends show ascii plot of all metrics
 - Add support for creating file report of training run
+- Get rid of these: getattr(self.config, "eval_freq_epochs", None)
 - BUG: action distributions are note being logged correctly (how will I log this along with our current per epoch system?)
 - FEAT: ask copilot to create its own isntructrions namely to generate its own techical documentation that it keeps up to date
 - REFACTOR: rollout buffer can be much more efficient (review how sb3 does it) -- our fps is still 1000 below sb3

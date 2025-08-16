@@ -110,6 +110,9 @@ class Config:
     eval_deterministic: bool = True
     # Optional target reward threshold to drive early-stopping or checkpointing heuristics
     reward_threshold: Optional[float] = None
+    # Control verbosity of evaluation metric logging: when False, suppress per_env/* metrics in logs
+    # (evaluate_policy still computes/returns them; this only affects logging)
+    log_per_env_eval_metrics: bool = False
 
     # ===== Experiment tracking (optional) =====
     # Project identifier for logging (e.g., W&B project); defaults to a name derived from env_id

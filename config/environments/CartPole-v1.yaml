@@ -4,11 +4,9 @@ __CartPole-v1:
   project_id: "CartPole-v1"
   env_id: CartPole-v1
   # Sensible evaluation defaults for CartPole
-  eval_freq_epochs: 5         # evaluate every 5 training epochs
+  eval_freq_epochs: 100        # evaluate every 5 training epochs
   eval_episodes: 10           # run 10 episodes per evaluation
   eval_deterministic: true    # use greedy actions during evaluation
-  # CartPole-v1 is considered solved at 475 average reward
-  reward_threshold: 475
 __CartPole-v1_normalized:
   inherits: __CartPole-v1
   normalize_obs: "static"

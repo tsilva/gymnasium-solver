@@ -297,6 +297,10 @@ class BaseAgent(pl.LightningModule):
         epoch_fps = int(timesteps_elapsed / time_elapsed)
 
         # Log metrics
+        # Optionally suppress verbose per-env eval diagnostics in logs
+        if not getattr(self.config, "log_per_env_eval_metrics", False):
+            eval_metrics = {k: v for k, v in eval_metrics.items() if not k.startswith("per_env/")}
+
         self.log_metrics({"epoch": int(self.current_epoch), "epoch_fps": epoch_fps, **eval_metrics}, prefix="eval")
 
         self._flush_metrics()

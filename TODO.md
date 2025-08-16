@@ -1,4 +1,7 @@
 
+- FEAT: show warning when training starts for an rgb observation space with MLPPolicy, suggesting to use CNNPolicy instead. show this when training starts when the information is show along with start training user prompt.
+- FEAT: show warning when training starts when config has cnnpolicy but we're using the cpu device for training, . show this when training starts when the information is show along with start training user prompt.
+
 - FEAT: when the training starts, when we show all details before starting, we should also be showing all environment details we know about, namely observation space, action space, reward range, reward threshold, etc.
 - FEAT: gradio app that allows running a given run id and see the frames, actions, rewards, etc. This will allow us to debug runs and see how the agent behaves in different scenarios. This feature should be implemented in a file called inspect.py. You can call it by providing the run id as an argument, defaulting to the latest run. The app should allow selecting the checkpoint step to inspect and should display the frames, actions, rewards, etc. in a user-friendly way. By default use the best checkpoint, if not available use the latest.
 - FEAT: Add support for uploading run to hugging face, upload it using publish.py script. Uploading should receive the run id as an argument, defaulting to the latest run, and upload all relevant files (config, model, metrics, etc). This will allow us to share our runs with the community and get feedback on our work. Upload videos as previews when available as well.

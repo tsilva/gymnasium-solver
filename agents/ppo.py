@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-from utils.models import ActorCritic
+from utils.models import ActorCritic, CNNActorCritic
 
 from .base_agent import BaseAgent
 
@@ -17,12 +17,38 @@ class PPO(BaseAgent):
     def create_models(self):
         input_dim = self.train_env.get_input_dim()
         output_dim = self.train_env.get_output_dim()
-        model = ActorCritic(
-            input_dim,
-            output_dim,  # TODO: should be called obs_dim and act_dim?
-            hidden=self.config.hidden_dims,
-            activation=self.config.activation,
-        )
+        policy_type = getattr(self.config, 'policy', 'MlpPolicy')
+        policy_kwargs = getattr(self.config, 'policy_kwargs', None) or {}
+        activation = getattr(self.config, 'activation', 'tanh')
+
+        if isinstance(policy_type, str) and policy_type.lower() == 'cnnpolicy':
+            # Derive HWC shape from observation space
+            obs_space = self.train_env.observation_space
+            obs_shape = getattr(obs_space, 'shape', None)
+            if obs_shape is None:
+                raise ValueError("CNNPolicy requires Box observation space with shape")
+            if len(obs_shape) == 3:
+                hwc = (obs_shape[0], obs_shape[1], obs_shape[2])
+            elif len(obs_shape) == 2:
+                hwc = (obs_shape[0], obs_shape[1], 1)
+            else:
+                # Fallback heuristic
+                side = int(max(input_dim, 1) ** 0.5)
+                hwc = (side, side, 1)
+            model = CNNActorCritic(
+                obs_shape=hwc,
+                action_dim=output_dim,
+                hidden=self.config.hidden_dims,
+                activation=activation,
+                **policy_kwargs,
+            )
+        else:
+            model = ActorCritic(
+                input_dim,
+                output_dim,
+                hidden=self.config.hidden_dims,
+                activation=activation,
+            )
 
         # During some unit tests, PPO is instantiated via object.__new__ without
         # calling LightningModule/nn.Module.__init__. In that case, assigning a

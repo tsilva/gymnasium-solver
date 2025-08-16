@@ -1,4 +1,11 @@
-"""Neural network model utilities."""
+"""Neural network model utilities.
+
+Includes simple MLP-based Actor-Critic and Policy-only models, plus CNN-based
+variants for image observations (channels-last HWC expected from envs). CNN
+models internally reshape flat inputs back to (N, C, H, W) using a provided
+``obs_shape`` to remain compatible with the current rollout pipeline that
+returns flattened observations.
+"""
 
 import math
 
@@ -41,6 +48,45 @@ def mlp(in_dim, hidden, act: "str | type[nn.Module] | nn.Module" = nn.Tanh):
         layers += [nn.Linear(last, h), act_cls()]
         last = h
     return nn.Sequential(*layers)
+
+
+class NatureCNN(nn.Module):
+    """A lightweight, configurable CNN feature extractor.
+
+    Expects input tensors as (N, C, H, W). If observations arrive flattened
+    (N, H*W*C), callers should reshape prior to calling forward or pass through
+    a wrapper model that reshapes.
+
+    Default mirrors common RL baselines for 84x84 inputs, but parameters are
+    configurable via kwargs.
+    """
+
+    def __init__(
+        self,
+        in_channels: int,
+        channels=(32, 64, 64),
+        kernel_sizes=(8, 4, 3),
+        strides=(4, 2, 1),
+        activation: "str | type[nn.Module] | nn.Module" = nn.ReLU,
+        flatten: bool = True,
+    ):
+        super().__init__()
+        assert len(channels) == len(kernel_sizes) == len(strides), "Conv spec lengths must match"
+        act_cls = resolve_activation(activation)
+
+        convs = []
+        last_c = in_channels
+        for c, k, s in zip(channels, kernel_sizes, strides):
+            convs += [nn.Conv2d(last_c, c, kernel_size=k, stride=s), act_cls()]
+            last_c = c
+        self.convs = nn.Sequential(*convs)
+        self.flatten = flatten
+
+    def forward(self, x):
+        x = self.convs(x)
+        if self.flatten:
+            x = torch.flatten(x, 1)
+        return x
 
 class PolicyOnly(nn.Module):
     def __init__(self, state_dim: int, action_dim: int, hidden=(64, 64), activation: "str | type[nn.Module] | nn.Module" = nn.Tanh):
@@ -121,4 +167,174 @@ class ActorCritic(nn.Module):
         x = self.backbone(obs)
         value = self.value_head(x).squeeze(-1)
         return value
+
+
+class _ReshapeFlatToImage(nn.Module):
+    """Utility module to reshape flat (N, prod(HWC)) to (N, C, H, W).
+
+    Assumes original observation shape is HWC. Will transpose to CHW for CNNs.
+    """
+
+    def __init__(self, obs_shape):
+        super().__init__()
+        assert len(obs_shape) >= 2, "obs_shape must be (H, W, C) or similar"
+        if len(obs_shape) == 2:
+            # No channels dimension; treat as single-channel
+            H, W = obs_shape
+            C = 1
+            self.hwc = (H, W, C)
+        else:
+            H, W, C = obs_shape[-3:]
+            self.hwc = (H, W, C)
+
+    def forward(self, x: torch.Tensor):
+        N = x.shape[0]
+        H, W, C = self.hwc
+        if x.ndim == 2:
+            x = x.view(N, H, W, C)
+        # Convert HWC -> CHW
+        x = x.permute(0, 3, 1, 2).contiguous()
+        # Normalize uint8-like ranges if needed (assume already float)
+        return x
+
+
+class CNNActorCritic(nn.Module):
+    """CNN-based Actor-Critic for discrete action spaces.
+
+    Parameters are intentionally flexible; pass via config.policy_kwargs.
+    """
+
+    def __init__(
+        self,
+        obs_shape,  # expected HWC shape from env observation
+        action_dim: int,
+        hidden=(256,),
+        activation: "str | type[nn.Module] | nn.Module" = nn.ReLU,
+        # CNN kwargs
+        in_channels: int | None = None,
+        channels=(32, 64, 64),
+        kernel_sizes=(8, 4, 3),
+        strides=(4, 2, 1),
+    ):
+        super().__init__()
+        self.reshape = _ReshapeFlatToImage(obs_shape)
+        H, W, C = self.reshape.hwc
+        C_in = in_channels if in_channels is not None else C
+        act_cls = resolve_activation(activation)
+
+        # CNN feature extractor
+        self.cnn = NatureCNN(C_in, channels=channels, kernel_sizes=kernel_sizes, strides=strides, activation=activation)
+
+        # To build the MLP head dimensions, run a dummy forward with zeros
+        with torch.no_grad():
+            dummy = torch.zeros(1, H, W, C)
+            feat = self.cnn(self.reshape(dummy))
+            feat_dim = feat.shape[1]
+
+        # MLP head shared by policy and value
+        self.backbone = mlp(feat_dim, hidden, act=activation) if hidden and len(hidden) > 0 else nn.Identity()
+        last_dim = hidden[-1] if hidden and len(hidden) > 0 else feat_dim
+        self.policy_head = nn.Linear(last_dim, action_dim)
+        self.value_head = nn.Linear(last_dim, 1)
+
+        self._init_weights()
+
+    def _init_weights(self):
+        # Orthogonal init for linear layers; convs keep defaults
+        for m in self.backbone.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.orthogonal_(m.weight, gain=math.sqrt(2))
+                nn.init.constant_(m.bias, 0.0)
+        nn.init.orthogonal_(self.policy_head.weight, gain=0.01)
+        nn.init.constant_(self.policy_head.bias, 0.0)
+        nn.init.orthogonal_(self.value_head.weight, gain=1.0)
+        nn.init.constant_(self.value_head.bias, 0.0)
+
+    def _forward_features(self, obs_flat: torch.Tensor):
+        x = self.reshape(obs_flat)
+        x = self.cnn(x)
+        x = self.backbone(x)
+        return x
+
+    def forward(self, obs_flat: torch.Tensor):
+        x = self._forward_features(obs_flat)
+        logits = self.policy_head(x)
+        dist = Categorical(logits=logits)
+        value = self.value_head(x).squeeze(-1)
+        return dist, value
+
+    @torch.inference_mode()
+    def act(self, obs_flat: torch.Tensor, deterministic=False):
+        dist, v = self.forward(obs_flat)
+        a = dist.sample() if not deterministic else dist.mode
+        return a, dist.log_prob(a), v
+
+    def evaluate_actions(self, obs_flat: torch.Tensor, actions: torch.Tensor):
+        dist, v = self.forward(obs_flat)
+        return dist.log_prob(actions), dist.entropy(), v
+
+    def predict_values(self, obs_flat: torch.Tensor):
+        x = self._forward_features(obs_flat)
+        return self.value_head(x).squeeze(-1)
+
+
+class CNNPolicyOnly(nn.Module):
+    """CNN-based policy-only network (no value head) for REINFORCE."""
+
+    def __init__(
+        self,
+        obs_shape,
+        action_dim: int,
+        hidden=(256,),
+        activation: "str | type[nn.Module] | nn.Module" = nn.ReLU,
+        in_channels: int | None = None,
+        channels=(32, 64, 64),
+        kernel_sizes=(8, 4, 3),
+        strides=(4, 2, 1),
+    ):
+        super().__init__()
+        self.reshape = _ReshapeFlatToImage(obs_shape)
+        H, W, C = self.reshape.hwc
+        C_in = in_channels if in_channels is not None else C
+
+        self.cnn = NatureCNN(C_in, channels=channels, kernel_sizes=kernel_sizes, strides=strides, activation=activation)
+        with torch.no_grad():
+            feat = self.cnn(self.reshape(torch.zeros(1, H, W, C)))
+            feat_dim = feat.shape[1]
+        self.backbone = mlp(feat_dim, hidden, act=activation) if hidden and len(hidden) > 0 else nn.Identity()
+        last_dim = hidden[-1] if hidden and len(hidden) > 0 else feat_dim
+        self.policy_head = nn.Linear(last_dim, action_dim)
+
+        # Init
+        for m in self.backbone.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.orthogonal_(m.weight, gain=math.sqrt(2))
+                nn.init.constant_(m.bias, 0.0)
+        nn.init.orthogonal_(self.policy_head.weight, gain=0.01)
+        nn.init.constant_(self.policy_head.bias, 0.0)
+
+    def _forward_features(self, obs_flat: torch.Tensor):
+        x = self.reshape(obs_flat)
+        x = self.cnn(x)
+        x = self.backbone(x)
+        return x
+
+    def forward(self, obs_flat: torch.Tensor):
+        x = self._forward_features(obs_flat)
+        logits = self.policy_head(x)
+        dist = Categorical(logits=logits)
+        return dist, None
+
+    @torch.inference_mode()
+    def act(self, obs_flat: torch.Tensor, deterministic=False):
+        dist, _ = self.forward(obs_flat)
+        a = dist.sample() if not deterministic else dist.mode
+        return a, dist.log_prob(a), torch.zeros_like(a, dtype=torch.float32)
+
+    def evaluate_actions(self, obs_flat: torch.Tensor, actions: torch.Tensor):
+        dist, _ = self.forward(obs_flat)
+        return dist.log_prob(actions), dist.entropy(), torch.zeros(obs_flat.shape[0], device=obs_flat.device)
+
+    def predict_values(self, obs_flat: torch.Tensor):
+        return torch.zeros(obs_flat.shape[0], device=obs_flat.device)
 

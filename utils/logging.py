@@ -243,9 +243,10 @@ def capture_all_output(config=None, log_dir: str = "logs", max_log_files: int = 
             print("This goes to both console and log file")
             # ... run training ...
     """
-    # Set up log manager if not already done
-    if _log_manager is None:
-        setup_logging(log_dir, max_log_files)
+    # Set up log manager if not already done, or if target dir changed
+    target_dir = Path(log_dir)
+    if _log_manager is None or getattr(_log_manager, 'log_dir', None) != target_dir:
+        setup_logging(str(target_dir), max_log_files)
     
     # Create log file
     log_file = _log_manager.create_log_file(config)

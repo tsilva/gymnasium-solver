@@ -69,8 +69,11 @@ class Config:
     # Activation function for MLP backbones: one of
     # ['tanh','relu','leaky_relu','elu','selu','gelu','silu','swish','identity']
     activation: str = "tanh"
-    # Optional policy kwargs string (legacy compatibility or advanced wiring)
-    policy_kwargs: Optional[str] = None
+    # Policy selection and kwargs
+    # policy can be 'MlpPolicy' or 'CnnPolicy'
+    policy: str = 'MlpPolicy'
+    # Optional policy kwargs (dict). When using environment YAML, this can be a mapping.
+    policy_kwargs: Optional[Dict[str, Any]] = None
 
     # ===== Optimization (optional) =====
     # Base learning rate for optimizer (used unless 'learning_rate' override/schedule is provided)
@@ -141,8 +144,6 @@ class Config:
     # ===== Legacy compatibility (do not rely on these directly) =====
     # RL Zoo compatibility flag mapped to normalize_obs/reward
     normalize: Optional[bool] = None
-    # RL Zoo policy type placeholder (unused by current implementation)
-    policy: str = 'MlpPolicy'
 
     @classmethod
     def load_from_yaml(cls, config_id: str, algo_id: str = None, config_dir: str = "config/environments") -> 'Config':
@@ -405,6 +406,12 @@ class Config:
         # while keeping policy_lr as the optimizer's initial value
         if self.learning_rate is not None and self.policy_lr is None:
             self.policy_lr = self.learning_rate
+        # Normalize policy name capitalization
+        if isinstance(self.policy, str):
+            self.policy = self.policy.strip()
+        # Ensure policy_kwargs is a dict
+        if self.policy_kwargs is None:
+            self.policy_kwargs = {}
         
     def rollout_collector_hyperparams(self) -> Dict[str, Any]:
         return {
@@ -483,6 +490,9 @@ class Config:
             )
         if isinstance(self.devices, str) and self.devices != "auto":
             raise ValueError("devices may be an int, 'auto', or None")
+        # Policy
+        if isinstance(self.policy, str) and self.policy.lower() not in {"mlppolicy", "cnnpolicy"}:
+            raise ValueError("policy must be 'MlpPolicy' or 'CnnPolicy'")
 
 def load_config(config_id: str, algo_id: str = None, config_dir: str = "config/environments") -> Config:
     """Convenience function to load configuration."""

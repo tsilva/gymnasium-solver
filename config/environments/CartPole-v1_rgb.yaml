@@ -1,0 +1,31 @@
+# CartPole-v1 from RGB pixels using CNN policy
+
+__CartPole-v1_rgb_base:
+  inherits: __CartPole-v1
+  # Use environment wrapper to expose pixels as observations
+  env_wrappers:
+    - id: PixelObservationWrapper
+      pixels_only: true
+  # Image-specific preprocessing
+  frame_stack: 4
+  # Select CNN policy and configure a small CNN
+  policy: CnnPolicy
+  policy_kwargs:
+    channels: [32, 64, 64]
+    kernel_sizes: [8, 4, 3]
+    strides: [4, 2, 1]
+    activation: relu
+
+CartPole-v1_rgb_ppo:
+  inherits: __CartPole-v1_rgb_base
+  algo_id: ppo
+  n_envs: 8
+  n_timesteps: 5e5
+  n_steps: 64
+  batch_size: 512
+  gae_lambda: 0.95
+  gamma: 0.99
+  ent_coef: 0.001
+  n_epochs: 4
+  learning_rate: lin_2.5e-4
+  clip_range: lin_0.2

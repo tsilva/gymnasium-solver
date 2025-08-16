@@ -1,5 +1,3 @@
-- Get rid of these kinds of getattr usages: getattr(self.config, "eval_freq_epochs", None), config attributes are always defined, you can just use self.config.eval_freq_epochs
-
 - FEAT: create debugger stremio app that given a run id, allows running with a chosen checkpont step by step and see frames and computed values, eg: action distribution, reward, predicted value, etc. The way this works is that the full rollout is collected with frames and then we can run through them, this so that we can see all values namely monte carlo returns, GAE estimates, etc.
 
 - FEAT: Whenever a better checkpoint is found, make sure we run one extra episode and now record it.
@@ -7,6 +5,10 @@
 - FEAT: we currently only support MLPPolicy, add support for CNN Policy, softcode config to pick the right one, make policy kwargs be propagated from config; add support for training CartPoel'v1 from rgb pixels with that CNNPolicy, to do so, you'll need to create a new hyperparam file callec CartPole-v1_rgb.py
 
 - FEAT: Add support for uploading run to hugging face, upload it using publish.py script. Uploading should receive the run id as an argument, defaulting to the latest run, and upload all relevant files (config, model, metrics, etc). This will allow us to share our runs with the community and get feedback on our work. Upload videos as previews when available as well.
+
+- FEAT: Add support for specifying extra reward metrics for each environment, then make the reward shaper assign value for each of those rewards
+
+- FEAT: add support for creating publishable video for youtube
 
 - Generalized scheduling for metrics, make those be logged
 - FEAT: track learning hyperparams in wandb (train/hyperparams)
@@ -42,6 +44,8 @@
 MaxAndSkipEnv
 - BUG: video step is still not alligned
 - BUG: step 100 = reward 99
+- FEAT: add vizdoom support
+- FEAT: add stable-retro support
 - Adjust eval policy for atari
 	•	Normalize each byte (e.g., to [0,1]) and consider embedding bits (treat bytes as 8 bits).
 	•	Try longer training and more seeds; RAM setups often need more steps to stabilize.

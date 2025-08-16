@@ -4,8 +4,7 @@
 
 - FEAT: Whenever a better checkpoint is found, make sure we run one extra episode and now record it.
 
-- FEAT: add support CNN Policy, softcode config to pick the right one, make policy kwargs be propagated from config
-- FEAT: Train on CartPole-v1 with rgb
+- FEAT: we currently only support MLPPolicy, add support for CNN Policy, softcode config to pick the right one, make policy kwargs be propagated from config; add support for training CartPoel'v1 from rgb pixels with that CNNPolicy, to do so, you'll need to create a new hyperparam file callec CartPole-v1_rgb.py
 
 - FEAT: Add support for uploading run to hugging face, upload it using publish.py script. Uploading should receive the run id as an argument, defaulting to the latest run, and upload all relevant files (config, model, metrics, etc). This will allow us to share our runs with the community and get feedback on our work. Upload videos as previews when available as well.
 

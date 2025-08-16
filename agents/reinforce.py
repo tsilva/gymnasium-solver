@@ -14,7 +14,7 @@ class REINFORCE(BaseAgent):
             input_dim,
             output_dim,
             hidden=self.config.hidden_dims,
-            activation=getattr(self.config, "activation", "tanh"),
+            activation=self.config.activation,
         )
     
     def rollout_collector_hyperparams(self):

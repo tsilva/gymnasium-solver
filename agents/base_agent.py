@@ -166,7 +166,7 @@ class BaseAgent(pl.LightningModule):
 
         # Use a shared generator for reproducible shuffles across the app
         from utils.random_utils import get_global_torch_generator
-        generator = get_global_torch_generator(getattr(self.config, "seed", None))
+        generator = get_global_torch_generator(self.config.seed)
 
         # Build efficient index-collate dataloader backed by MultiPassRandomSampler
         # Use a getter to ensure fresh trajectories are used by the collate function
@@ -304,7 +304,7 @@ class BaseAgent(pl.LightningModule):
 
         # Log metrics
         # Optionally suppress verbose per-env eval diagnostics in logs
-        if not getattr(self.config, "log_per_env_eval_metrics", False):
+        if not self.config.log_per_env_eval_metrics:
             eval_metrics = {k: v for k, v in eval_metrics.items() if not k.startswith("per_env/")}
 
         self.log_metrics({"epoch": int(self.current_epoch), "epoch_fps": epoch_fps, **eval_metrics}, prefix="eval")
@@ -322,10 +322,10 @@ class BaseAgent(pl.LightningModule):
         - If E == eval_warmup_epochs: run (first eval after warmup)
         - Otherwise: run when (E - eval_warmup_epochs) % eval_freq_epochs == 0
         """
-        freq = getattr(self.config, "eval_freq_epochs", None)
+        freq = self.config.eval_freq_epochs
         if freq is None:
             return False
-        warmup = int(getattr(self.config, "eval_warmup_epochs", 0) or 0)
+        warmup = int(self.config.eval_warmup_epochs or 0)
         E = int(epoch_idx) + 1
         if warmup <= 0:
             # First epoch (E==1) then multiples of freq
@@ -442,7 +442,7 @@ class BaseAgent(pl.LightningModule):
                 mode="max",
                 save_last=True,
                 save_threshold_reached=True,
-                resume=getattr(self.config, "resume", False),
+                resume=self.config.resume,
             )
 
         # Create algorithm-specific metric rules from metrics config
@@ -480,8 +480,8 @@ class BaseAgent(pl.LightningModule):
 
     def _get_validation_controls(self):
         # Keep Lightning validation cadence driven by eval_freq_epochs; warmup is enforced in hooks.
-        eval_freq = getattr(self.config, "eval_freq_epochs", None)
-        warmup = getattr(self.config, "eval_warmup_epochs", 0) or 0
+        eval_freq = self.config.eval_freq_epochs
+        warmup = self.config.eval_warmup_epochs or 0
         # If warmup is active, request validation every epoch and gate in hooks
         eff_freq = 1 if (eval_freq is not None and warmup > 0) else eval_freq
         return self._compute_validation_controls(eff_freq)
@@ -511,8 +511,8 @@ class BaseAgent(pl.LightningModule):
             callbacks=callbacks,
             validation_controls=validation_controls,
             max_epochs=self.config.max_epochs,
-            accelerator=getattr(self.config, "accelerator", "cpu"),
-            devices=getattr(self.config, "devices", None),
+            accelerator=self.config.accelerator,
+            devices=self.config.devices,
         )
 
     def _backpropagate_and_step(self, losses):

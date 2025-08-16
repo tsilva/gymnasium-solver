@@ -98,6 +98,64 @@ class VecInfoWrapper(VecEnvWrapper):
             pass
             
         return None
+
+    def get_reward_range(self):
+        """Return the reward_range from the underlying environment if available.
+
+        Attempts the following, in order:
+        - Direct attribute on first base env (DummyVecEnv path)
+        - get_attr('reward_range') on the VecEnv (SubprocVecEnv path)
+        - Fallback to Gymnasium registry by resolving spec and instantiating a temp env
+        """
+        # Try reading from the first underlying base env
+        try:
+            base = self._first_base_env()
+            if base is not None and hasattr(base, "reward_range"):
+                rr = getattr(base, "reward_range")
+                # ensure it is a tuple-like of length 2
+                if isinstance(rr, (tuple, list)) and len(rr) == 2:
+                    return tuple(rr)
+        except Exception:
+            pass
+
+        # Try vec env API (works for SubprocVecEnv)
+        try:
+            rr = self.venv.get_attr("reward_range", indices=[0])[0]
+            if isinstance(rr, (tuple, list)) and len(rr) == 2:
+                return tuple(rr)
+        except Exception:
+            pass
+
+        # Last resort: resolve via env spec and a temporary instance
+        try:
+            base = self._first_base_env()
+            env_id = None
+            if base is not None:
+                env_id = getattr(base, "id", None) or getattr(getattr(base, "spec", None), "id", None)
+            if env_id:
+                import gymnasium as gym
+                if env_id.startswith("ALE/"):
+                    try:
+                        import ale_py
+                        gym.register_envs(ale_py)
+                    except Exception:
+                        pass
+                # Instantiate a lightweight temp env to read reward_range
+                try:
+                    tmp_env = gym.make(env_id)
+                    rr = getattr(tmp_env, "reward_range", None)
+                    try:
+                        tmp_env.close()
+                    except Exception:
+                        pass
+                    if isinstance(rr, (tuple, list)) and len(rr) == 2:
+                        return tuple(rr)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        return None
     
     def get_input_dim(self):
         """

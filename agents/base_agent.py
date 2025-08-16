@@ -364,6 +364,43 @@ class BaseAgent(pl.LightningModule):
         # Ask for confirmation before any heavy setup (keep prior prints grouped)
         # Before prompting, suggest better defaults if we detect mismatches
         self._maybe_warn_mlp_on_rgb_obs()
+        # Show environment details for transparency
+        try:
+            print("\n=== Environment Details ===")
+            # Observation space and action space from vectorized env
+            obs_space = getattr(self.train_env, "observation_space", None)
+            act_space = getattr(self.train_env, "action_space", None)
+            if obs_space is not None:
+                print(f"Observation space: {obs_space}")
+            if act_space is not None:
+                print(f"Action space: {act_space}")
+
+            # Reward range and threshold when available
+            reward_range = None
+            if hasattr(self.train_env, "get_reward_range"):
+                try:
+                    reward_range = self.train_env.get_reward_range()
+                except Exception:
+                    reward_range = None
+            if reward_range is None and hasattr(getattr(self.train_env, "envs", [None])[0], "reward_range"):
+                rr = getattr(self.train_env.envs[0], "reward_range", None)
+                if isinstance(rr, (tuple, list)) and len(rr) == 2:
+                    reward_range = tuple(rr)
+            if reward_range is not None:
+                print(f"Reward range: {reward_range}")
+
+            reward_threshold = None
+            if hasattr(self.train_env, "get_reward_threshold"):
+                try:
+                    reward_threshold = self.train_env.get_reward_threshold()
+                except Exception:
+                    reward_threshold = None
+            if reward_threshold is not None:
+                print(f"Reward threshold: {reward_threshold}")
+            print("=" * 30)
+        except Exception:
+            # Never block training if introspection fails
+            pass
         if not self._confirm_proceed():
             print("Training aborted by user before start.")
             return

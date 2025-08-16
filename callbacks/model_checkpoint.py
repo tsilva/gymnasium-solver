@@ -77,9 +77,50 @@ class ModelCheckpointCallback(pl.Callback):
         checkpoint_path.mkdir(parents=True, exist_ok=True)
         return checkpoint_path
     
-    def _save_checkpoint(self, agent, checkpoint_path: Path, is_best: bool = False, is_last: bool = False, is_threshold: bool = False):
-        """Save a checkpoint with all necessary information."""
+    def _save_checkpoint(self, agent, checkpoint_path: Path, is_best: bool = False, is_last: bool = False, is_threshold: bool = False, *, metrics: dict | None = None, current_eval_reward: float | None = None, threshold_value: float | None = None):
+        """Save a checkpoint with all necessary information, including metrics snapshot.
+
+        Args:
+            agent: LightningModule/Agent instance
+            checkpoint_path: destination file path
+            is_best: flag if this is best checkpoint
+            is_last: flag if this is last checkpoint
+            is_threshold: flag if threshold reached checkpoint
+            metrics: optional metrics dict (already serialized to JSON-serializable types)
+            current_eval_reward: optional explicit eval reward value to store
+            threshold_value: optional threshold used when saving
+        """
         from dataclasses import asdict
+        
+        # Helper to serialize metric values to plain Python types
+        def _to_py(val):
+            try:
+                import torch
+                import numpy as np
+                if isinstance(val, torch.Tensor):
+                    if val.ndim == 0:
+                        return val.item()
+                    return val.detach().cpu().tolist()
+                if isinstance(val, (np.floating, np.integer)):
+                    return val.item()
+            except Exception:
+                pass
+            # Plain numbers or strings pass through; others fallback to str
+            if isinstance(val, (int, float, bool)):
+                return val
+            return str(val)
+
+        def _serialize_metrics(m):
+            if m is None:
+                return None
+            try:
+                return {str(k): _to_py(v) for k, v in dict(m).items()}
+            except Exception:
+                # Best-effort fallback
+                try:
+                    return {str(k): str(v) for k, v in dict(m).items()}
+                except Exception:
+                    return None
 
         # Prepare checkpoint data
         checkpoint_data = {
@@ -90,10 +131,12 @@ class ModelCheckpointCallback(pl.Callback):
             'global_step': agent.global_step,
             'total_timesteps': getattr(agent, 'total_timesteps', 0),
             'best_eval_reward': getattr(agent, 'best_eval_reward', float('-inf')),
-            'current_eval_reward': None,  # Will be set by caller if available
+            'current_eval_reward': current_eval_reward,
             'is_best': is_best,
             'is_last': is_last,
             'is_threshold': is_threshold,
+            'threshold_value': threshold_value,
+            'metrics': _serialize_metrics(metrics),
             'rng_states': {
                 'torch': torch.get_rng_state(),
                 'torch_cuda': torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
@@ -135,16 +178,22 @@ class ModelCheckpointCallback(pl.Callback):
             epoch = pl_module.current_epoch
             step = pl_module.global_step
             timestamped_path = checkpoint_dir / f"epoch={epoch:02d}-step={step:04d}.ckpt"
-            self._save_checkpoint(pl_module, timestamped_path, is_best=True)
-            checkpoint_data = torch.load(timestamped_path)
-            checkpoint_data['current_eval_reward'] = current_metric_value
-            torch.save(checkpoint_data, timestamped_path)
+            self._save_checkpoint(
+                pl_module,
+                timestamped_path,
+                is_best=True,
+                metrics=logged_metrics,
+                current_eval_reward=current_metric_value,
+            )
 
             best_path = checkpoint_dir / "best_checkpoint.ckpt"
-            self.best_checkpoint_path = self._save_checkpoint(pl_module, best_path, is_best=True)
-            checkpoint_data = torch.load(best_path)
-            checkpoint_data['current_eval_reward'] = current_metric_value
-            torch.save(checkpoint_data, best_path)
+            self.best_checkpoint_path = self._save_checkpoint(
+                pl_module,
+                best_path,
+                is_best=True,
+                metrics=logged_metrics,
+                current_eval_reward=current_metric_value,
+            )
 
             print(f"New best model saved with {self.monitor}={current_metric_value:.4f}")
             print(f"  Timestamped: {timestamped_path}")
@@ -176,11 +225,14 @@ class ModelCheckpointCallback(pl.Callback):
             epoch = pl_module.current_epoch
             step = pl_module.global_step
             threshold_path = checkpoint_dir / f"threshold-epoch={epoch:02d}-step={step:04d}.ckpt"
-            self._save_checkpoint(pl_module, threshold_path, is_threshold=True)
-            checkpoint_data = torch.load(threshold_path)
-            checkpoint_data['current_eval_reward'] = current_metric_value
-            checkpoint_data['threshold_value'] = effective_threshold
-            torch.save(checkpoint_data, threshold_path)
+            self._save_checkpoint(
+                pl_module,
+                threshold_path,
+                is_threshold=True,
+                metrics=logged_metrics,
+                current_eval_reward=current_metric_value,
+                threshold_value=effective_threshold,
+            )
             self._threshold_checkpoint_saved = True
             print(f"Threshold reached! Saved model with {self.monitor}={current_metric_value:.4f} (threshold={effective_threshold}) at {threshold_path}")
             if not trainer.should_stop and getattr(pl_module.config, 'early_stop_on_eval_threshold', True):
@@ -276,8 +328,20 @@ class ModelCheckpointCallback(pl.Callback):
         if self.save_last:
             checkpoint_dir = self._get_checkpoint_dir(pl_module)
             last_path = checkpoint_dir / "last_checkpoint.ckpt"
+            # Capture whatever metrics are available at train epoch end
+            logged_metrics = getattr(trainer, 'logged_metrics', None)
+            cur_eval = None
+            try:
+                if isinstance(logged_metrics, dict) and self.monitor in logged_metrics:
+                    cur_eval = float(logged_metrics[self.monitor])
+            except Exception:
+                cur_eval = None
             self.last_checkpoint_path = self._save_checkpoint(
-                pl_module, last_path, is_last=True
+                pl_module,
+                last_path,
+                is_last=True,
+                metrics=logged_metrics,
+                current_eval_reward=cur_eval,
             )
     
     def on_fit_end(self, trainer, pl_module):

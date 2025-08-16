@@ -19,7 +19,8 @@ dependencies = [
     "pyyaml",
     "ruamel.yaml",
     "watchdog",
-    "setuptools<80"
+    "setuptools<80",
+    "huggingface_hub>=0.22.0"
 ]
 
 [tool.pytest.ini_options]

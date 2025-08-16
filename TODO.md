@@ -1,3 +1,6 @@
+- if training ends by max timesteps last eval is not being recorded
+- add support for resuming training from a checkpoint
+- add min/max range to wandb plots
 - FEAT: gradio app that allows running a given run id and see the frames, actions, rewards, etc. This will allow us to debug runs and see how the agent behaves in different scenarios. This feature should be implemented in a file called inspect.py. You can call it by providing the run id as an argument, defaulting to the latest run. The app should allow selecting the checkpoint step to inspect and should display the frames, actions, rewards, etc. in a user-friendly way. By default use the best checkpoint, if not available use the latest.
 - FEAT: Whenever we record a checkpoint we need to store all metrics at that point.
 - FEAT: call challenges instead of environments

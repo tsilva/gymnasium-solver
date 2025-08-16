@@ -8,8 +8,9 @@ Behavior:
     - If --run-id is omitted, the latest run (runs/latest-run) is used.
     - If --repo is omitted, we publish to a repo named after the run's config id
         under your user/org namespace: <owner>/<config_id>.
-    - Checkpoints and videos are uploaded under artifacts/, and up to 3 videos are attached
-        at the repo root (preview_*.mp4) and embedded in the README for live preview on the Hub.
+    - Checkpoints and logs are uploaded under artifacts/. Only the best video
+        (best_checkpoint.mp4) is included under artifacts/videos and attached at the
+        repo root as preview.mp4, which is embedded in the README for live preview on the Hub.
 
 Authentication:
     - Ensure you are logged in: from a shell, run `huggingface-cli login` once, or set HF_TOKEN env var.
@@ -151,11 +152,34 @@ def _find_videos_for_run(run_dir: Path) -> List[Path]:
     seen = set()
     uniq: List[Path] = []
     for v in videos:
-        rp = v.resolve()
+        try:
+            rp = v.resolve()
+        except Exception:
+            rp = v
         if rp not in seen:
-            uniq.append(rp)
+            uniq.append(Path(rp))
             seen.add(rp)
     return uniq
+
+
+def _find_best_video_for_run(run_dir: Path) -> Optional[Path]:
+    """Locate best_checkpoint.mp4 for the run, preferring the local run directory.
+
+    Returns the path if found, else None.
+    """
+    # Prefer the canonical location under the run directory first
+    canonical = run_dir / "videos" / "eval" / "episodes" / "best_checkpoint.mp4"
+    if canonical.exists():
+        return canonical.resolve()
+
+    # Otherwise scan known locations and pick the first matching filename
+    for v in _find_videos_for_run(run_dir):
+        if v.name == "best_checkpoint.mp4":
+            try:
+                return v.resolve()
+            except Exception:
+                return v
+    return None
 
 
 def extract_run_metadata(run_dir: Path) -> dict:
@@ -186,8 +210,8 @@ def extract_run_metadata(run_dir: Path) -> dict:
             if files:
                 ckpt_file = files[0]
 
-    # Collect video previews (support fallback to W&B file mirrors)
-    video_files: List[Path] = _find_videos_for_run(run_dir)
+    # Find the best video (best_checkpoint.mp4) if available
+    best_video: Optional[Path] = _find_best_video_for_run(run_dir)
 
     logs_dir = run_dir / "logs"
     log_files: List[Path] = []
@@ -210,7 +234,7 @@ def extract_run_metadata(run_dir: Path) -> dict:
         "config": cfg,
     "config_id": config_id,
         "representative_ckpt": str(ckpt_file) if ckpt_file else None,
-        "videos": [str(v) for v in video_files],
+    "best_video": str(best_video) if best_video else None,
         "logs": [str(l) for l in log_files],
         "metrics": metrics,
     }
@@ -297,16 +321,13 @@ def build_model_card(meta: dict, run_dir: Path) -> str:
     lines.append("- Config: `artifacts/configs/config.json`")
     lines.append("- Checkpoints: `artifacts/checkpoints/*.ckpt`")
     lines.append("- Logs: `artifacts/logs/*.log`")
-    if meta.get("videos"):
-        lines.append("- Videos: `artifacts/videos/**/*.mp4` (also previewed below)")
+    if meta.get("best_video"):
+        lines.append("- Video: `artifacts/videos/**/best_checkpoint.mp4` (also previewed below)")
     lines.append("")
-    if meta.get("videos"):
-        lines.append("## Previews")
-        n = min(3, len(meta["videos"]))
-        if n:
-            for i in range(n):
-                lines.append(f'<video controls src="preview_{i+1}.mp4" width="480"></video>')
-            lines.append("")
+    if meta.get("best_video"):
+        lines.append("## Preview")
+        lines.append('<video controls src="preview.mp4" width="480"></video>')
+        lines.append("")
 
     if cfg:
         lines.append("## Config (excerpt)")
@@ -383,7 +404,9 @@ def publish_run(
             "configs/**",
             "checkpoints/**",
             "logs/**",
-            "videos/**",
+            # Only include the best checkpoint video
+            "videos/**/best_checkpoint.mp4",
+            "videos/best_checkpoint.mp4",
             "hyperparam_control/**",
             "*.md",
         ],
@@ -391,59 +414,42 @@ def publish_run(
     )
 
     # Also attach a few mp4s at repo root for preview (from whatever sources we detected)
-    videos = [Path(p) for p in meta.get("videos", [])]
-    if videos:
-        for i, vpath in enumerate(videos[:3]):  # Limit to first 3 previews
-            try:
-                upload_file(
-                    path_or_fileobj=str(vpath),
-                    path_in_repo=f"preview_{i+1}.mp4",
-                    repo_id=final_repo_id,
-                    repo_type="model",
-                )
-            except Exception:
-                # Do not fail publishing if a preview upload fails
-                pass
-
-    # Explicitly upload any videos that live outside the run_dir (e.g., W&B mirrors)
-    # into artifacts/videos/_external to ensure they are included.
-    external_videos = []
-    try:
-        run_dir_resolved = run_dir.resolve()
-        for v in videos:
-            try:
-                if not Path(v).resolve().is_relative_to(run_dir_resolved):  # Python 3.9+: emulate
-                    # emulate is_relative_to for 3.9 compatibility
-                    rel_ok = True
-                    try:
-                        Path(v).resolve().relative_to(run_dir_resolved)
-                    except Exception:
-                        rel_ok = False
-                    if not rel_ok:
-                        external_videos.append(Path(v))
-            except Exception:
-                # Conservative: if we can't determine, treat as external
-                external_videos.append(Path(v))
-    except Exception:
-        pass
-    # Deduplicate
-    ext_seen = set()
-    ext_videos = []
-    for v in external_videos:
-        rp = str(v.resolve())
-        if rp not in ext_seen:
-            ext_videos.append(v)
-            ext_seen.add(rp)
-    for v in ext_videos:
+    best_video = meta.get("best_video")
+    if best_video:
         try:
             upload_file(
-                path_or_fileobj=str(v),
-                path_in_repo=f"artifacts/videos/_external/{v.name}",
+                path_or_fileobj=str(best_video),
+                path_in_repo="preview.mp4",
                 repo_id=final_repo_id,
                 repo_type="model",
             )
         except Exception:
+            # Do not fail publishing if a preview upload fails
             pass
+
+    # If the best video lives outside the run_dir (e.g., W&B mirrors),
+    # upload it explicitly under artifacts so it is preserved.
+    try:
+        if best_video:
+            run_dir_resolved = run_dir.resolve()
+            vpath = Path(best_video)
+            rel_ok = True
+            try:
+                vpath.resolve().relative_to(run_dir_resolved)
+            except Exception:
+                rel_ok = False
+            if not rel_ok:
+                try:
+                    upload_file(
+                        path_or_fileobj=str(vpath),
+                        path_in_repo=f"artifacts/videos/_external/{vpath.name}",
+                        repo_id=final_repo_id,
+                        repo_type="model",
+                    )
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
     # Save a small run-info.json
     run_info = {

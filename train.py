@@ -1,6 +1,12 @@
 import argparse
+from typing import Optional
 
 from utils.config import load_config
+
+try:
+    import torch  # For device availability checks when accelerator is 'auto'
+except Exception:  # pragma: no cover - training script fallback
+    torch = None  # type: ignore
 
 
 def main():
@@ -19,6 +25,26 @@ def main():
     
     # Group session header and config/agent details neatly once
     print("=== Training Session Started ===")
+
+    # Warn early if using CNN policy on CPU (can be very slow)
+    def _is_cpu_training(cfg) -> bool:
+        acc: Optional[str] = getattr(cfg, "accelerator", "cpu")
+        if acc == "cpu":
+            return True
+        if acc in ("auto", None):
+            # If no GPU/MPS is available, this will end up on CPU
+            try:
+                has_cuda = bool(torch and torch.cuda.is_available())
+                has_mps = bool(torch and getattr(torch.backends, "mps", None) and torch.backends.mps.is_available())
+                return not (has_cuda or has_mps)
+            except Exception:
+                return True
+        return False
+
+    pol = getattr(config, "policy", "")
+    if isinstance(pol, str) and pol.lower() == "cnnpolicy" and _is_cpu_training(config):
+        print("[WARN] CnnPolicy selected but training device is CPU. CNN training on CPU can be very slow. "
+              "Consider setting accelerator='gpu' (or 'auto') and devices='auto' if a GPU is available.")
     
     from stable_baselines3.common.utils import set_random_seed
     set_random_seed(config.seed)

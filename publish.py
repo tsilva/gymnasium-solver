@@ -25,7 +25,7 @@ import argparse
 import json
 import os
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Tuple
 import importlib
 import yaml
 
@@ -38,23 +38,43 @@ def resolve_run_dir(run_id: Optional[str]) -> Path:
         raise FileNotFoundError(f"Runs directory not found at {RUNS_DIR.resolve()}")
 
     if not run_id:
-        # Use latest-run symlink/dir
+        # Prefer the most recently modified real run directory with artifacts,
+        # but keep supporting the latest-run symlink if it points to a valid dir.
         latest = RUNS_DIR / "latest-run"
-        if not latest.exists():
-            raise FileNotFoundError("No --run-id provided and 'runs/latest-run' not found")
-        # If symlink, resolve target directory under runs/
-        try:
-            target = latest.resolve()
-        except Exception:
-            target = latest
-        run_dir = target
-        # In some setups, latest-run is a relative symlink (e.g., to <id>)
-        if not run_dir.exists():
-            # Fallback: iterate for most recent directory
-            candidates = [p for p in RUNS_DIR.iterdir() if p.is_dir() and p.name != "latest-run"]
-            if not candidates:
-                raise FileNotFoundError("No runs found in runs/")
-            run_dir = max(candidates, key=lambda p: p.stat().st_mtime)
+        latest_target: Optional[Path] = None
+        if latest.exists():
+            try:
+                latest_target = latest.resolve()
+            except Exception:
+                latest_target = latest
+
+        # Collect candidate run dirs (exclude the latest-run entry itself)
+        candidates = [p for p in RUNS_DIR.iterdir() if p.is_dir() and p.name != "latest-run"]
+        if not candidates and not latest_target:
+            raise FileNotFoundError("No runs found in runs/")
+
+        def has_artifacts(p: Path) -> Tuple[int, bool]:
+            """Score by mtime and presence of interesting files (videos or checkpoints)."""
+            mtime = int(p.stat().st_mtime)
+            vids = any(p.glob("videos/**/*.mp4"))
+            ckpts = any(p.glob("checkpoints/*.ckpt"))
+            return (mtime, vids or ckpts)
+
+        # Choose best candidate: prefer one with artifacts; tie-breaker by mtime
+        best = None
+        if candidates:
+            best = max(candidates, key=lambda p: (has_artifacts(p)[1], has_artifacts(p)[0]))
+
+        run_dir = None
+        # If latest-target exists and has artifacts, prefer it; otherwise use best
+        if latest_target and latest_target.exists():
+            lt_score = has_artifacts(latest_target)
+            if best is None or lt_score >= has_artifacts(best):
+                run_dir = latest_target
+        if run_dir is None:
+            run_dir = best or latest_target  # fallback to whatever exists
+        if run_dir is None:
+            raise FileNotFoundError("Unable to resolve a valid run directory")
     else:
         run_dir = RUNS_DIR / run_id
         if not run_dir.exists():
@@ -97,6 +117,47 @@ def _detect_config_id_from_run(run_dir: Path, cfg: dict) -> Optional[str]:
         return guessed or f"{env_id}_{algo_id}"
 
 
+def _find_videos_for_run(run_dir: Path) -> List[Path]:
+    """Find video files for the given run.
+
+    Primary location: runs/<id>/videos/**/*.mp4
+    Fallback: wandb/*/files/runs/<id>/videos/**/*.mp4
+    """
+    videos: List[Path] = []
+    local_videos_root = run_dir / "videos"
+    if local_videos_root.exists():
+        videos = sorted(local_videos_root.rglob("*.mp4"))
+        if videos:
+            return videos
+
+    # Fallback: try within wandb run files mirrors
+    try:
+        repo_root = Path(__file__).parent
+        wandb_root = repo_root / "wandb"
+        if wandb_root.exists():
+            run_id = run_dir.name
+            pattern = f"run-*/files/runs/{run_id}/videos"
+            for path in sorted(wandb_root.glob(pattern)):
+                if path.is_dir():
+                    vids = sorted(Path(path).rglob("*.mp4"))
+                    videos.extend(vids)
+            # Also check wandb/latest-run link if present
+            latest = wandb_root / "latest-run" / "files" / "runs" / run_id / "videos"
+            if latest.exists():
+                videos.extend(sorted(latest.rglob("*.mp4")))
+    except Exception:
+        pass
+    # Return unique, ordered
+    seen = set()
+    uniq: List[Path] = []
+    for v in videos:
+        rp = v.resolve()
+        if rp not in seen:
+            uniq.append(rp)
+            seen.add(rp)
+    return uniq
+
+
 def extract_run_metadata(run_dir: Path) -> dict:
     config_path = run_dir / "configs" / "config.json"
     cfg = {}
@@ -125,11 +186,8 @@ def extract_run_metadata(run_dir: Path) -> dict:
             if files:
                 ckpt_file = files[0]
 
-    # Collect video previews
-    videos_dir = run_dir / "videos"
-    video_files: List[Path] = []
-    if videos_dir.exists():
-        video_files = sorted(videos_dir.rglob("*.mp4"))
+    # Collect video previews (support fallback to W&B file mirrors)
+    video_files: List[Path] = _find_videos_for_run(run_dir)
 
     logs_dir = run_dir / "logs"
     log_files: List[Path] = []
@@ -332,17 +390,60 @@ def publish_run(
         ignore_patterns=["**/__pycache__/**"],
     )
 
-    if (run_dir / "videos").exists():
-
-        # Also attach a few mp4s at repo root for preview
-        videos = sorted((run_dir / "videos").rglob("*.mp4"))
+    # Also attach a few mp4s at repo root for preview (from whatever sources we detected)
+    videos = [Path(p) for p in meta.get("videos", [])]
+    if videos:
         for i, vpath in enumerate(videos[:3]):  # Limit to first 3 previews
+            try:
+                upload_file(
+                    path_or_fileobj=str(vpath),
+                    path_in_repo=f"preview_{i+1}.mp4",
+                    repo_id=final_repo_id,
+                    repo_type="model",
+                )
+            except Exception:
+                # Do not fail publishing if a preview upload fails
+                pass
+
+    # Explicitly upload any videos that live outside the run_dir (e.g., W&B mirrors)
+    # into artifacts/videos/_external to ensure they are included.
+    external_videos = []
+    try:
+        run_dir_resolved = run_dir.resolve()
+        for v in videos:
+            try:
+                if not Path(v).resolve().is_relative_to(run_dir_resolved):  # Python 3.9+: emulate
+                    # emulate is_relative_to for 3.9 compatibility
+                    rel_ok = True
+                    try:
+                        Path(v).resolve().relative_to(run_dir_resolved)
+                    except Exception:
+                        rel_ok = False
+                    if not rel_ok:
+                        external_videos.append(Path(v))
+            except Exception:
+                # Conservative: if we can't determine, treat as external
+                external_videos.append(Path(v))
+    except Exception:
+        pass
+    # Deduplicate
+    ext_seen = set()
+    ext_videos = []
+    for v in external_videos:
+        rp = str(v.resolve())
+        if rp not in ext_seen:
+            ext_videos.append(v)
+            ext_seen.add(rp)
+    for v in ext_videos:
+        try:
             upload_file(
-                path_or_fileobj=str(vpath),
-                path_in_repo=f"preview_{i+1}.mp4",
+                path_or_fileobj=str(v),
+                path_in_repo=f"artifacts/videos/_external/{v.name}",
                 repo_id=final_repo_id,
                 repo_type="model",
             )
+        except Exception:
+            pass
 
     # Save a small run-info.json
     run_info = {

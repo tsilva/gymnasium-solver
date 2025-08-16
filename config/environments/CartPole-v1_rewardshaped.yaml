@@ -1,0 +1,27 @@
+# CartPole standard challenge configurations
+
+__CartPole-v1_rewardshaping:
+  inherits: __CartPole-v1
+  env_id: CartPole-v1
+  eval_freq_epochs: 100        # evaluate every 5 training epochs
+  eval_episodes: 10           # run 10 episodes per evaluation
+  eval_deterministic: true    # use greedy actions during evaluation
+  env_wrappers:
+    - id: CartPoleV1_RewardShaper
+      angle_reward_scale: 1.0
+      position_reward_scpale: 0.25
+      clip_potential: true
+
+CartPole-v1_rewardshaping_ppo:
+  inherits: __CartPole-v1_rewardshaping
+  algo_id: ppo
+  n_envs: 8
+  n_timesteps: 1e5
+  n_steps: 64
+  batch_size: 256
+  gae_lambda: 0.9
+  gamma: 0.99
+  ent_coef: 0.0
+  n_epochs: 10
+  learning_rate: lin_0.001
+  clip_range: lin_0.2

@@ -348,6 +348,8 @@ def build_model_card(meta: dict, run_dir: Path) -> str:
     front_lines.append("---")
     front_lines.append("license: mit")
     front_lines.append("library_name: pytorch")
+    # Make the task explicit so the Hub enables the RL preview panel
+    front_lines.append("pipeline_tag: reinforcement-learning")
     # optional language for better discoverability
     front_lines.append("language:")
     front_lines.append("  - en")
@@ -391,7 +393,10 @@ def build_model_card(meta: dict, run_dir: Path) -> str:
     lines.append("")
     if meta.get("best_video"):
         lines.append("## Preview")
+        # Prefer preview.mp4 but also provide a fallback link to replay.mp4
         lines.append('<video controls src="preview.mp4" width="480"></video>')
+        lines.append("")
+        lines.append("If the video above doesn't load, try the fallback: [replay.mp4](replay.mp4)")
         lines.append("")
 
     if cfg:
@@ -488,6 +493,18 @@ def publish_run(
                 repo_id=final_repo_id,
                 repo_type="model",
             )
+            # Upload under additional common names recognized by the Hub UI
+            # (SB3 and others typically use replay.mp4). Keep best-effort.
+            for alt_name in ("replay.mp4", "video-preview.mp4"):
+                try:
+                    upload_file(
+                        path_or_fileobj=str(best_video),
+                        path_in_repo=alt_name,
+                        repo_id=final_repo_id,
+                        repo_type="model",
+                    )
+                except Exception:
+                    pass
         except Exception:
             # Do not fail publishing if a preview upload fails
             pass

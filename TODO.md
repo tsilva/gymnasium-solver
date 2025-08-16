@@ -1,5 +1,3 @@
-
-- FEAT: show warning when training starts for an rgb observation space with MLPPolicy, suggesting to use CNNPolicy instead. show this when training starts when the information is show along with start training user prompt.
 - FEAT: show warning when training starts when config has cnnpolicy but we're using the cpu device for training, . show this when training starts when the information is show along with start training user prompt.
 
 - FEAT: when the training starts, when we show all details before starting, we should also be showing all environment details we know about, namely observation space, action space, reward range, reward threshold, etc.
@@ -7,9 +5,6 @@
 - FEAT: Add support for uploading run to hugging face, upload it using publish.py script. Uploading should receive the run id as an argument, defaulting to the latest run, and upload all relevant files (config, model, metrics, etc). This will allow us to share our runs with the community and get feedback on our work. Upload videos as previews when available as well.
 - FEAT: Whenever a better checkpoint is found, make sure we run one extra episode and now record it.
 - FEAT: Whenever we record a checkpoint we need to store all metrics at that point.
-
-- FEAT: we currently only support MLPPolicy, add support for CNN Policy, softcode config to pick the right one, make policy kwargs be propagated from config; add support for training CartPoel'v1 from rgb pixels with that CNNPolicy, to do so, you'll need to create a new hyperparam file callec CartPole-v1_rgb.py
-
 
 - FEAT: Add support for specifyingpo extra reward metrics for each environment, then make the reward shaper assign value for each of those rewards
 

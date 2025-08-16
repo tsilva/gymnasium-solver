@@ -362,6 +362,8 @@ class BaseAgent(pl.LightningModule):
         from utils.logging import capture_all_output
 
         # Ask for confirmation before any heavy setup (keep prior prints grouped)
+        # Before prompting, suggest better defaults if we detect mismatches
+        self._maybe_warn_mlp_on_rgb_obs()
         if not self._confirm_proceed():
             print("Training aborted by user before start.")
             return
@@ -407,6 +409,61 @@ class BaseAgent(pl.LightningModule):
     @staticmethod
     def _sanitize_name(name: str) -> str:
         return name.replace("/", "-").replace("\\", "-")
+
+    # -------------------------
+    # Pre-prompt guidance helpers
+    # -------------------------
+
+    def _maybe_warn_mlp_on_rgb_obs(self):
+        """If obs space appears to be RGB images and policy is MLP, print a warning.
+
+        Intent: gently nudge users to use CnnPolicy when training from pixels.
+        Triggered right before the start-training confirmation prompt.
+        """
+        try:
+            policy_type = getattr(self.config, "policy", "MlpPolicy")
+            # Normalize common strings
+            is_mlp = False
+            if isinstance(policy_type, str):
+                s = policy_type.lower()
+                is_mlp = s in ("mlppolicy", "mlp", "mlp_policy")
+            # If policy was provided as a class, heuristically treat non-CNN as MLP
+            else:
+                is_mlp = True
+
+            if not is_mlp:
+                return
+
+            obs_space = getattr(self.train_env, "observation_space", None)
+            if obs_space is None:
+                return
+
+            # Heuristic: RGB observations are typically uint8 Box with 3 channels stacked
+            import numpy as np
+            from gymnasium import spaces
+
+            if not isinstance(obs_space, spaces.Box):
+                return
+
+            shape = tuple(getattr(obs_space, "shape", ()) or ())
+            if len(shape) < 3:
+                return
+
+            # VecFrameStack may multiply channels; dtype uint8 is a strong signal for pixels
+            is_uint8 = getattr(obs_space, "dtype", None) == np.uint8
+            channels_like = shape[-1]
+            looks_rgb = is_uint8 and (channels_like == 3 or channels_like % 3 == 0)
+
+            if not looks_rgb:
+                return
+
+            print(
+                "Warning: Detected RGB image observations with MlpPolicy. "
+                "For pixel inputs, consider using CnnPolicy for better performance."
+            )
+        except Exception:
+            # Never block training on advisory messages
+            pass
 
     def _create_wandb_logger(self):
         from dataclasses import asdict

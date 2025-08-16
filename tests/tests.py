@@ -26,4 +26,5 @@ from tests.test_rollouts import *  # noqa: F401,F403
 from tests.test_rollout_buffer import *  # noqa: F401,F403
 from tests.test_rollout_collector import *  # noqa: F401,F403
 from tests.test_run_manager import *  # noqa: F401,F403
+from tests.test_evaluation import *  # noqa: F401,F403
 

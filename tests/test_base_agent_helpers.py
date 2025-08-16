@@ -33,3 +33,38 @@ def test_compute_validation_controls_positive():
     controls = BaseAgent._compute_validation_controls(5)
     assert controls["limit_val_batches"] == 1.0
     assert controls["check_val_every_n_epoch"] == 5
+
+
+def test_should_run_eval_no_warmup():
+    class Cfg:
+        eval_freq_epochs = 5
+        eval_warmup_epochs = 0
+
+    # Create a dummy instance with config
+    inst = BaseAgent.__new__(BaseAgent)
+    inst.config = Cfg()
+
+    # Epochs are 0-based inside the module; E = epoch+1
+    # With no warmup: evaluate at E==1 and multiples of 5
+    assert inst._should_run_eval(0) is True   # E=1
+    assert inst._should_run_eval(1) is False  # E=2
+    assert inst._should_run_eval(3) is False  # E=4
+    assert inst._should_run_eval(4) is True   # E=5
+    assert inst._should_run_eval(9) is True   # E=10
+
+
+def test_should_run_eval_with_warmup():
+    class Cfg:
+        eval_freq_epochs = 2
+        eval_warmup_epochs = 3
+
+    inst = BaseAgent.__new__(BaseAgent)
+    inst.config = Cfg()
+
+    # Before warmup (E < 3): skip
+    assert inst._should_run_eval(0) is False  # E=1
+    assert inst._should_run_eval(1) is False  # E=2
+    # At warmup boundary and then every freq
+    assert inst._should_run_eval(2) is True   # E=3
+    assert inst._should_run_eval(3) is False  # E=4
+    assert inst._should_run_eval(4) is True   # E=5

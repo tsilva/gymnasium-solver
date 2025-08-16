@@ -253,12 +253,10 @@ class BaseAgent(pl.LightningModule):
         return build_dummy_loader()
 
     def on_validation_epoch_start(self):
-        assert (
-            self.current_epoch == 0
-            or (self.current_epoch + 1) % self.config.eval_freq_epochs == 0
-        ), (
-            f"Validation epoch {self.current_epoch} is not a multiple of eval_freq_epochs {self.config.eval_freq_epochs}"
-        )
+        # Skip validation entirely during warmup epochs to avoid evaluation overhead
+        if not self._should_run_eval(self.current_epoch):
+            # Lightning still calls val hooks when limit_val_batches>0; guard our logic here
+            return
         self.validation_epoch_start_time = time.time_ns()
         # We'll compute eval FPS based on per-call totals from evaluate_policy
         self.validation_epoch_start_timesteps = 0
@@ -268,6 +266,9 @@ class BaseAgent(pl.LightningModule):
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
     # TODO: there are train/fps drops caused by running the collector N times (its not only the video recording); cause currently unknown
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
+        # Respect warmup scheduling and frequency
+        if not self._should_run_eval(self.current_epoch):
+            return None
         # New evaluation using vectorized env policy runner
         from utils.evaluation import evaluate_policy
 
@@ -304,6 +305,30 @@ class BaseAgent(pl.LightningModule):
         self.log_metrics({"epoch": int(self.current_epoch), "epoch_fps": epoch_fps, **eval_metrics}, prefix="eval")
 
         self._flush_metrics()
+
+    # ----- Evaluation scheduling helpers -----
+    def _should_run_eval(self, epoch_idx: int) -> bool:
+        """Return True if evaluation should run on this epoch index.
+
+        Scheduling uses 1-based epoch numbers for human-friendly config:
+        - Let E = epoch_idx + 1
+        - If eval_freq_epochs is None: never evaluate
+        - If E < eval_warmup_epochs: skip
+        - If E == eval_warmup_epochs: run (first eval after warmup)
+        - Otherwise: run when (E - eval_warmup_epochs) % eval_freq_epochs == 0
+        """
+        freq = getattr(self.config, "eval_freq_epochs", None)
+        if freq is None:
+            return False
+        warmup = int(getattr(self.config, "eval_warmup_epochs", 0) or 0)
+        E = int(epoch_idx) + 1
+        if warmup <= 0:
+            # First epoch (E==1) then multiples of freq
+            return E == 1 or (E % int(freq) == 0)
+        # With warmup, first eval at E==warmup, then every freq epochs thereafter
+        if E < warmup:
+            return False
+        return ((E - warmup) % int(freq)) == 0
 
     def on_validation_epoch_end(self):
         # Validation epoch end is called after all validation steps are done
@@ -443,8 +468,12 @@ class BaseAgent(pl.LightningModule):
         return callbacks
 
     def _get_validation_controls(self):
+        # Keep Lightning validation cadence driven by eval_freq_epochs; warmup is enforced in hooks.
         eval_freq = getattr(self.config, "eval_freq_epochs", None)
-        return self._compute_validation_controls(eval_freq)
+        warmup = getattr(self.config, "eval_warmup_epochs", 0) or 0
+        # If warmup is active, request validation every epoch and gate in hooks
+        eff_freq = 1 if (eval_freq is not None and warmup > 0) else eval_freq
+        return self._compute_validation_controls(eff_freq)
 
     @staticmethod
     def _compute_validation_controls(eval_freq_epochs):

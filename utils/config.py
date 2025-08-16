@@ -100,6 +100,9 @@ class Config:
     # ===== Evaluation (optional; disabled unless eval_freq_epochs is set) =====
     # Run evaluation every N training epochs; None disables evaluation entirely
     eval_freq_epochs: Optional[int] = None
+    # Minimum number of epochs to wait before starting evaluations
+    # Example: eval_warmup_epochs=5 -> first eval at end of epoch 5, then every eval_freq_epochs
+    eval_warmup_epochs: int = 0
     # Number of episodes to run during each evaluation window
     eval_episodes: Optional[int] = None
     # Record evaluation videos every N evaluation epochs; defaults to eval_freq_epochs when not set
@@ -440,6 +443,8 @@ class Config:
         # Evaluation
         if self.eval_freq_epochs is not None and self.eval_freq_epochs <= 0:
             raise ValueError("eval_freq_epochs must be a positive integer when set.")
+        if self.eval_warmup_epochs < 0:
+            raise ValueError("eval_warmup_epochs must be a non-negative integer.")
         if self.eval_episodes is not None and self.eval_episodes <= 0:
             raise ValueError("eval_episodes must be a positive integer when set.")
         if self.eval_recording_freq_epochs is not None and self.eval_recording_freq_epochs <= 0:

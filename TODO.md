@@ -1,15 +1,25 @@
+- BUG: Some tests are failing. For all failing tests, find root bug and fix it. Keep doing this until all tests pass.
+
 - FEAT: Add support for specifying minimum number of epochs to wait before starting evaluations. The purpose of this is that evaluations bottleneck training throughput, so we don't want to run evaluations until it's worth it.
+
+
+- FEAT: We currently only stop training when eval reward threshold is reached. But we also want to allow early stopping when the train/ep_reward_mean breaches treshold. Both early stopping on train and eval should be config flags.
 
 
 - FEAT: Our models currently have tanh as their activation function. We should allow softcoding them through the config along with the hidden dims.
 
+- FEAT: Whenever a better checkpoint is found, make sure we run one extra episode and now record it.
+
 - FEAT: add support CNN Policy, softcode config to pick the right one, make policy kwargs be propagated from config
 - FEAT: Train on CartPole-v1 with rgb
+
+- FEAT: Add support for uploading run to hugging face, upload it using publish.py script. Uploading should receive the run id as an argument, defaulting to the latest run, and upload all relevant files (config, model, metrics, etc). This will allow us to share our runs with the community and get feedback on our work. Upload videos as previews when available as well.
 
 - Generalized scheduling for metrics, make those be logged
 - FEAT: track learning hyperparams in wandb (train/hyperparams)
 
 - FEAT: When training ends show ascii plot of all metrics
+- FEAT: Add support for generating end of training report
 - Add support for creating file report of training run
 - Get rid of these: getattr(self.config, "eval_freq_epochs", None)
 - BUG: action distributions are note being logged correctly (how will I log this along with our current per epoch system?)
@@ -35,7 +45,6 @@
 - FEAT: add warning confirming if ale-py has been compiled to target architecture (avoid rosetta in silicon macs)
 - BUG: baseline_mean/std are being recorded even when not used
 - BUG: metrics are not well sorted yet
-- FEAT: add support for stopping training on reward threshold reached
 - FEAT: add support for fully recording last eval
 - BUG: check that were are matching rlzoo mstop criteria
 - Pong-RAM: Add support for byte-selection

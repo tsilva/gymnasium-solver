@@ -1,6 +1,6 @@
 # CartPole standard challenge configurations
 
-__CartPole-v1_rewardshaping:
+__CartPole-v1_rewardshaped:
   inherits: __CartPole-v1
   env_id: CartPole-v1
   eval_freq_epochs: 100        # evaluate every 5 training epochs
@@ -12,8 +12,8 @@ __CartPole-v1_rewardshaping:
     position_reward_scale: 0.25
       clip_potential: true
 
-CartPole-v1_rewardshaping_ppo:
-  inherits: __CartPole-v1_rewardshaping
+CartPole-v1_rewardshaped_ppo:
+  inherits: __CartPole-v1_rewardshaped
   algo_id: ppo
   n_envs: 8
   n_timesteps: 1e5

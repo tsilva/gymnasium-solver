@@ -1,7 +1,9 @@
+- Remove 
+- FEAT: When training ends show ascii plot of all metrics
+- Add support for creating file report of training run
 - BUG: action distributions are note being logged correctly (how will I log this along with our current per epoch system?)
 - FEAT: ask copilot to create its own isntructrions namely to generate its own techical documentation that it keeps up to date
-- REFACTOR: rollout buffer can be much more efficient (review how sb3 does it)
-- BUG: our FPS is still 1000 below SB3, investigate why
+- REFACTOR: rollout buffer can be much more efficient (review how sb3 does it) -- our fps is still 1000 below sb3
 - FEAT: add ability for the cursor agent to be able to run and adjust hyperparams by itself
 - BUG: CartPole-v1/PPO training performance has regressed vs rlzoo
 - BUG: clip_range metric warning is being triggered incorrectly

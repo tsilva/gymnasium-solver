@@ -19,6 +19,42 @@ class RolloutTrajectory(NamedTuple):
     returns: torch.Tensor
     next_observations: torch.Tensor
 
+
+class RollingWindow:
+    """O(1) rolling-window aggregator with deque semantics for len() and append().
+
+    - Maintains a fixed-size window of recent values.
+    - Tracks running sum for O(1) mean() updates.
+    - Exposes append(value) and __len__ for compatibility with tests that
+      assert on the number of stored items.
+    """
+
+    def __init__(self, maxlen: int):
+        if maxlen <= 0:
+            raise ValueError("RollingWindow maxlen must be > 0")
+        self._maxlen = int(maxlen)
+        self._dq = deque()
+        self._sum = 0.0
+
+    def append(self, value: float) -> None:
+        if len(self._dq) == self._maxlen:
+            oldest = self._dq.popleft()
+            self._sum -= float(oldest)
+        self._dq.append(value)
+        self._sum += float(value)
+
+    def mean(self) -> float:
+        n = len(self._dq)
+        if n == 0:
+            return 0.0
+        return self._sum / n
+
+    def __len__(self) -> int:
+        return len(self._dq)
+
+    def __bool__(self) -> bool:
+        return len(self._dq) > 0
+
 class RolloutBuffer:
     """
     Persistent rollout storage to avoid reallocating buffers every collect.
@@ -98,11 +134,10 @@ class RolloutBuffer:
         dones_np: np.ndarray,
         timeouts_np: np.ndarray,
     ) -> None:
-        # Ensure 2D shape for observations
-        if obs_np.ndim == 1:
-            obs_np = obs_np.reshape(-1, 1)
-        if next_obs_np.ndim == 1:
-            next_obs_np = next_obs_np.reshape(-1, 1)
+        # Keep shapes consistent with buffers; do not force extra dims for scalar observations
+        if self.obs_shape == ():
+            obs_np = np.asarray(obs_np).reshape(self.n_envs)
+            next_obs_np = np.asarray(next_obs_np).reshape(self.n_envs)
         self.obs_buf[idx] = obs_np
         self.next_obs_buf[idx] = next_obs_np
         self.actions_buf[idx] = actions_np
@@ -196,52 +231,12 @@ class RolloutCollector():
         self.device = _device_of(policy_model)
         self.n_envs = env.num_envs
 
-        # Running average stats (windowed)
-        self.rollout_fpss = deque(maxlen=stats_window_size)
-        self.episode_reward_deque = deque(maxlen=stats_window_size)
-        self.episode_length_deque = deque(maxlen=stats_window_size)
-        self.env_episode_reward_deques = [deque(maxlen=stats_window_size) for _ in range(self.n_envs)]
-        self.env_episode_length_deques = [deque(maxlen=stats_window_size) for _ in range(self.n_envs)]
-
-        # Lightweight running statistics (avoid per-sample Python overhead)
-        # Obs/reward running stats over all seen samples (scalar over all dims)
-        self._obs_count = 0
-        self._obs_sum = 0.0
-        self._obs_sumsq = 0.0
-
-        self._rew_count = 0
-        self._rew_sum = 0.0
-        self._rew_sumsq = 0.0
-
-        # Action histogram (discrete); grows dynamically as needed
-        self._action_counts = None
-
-        # Baseline stats for REINFORCE (global running mean/std over returns)
-        self._base_count = 0
-        self._base_sum = 0.0
-        self._base_sumsq = 0.0
-
-        self.total_rollouts = 0
-        self.total_steps = 0
-        self.total_episodes = 0
-        self.rollout_steps = 0
-        self.rollout_episodes = 0
-
-        # Current observations - initialize on first collect
-        self.obs = None
-
-        # Persistent rollout buffer (lazy init when first obs is known)
-        self._buffer = None
-
-        # Reusable arrays to avoid per-step allocations
-        self._step_timeouts = np.zeros(self.n_envs, dtype=bool)
-
-        # Running average stats (windowed)
-        self.rollout_fpss = deque(maxlen=stats_window_size)
-        self.episode_reward_deque = deque(maxlen=stats_window_size)
-        self.episode_length_deque = deque(maxlen=stats_window_size)
-        self.env_episode_reward_deques = [deque(maxlen=stats_window_size) for _ in range(self.n_envs)]
-        self.env_episode_length_deques = [deque(maxlen=stats_window_size) for _ in range(self.n_envs)]
+        # Running average stats (windowed) with O(1) mean updates
+        self.rollout_fpss = RollingWindow(stats_window_size)
+        self.episode_reward_deque = RollingWindow(stats_window_size)
+        self.episode_length_deque = RollingWindow(stats_window_size)
+        self.env_episode_reward_deques = [RollingWindow(stats_window_size) for _ in range(self.n_envs)]
+        self.env_episode_length_deques = [RollingWindow(stats_window_size) for _ in range(self.n_envs)]
 
         # Lightweight running statistics (avoid per-sample Python overhead)
         # Obs/reward running stats over all seen samples (scalar over all dims)
@@ -278,7 +273,7 @@ class RolloutCollector():
 
     @torch.inference_mode()
     def collect(self, *args, **kwargs):
-        with inference_ctx(self.policy_model): 
+        with inference_ctx(self.policy_model):
             return self._collect(*args, **kwargs)
 
     def _collect(self, deterministic=False):
@@ -442,14 +437,10 @@ class RolloutCollector():
         next_values_buf[-1] = last_values
 
         # Override next values array with bootstrapped values from terminal states for truncated episodes
-        # - by default last obs is next state from unfinished episode
-        # - if episode is done and truncated, value will be replaced by value from terminal observation (as last obs here will be the next states' first observation)
-        # - if episode is done but not truncated, value will later be ignored in GAE calculation by this being considered a terminal state
         bootstrapped_slice = self._buffer.bootstrapped_values_buf[start:end]
         next_values_buf = np.where(timeouts_slice, bootstrapped_slice, next_values_buf)
 
         # Real terminal states are only the dones where environment finished but not due to a timeout
-        # (for timeout we must estimate next state value as if episode continued)
         real_terminal = np.logical_and(dones_slice.astype(bool), ~timeouts_slice)
         non_terminal = (~real_terminal).astype(np.float32)
 
@@ -510,17 +501,17 @@ class RolloutCollector():
             actions=trajectories.actions[idxs],
             rewards=trajectories.rewards[idxs],
             dones=trajectories.dones[idxs],
-            old_log_prob=trajectories.old_log_prob[idxs], # TODO: change names
+            old_log_prob=trajectories.old_log_prob[idxs],  # TODO: change names
             old_values=trajectories.old_values[idxs],
             advantages=trajectories.advantages[idxs],
             returns=trajectories.returns[idxs],
             next_observations=trajectories.next_observations[idxs]
         )
-    
+
     def get_metrics(self):
-        ep_rew_mean = float(np.mean(self.episode_reward_deque)) if self.episode_reward_deque else 0.0
-        ep_len_mean = int(np.mean(self.episode_length_deque)) if self.episode_length_deque else 0
-        rollout_fps = float(np.mean(self.rollout_fpss)) if self.rollout_fpss else 0.0
+        ep_rew_mean = float(self.episode_reward_deque.mean()) if self.episode_reward_deque else 0.0
+        ep_len_mean = int(self.episode_length_deque.mean()) if self.episode_length_deque else 0
+        rollout_fps = float(self.rollout_fpss.mean()) if self.rollout_fpss else 0.0
 
         # Observation statistics from running aggregates
         if self._obs_count > 0:
@@ -561,12 +552,12 @@ class RolloutCollector():
             baseline_mean, baseline_std = 0.0, 0.0
 
         return {
-            "total_timesteps": self.total_steps, # TODO: steps vs timesteps
+            "total_timesteps": self.total_steps,  # TODO: steps vs timesteps
             "total_episodes": self.total_episodes,
             "total_rollouts": self.total_rollouts,
             "rollout_timesteps": self.rollout_steps,
             "rollout_episodes": self.rollout_episodes,  # Renamed to avoid conflict with video logging
-            "rollout_fps": rollout_fps, # TODO: this is a mean, it shouln't be
+            "rollout_fps": rollout_fps,  # TODO: this is a mean, it shouln't be
             "ep_rew_mean": ep_rew_mean,
             "ep_len_mean": ep_len_mean,
             "obs_mean": obs_mean,

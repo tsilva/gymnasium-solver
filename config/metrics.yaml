@@ -41,7 +41,7 @@ clip_range:
   algorithm_rules:
     ppo:
       threshold: 0.2
-    condition: "less_than"
+      condition: "greater_than"
       message: "High clip range ({current_value:.4f}) may lead to unstable training. Consider reducing."
       level: "warning"
       

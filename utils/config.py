@@ -66,6 +66,9 @@ class Config:
     # ===== Model architecture (optional) =====
     # Hidden layer dimensions for policy/value networks (tuple or single int)
     hidden_dims: Union[int, Tuple[int, ...]] = (64, 64)
+    # Activation function for MLP backbones: one of
+    # ['tanh','relu','leaky_relu','elu','selu','gelu','silu','swish','identity']
+    activation: str = "tanh"
     # Optional policy kwargs string (legacy compatibility or advanced wiring)
     policy_kwargs: Optional[str] = None
 
@@ -427,6 +430,22 @@ class Config:
             raise ValueError("policy_lr must be a positive float.")
         if self.ent_coef < 0:
             raise ValueError("ent_coef must be a non-negative float.")
+        # Activation
+        allowed_activations = {
+            "tanh",
+            "relu",
+            "leaky_relu",
+            "elu",
+            "selu",
+            "gelu",
+            "silu",
+            "swish",
+            "identity",
+        }
+        if isinstance(self.activation, str) and self.activation.lower() not in allowed_activations:
+            raise ValueError(
+                f"activation must be one of {sorted(allowed_activations)}; got '{self.activation}'"
+            )
 
         # Training
         if self.n_epochs <= 0:

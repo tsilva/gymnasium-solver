@@ -21,6 +21,7 @@ class PPO(BaseAgent):
             input_dim,
             output_dim,  # TODO: should be called obs_dim and act_dim?
             hidden=self.config.hidden_dims,
+            activation=getattr(self.config, "activation", "tanh"),
         )
 
         # During some unit tests, PPO is instantiated via object.__new__ without

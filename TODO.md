@@ -1,7 +1,6 @@
+- Get rid of these kinds of getattr usages: getattr(self.config, "eval_freq_epochs", None), config attributes are always defined, you can just use self.config.eval_freq_epochs
 
-
-
-- FEAT: Our models currently have tanh as their activation function. We should allow softcoding them through the config along with the hidden dims.
+- FEAT: create debugger stremio app that given a run id, allows running with a chosen checkpont step by step and see frames and computed values, eg: action distribution, reward, predicted value, etc. The way this works is that the full rollout is collected with frames and then we can run through them, this so that we can see all values namely monte carlo returns, GAE estimates, etc.
 
 - FEAT: Whenever a better checkpoint is found, make sure we run one extra episode and now record it.
 
@@ -15,8 +14,6 @@
 
 - FEAT: When training ends show ascii plot of all metrics
 - FEAT: Add support for generating end of training report
-- Add support for creating file report of training run
-- Get rid of these: getattr(self.config, "eval_freq_epochs", None)
 - BUG: action distributions are note being logged correctly (how will I log this along with our current per epoch system?)
 - FEAT: ask copilot to create its own isntructrions namely to generate its own techical documentation that it keeps up to date
 - REFACTOR: rollout buffer can be much more efficient (review how sb3 does it) -- our fps is still 1000 below sb3

@@ -13,7 +13,8 @@ class REINFORCE(BaseAgent):
         self.policy_model = PolicyOnly(
             input_dim,
             output_dim,
-            hidden=self.config.hidden_dims
+            hidden=self.config.hidden_dims,
+            activation=getattr(self.config, "activation", "tanh"),
         )
     
     def rollout_collector_hyperparams(self):

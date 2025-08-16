@@ -7,17 +7,45 @@ import torch.nn as nn
 from torch.distributions import Categorical
 
 
-def mlp(in_dim, hidden, act=nn.Tanh):
+def resolve_activation(act: "str | type[nn.Module] | nn.Module" = nn.Tanh) -> type[nn.Module]:
+    """Map a string or nn.Module class/instance to an activation module class.
+
+    Supported strings: 'tanh','relu','leaky_relu','elu','selu','gelu','silu','swish','identity'.
+    Defaults to nn.Tanh.
+    """
+    if isinstance(act, type) and issubclass(act, nn.Module):
+        return act
+    if isinstance(act, nn.Module):
+        return act.__class__
+    if isinstance(act, str):
+        key = act.lower()
+        mapping = {
+            "tanh": nn.Tanh,
+            "relu": nn.ReLU,
+            "leaky_relu": nn.LeakyReLU,
+            "elu": nn.ELU,
+            "selu": nn.SELU,
+            "gelu": nn.GELU,
+            "silu": nn.SiLU,
+            "swish": nn.SiLU,  # alias
+            "identity": nn.Identity,
+        }
+        return mapping.get(key, nn.Tanh)
+    return nn.Tanh
+
+
+def mlp(in_dim, hidden, act: "str | type[nn.Module] | nn.Module" = nn.Tanh):
+    act_cls = resolve_activation(act)
     layers, last = [], in_dim
     for h in hidden:
-        layers += [nn.Linear(last, h), act()]
+        layers += [nn.Linear(last, h), act_cls()]
         last = h
     return nn.Sequential(*layers)
 
 class PolicyOnly(nn.Module):
-    def __init__(self, state_dim: int, action_dim: int, hidden=(64, 64)):
+    def __init__(self, state_dim: int, action_dim: int, hidden=(64, 64), activation: "str | type[nn.Module] | nn.Module" = nn.Tanh):
         super().__init__()
-        self.backbone = mlp(state_dim, hidden, nn.Tanh)
+        self.backbone = mlp(state_dim, hidden, activation)
         self.policy_head = nn.Linear(hidden[-1], action_dim)
         self._init_weights()
 
@@ -52,9 +80,9 @@ class PolicyOnly(nn.Module):
         return torch.zeros(obs.shape[0], device=obs.device)
 
 class ActorCritic(nn.Module):
-    def __init__(self, state_dim: int, action_dim: int, hidden=(64, 64)):
+    def __init__(self, state_dim: int, action_dim: int, hidden=(64, 64), activation: "str | type[nn.Module] | nn.Module" = nn.Tanh):
         super().__init__()
-        self.backbone = mlp(state_dim, hidden, nn.Tanh)
+        self.backbone = mlp(state_dim, hidden, activation)
         self.policy_head = nn.Linear(hidden[-1], action_dim)
         self.value_head  = nn.Linear(hidden[-1], 1)
         self._init_weights()

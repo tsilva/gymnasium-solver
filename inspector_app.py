@@ -242,6 +242,7 @@ def build_ui(default_run_id: str = "latest-run"):
                 row_count=(0, "dynamic"),
                 col_count=(7, "fixed"),
                 label="Per-step details",
+                interactive=True,
             )
         with gr.Row():
             summary = gr.JSON(label="Summary")
@@ -268,12 +269,31 @@ def build_ui(default_run_id: str = "latest-run"):
         run_btn.click(_inspect, inputs=[run_id, checkpoint, deterministic, max_steps], outputs=[frames_gallery, step_table, summary])
 
         # When a user selects a cell in the step table, select the corresponding frame in the gallery
-        def _on_step_select(evt):
-            # evt.index is a tuple: (row_index, column_index)
-            row_idx = getattr(evt, "index", None)
-            row_idx = row_idx[0] if isinstance(row_idx, (list, tuple)) else 0
+        def _on_step_select(evt=None):
+            """When a table cell is selected, select the corresponding frame in the gallery.
+
+            Supports Gradio's SelectData event object or a dict payload with an
+            "index" field. The index is generally a (row, col) pair.
+            """
+            row_idx = 0
+            try:
+                idx = None
+                if isinstance(evt, dict):
+                    idx = evt.get("index")
+                else:
+                    idx = getattr(evt, "index", None)
+
+                if isinstance(idx, (list, tuple)) and len(idx) > 0:
+                    row_idx = int(idx[0])
+                elif isinstance(idx, int):
+                    row_idx = int(idx)
+                else:
+                    row_idx = 0
+            except Exception:
+                row_idx = 0
+
             # Gallery uses 0-based selected_index
-            return gr.update(selected_index=int(row_idx))
+            return gr.update(selected_index=row_idx)
 
         step_table.select(_on_step_select, outputs=frames_gallery)
 

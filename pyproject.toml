@@ -20,7 +20,8 @@ dependencies = [
     "ruamel.yaml",
     "watchdog",
     "setuptools<80",
-    "huggingface_hub>=0.22.0"
+    "huggingface_hub>=0.22.0",
+    "gradio>=4.0.0"
 ]
 
 [tool.pytest.ini_options]

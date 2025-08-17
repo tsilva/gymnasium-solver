@@ -154,6 +154,11 @@ class BaseAgent(pl.LightningModule):
         # Shared metrics buffer across epochs
         self._metrics_buffer = MetricsBuffer()
 
+        # Lightweight history to render ASCII summary at training end
+        # Maps metric name -> list[(step, value)]
+        self._terminal_history = {}
+        self._last_step_for_terminal = 0
+
     @must_implement
     def create_models(self):
         pass
@@ -358,6 +363,83 @@ class BaseAgent(pl.LightningModule):
         # Log training completion time
         time_elapsed = max((time.time_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
+
+        # Print concise ASCII summary of key metrics for quick inspection
+        try:
+            self._print_terminal_ascii_summary()
+        except Exception:
+            # Never block program end on summary printing
+            pass
+
+    # -------------------------
+    # Terminal ASCII summary
+    # -------------------------
+    def _print_terminal_ascii_summary(self, max_metrics: int = 50, width: int = 48, per_metric_cap: int = 2000):
+        """Print an ASCII sparkline summary of recorded numeric metrics.
+
+        Args:
+            max_metrics: Maximum number of metrics to print to avoid long outputs.
+            width: Target width of sparklines.
+            per_metric_cap: Safety cap (ignored here but kept for future trimming consistency).
+        """
+        history = getattr(self, "_terminal_history", None)
+        if not history:
+            return
+
+        def downsample(seq, target):
+            if len(seq) <= target:
+                return seq
+            # Uniform uniform sampling by index
+            step = len(seq) / float(target)
+            return [seq[int(i * step)] for i in range(target)]
+
+        def spark(values, w):
+            blocks = "▁▂▃▄▅▆▇█"
+            if not values:
+                return ""
+            vmin = min(values)
+            vmax = max(values)
+            if vmax == vmin:
+                return "─" * max(1, min(w, len(values)))
+            data = downsample(values, max(1, w))
+            out = []
+            rng = (vmax - vmin) or 1.0
+            for v in data:
+                idx = int((v - vmin) / rng * (len(blocks) - 1))
+                out.append(blocks[max(0, min(idx, len(blocks) - 1))])
+            return "".join(out)
+
+        # Prefer train/* then eval/* then others for readability
+        keys = sorted(history.keys(), key=lambda k: (0 if k.startswith("train/") else 1 if k.startswith("eval/") else 2, k))
+        shown = 0
+        printed_header = False
+        for k in keys:
+            pts = history.get(k) or []
+            if len(pts) < 2:
+                continue
+            # Collapse duplicate steps (keep last)
+            by_step = {}
+            for s, v in pts:
+                by_step[int(s)] = float(v)
+            if not by_step:
+                continue
+            steps_sorted = sorted(by_step)
+            values = [by_step[s] for s in steps_sorted]
+            chart = spark(values, width)
+            vmin = min(values)
+            vmax = max(values)
+            vlast = values[-1]
+            if not printed_header:
+                print("\n=== Metrics Summary (ASCII) ===")
+                printed_header = True
+            print(f"{k:>26}: {chart}  min={vmin:.4g} max={vmax:.4g} last={vlast:.4g}")
+            shown += 1
+            if shown >= max_metrics:
+                break
+        if printed_header:
+            if shown == 0:
+                print("(no numeric metrics to summarize)")
+            print("=" * 30)
 
     def learn(self):
         from utils.logging import capture_all_output
@@ -708,6 +790,30 @@ class BaseAgent(pl.LightningModule):
         Using custom metric collection / flushing logic to avoid this issue.
         """
         self._metrics_buffer.log(metrics, prefix=prefix)
+
+        # Capture lightweight numeric history for terminal ASCII summary
+        try:
+            if prefix:
+                prefixed = {f"{prefix}/{k}": v for k, v in metrics.items()}
+            else:
+                prefixed = dict(metrics)
+
+            # Update last known step from canonical metric if present
+            step_val = prefixed.get("train/total_timesteps")
+            if isinstance(step_val, (int, float)):
+                self._last_step_for_terminal = int(step_val)
+
+            for k, v in prefixed.items():
+                if k.endswith("action_distribution"):
+                    continue
+                if not isinstance(v, (int, float)):
+                    continue
+                history = self._terminal_history.setdefault(k, [])
+                step = self._last_step_for_terminal if k != "train/total_timesteps" else int(v)
+                history.append((step, float(v)))
+        except Exception:
+            # Never fail due to bookkeeping issues
+            pass
 
     def _flush_metrics(self):
         # Flush via buffer abstraction

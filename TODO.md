@@ -10,7 +10,6 @@
 - Generalized scheduling for metrics, make those be logged
 - FEAT: track learning hyperparams in wandb (train/hyperparams)
 
-- FEAT: When training ends show ascii plot of all metrics
 - FEAT: Add support for generating end of training report
 - BUG: action distributions are note being logged correctly (how will I log this along with our current per epoch system?)
 - FEAT: ask copilot to create its own isntructrions namely to generate its own techical documentation that it keeps up to date

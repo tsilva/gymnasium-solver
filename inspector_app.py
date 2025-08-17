@@ -296,8 +296,9 @@ def build_ui(default_run_id: str = "latest-run"):
             max_steps = gr.Slider(label="Max steps", minimum=10, maximum=5000, value=1000, step=10)
             run_btn = gr.Button("Inspect")
 
+        # Display only the current frame (hide the thumbnail strip previously provided by Gallery)
         with gr.Row():
-            frames_gallery = gr.Gallery(label="Frames", columns=4, height=400)
+            frame_image = gr.Image(label="Frame", height=400)
 
         # Horizontal navigation slider for quick mouse-based scrubbing
         with gr.Row():
@@ -321,8 +322,14 @@ def build_ui(default_run_id: str = "latest-run"):
         index_state = gr.State(0)
         playing_state = gr.State(False)
 
-        # Timer for autoplay
-        timer = gr.Timer(0.25)
+        # Timer for autoplay (fallback if Timer doesn't exist in older Gradio)
+        timer = None
+        try:
+            TimerCls = getattr(gr, "Timer", None)
+            if TimerCls is not None:
+                timer = TimerCls(0.25)
+        except Exception:
+            timer = None
         with gr.Row():
             step_table = gr.Dataframe(
                 headers=["step", "action", "reward", "cum_reward", "value", "mc_return", "gae_adv", "done", "probs"],
@@ -360,8 +367,10 @@ def build_ui(default_run_id: str = "latest-run"):
                     "[" + ", ".join(f"{p:.3f}" for p in (s["probs"] or [])) + "]" if s["probs"] else None,
                 ])
             # Initialize gallery selection, states, and play button label
+            # Initialize the image (first frame) and slider range
+            first_frame = frames[0] if frames else None
             return (
-                gr.update(value=frames, selected_index=0),  # frames_gallery
+                gr.update(value=first_frame),  # frame_image
                 gr.update(minimum=0, maximum=(len(frames) - 1 if frames else 0), step=1, value=0),  # frame_slider
                 rows,                                       # step_table
                 info,                                       # summary
@@ -373,11 +382,11 @@ def build_ui(default_run_id: str = "latest-run"):
         run_btn.click(
             _inspect,
             inputs=[run_id, checkpoint, deterministic, max_steps],
-            outputs=[frames_gallery, frame_slider, step_table, summary, frames_state, index_state, playing_state, play_pause_btn],
+            outputs=[frame_image, frame_slider, step_table, summary, frames_state, index_state, playing_state, play_pause_btn],
         )
 
         # When a user selects a cell in the step table, select the corresponding frame in the gallery
-        def _on_step_select(evt=None):
+        def _on_step_select(frames: List[np.ndarray], evt=None):
             """When a table cell is selected, select the corresponding frame in the gallery.
 
             Supports Gradio's SelectData event object or a dict payload with an
@@ -400,76 +409,82 @@ def build_ui(default_run_id: str = "latest-run"):
             except Exception:
                 row_idx = 0
 
-            # Gallery uses 0-based selected_index; also pause playback and sync index state
+            # Update the displayed image and slider; also pause playback and sync index state
+            img = frames[row_idx] if (isinstance(frames, list) and 0 <= row_idx < len(frames)) else None
             return (
-                gr.update(selected_index=row_idx),  # frames_gallery
+                gr.update(value=img),               # frame_image
                 gr.update(value=row_idx),           # frame_slider
                 row_idx,                            # index_state
                 False,                              # playing_state
                 gr.update(value="Play"),           # play_pause_btn label
             )
-        step_table.select(_on_step_select, outputs=[frames_gallery, frame_slider, index_state, playing_state, play_pause_btn])
+        step_table.select(_on_step_select, inputs=[frames_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
 
         # Navigation handlers
         def _on_prev(frames: List[np.ndarray], idx: int):
             if not frames:
                 return gr.update(), gr.update(), idx, False, gr.update(value="Play")
             new_idx = max(0, int(idx) - 1)
-            return gr.update(selected_index=new_idx), gr.update(value=new_idx), new_idx, False, gr.update(value="Play")
+            img = frames[new_idx] if 0 <= new_idx < len(frames) else None
+            return gr.update(value=img), gr.update(value=new_idx), new_idx, False, gr.update(value="Play")
 
         def _on_next(frames: List[np.ndarray], idx: int):
             if not frames:
                 return gr.update(), gr.update(), idx, False, gr.update(value="Play")
             new_idx = min(len(frames) - 1, int(idx) + 1)
-            return gr.update(selected_index=new_idx), gr.update(value=new_idx), new_idx, False, gr.update(value="Play")
+            img = frames[new_idx] if 0 <= new_idx < len(frames) else None
+            return gr.update(value=img), gr.update(value=new_idx), new_idx, False, gr.update(value="Play")
 
         def _on_play_pause(playing: bool):
             new_playing = not bool(playing)
             return new_playing, gr.update(value=("Pause" if new_playing else "Play"))
 
-        def _on_stop():
-            return gr.update(selected_index=0), gr.update(value=0), 0, False, gr.update(value="Play")
+        def _on_stop(frames: List[np.ndarray]):
+            img = frames[0] if frames else None
+            return gr.update(value=img), gr.update(value=0), 0, False, gr.update(value="Play")
 
         def _on_first(frames: List[np.ndarray]):
             if not frames:
                 return gr.update(), gr.update(), 0, False, gr.update(value="Play")
-            return gr.update(selected_index=0), gr.update(value=0), 0, False, gr.update(value="Play")
+            return gr.update(value=frames[0]), gr.update(value=0), 0, False, gr.update(value="Play")
 
         def _on_last(frames: List[np.ndarray]):
             if not frames:
                 return gr.update(), gr.update(), 0, False, gr.update(value="Play")
             last_idx = len(frames) - 1
-            return gr.update(selected_index=last_idx), gr.update(value=last_idx), last_idx, False, gr.update(value="Play")
+            return gr.update(value=frames[last_idx]), gr.update(value=last_idx), last_idx, False, gr.update(value="Play")
 
-        def _on_slider_change(val: int):
+        def _on_slider_change(frames: List[np.ndarray], val: int):
             idx = int(val) if val is not None else 0
-            return gr.update(selected_index=idx), idx, False, gr.update(value="Play")
+            img = frames[idx] if (isinstance(frames, list) and 0 <= idx < len(frames)) else None
+            return gr.update(value=img), idx, False, gr.update(value="Play")
 
         # Add First/Last buttons adjacent to navigation
         with gr.Row():
             first_btn = gr.Button("First", variant="secondary")
             last_btn = gr.Button("Last", variant="secondary")
 
-        prev_btn.click(_on_prev, inputs=[frames_state, index_state], outputs=[frames_gallery, frame_slider, index_state, playing_state, play_pause_btn])
-        next_btn.click(_on_next, inputs=[frames_state, index_state], outputs=[frames_gallery, frame_slider, index_state, playing_state, play_pause_btn])
-        first_btn.click(_on_first, inputs=[frames_state], outputs=[frames_gallery, frame_slider, index_state, playing_state, play_pause_btn])
-        last_btn.click(_on_last, inputs=[frames_state], outputs=[frames_gallery, frame_slider, index_state, playing_state, play_pause_btn])
+        prev_btn.click(_on_prev, inputs=[frames_state, index_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
+        next_btn.click(_on_next, inputs=[frames_state, index_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
+        first_btn.click(_on_first, inputs=[frames_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
+        last_btn.click(_on_last, inputs=[frames_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
         play_pause_btn.click(_on_play_pause, inputs=[playing_state], outputs=[playing_state, play_pause_btn])
-        stop_btn.click(_on_stop, outputs=[frames_gallery, frame_slider, index_state, playing_state, play_pause_btn])
-        frame_slider.change(_on_slider_change, inputs=[frame_slider], outputs=[frames_gallery, index_state, playing_state, play_pause_btn])
+        stop_btn.click(_on_stop, inputs=[frames_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
+        frame_slider.change(_on_slider_change, inputs=[frames_state, frame_slider], outputs=[frame_image, index_state, playing_state, play_pause_btn])
 
-        # Autoplay tick handler
+        # Autoplay tick handler (only if timer available)
         def _on_tick(frames: List[np.ndarray], idx: int, playing: bool):
             if not playing or not frames:
                 return gr.update(), gr.update(), idx, playing, gr.update()
             if int(idx) < len(frames) - 1:
                 new_idx = int(idx) + 1
-                return gr.update(selected_index=new_idx), gr.update(value=new_idx), new_idx, True, gr.update(value="Pause")
+                return gr.update(value=frames[new_idx]), gr.update(value=new_idx), new_idx, True, gr.update(value="Pause")
             # Reached end: stop
             last_idx = len(frames) - 1
-            return gr.update(selected_index=last_idx), gr.update(value=last_idx), last_idx, False, gr.update(value="Play")
+            return gr.update(value=frames[last_idx]), gr.update(value=last_idx), last_idx, False, gr.update(value="Play")
 
-        timer.tick(_on_tick, inputs=[frames_state, index_state, playing_state], outputs=[frames_gallery, frame_slider, index_state, playing_state, play_pause_btn])
+        if timer is not None:
+            timer.tick(_on_tick, inputs=[frames_state, index_state, playing_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
 
     return demo
 

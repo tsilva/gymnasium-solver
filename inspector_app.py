@@ -16,6 +16,7 @@ import torch
 
 from play import load_model as _load_model
 from play import load_config_from_run as _load_config_from_run
+from utils.rollouts import compute_mc_returns, compute_gae_advantages_and_returns
 
 
 RUNS_DIR = Path("runs")
@@ -212,45 +213,32 @@ def run_episode(
     # Post-process per-step MC returns and GAE advantages
     if steps:
         T = len(rewards_buf)
-        # Monte Carlo discounted returns (observed rewards only; no bootstrap)
-        mc_returns = [0.0] * T
-        running_ret = 0.0
-        for i in reversed(range(T)):
-            running_ret = float(rewards_buf[i]) + gamma * running_ret
-            mc_returns[i] = running_ret
-
-        # GAE(λ) using value predictions and bootstrap for truncations
         values_np = np.asarray(values_buf, dtype=np.float32)
         rewards_np = np.asarray(rewards_buf, dtype=np.float32)
         dones_np = np.asarray(dones_buf, dtype=bool)
         truncated_np = np.asarray(truncated_buf, dtype=bool)
 
-        # Next-values: shift by one, last bootstrapped if truncated or if we stopped by max_steps
-        next_values = np.zeros_like(values_np, dtype=np.float32)
-        if T > 1:
-            next_values[:-1] = values_np[1:]
+        # MC returns (no bootstrap, pure discounted sum of observed rewards)
+        mc_returns = compute_mc_returns(rewards_np, gamma)
 
-        # Determine last next value for bootstrap
+        # Determine bootstrap value for the last step if episode truncated or hit max_steps
         last_next_value = 0.0
-        # If episode ended due to truncation or due to hitting max_steps without termination, bootstrap
-        ended_by_time = (truncated_np[-1] is True) or (not dones_np[-1])
+        ended_by_time = bool(truncated_np[-1]) or (not bool(dones_np[-1]))
         if ended_by_time:
             with torch.no_grad():
                 last_v = policy_model(_to_batch_obs(obs))[1]
                 if last_v is not None:
                     last_next_value = float(last_v.squeeze().item())
-        next_values[-1] = last_next_value
 
-        # Real terminals (no bootstrap): terminated and not truncated
-        real_terminal = np.logical_and(dones_np, ~truncated_np)
-        non_terminal = (~real_terminal).astype(np.float32)
-
-        gae_adv = np.zeros(T, dtype=np.float32)
-        gae = 0.0
-        for i in reversed(range(T)):
-            delta = rewards_np[i] + gamma * next_values[i] * non_terminal[i] - values_np[i]
-            gae = float(delta + gamma * gae_lambda * non_terminal[i] * gae)
-            gae_adv[i] = gae
+        gae_adv, _returns = compute_gae_advantages_and_returns(
+            values=values_np,
+            rewards=rewards_np,
+            dones=dones_np,
+            timeouts=truncated_np,
+            last_value=last_next_value,
+            gamma=gamma,
+            gae_lambda=gae_lambda,
+        )
 
         # Attach to steps
         for i in range(T):

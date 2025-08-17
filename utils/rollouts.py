@@ -8,6 +8,79 @@ import torch
 from utils.torch_utils import _device_of, inference_ctx
 
 
+# -----------------------------
+# Shared return/advantage utils
+# -----------------------------
+def compute_mc_returns(rewards: np.ndarray, gamma: float) -> np.ndarray:
+    """Compute simple discounted Monte Carlo returns for a single trajectory.
+
+    Parameters
+    - rewards: shape (T,), rewards collected along the trajectory
+    - gamma: discount factor
+
+    Returns
+    - returns: shape (T,), R_t = r_t + gamma * R_{t+1}
+    """
+    rewards = np.asarray(rewards, dtype=np.float32)
+    T = rewards.shape[0]
+    out = np.zeros(T, dtype=np.float32)
+    running = 0.0
+    for t in range(T - 1, -1, -1):
+        running = float(rewards[t]) + gamma * running
+        out[t] = running
+    return out
+
+
+def compute_gae_advantages_and_returns(
+    values: np.ndarray,
+    rewards: np.ndarray,
+    dones: np.ndarray,
+    timeouts: Optional[np.ndarray],
+    last_value: float,
+    gamma: float,
+    gae_lambda: float,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Compute GAE(λ) advantages and corresponding returns for a single env trajectory.
+
+    Mirrors the logic used in RolloutCollector for a 1D trajectory (T,).
+
+    Notes
+    - "dones" are environment terminations (can include time-limit truncations if you OR'd them).
+    - "timeouts" marks steps that were truncated by a time limit (no true terminal); if provided and the
+      final step is a timeout, we bootstrap using last_value. For intermediate steps in a single-episode
+      trajectory, timeouts is typically all False except possibly the last step.
+    - Returns are computed as advantages + values, matching PPO-style training targets.
+    """
+    values = np.asarray(values, dtype=np.float32)
+    rewards = np.asarray(rewards, dtype=np.float32)
+    dones = np.asarray(dones, dtype=bool)
+    if timeouts is None:
+        timeouts = np.zeros_like(dones, dtype=bool)
+    else:
+        timeouts = np.asarray(timeouts, dtype=bool)
+
+    T = rewards.shape[0]
+    # Build next_values by shifting and bootstrapping the last with last_value
+    next_values = np.zeros_like(values, dtype=np.float32)
+    if T > 1:
+        next_values[:-1] = values[1:]
+    next_values[-1] = float(last_value)
+
+    # Real terminals are dones that are not timeouts
+    real_terminal = np.logical_and(dones, ~timeouts)
+    non_terminal = (~real_terminal).astype(np.float32)
+
+    advantages = np.zeros(T, dtype=np.float32)
+    gae = 0.0
+    for t in range(T - 1, -1, -1):
+        delta = rewards[t] + gamma * next_values[t] * non_terminal[t] - values[t]
+        gae = float(delta + gamma * gae_lambda * gae * non_terminal[t])
+        advantages[t] = gae
+
+    returns = advantages + values
+    return advantages, returns
+
+
 class RolloutTrajectory(NamedTuple):
     observations: torch.Tensor
     actions: torch.Tensor

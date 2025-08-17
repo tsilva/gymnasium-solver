@@ -316,7 +316,6 @@ def build_ui(default_run_id: str = "latest-run"):
             prev_btn = gr.Button("Previous", variant="secondary")
             play_pause_btn = gr.Button(value="Play", variant="primary")
             next_btn = gr.Button("Next", variant="secondary")
-            stop_btn = gr.Button("Stop", variant="secondary")
 
         frames_state = gr.State([])  # type: ignore[var-annotated]
         index_state = gr.State(0)
@@ -439,37 +438,14 @@ def build_ui(default_run_id: str = "latest-run"):
             new_playing = not bool(playing)
             return new_playing, gr.update(value=("Pause" if new_playing else "Play"))
 
-        def _on_stop(frames: List[np.ndarray]):
-            img = frames[0] if frames else None
-            return gr.update(value=img), gr.update(value=0), 0, False, gr.update(value="Play")
-
-        def _on_first(frames: List[np.ndarray]):
-            if not frames:
-                return gr.update(), gr.update(), 0, False, gr.update(value="Play")
-            return gr.update(value=frames[0]), gr.update(value=0), 0, False, gr.update(value="Play")
-
-        def _on_last(frames: List[np.ndarray]):
-            if not frames:
-                return gr.update(), gr.update(), 0, False, gr.update(value="Play")
-            last_idx = len(frames) - 1
-            return gr.update(value=frames[last_idx]), gr.update(value=last_idx), last_idx, False, gr.update(value="Play")
-
         def _on_slider_change(frames: List[np.ndarray], val: int):
             idx = int(val) if val is not None else 0
             img = frames[idx] if (isinstance(frames, list) and 0 <= idx < len(frames)) else None
             return gr.update(value=img), idx, False, gr.update(value="Play")
 
-        # Add First/Last buttons adjacent to navigation
-        with gr.Row():
-            first_btn = gr.Button("First", variant="secondary")
-            last_btn = gr.Button("Last", variant="secondary")
-
         prev_btn.click(_on_prev, inputs=[frames_state, index_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
         next_btn.click(_on_next, inputs=[frames_state, index_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
-        first_btn.click(_on_first, inputs=[frames_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
-        last_btn.click(_on_last, inputs=[frames_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
         play_pause_btn.click(_on_play_pause, inputs=[playing_state], outputs=[playing_state, play_pause_btn])
-        stop_btn.click(_on_stop, inputs=[frames_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
         frame_slider.change(_on_slider_change, inputs=[frames_state, frame_slider], outputs=[frame_image, index_state, playing_state, play_pause_btn])
 
         # Autoplay tick handler (only if timer available)

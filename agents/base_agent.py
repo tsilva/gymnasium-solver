@@ -525,6 +525,16 @@ class BaseAgent(pl.LightningModule):
         if wandb_logger.experiment:
             wandb_logger.experiment.define_metric("train/*", step_metric="train/total_timesteps")
             wandb_logger.experiment.define_metric("eval/*", step_metric="train/total_timesteps")
+            # Expose metric bounds to the W&B run config for dashboard consumption
+            try:
+                from utils.metrics import get_metric_bounds
+                bounds = get_metric_bounds()
+                if isinstance(bounds, dict) and bounds:
+                    # Store under a dedicated namespace to avoid clutter
+                    wandb_logger.experiment.config.update({"metric_bounds": bounds}, allow_val_change=True)
+            except Exception:
+                # Never block training on telemetry metadata
+                pass
 
     def _build_callbacks(self):
         # Lazy imports to avoid heavy deps at module import time

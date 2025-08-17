@@ -184,3 +184,47 @@ def get_key_priority(metrics_config: Optional[Dict[str, Any]] = None) -> Optiona
     if isinstance(kp, list) and all(isinstance(x, str) for x in kp):
         return kp
     return None
+
+
+def get_metric_bounds(metrics_config: Optional[Dict[str, Any]] = None) -> Dict[str, Dict[str, float]]:
+    """Return min/max bounds per metric if defined in metrics.yaml.
+
+    Expands into common namespaces (train/, eval/, rollout/, time/).
+    Shape: {metric_name or namespaced: {"min": float, "max": float}}
+    Missing bounds are omitted per metric.
+    """
+    if metrics_config is None:
+        metrics_config = load_metrics_config()
+
+    namespaces = ["train", "eval", "rollout", "time"]
+    bounds: Dict[str, Dict[str, float]] = {}
+
+    for metric_name, metric_cfg in metrics_config.items():
+        if metric_name.startswith("_") or not isinstance(metric_cfg, dict):
+            continue
+        has_min = "min" in metric_cfg
+        has_max = "max" in metric_cfg
+        if not (has_min or has_max):
+            continue
+
+        b: Dict[str, float] = {}
+        if has_min:
+            try:
+                b["min"] = float(metric_cfg["min"])
+            except Exception:
+                pass
+        if has_max:
+            try:
+                b["max"] = float(metric_cfg["max"])
+            except Exception:
+                pass
+        if not b:
+            continue
+
+        # Bare metric key (for backward compatibility)
+        bounds[metric_name] = dict(b)
+        # Namespaced keys
+        for ns in namespaces:
+            bounds[f"{ns}/{metric_name}"] = dict(b)
+
+    return bounds

@@ -38,6 +38,8 @@ _global:
 clip_range:
   precision: 4
   description: "PPO clip range for policy updates"
+  min: 0.0
+  max: 1.0
   algorithm_rules:
     ppo:
       threshold: 0.2
@@ -118,16 +120,19 @@ time_elapsed:
   precision: 2
   delta_rule: "non_decreasing"  # Time should always increase
   description: "Total elapsed training time in seconds"
+  min: 0.0
 
 fps:
   precision: 0
   force_integer: true
   description: "Training throughput in frames (environment steps) per second"
+  min: 0.0
 
 fps_instant:
   precision: 0
   force_integer: true
   description: "Instant training throughput in frames per second measured within the current epoch"
+  min: 0.0
 
 # Loss metrics
 policy_loss:
@@ -176,6 +181,8 @@ kl_div:
 clip_fraction:
   precision: 3
   description: "Fraction of probability ratios that were clipped in PPO objective"
+  min: 0.0
+  max: 1.0
   algorithm_rules:
     ppo:
       threshold: 0.5
@@ -186,6 +193,8 @@ clip_fraction:
 explained_variance:
   precision: 3
   description: "How well the value function predicts returns (1.0 = perfect, 0.0 = no better than mean)"
+  min: -1.0
+  max: 1.0
   algorithm_rules:
     ppo:
       threshold: -0.5
@@ -196,6 +205,7 @@ explained_variance:
 entropy:
   precision: 4
   description: "Policy entropy measuring exploration vs exploitation trade-off"
+  min: 0.0
   algorithm_rules:
     ppo:
       threshold: 0.1
@@ -212,23 +222,28 @@ entropy:
 policy_lr:
   precision: 6
   description: "Current learning rate for policy network optimizer"
+  min: 0.0
 
 value_lr:
   precision: 6
   description: "Current learning rate for value network optimizer"
+  min: 0.0
 
 learning_rate:
   precision: 6
   description: "General learning rate for optimizer"
+  min: 0.0
 
 # Gradient metrics
 grad_norm:
   precision: 4
   description: "L2 norm of policy network gradients before clipping"
+  min: 0.0
 
 max_grad_norm:
   precision: 4
   description: "Maximum allowed gradient norm for gradient clipping"
+  min: 0.0
 
 # Algorithm-specific metrics
 advantage_mean:
@@ -238,6 +253,7 @@ advantage_mean:
 advantage_std:
   precision: 4
   description: "Standard deviation of advantage estimates across batch"
+  min: 0.0
 
 value_mean:
   precision: 4
@@ -246,3 +262,4 @@ value_mean:
 value_std:
   precision: 4
   description: "Standard deviation of value function estimates across states in batch"
+  min: 0.0

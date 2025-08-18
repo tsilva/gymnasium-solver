@@ -376,8 +376,8 @@ class ModelCheckpointCallback(pl.Callback):
         else:
             print("No checkpoints were saved during training")
 
-        # After training finishes, run a final evaluation using the best checkpoint
-        # and record a full-length video saved as 'best_checkpoint.mp4'.
+    # After training finishes, run a final evaluation using the best checkpoint
+    # and record a full-length video saved as 'best.mp4'.
         try:
             best_ckpt = self.best_checkpoint_path
             if best_ckpt is None:
@@ -399,9 +399,10 @@ class ModelCheckpointCallback(pl.Callback):
                 return
 
             # Prepare video path under the run's video directory
-            video_dir = pl_module.run_manager.get_video_dir() / "eval" / "episodes"
+            # Store alongside other eval videos: runs/<run_id>/videos/eval/best.mp4
+            video_dir = pl_module.run_manager.get_video_dir() / "eval"
             video_dir.mkdir(parents=True, exist_ok=True)
-            video_path = video_dir / "best_checkpoint.mp4"
+            video_path = video_dir / "best.mp4"
 
             # Ensure full-length recording by temporarily disabling video_length cap
             # validation_env is a VecInfoWrapper around VecVideoRecorder -> access via .venv

@@ -9,7 +9,7 @@ Behavior:
     - If --repo is omitted, we publish to a repo named after the run's config id
         under your user/org namespace: <owner>/<config_id>.
     - Checkpoints and logs are uploaded under artifacts/. Only the best video
-        (best_checkpoint.mp4) is included under artifacts/videos and attached at the
+        (best.mp4, or legacy best_checkpoint.mp4) is included under artifacts/videos and attached at the
         repo root as preview.mp4, which is embedded in the README for live preview on the Hub.
 
 Authentication:
@@ -163,18 +163,27 @@ def _find_videos_for_run(run_dir: Path) -> List[Path]:
 
 
 def _find_best_video_for_run(run_dir: Path) -> Optional[Path]:
-    """Locate best_checkpoint.mp4 for the run, preferring the local run directory.
+    """Locate the canonical best evaluation video for the run.
 
+    Preference order:
+      1) runs/<id>/videos/eval/best.mp4 (new)
+      2) runs/<id>/videos/eval/episodes/best_checkpoint.mp4 (legacy)
+      3) Any discovered best.mp4/best_checkpoint.mp4 under videos/**
     Returns the path if found, else None.
     """
-    # Prefer the canonical location under the run directory first
-    canonical = run_dir / "videos" / "eval" / "episodes" / "best_checkpoint.mp4"
-    if canonical.exists():
-        return canonical.resolve()
+    # Prefer the canonical new location under the run directory first
+    canonical_new = run_dir / "videos" / "eval" / "best.mp4"
+    if canonical_new.exists():
+        return canonical_new.resolve()
+
+    # Fallback to legacy canonical location
+    canonical_legacy = run_dir / "videos" / "eval" / "episodes" / "best_checkpoint.mp4"
+    if canonical_legacy.exists():
+        return canonical_legacy.resolve()
 
     # Otherwise scan known locations and pick the first matching filename
     for v in _find_videos_for_run(run_dir):
-        if v.name == "best_checkpoint.mp4":
+        if v.name in {"best.mp4", "best_checkpoint.mp4"}:
             try:
                 return v.resolve()
             except Exception:
@@ -213,7 +222,7 @@ def extract_run_metadata(run_dir: Path) -> dict:
             if files:
                 ckpt_file = files[0]
 
-    # Find the best video (best_checkpoint.mp4) if available
+    # Find the best video (best.mp4 or legacy best_checkpoint.mp4) if available
     best_video: Optional[Path] = _find_best_video_for_run(run_dir)
 
     # Logs: prefer stable run.log at run root, then all logs under logs/
@@ -396,7 +405,7 @@ def build_model_card(meta: dict, run_dir: Path) -> str:
     lines.append("- Checkpoints: `artifacts/checkpoints/*.ckpt`")
     lines.append("- Logs: `artifacts/logs/*.log`")
     if meta.get("best_video"):
-        lines.append("- Video: `artifacts/videos/**/best_checkpoint.mp4` (also previewed below)")
+        lines.append("- Video: `artifacts/videos/**/best.mp4` (also previewed below)")
     lines.append("")
     if meta.get("best_video"):
         lines.append("## Preview")
@@ -481,7 +490,10 @@ def publish_run(
             "configs/**",
             "checkpoints/**",
             "logs/**",
-            # Only include the best checkpoint video
+            # Only include the best evaluation video
+            "videos/**/best.mp4",
+            "videos/best.mp4",
+            # Keep legacy name support for existing runs
             "videos/**/best_checkpoint.mp4",
             "videos/best_checkpoint.mp4",
             "hyperparam_control/**",

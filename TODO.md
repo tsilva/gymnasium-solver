@@ -1,5 +1,3 @@
-- FEAT: track immediate episode reward metric, we are only currently monitorning rolling averages (for monitoring hyperparam change reaction)
-
 - Add support for quiet mode; this will allow running without user prompts (just does defaults) - eg: will skip asking if trainign shouldd start
 
 

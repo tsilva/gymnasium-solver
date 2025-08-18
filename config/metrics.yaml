@@ -76,6 +76,16 @@ ep_len_mean:
   precision: 2
   description: "Average episode length over recent episodes window"
 
+# Immediate episode stats
+ep_rew_last:
+  precision: 2
+  description: "Reward of the most recent completed episode"
+
+ep_len_last:
+  precision: 0
+  force_integer: true
+  description: "Length of the most recent completed episode"
+
 ep_rew_min:
   precision: 2
   description: "Minimum episode reward observed in recent episodes window"

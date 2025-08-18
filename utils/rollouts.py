@@ -310,6 +310,9 @@ class RolloutCollector():
         self.episode_length_deque = RollingWindow(stats_window_size)
         self.env_episode_reward_deques = [RollingWindow(stats_window_size) for _ in range(self.n_envs)]
         self.env_episode_length_deques = [RollingWindow(stats_window_size) for _ in range(self.n_envs)]
+        # Immediate episode stats (most recent completed episode in any env)
+        self._last_episode_reward = 0.0
+        self._last_episode_length = 0
 
         # Lightweight running statistics (avoid per-sample Python overhead)
         # Obs/reward running stats over all seen samples (scalar over all dims)
@@ -418,6 +421,16 @@ class RolloutCollector():
                     self.episode_length_deque.append(episode['l'])
                     self.env_episode_reward_deques[idx].append(episode['r'])
                     self.env_episode_length_deques[idx].append(episode['l'])
+
+                    # Track immediate last episode stats (latest wins if multiple end simultaneously)
+                    try:
+                        self._last_episode_reward = float(episode.get('r', 0.0))
+                    except Exception:
+                        self._last_episode_reward = 0.0
+                    try:
+                        self._last_episode_length = int(episode.get('l', 0))
+                    except Exception:
+                        self._last_episode_length = 0
 
                     # Just mark timeouts and collect terminal obs for later processing
                     if info.get("TimeLimit.truncated"):
@@ -631,6 +644,9 @@ class RolloutCollector():
             "rollout_timesteps": self.rollout_steps,
             "rollout_episodes": self.rollout_episodes,  # Renamed to avoid conflict with video logging
             "rollout_fps": rollout_fps,  # TODO: this is a mean, it shouln't be
+            # Immediate last episode stats
+            "ep_rew_last": float(self._last_episode_reward),
+            "ep_len_last": int(self._last_episode_length),
             "ep_rew_mean": ep_rew_mean,
             "ep_len_mean": ep_len_mean,
             "obs_mean": obs_mean,

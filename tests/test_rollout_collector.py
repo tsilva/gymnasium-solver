@@ -114,6 +114,10 @@ def test_rollout_collector_gae_with_timeout_bootstrap_influences_advantages():
     assert m['rollout_episodes'] == 1
     assert len(collector.episode_reward_deque) == 1
     assert len(collector.env_episode_reward_deques[0]) == 1
+    # Immediate episode metrics captured
+    assert 'ep_rew_last' in m and 'ep_len_last' in m
+    assert m['ep_rew_last'] == 0.0
+    assert m['ep_len_last'] == 2
 
 
 @pytest.mark.unit
@@ -154,6 +158,6 @@ def test_rollout_collector_deterministic_actions_and_shapes():
     m = collector.get_metrics()
     for k in [
         'total_timesteps', 'total_episodes', 'total_rollouts', 'rollout_timesteps', 'rollout_episodes',
-        'ep_rew_mean', 'ep_len_mean', 'reward_mean', 'reward_std', 'obs_mean', 'obs_std'
+    'ep_rew_last', 'ep_len_last', 'ep_rew_mean', 'ep_len_mean', 'reward_mean', 'reward_std', 'obs_mean', 'obs_std'
     ]:
         assert k in m

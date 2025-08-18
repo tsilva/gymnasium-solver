@@ -39,6 +39,7 @@ class ModelCheckpointCallback(pl.Callback):
         self.best_checkpoint_path = None
         self.last_checkpoint_path = None
         self.resume_checkpoint_path = None
+        self.best_epoch_index = None
         
     def setup(self, trainer, pl_module, stage):
         """Setup callback - called before training starts."""
@@ -76,6 +77,28 @@ class ModelCheckpointCallback(pl.Callback):
         # Ensure the directory exists
         checkpoint_path.mkdir(parents=True, exist_ok=True)
         return checkpoint_path
+
+    @staticmethod
+    def _update_symlink(link_path: Path, target_path: Path) -> None:
+        """Create or update a symlink at link_path pointing to target_path (relative target)."""
+        try:
+            if link_path.exists() or link_path.is_symlink():
+                try:
+                    link_path.unlink()
+                except Exception:
+                    pass
+            # Use a relative path so the directory can be moved/copied
+            link_path.symlink_to(Path(target_path.name))
+        except Exception as e:
+            print(f"Warning: failed to create symlink {link_path} -> {target_path}: {e}")
+
+    @staticmethod
+    def _find_latest_epoch_ckpt(checkpoint_dir: Path) -> Path | None:
+        files = list(checkpoint_dir.glob("epoch=*.ckpt"))
+        if not files:
+            return None
+        files.sort(key=lambda p: p.stat().st_mtime)
+        return files[-1]
     
     def _save_checkpoint(self, agent, checkpoint_path: Path, is_best: bool = False, is_last: bool = False, is_threshold: bool = False, *, metrics: dict | None = None, current_eval_reward: float | None = None, threshold_value: float | None = None):
         """Save a checkpoint with all necessary information, including metrics snapshot.
@@ -155,7 +178,7 @@ class ModelCheckpointCallback(pl.Callback):
             return current_value < self.best_metric_value
     
     def on_validation_epoch_end(self, trainer, pl_module):
-        """Save checkpoints when validation ends (after eval) and handle early stopping."""
+        """Save a timestamped checkpoint every eval epoch, maintain best/last symlinks, and early stop when needed."""
 
         logged_metrics = trainer.logged_metrics
         assert self.monitor in logged_metrics, f"Monitor metric '{self.monitor}' not found in logged metrics: {trainer.logged_metrics.keys()}"
@@ -171,39 +194,12 @@ class ModelCheckpointCallback(pl.Callback):
 
         checkpoint_dir = self._get_checkpoint_dir(pl_module)
 
-        # Best model logic
-        saved_timestamped_path = None  # track if we saved an epoch checkpoint in this call
-        is_best = self._should_save_best(current_metric_value)
-        if is_best:
-            self.best_metric_value = current_metric_value
-            epoch = pl_module.current_epoch
-            step = pl_module.global_step
-            timestamped_path = checkpoint_dir / f"epoch={epoch:02d}.ckpt"
-            self._save_checkpoint(
-                pl_module,
-                timestamped_path,
-                is_best=True,
-                metrics=logged_metrics,
-                current_eval_reward=current_metric_value,
-            )
-            saved_timestamped_path = timestamped_path
+        # Always save a timestamped checkpoint for this eval epoch
+        epoch = pl_module.current_epoch
+        step = pl_module.global_step
+        timestamped_path = checkpoint_dir / f"epoch={epoch:02d}.ckpt"
 
-            best_path = checkpoint_dir / "best.ckpt"
-            self.best_checkpoint_path = self._save_checkpoint(
-                pl_module,
-                best_path,
-                is_best=True,
-                metrics=logged_metrics,
-                current_eval_reward=current_metric_value,
-            )
-
-            print(f"New best model saved with {self.monitor}={current_metric_value:.4f}")
-            print(f"  Timestamped: {timestamped_path}")
-            print(f"  Best: {best_path}")
-            pl_module.best_model_path = str(best_path)
-            pl_module.best_eval_reward = current_metric_value
-
-        # Unified reward threshold (config overrides env spec, then gym.spec fallback)
+        # Determine reward threshold once for this epoch
         cfg_thr = getattr(pl_module.config, 'reward_threshold', None)
         effective_threshold = cfg_thr
         if effective_threshold is None:
@@ -220,45 +216,61 @@ class ModelCheckpointCallback(pl.Callback):
             except Exception:
                 effective_threshold = None
 
-        if (self.save_threshold_reached and
+        is_best = self._should_save_best(current_metric_value)
+        is_threshold = (
+            self.save_threshold_reached and
             effective_threshold is not None and
             current_metric_value >= effective_threshold and
-            not self._threshold_checkpoint_saved):
-            epoch = pl_module.current_epoch
-            step = pl_module.global_step
-            if saved_timestamped_path is not None:
-                # Avoid redundancy: annotate the just-saved epoch checkpoint with threshold info
-                self._save_checkpoint(
-                    pl_module,
-                    saved_timestamped_path,
-                    is_best=True,
-                    is_threshold=True,
-                    metrics=logged_metrics,
-                    current_eval_reward=current_metric_value,
-                    threshold_value=effective_threshold,
-                )
-                print(
-                    f"Threshold reached! Annotated checkpoint {saved_timestamped_path.name} "
-                    f"with {self.monitor}={current_metric_value:.4f} (threshold={effective_threshold})"
-                )
-            else:
-                # No epoch checkpoint saved this validation; create a dedicated threshold checkpoint
-                threshold_path = checkpoint_dir / f"threshold-epoch={epoch:02d}-step={step:04d}.ckpt"
-                self._save_checkpoint(
-                    pl_module,
-                    threshold_path,
-                    is_threshold=True,
-                    metrics=logged_metrics,
-                    current_eval_reward=current_metric_value,
-                    threshold_value=effective_threshold,
-                )
-                print(
-                    f"Threshold reached! Saved model with {self.monitor}={current_metric_value:.4f} "
-                    f"(threshold={effective_threshold}) at {threshold_path}"
-                )
+            not self._threshold_checkpoint_saved
+        )
+
+        # Save timestamped checkpoint marked with flags
+        self._save_checkpoint(
+            pl_module,
+            timestamped_path,
+            is_best=is_best,
+            is_threshold=is_threshold,
+            metrics=logged_metrics,
+            current_eval_reward=current_metric_value,
+            threshold_value=effective_threshold,
+        )
+
+        # Maintain 'last' symlinks (ckpt + mp4) to this epoch artifacts
+        last_ckpt = checkpoint_dir / "last.ckpt"
+        self._update_symlink(last_ckpt, timestamped_path)
+        self.last_checkpoint_path = str(last_ckpt)
+
+        # Update last.mp4 -> epoch=XX.mp4 when available
+        epoch_video = checkpoint_dir / f"epoch={epoch:02d}.mp4"
+        if epoch_video.exists():
+            self._update_symlink(checkpoint_dir / "last.mp4", epoch_video)
+
+        # If this is a new best, update best metric and best symlinks
+        if is_best:
+            self.best_metric_value = current_metric_value
+            self.best_epoch_index = int(epoch)
+            best_ckpt = checkpoint_dir / "best.ckpt"
+            self._update_symlink(best_ckpt, timestamped_path)
+            self.best_checkpoint_path = str(best_ckpt)
+
+            if epoch_video.exists():
+                self._update_symlink(checkpoint_dir / "best.mp4", epoch_video)
+
+            print(f"New best model: {self.monitor}={current_metric_value:.4f}\n  -> {timestamped_path.name}")
+            pl_module.best_model_path = str(best_ckpt)
+            pl_module.best_eval_reward = current_metric_value
+
+        # Unified reward threshold (config overrides env spec, then gym.spec fallback)
+        if is_threshold:
+            print(
+                f"Threshold reached! Saved model with {self.monitor}={current_metric_value:.4f} "
+                f"(threshold={effective_threshold}) at {timestamped_path}"
+            )
             self._threshold_checkpoint_saved = True
             if not trainer.should_stop and getattr(pl_module.config, 'early_stop_on_eval_threshold', True):
-                print(f"Early stopping at epoch {pl_module.current_epoch} with eval mean reward {current_metric_value:.2f} >= threshold {effective_threshold}")
+                print(
+                    f"Early stopping at epoch {pl_module.current_epoch} with eval mean reward {current_metric_value:.2f} >= threshold {effective_threshold}"
+                )
                 trainer.should_stop = True
 
         # Delegate to legacy tracking (will early stop if missed above)
@@ -316,7 +328,7 @@ class ModelCheckpointCallback(pl.Callback):
                 print(f"No reward threshold available - config: {config_threshold}, env spec: {env_threshold} - skipping early stopping check")
     
     def on_train_epoch_end(self, trainer, pl_module):
-        """Save last checkpoint after each training epoch."""
+        """Maintain 'last' symlinks to the most recent epoch checkpoint/video after each training epoch."""
         # Train-side early stopping on threshold if enabled
         try:
             train_ep_rew_mean = float(trainer.logged_metrics.get("train/ep_rew_mean")) if hasattr(trainer, 'logged_metrics') else None
@@ -349,25 +361,21 @@ class ModelCheckpointCallback(pl.Callback):
 
         if self.save_last:
             checkpoint_dir = self._get_checkpoint_dir(pl_module)
-            last_path = checkpoint_dir / "last.ckpt"
-            # Capture whatever metrics are available at train epoch end
-            logged_metrics = getattr(trainer, 'logged_metrics', None)
-            cur_eval = None
-            try:
-                if isinstance(logged_metrics, dict) and self.monitor in logged_metrics:
-                    cur_eval = float(logged_metrics[self.monitor])
-            except Exception:
-                cur_eval = None
-            self.last_checkpoint_path = self._save_checkpoint(
-                pl_module,
-                last_path,
-                is_last=True,
-                metrics=logged_metrics,
-                current_eval_reward=cur_eval,
-            )
+            latest = self._find_latest_epoch_ckpt(checkpoint_dir)
+            if latest is not None:
+                self._update_symlink(checkpoint_dir / "last.ckpt", latest)
+                self.last_checkpoint_path = str(checkpoint_dir / "last.ckpt")
+                # Mirror last.mp4 if available
+                try:
+                    epoch_str = latest.stem.split("=")[-1]
+                    vid = checkpoint_dir / f"epoch={epoch_str}.mp4"
+                    if vid.exists():
+                        self._update_symlink(checkpoint_dir / "last.mp4", vid)
+                except Exception:
+                    pass
     
     def on_fit_end(self, trainer, pl_module):
-        """Handle training completion summary that was previously in BaseAgent."""
+        """Handle training completion summary and ensure symlinks are consistent."""
         # Print completion summary
         if self.best_checkpoint_path:
             print(f"Best model saved at {self.best_checkpoint_path} with eval reward {pl_module.best_eval_reward:.2f}")
@@ -376,65 +384,29 @@ class ModelCheckpointCallback(pl.Callback):
         else:
             print("No checkpoints were saved during training")
 
-    # After training finishes, run a final evaluation using the best checkpoint
-    # and record a full-length video saved as 'best.mp4'.
+        # Ensure best/last symlinks are pointing to the latest epoch artifacts
         try:
-            best_ckpt = self.best_checkpoint_path
-            if best_ckpt is None:
-                # If no explicit best was tracked, try conventional path in checkpoint_dir
-                candidate = Path(self.checkpoint_dir) / "best.ckpt"
-                if candidate.exists():
-                    best_ckpt = candidate
-
-            if best_ckpt is None or not Path(best_ckpt).exists():
-                # Nothing to do if we don't have a best checkpoint
-                return
-
-            # Load the best checkpoint weights (no need to resume optimizer/state)
-            try:
-                from utils.checkpoint import load_checkpoint
-                load_checkpoint(Path(best_ckpt), pl_module, resume_training=False)
-            except Exception as e:
-                print(f"Warning: failed to load best checkpoint for final evaluation: {e}")
-                return
-
-            # Prepare video path alongside checkpoints so names align for correlation
-            # Save as checkpoints/best.mp4 next to checkpoints/best.ckpt
             ckpt_dir = pl_module.run_manager.get_checkpoint_dir()
-            ckpt_dir.mkdir(parents=True, exist_ok=True)
-            video_path = ckpt_dir / "best.mp4"
-
-            # Ensure full-length recording by temporarily disabling video_length cap
-            # validation_env is a VecInfoWrapper around VecVideoRecorder -> access via .venv
-            vec_rec = getattr(pl_module.validation_env, 'venv', None)
-            old_len = None
-            if vec_rec is not None and hasattr(vec_rec, 'video_length'):
-                old_len = getattr(vec_rec, 'video_length')
+            latest = self._find_latest_epoch_ckpt(ckpt_dir)
+            if latest is not None:
+                self._update_symlink(ckpt_dir / "last.ckpt", latest)
+                # Update last.mp4 if available
                 try:
-                    setattr(vec_rec, 'video_length', None)
+                    epoch_str = latest.stem.split("=")[-1]
+                    vid = ckpt_dir / f"epoch={epoch_str}.mp4"
+                    if vid.exists():
+                        self._update_symlink(ckpt_dir / "last.mp4", vid)
                 except Exception:
                     pass
 
-            # Run a one-episode deterministic evaluation while recording
-            try:
-                from utils.evaluation import evaluate_policy
-                with pl_module.validation_env.recorder(str(video_path), record_video=True):
-                    _ = evaluate_policy(
-                        pl_module.validation_env,
-                        pl_module.policy_model,
-                        n_episodes=1,
-                        deterministic=getattr(pl_module.config, 'eval_deterministic', True),
-                    )
-                print(f"Saved final evaluation video to: {video_path}")
-            except Exception as e:
-                print(f"Warning: failed to record final evaluation video: {e}")
-            finally:
-                # Restore original video length cap if we changed it
-                if vec_rec is not None and hasattr(vec_rec, 'video_length'):
-                    try:
-                        setattr(vec_rec, 'video_length', old_len)
-                    except Exception:
-                        pass
+            # If we tracked a best epoch, ensure best symlinks exist
+            if self.best_epoch_index is not None:
+                best_epoch = int(self.best_epoch_index)
+                best_epoch_ckpt = ckpt_dir / f"epoch={best_epoch:02d}.ckpt"
+                if best_epoch_ckpt.exists():
+                    self._update_symlink(ckpt_dir / "best.ckpt", best_epoch_ckpt)
+                    best_vid = ckpt_dir / f"epoch={best_epoch:02d}.mp4"
+                    if best_vid.exists():
+                        self._update_symlink(ckpt_dir / "best.mp4", best_vid)
         except Exception as e:
-            # Never fail training teardown due to best-checkpoint evaluation
-            print(f"Warning: final best-checkpoint evaluation skipped due to error: {e}")
+            print(f"Warning: final symlink reconciliation failed: {e}")

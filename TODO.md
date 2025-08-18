@@ -1,9 +1,4 @@
-- Add support for quiet mode; this will allow running without user prompts (just does defaults) - eg: will skip asking if trainign shouldd start
-
-
 - BUG: action distributions are note being logged correctly (how will I log this along with our current per epoch system?)
-- BUG: last video recorded video is cropped; whenever training stops for whatever reason, the last video should be recorded until episode end.
-
 - BUG: CartPole-v1 PPO is not training as fast; 115f9c73faed6785a0bd58c37f55298324e90f43 was ok
 - add support for resuming training from a checkpoint
 - FEAT: Whenever we record a checkpoint we need to store all metrics at that point.

@@ -870,6 +870,13 @@ class BaseAgent(pl.LightningModule):
 
     def _confirm_proceed(self) -> bool:
         """Ask user to confirm proceeding. Default to Yes on empty input or non-interactive sessions."""
+        # Honor quiet mode to avoid any interactive prompts
+        try:
+            if getattr(getattr(self, "config", object()), "quiet", False):
+                print("Proceed with training? [Y/n]: Y (quiet)")
+                return True
+        except Exception:
+            pass
         prompt = "Proceed with training? [Y/n]: "
         try:
             # If not a TTY (e.g., running in CI), default-accept

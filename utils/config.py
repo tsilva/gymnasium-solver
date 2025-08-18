@@ -141,6 +141,10 @@ class Config:
     # Number of devices to use or 'auto' (forwarded to Lightning as-is); None lets Lightning decide
     devices: Optional[Union[int, str]] = None
 
+    # ===== CLI/UX (optional) =====
+    # When True, run non-interactively (auto-accept prompts, suppress confirmations)
+    quiet: bool = False
+
     # ===== Legacy compatibility (do not rely on these directly) =====
     # RL Zoo compatibility flag mapped to normalize_obs/reward
     normalize: Optional[bool] = None

@@ -15,6 +15,7 @@ def main():
     parser.add_argument("--algo", type=str, default=None, help="Agent type (optional, extracted from config if not provided)")
     parser.add_argument("--resume", action="store_true", help="Resume training from latest checkpoint")
     parser.add_argument("--log-dir", type=str, default="logs", help="Directory for log files (default: logs)")
+    parser.add_argument("--quiet", "-q", action="store_true", help="Run non-interactively: auto-accept prompts and defaults")
     args = parser.parse_args()
 
     config = load_config(args.config, args.algo)
@@ -22,6 +23,9 @@ def main():
     # Override resume flag if provided via command line
     if args.resume:
         config.resume = True
+    # Quiet mode disables interactive prompts
+    if getattr(args, "quiet", False):
+        setattr(config, "quiet", True)
     
     # Group session header and config/agent details neatly once
     print("=== Training Session Started ===")

@@ -1,5 +1,3 @@
-
-- FEAT: Whenever we record a checkpoint we need to store all metrics at that point; in same folder save a .json file with same name as checkpoint, containing all metrics at that point
 - FEAT: track learning hyperparams in wandb (train/hyperparams)
 - FEAT: call challenges instead of environments
 

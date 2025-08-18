@@ -1,6 +1,7 @@
 """Checkpoint management utilities for model saving and resuming training."""
 
 from pathlib import Path
+import json
 
 import pytorch_lightning as pl
 import torch
@@ -194,6 +195,17 @@ class ModelCheckpointCallback(pl.Callback):
         
         # Save checkpoint
         torch.save(checkpoint_data, checkpoint_path)
+
+        # Save metrics snapshot as a sidecar JSON with the same basename
+        try:
+            serialized_metrics = _serialize_metrics(metrics)
+            if serialized_metrics is not None:
+                json_path = checkpoint_path.with_suffix(".json")
+                with open(json_path, "w", encoding="utf-8") as f:
+                    json.dump(serialized_metrics, f, ensure_ascii=False)
+        except Exception as e:
+            # Don't fail training if metrics JSON can't be written
+            print(f"Warning: failed to write metrics JSON for {checkpoint_path.name}: {e}")
         return checkpoint_path
     
     def _should_save_best(self, current_value: float) -> bool:
@@ -261,10 +273,15 @@ class ModelCheckpointCallback(pl.Callback):
             threshold_value=effective_threshold,
         )
 
-        # Maintain 'last' symlinks (ckpt + mp4) to this epoch artifacts
+        # Maintain 'last' symlinks (ckpt + json + mp4) to this epoch artifacts
         last_ckpt = checkpoint_dir / "last.ckpt"
         self._update_symlink(last_ckpt, timestamped_path)
         self.last_checkpoint_path = str(last_ckpt)
+
+        # Update last.json -> epoch=XX.json when available
+        epoch_json = checkpoint_dir / f"epoch={epoch:02d}.json"
+        if epoch_json.exists():
+            self._update_symlink(checkpoint_dir / "last.json", epoch_json)
 
         # Update last.mp4 -> epoch=XX.mp4 when available
         epoch_video = checkpoint_dir / f"epoch={epoch:02d}.mp4"
@@ -278,6 +295,10 @@ class ModelCheckpointCallback(pl.Callback):
             best_ckpt = checkpoint_dir / "best.ckpt"
             self._update_symlink(best_ckpt, timestamped_path)
             self.best_checkpoint_path = str(best_ckpt)
+
+            # Mirror best.json if available
+            if epoch_json.exists():
+                self._update_symlink(checkpoint_dir / "best.json", epoch_json)
 
             if epoch_video.exists():
                 self._update_symlink(checkpoint_dir / "best.mp4", epoch_video)
@@ -391,9 +412,12 @@ class ModelCheckpointCallback(pl.Callback):
             if latest is not None:
                 self._update_symlink(checkpoint_dir / "last.ckpt", latest)
                 self.last_checkpoint_path = str(checkpoint_dir / "last.ckpt")
-                # Mirror last.mp4 if available
+                # Mirror last.json/mp4 if available
                 try:
                     epoch_str = latest.stem.split("=")[-1]
+                    jpath = checkpoint_dir / f"epoch={epoch_str}.json"
+                    if jpath.exists():
+                        self._update_symlink(checkpoint_dir / "last.json", jpath)
                     vid = checkpoint_dir / f"epoch={epoch_str}.mp4"
                     if vid.exists():
                         self._update_symlink(checkpoint_dir / "last.mp4", vid)
@@ -416,9 +440,12 @@ class ModelCheckpointCallback(pl.Callback):
             latest = self._find_latest_epoch_ckpt(ckpt_dir)
             if latest is not None:
                 self._update_symlink(ckpt_dir / "last.ckpt", latest)
-                # Update last.mp4 if available
+                # Update last.json/mp4 if available
                 try:
                     epoch_str = latest.stem.split("=")[-1]
+                    jpath = ckpt_dir / f"epoch={epoch_str}.json"
+                    if jpath.exists():
+                        self._update_symlink(ckpt_dir / "last.json", jpath)
                     vid = ckpt_dir / f"epoch={epoch_str}.mp4"
                     if vid.exists():
                         self._update_symlink(ckpt_dir / "last.mp4", vid)
@@ -431,6 +458,9 @@ class ModelCheckpointCallback(pl.Callback):
                 best_epoch_ckpt = ckpt_dir / f"epoch={best_epoch:02d}.ckpt"
                 if best_epoch_ckpt.exists():
                     self._update_symlink(ckpt_dir / "best.ckpt", best_epoch_ckpt)
+                    best_json = ckpt_dir / f"epoch={best_epoch:02d}.json"
+                    if best_json.exists():
+                        self._update_symlink(ckpt_dir / "best.json", best_json)
                     best_vid = ckpt_dir / f"epoch={best_epoch:02d}.mp4"
                     if best_vid.exists():
                         self._update_symlink(ckpt_dir / "best.mp4", best_vid)

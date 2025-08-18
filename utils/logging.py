@@ -250,6 +250,43 @@ def capture_all_output(config=None, log_dir: str = "logs", max_log_files: int = 
     
     # Create log file
     log_file = _log_manager.create_log_file(config)
+
+    # Best-effort: ensure a stable run log exists at parent/run.log when using a
+    # conventional runs/<run_id>/logs layout. This creates or updates a symlink
+    # runs/<run_id>/run.log -> runs/<run_id>/logs/<training_timestamp>.log.
+    try:
+        logs_path = Path(log_dir)
+        if logs_path.name == "logs":
+            run_root = logs_path.parent
+            target = Path(log_file.name)
+            try:
+                # Use a relative target so the link works regardless of CWD
+                rel_target = target if target.is_absolute() else Path("logs") / target.name
+            except Exception:
+                rel_target = target
+            stable = run_root / "run.log"
+            # Remove existing file or link if present
+            if stable.exists() or stable.is_symlink():
+                try:
+                    stable.unlink()
+                except Exception:
+                    pass
+            try:
+                stable.symlink_to(rel_target)
+            except Exception:
+                # If symlink fails (e.g., platform restrictions), copy once as fallback
+                try:
+                    # Write a small header then append the current content
+                    with open(stable, "w", encoding="utf-8") as f_out:
+                        f_out.write(f"Link target: {target}\n")
+                    # Best-effort initial copy; live updates won't mirror without symlink
+                    from shutil import copyfile
+                    copyfile(target, stable)
+                except Exception:
+                    pass
+    except Exception:
+        # Never fail logging on symlink/copy issues
+        pass
     
     # Use stream redirector
     with StreamRedirector(log_file, redirect_stdout=True, redirect_stderr=True):

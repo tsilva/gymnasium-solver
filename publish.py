@@ -216,10 +216,14 @@ def extract_run_metadata(run_dir: Path) -> dict:
     # Find the best video (best_checkpoint.mp4) if available
     best_video: Optional[Path] = _find_best_video_for_run(run_dir)
 
+    # Logs: prefer stable run.log at run root, then all logs under logs/
     logs_dir = run_dir / "logs"
     log_files: List[Path] = []
+    stable_log = run_dir / "run.log"
+    if stable_log.exists():
+        log_files.append(stable_log)
     if logs_dir.exists():
-        log_files = sorted(logs_dir.glob("*.log"))
+        log_files.extend(sorted(logs_dir.glob("*.log")))
 
     # Basic metrics from checkpoint (best/current eval reward, epoch, timesteps)
     metrics = {}

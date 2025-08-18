@@ -243,50 +243,35 @@ def capture_all_output(config=None, log_dir: str = "logs", max_log_files: int = 
             print("This goes to both console and log file")
             # ... run training ...
     """
-    # Set up log manager if not already done, or if target dir changed
-    target_dir = Path(log_dir)
-    if _log_manager is None or getattr(_log_manager, 'log_dir', None) != target_dir:
-        setup_logging(str(target_dir), max_log_files)
-    
-    # Create log file
-    log_file = _log_manager.create_log_file(config)
-
-    # Best-effort: ensure a stable run log exists at parent/run.log when using a
-    # conventional runs/<run_id>/logs layout. This creates or updates a symlink
-    # runs/<run_id>/run.log -> runs/<run_id>/logs/<training_timestamp>.log.
-    try:
-        logs_path = Path(log_dir)
-        if logs_path.name == "logs":
-            run_root = logs_path.parent
-            target = Path(log_file.name)
-            try:
-                # Use a relative target so the link works regardless of CWD
-                rel_target = target if target.is_absolute() else Path("logs") / target.name
-            except Exception:
-                rel_target = target
-            stable = run_root / "run.log"
-            # Remove existing file or link if present
-            if stable.exists() or stable.is_symlink():
-                try:
-                    stable.unlink()
-                except Exception:
-                    pass
-            try:
-                stable.symlink_to(rel_target)
-            except Exception:
-                # If symlink fails (e.g., platform restrictions), copy once as fallback
-                try:
-                    # Write a small header then append the current content
-                    with open(stable, "w", encoding="utf-8") as f_out:
-                        f_out.write(f"Link target: {target}\n")
-                    # Best-effort initial copy; live updates won't mirror without symlink
-                    from shutil import copyfile
-                    copyfile(target, stable)
-                except Exception:
-                    pass
-    except Exception:
-        # Never fail logging on symlink/copy issues
-        pass
+    logs_path = Path(log_dir)
+    if logs_path.name == "logs":
+        # Legacy/generic mode: create timestamped logs under a 'logs' directory
+        # Set up log manager if not already done, or if target dir changed
+        target_dir = logs_path
+        if _log_manager is None or getattr(_log_manager, 'log_dir', None) != target_dir:
+            setup_logging(str(target_dir), max_log_files)
+        # Create timestamped log file under logs/
+        log_file = _log_manager.create_log_file(config)
+    else:
+        # Run-root mode: write a stable run.log directly in the provided directory
+        try:
+            logs_path.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            # If directory creation fails, fallback to current directory
+            logs_path = Path(".")
+        stable_path = logs_path / "run.log"
+        # Always overwrite on new session start
+        log_file = open(stable_path, 'w', encoding='utf-8', buffering=1)
+        # Write a header similar to LogFileManager
+        log_file.write(f"=== Training Session Started ===\n")
+        log_file.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        log_file.write(f"Log file: {stable_path}\n")
+        if config:
+            log_file.write(f"Algorithm: {getattr(config, 'algo_id', 'unknown')}\n")
+            log_file.write(f"Environment: {getattr(config, 'env_id', 'unknown')}\n")
+            log_file.write(f"Seed: {getattr(config, 'seed', 'unknown')}\n")
+        log_file.write("=" * 50 + "\n\n")
+        log_file.flush()
     
     # Use stream redirector
     with StreamRedirector(log_file, redirect_stdout=True, redirect_stderr=True):

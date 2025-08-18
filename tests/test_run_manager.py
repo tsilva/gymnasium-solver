@@ -21,7 +21,6 @@ def test_run_manager_creates_dirs_and_symlink(tmp_path: Path, monkeypatch):
     assert run_dir.exists()
     assert (run_dir / "checkpoints").exists()
     assert (run_dir / "videos").exists()
-    assert (run_dir / "logs").exists()
     # configs subdir is optional in new layout
 
     latest = Path(tmp_path / "runs" / "latest-run")

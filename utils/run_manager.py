@@ -29,7 +29,6 @@ class RunManager:
         # Create dirs
         self.run_dir.mkdir(parents=True, exist_ok=True)
         (self.run_dir / "checkpoints").mkdir(exist_ok=True)
-        (self.run_dir / "logs").mkdir(exist_ok=True)
         (self.run_dir / "videos").mkdir(exist_ok=True)
 
         self._update_latest_run_symlink()
@@ -59,7 +58,8 @@ class RunManager:
     def get_logs_dir(self) -> Path:
         if self.run_dir is None:
             raise ValueError("Run directory not set up. Call setup_run_directory() first.")
-        return self.run_dir / "logs"
+        # Store logs directly at the run root (run.log), no logs subfolder
+        return self.run_dir
 
     def get_configs_dir(self) -> Path:
         """Compatibility: place configs at run root."""

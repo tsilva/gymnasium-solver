@@ -1,3 +1,7 @@
+- BUG: best.mp4 is not symlinked to the respective video
+- BUG: `videos` folder is still being created in the run dir
+- BUG: we should be logging training metrics to a CSV file too, to be stored in run_dir as `metrics.csv`. While logging make sure you do it in a way that has the highest throughput possible and doesnt' slow down training.
+
 - BUG: CartPole-v1 PPO is not training as fast; 115f9c73faed6785a0bd58c37f55298324e90f43 was ok
 - add support for resuming training from a checkpoint
 - FEAT: Whenever we record a checkpoint we need to store all metrics at that point.

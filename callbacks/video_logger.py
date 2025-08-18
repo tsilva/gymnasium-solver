@@ -95,9 +95,14 @@ class VideoLoggerCallback(pl.Callback):
         train_root = train_root.resolve()
         eval_root = eval_root.resolve()
         
-        # Create directories if they don't exist
-        train_root.mkdir(parents=True, exist_ok=True)
-        eval_root.mkdir(parents=True, exist_ok=True)
+        # Do NOT create directories here; only watch ones that already exist
+        train_exists = train_root.exists()
+        eval_exists = eval_root.exists()
+        if not train_exists and not eval_exists:
+            # Still record intended roots for later checks
+            self._train_root = train_root
+            self._eval_root = eval_root
+            return
         
         self._train_root = train_root
         self._eval_root = eval_root
@@ -152,10 +157,19 @@ class VideoLoggerCallback(pl.Callback):
         self._handler = CreatedOrMovedInHandler()
         self._observer = Observer()
         
-        # Watch both train and eval directories
-        self._observer.schedule(self._handler, str(train_root), recursive=True)
-        self._observer.schedule(self._handler, str(eval_root), recursive=True)
-        self._observer.start()
+        # Watch existing directories only
+        if train_exists:
+            self._observer.schedule(self._handler, str(train_root), recursive=True)
+        if eval_exists:
+            self._observer.schedule(self._handler, str(eval_root), recursive=True)
+        
+        # Start observer only if at least one directory is scheduled
+        if train_exists or eval_exists:
+            self._observer.start()
+        else:
+            # Clean up if nothing to watch
+            self._observer = None
+            self._handler = None
 
     def _stop_watch(self):
         if self._observer:
@@ -202,6 +216,20 @@ class VideoLoggerCallback(pl.Callback):
         if not self._observer:
             train_root, eval_root = self._resolve_roots(run.dir)
             self._start_watch(train_root, eval_root)
+            # One-time fallback: if roots exist and observer just started or roots exist
+            # but we chose not to start observer (e.g., only one exists), pick up existing files
+            tr_exists = train_root.exists()
+            ev_exists = eval_root.exists()
+            if tr_exists or ev_exists:
+                with self._lock:
+                    if tr_exists:
+                        for p in Path(train_root).rglob("*"):
+                            if p.is_file() and p.suffix.lower() in self.exts:
+                                self._pending_train.add(str(p.resolve()))
+                    if ev_exists:
+                        for p in Path(eval_root).rglob("*"):
+                            if p.is_file() and p.suffix.lower() in self.exts:
+                                self._pending_eval.add(str(p.resolve()))
 
         if self._train_root is None or self._eval_root is None:
             return

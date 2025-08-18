@@ -26,10 +26,12 @@ class MetricsBuffer:
     def clear(self) -> None:
         self._data.clear()
 
-    def flush_to(self, log_fn: Callable[[MutableMapping[str, float]], None]) -> None:
+    def flush_to(self, log_fn: Callable[[MutableMapping[str, float]], None]) -> Dict[str, float]:
         """
         Flush means to the provided logger function (e.g., LightningModule.log_dict)
-        and clear internal buffers.
+        and clear internal buffers. Returns the computed means for external sinks.
         """
-        log_fn(self.means())
+        m = self.means()
+        log_fn(m)
         self.clear()
+        return m

@@ -1,5 +1,9 @@
-- BUG: `videos` folder is still being created in the run dir
-- BUG: we should be logging training metrics to a CSV file too, to be stored in run_dir as `metrics.csv`. While logging make sure you do it in a way that has the highest throughput possible and doesnt' slow down training.
+- FEAT: Add support for generating end of training report. The objective of this report is to be fed to an LLM so it can suggest adjustment to the training hyperparameters in order to improve the training process, so that we can achieve a better reward (if applicable), achieve max reward faster (if max reward is already being achieved), etc.
+
+- FEAT: track immediate episode reward (for monitoring hyperparam change reaction)
+
+
+- BUG: action distributions are note being logged correctly (how will I log this along with our current per epoch system?)
 
 - BUG: CartPole-v1 PPO is not training as fast; 115f9c73faed6785a0bd58c37f55298324e90f43 was ok
 - add support for resuming training from a checkpoint
@@ -12,15 +16,12 @@
 - Generalized scheduling for metrics, make those be logged
 - FEAT: track learning hyperparams in wandb (train/hyperparams)
 
-- FEAT: Add support for generating end of training report
-- BUG: action distributions are note being logged correctly (how will I log this along with our current per epoch system?)
 - FEAT: ask copilot to create its own isntructrions namely to generate its own techical documentation that it keeps up to date
 - REFACTOR: rollout buffer can be much more efficient (review how sb3 does it) -- our fps is still 1000 below sb3
 - FEAT: add ability for the cursor agent to be able to run and adjust hyperparams by itself
 - TODO: Figure out why CartPole-v1/PPO works better with Tahn activation than ReLU
 - BUG: PPO can solve FrozenLake-v1, but REINFORCE cannot. REINFORCE is likely not implemented correctly.
 - BUG: is REINFORCE well implemented? are we waiting until the end of the episode to update the policy?
-- FEAT: track immediate episode reward (for monitoring hyperparam change reaction)
 - FEAT: improve metric descriptions
 - FEAT: write guide on how to monitor training
 - FEAT: train on cloud server

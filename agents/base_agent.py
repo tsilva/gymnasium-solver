@@ -3,6 +3,7 @@ import time
 import types
 
 import torch
+from pathlib import Path
 
 # Optional dependency: PyTorch Lightning
 try:
@@ -49,6 +50,7 @@ except Exception:  # pragma: no cover
 
 # Safe/lightweight import
 from utils.metrics_buffer import MetricsBuffer
+from utils.csv_logger import CsvMetricsLogger
 
 
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
@@ -79,6 +81,9 @@ class BaseAgent(pl.LightningModule):
         self.train_epoch_start_timesteps = None
         self.validation_epoch_start_time = None
         self.validation_epoch_start_timesteps = None
+
+        # CSV metrics logger (initialized with run manager)
+        self._csv_logger = None
 
         # Create the environments (lazy import of heavy deps)
         from utils.environment import build_env
@@ -607,6 +612,11 @@ class BaseAgent(pl.LightningModule):
         self.run_manager = RunManager()
         run_dir = self.run_manager.setup_run_directory(wandb_logger.experiment)
         run_logs_dir = str(self.run_manager.get_logs_dir())
+        # Initialize high-throughput CSV metrics logger at run root
+        try:
+            self._csv_logger = CsvMetricsLogger(Path(run_dir) / "metrics.csv")
+        except Exception:
+            self._csv_logger = None  # Never block training on CSV setup
         return run_dir, run_logs_dir
 
     def _define_wandb_metrics(self, wandb_logger):
@@ -823,7 +833,26 @@ class BaseAgent(pl.LightningModule):
 
     def _flush_metrics(self):
         # Flush via buffer abstraction
-        self._metrics_buffer.flush_to(self.log_dict)
+        means = self._metrics_buffer.flush_to(self.log_dict)
+        # Also enqueue to CSV logger (asynchronous, non-blocking)
+        try:
+            if self._csv_logger is not None:
+                self._csv_logger.log_metrics(means)
+        except Exception:
+            pass
+
+    # Ensure CSV logger is closed cleanly when training ends
+    def on_fit_end(self):
+        try:
+            if self._csv_logger is not None:
+                self._csv_logger.close()
+        except Exception:
+            pass
+        # Call super if available
+        try:
+            return super().on_fit_end()
+        except Exception:
+            return None
 
     # -------------------------
     # Pre-training summary & confirmation helpers

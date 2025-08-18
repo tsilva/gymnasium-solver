@@ -29,7 +29,8 @@ class RunManager:
         # Create dirs
         self.run_dir.mkdir(parents=True, exist_ok=True)
         (self.run_dir / "checkpoints").mkdir(exist_ok=True)
-        (self.run_dir / "videos").mkdir(exist_ok=True)
+        # Do not eagerly create a 'videos' directory; video loggers/recorders
+        # will create their own subfolders lazily when actually used.
 
         self._update_latest_run_symlink()
         return self.run_dir

@@ -117,7 +117,7 @@ class PPO(BaseAgent):
         new_clip_range = max(self.config.clip_range * (1.0 - progress), 0.0)
         self.clip_range = new_clip_range
 
-        # TODO: this should not be logged here
+        # Log scheduled clip_range under hyperparams namespace
         self.log_metrics({
-            'clip_range': new_clip_range    
-        }, prefix="train")
+            'clip_range': new_clip_range
+        }, prefix="train/hyperparams")

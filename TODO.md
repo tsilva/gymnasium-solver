@@ -1,4 +1,3 @@
-- FEAT: track learning hyperparams in wandb (train/hyperparams)
 - FEAT: call challenges instead of environments
 
 - BUG: action distributions are note being logged correctly (how will I log this along with our current per epoch system?)

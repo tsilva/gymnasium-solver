@@ -99,6 +99,13 @@ class HyperparameterScheduler(pl.Callback):
         if self.enable_manual_control:
             self.start_monitoring()
 
+        # Log initial hyperparameters to W&B under train/hyperparams
+        try:
+            self._log_hyperparams(pl_module)
+        except Exception:
+            # Never block training on telemetry issues
+            pass
+
         if self.verbose:
             print(f"\n🎛️  Hyperparameter manual control enabled!")
             print(f"   Control directory: {self.control_dir}")
@@ -162,6 +169,7 @@ class HyperparameterScheduler(pl.Callback):
     def _apply_adjustments(self, trainer: pl.Trainer, pl_module: pl.LightningModule, data: Dict[str, Any]) -> None:
         """Apply hyperparameter adjustments from control file."""
         changes = []
+        changed_for_log: Dict[str, float] = {}
         
         # Learning rate (support either 'policy_lr' or 'learning_rate' key from config.json)
         if "policy_lr" in data or "learning_rate" in data:
@@ -171,6 +179,7 @@ class HyperparameterScheduler(pl.Callback):
             if abs(new_lr - old_lr) > 1e-8:
                 self._update_learning_rate(trainer, pl_module, new_lr)
                 changes.append(f"policy_lr: {old_lr:.2e} → {new_lr:.2e}")
+                changed_for_log["learning_rate"] = new_lr
         
         # Entropy coefficient
         if "ent_coef" in data:
@@ -179,6 +188,7 @@ class HyperparameterScheduler(pl.Callback):
             if abs(new_val - old_val) > 1e-8:
                 pl_module.config.ent_coef = new_val
                 changes.append(f"ent_coef: {old_val:.3f} → {new_val:.3f}")
+                changed_for_log["ent_coef"] = new_val
         
         # Gradient clipping
         if "max_grad_norm" in data:
@@ -187,6 +197,7 @@ class HyperparameterScheduler(pl.Callback):
             if abs(new_val - old_val) > 1e-8:
                 pl_module.config.max_grad_norm = new_val
                 changes.append(f"max_grad_norm: {old_val:.3f} → {new_val:.3f}")
+                changed_for_log["max_grad_norm"] = new_val
         
         # PPO-specific parameters
         if hasattr(pl_module.config, 'clip_range') and "clip_range" in data:
@@ -195,6 +206,7 @@ class HyperparameterScheduler(pl.Callback):
             if abs(new_val - old_val) > 1e-8:
                 pl_module.config.clip_range = new_val
                 changes.append(f"clip_range: {old_val:.3f} → {new_val:.3f}")
+                changed_for_log["clip_range"] = new_val
         
         if hasattr(pl_module.config, 'vf_coef') and "vf_coef" in data:
             new_val = float(data["vf_coef"])
@@ -202,7 +214,15 @@ class HyperparameterScheduler(pl.Callback):
             if abs(new_val - old_val) > 1e-8:
                 pl_module.config.vf_coef = new_val
                 changes.append(f"vf_coef: {old_val:.3f} → {new_val:.3f}")
-        
+                changed_for_log["vf_coef"] = new_val
+
+        # Emit W&B logs for changed hyperparameters under train/hyperparams
+        if changed_for_log:
+            try:
+                pl_module.log_metrics(changed_for_log, prefix="train/hyperparams")
+            except Exception:
+                pass
+
         if changes and self.verbose:
             print(f"🎛️  Hyperparameters updated (epoch {trainer.current_epoch}): {', '.join(changes)}")
     
@@ -223,6 +243,22 @@ class HyperparameterScheduler(pl.Callback):
         
         if self.verbose and abs(new_lr - old_lr) > 1e-8:
             print(f"📈 Learning rate updated: {old_lr:.2e} → {new_lr:.2e} (epoch {trainer.current_epoch})")
+
+    def _log_hyperparams(self, pl_module: pl.LightningModule) -> None:
+        """Helper to log current hyperparameters under train/hyperparams."""
+        hp: Dict[str, float] = {}
+        try:
+            hp["learning_rate"] = float(pl_module.config.policy_lr)
+        except Exception:
+            pass
+        for key in ("ent_coef", "vf_coef", "clip_range", "max_grad_norm"):
+            if hasattr(pl_module.config, key) and getattr(pl_module.config, key) is not None:
+                try:
+                    hp[key] = float(getattr(pl_module.config, key))
+                except Exception:
+                    continue
+        if hp:
+            pl_module.log_metrics(hp, prefix="train/hyperparams")
     
     
     def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:

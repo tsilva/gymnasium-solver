@@ -626,6 +626,7 @@ class BaseAgent(pl.LightningModule):
     def _define_wandb_metrics(self, wandb_logger):
         if wandb_logger.experiment:
             wandb_logger.experiment.define_metric("train/*", step_metric="train/total_timesteps")
+            wandb_logger.experiment.define_metric("train/hyperparams/*", step_metric="train/total_timesteps")
             wandb_logger.experiment.define_metric("eval/*", step_metric="train/total_timesteps")
             # Expose metric bounds to the W&B run config for dashboard consumption
             try:
@@ -787,9 +788,8 @@ class BaseAgent(pl.LightningModule):
         progress = self._get_training_progress()
         new_learning_rate = max(self.config.learning_rate * (1.0 - progress), 0.0)
         self._change_optimizers_learning_rate(new_learning_rate)
-
-        # TODO: this should not be logged here
-        self.log_metrics({"learning_rate": new_learning_rate}, prefix="train")
+        # Log scheduled LR under hyperparams namespace
+        self.log_metrics({"learning_rate": new_learning_rate}, prefix="train/hyperparams")
 
     def _change_optimizers_learning_rate(self, learning_rate):
         # Obtain optimizers from Lightning when attached; otherwise, fall back

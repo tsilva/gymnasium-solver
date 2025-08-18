@@ -172,6 +172,7 @@ class ModelCheckpointCallback(pl.Callback):
         checkpoint_dir = self._get_checkpoint_dir(pl_module)
 
         # Best model logic
+        saved_timestamped_path = None  # track if we saved an epoch checkpoint in this call
         is_best = self._should_save_best(current_metric_value)
         if is_best:
             self.best_metric_value = current_metric_value
@@ -185,6 +186,7 @@ class ModelCheckpointCallback(pl.Callback):
                 metrics=logged_metrics,
                 current_eval_reward=current_metric_value,
             )
+            saved_timestamped_path = timestamped_path
 
             best_path = checkpoint_dir / "best.ckpt"
             self.best_checkpoint_path = self._save_checkpoint(
@@ -224,17 +226,37 @@ class ModelCheckpointCallback(pl.Callback):
             not self._threshold_checkpoint_saved):
             epoch = pl_module.current_epoch
             step = pl_module.global_step
-            threshold_path = checkpoint_dir / f"threshold-epoch={epoch:02d}-step={step:04d}.ckpt"
-            self._save_checkpoint(
-                pl_module,
-                threshold_path,
-                is_threshold=True,
-                metrics=logged_metrics,
-                current_eval_reward=current_metric_value,
-                threshold_value=effective_threshold,
-            )
+            if saved_timestamped_path is not None:
+                # Avoid redundancy: annotate the just-saved epoch checkpoint with threshold info
+                self._save_checkpoint(
+                    pl_module,
+                    saved_timestamped_path,
+                    is_best=True,
+                    is_threshold=True,
+                    metrics=logged_metrics,
+                    current_eval_reward=current_metric_value,
+                    threshold_value=effective_threshold,
+                )
+                print(
+                    f"Threshold reached! Annotated checkpoint {saved_timestamped_path.name} "
+                    f"with {self.monitor}={current_metric_value:.4f} (threshold={effective_threshold})"
+                )
+            else:
+                # No epoch checkpoint saved this validation; create a dedicated threshold checkpoint
+                threshold_path = checkpoint_dir / f"threshold-epoch={epoch:02d}-step={step:04d}.ckpt"
+                self._save_checkpoint(
+                    pl_module,
+                    threshold_path,
+                    is_threshold=True,
+                    metrics=logged_metrics,
+                    current_eval_reward=current_metric_value,
+                    threshold_value=effective_threshold,
+                )
+                print(
+                    f"Threshold reached! Saved model with {self.monitor}={current_metric_value:.4f} "
+                    f"(threshold={effective_threshold}) at {threshold_path}"
+                )
             self._threshold_checkpoint_saved = True
-            print(f"Threshold reached! Saved model with {self.monitor}={current_metric_value:.4f} (threshold={effective_threshold}) at {threshold_path}")
             if not trainer.should_stop and getattr(pl_module.config, 'early_stop_on_eval_threshold', True):
                 print(f"Early stopping at epoch {pl_module.current_epoch} with eval mean reward {current_metric_value:.2f} >= threshold {effective_threshold}")
                 trainer.should_stop = True

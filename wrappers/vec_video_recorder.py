@@ -294,9 +294,21 @@ class VecVideoRecorder(VecEnvWrapper):
         os.makedirs(video_root, exist_ok=True)
 
         self.start_recording()
-        yield self
-        self.stop_recording()
-        self.save_recording(video_path)
+        try:
+            yield self
+        finally:
+            # Always stop and save, even if an exception/early stop occurs
+            try:
+                self.stop_recording()
+            except Exception:
+                pass
+            try:
+                # Only save if we have at least one frame
+                if len(self.recorded_frames) > 0:
+                    self.save_recording(video_path)
+            except Exception:
+                # Avoid crashing the training due to video save failures
+                pass
 
     def save_recording(self, video_path: str) -> None:
         assert len(self.recorded_frames) > 0, "No frames recorded to save."

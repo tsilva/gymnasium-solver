@@ -131,7 +131,9 @@ class BaseAgent(pl.LightningModule):
             render_mode="rgb_array",
             record_video=True,
             record_video_kwargs={
-                "video_length": 100,  # TODO: softcode this
+                # Record full episodes without truncation; the recorder will run
+                # until the evaluation block finishes.
+                "video_length": None,
                 "record_env_idx": 0,  # Record only first env by default
             },
         )

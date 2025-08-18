@@ -5,16 +5,20 @@ import threading
 import time
 from pathlib import Path
 from queue import Queue, Empty
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Optional, List
 
 
 class CsvMetricsLogger:
     """
-    High-throughput CSV metrics logger.
+    High-throughput CSV metrics logger (wide format).
 
     - Appends rows asynchronously using a background thread to avoid blocking training.
-    - Uses a long-form schema to avoid costly header rewrites when metric keys vary.
-      Columns: [time, total_timesteps, epoch, name, value]
+    - Writes wide-form CSV with metric names as individual columns.
+      Columns: [time, total_timesteps, epoch, <metric1>, <metric2>, ...]
+    - Dynamically upgrades the header when new metric keys appear, using an atomic
+      file rewrite to preserve previous rows.
+    - Detects legacy long-form files (columns: name, value) and rotates them to
+      a .legacy.csv file, starting fresh in wide format.
     - Safe to call from the training hot path; enqueues work and returns immediately.
     """
 
@@ -22,21 +26,30 @@ class CsvMetricsLogger:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Open file once; newline='' for correct CSV on all platforms
-        self._fh = open(self.path, mode="a", encoding="utf-8", newline="")
-        self._writer = csv.writer(self._fh)
+        # Base fields always first
+        self._base_fields = ["time", "total_timesteps", "epoch"]
+        self._ignore_legacy_fields = {"name", "value"}
+        self._fieldnames = list(self._base_fields)
 
-        # Write header only if file is empty
-        try:
-            if self.path.stat().st_size == 0:
-                self._writer.writerow(["time", "total_timesteps", "epoch", "name", "value"])
-                self._fh.flush()
-        except Exception:
-            # If stat fails, proceed without header (degraded mode)
-            pass
+        # If file exists with a header, adopt it unless it's legacy long-form
+        header = self._read_existing_header(self.path)
+        if header is not None:
+            header_set = set(x.strip() for x in header)
+            if {"name", "value"}.issubset(header_set):
+                # Rotate legacy file and start fresh in wide format
+                self._rotate_legacy_file()
+                self._init_new_file_with_header(self._fieldnames)
+            else:
+                # Adopt existing header
+                self._fieldnames = list(header)
+                self._fh = open(self.path, mode="a", encoding="utf-8", newline="")
+                self._writer = csv.DictWriter(self._fh, fieldnames=self._fieldnames)
+        else:
+            # Create new file with base header only
+            self._init_new_file_with_header(self._fieldnames)
 
         # Async writer
-        self._q: Queue[list] = Queue(maxsize=queue_size)
+        self._q = Queue(maxsize=queue_size)
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="CsvMetricsLogger", daemon=True)
         self._thread.start()
@@ -56,21 +69,25 @@ class CsvMetricsLogger:
         epoch = self._first_number(metrics.get("train/epoch"), metrics.get("eval/epoch"))
         t = time.time()
 
-        rows: list[list[Any]] = []
+        row = {
+            "time": t,
+            "total_timesteps": step,
+            "epoch": epoch,
+        }
         for name, value in metrics.items():
-            # Skip bookkeeping keys if desired, but keep them as metrics if numeric
             if not self._is_number(value):
                 continue
-            rows.append([t, step, epoch, name, float(value)])
+            row[str(name)] = float(value)
 
-        if not rows:
+        # Nothing to write
+        if len(row) == len(self._base_fields):
             return
 
         # Non-blocking put with drop-on-full to avoid stalling training
         try:
-            self._q.put_nowait(rows)
+            self._q.put_nowait([row])
         except Exception:
-            # Queue full; drop this batch silently to preserve throughput
+            # Queue full; drop this row silently to preserve throughput
             pass
 
     def close(self, timeout: float = 2.0) -> None:
@@ -104,7 +121,7 @@ class CsvMetricsLogger:
             pass
 
     def _drain_once(self, timeout: float) -> None:
-        batched: list[list[Any]] = []
+        batched = []
         try:
             rows = self._q.get(timeout=timeout)
             batched.extend(rows)
@@ -118,25 +135,62 @@ class CsvMetricsLogger:
                     batched.extend(more)
                 except Empty:
                     break
-        if batched:
+        if not batched:
+            return
+
+        # Determine if header upgrade is needed
+        current_set = set(self._fieldnames)
+        # Collect any new metric keys excluding base and legacy fields
+        new_keys = set()
+        for d in batched:
+            for k in d.keys():
+                if k in self._base_fields or k in self._ignore_legacy_fields:
+                    continue
+                if k not in current_set:
+                    new_keys.add(k)
+
+        if new_keys:
+            # Build new fieldnames: base + sorted(existing_metrics ∪ new_keys)
+            existing_metrics = [f for f in self._fieldnames if f not in self._base_fields and f not in self._ignore_legacy_fields]
+            merged = sorted(set(existing_metrics).union(new_keys))
+            new_fieldnames = [*self._base_fields, *merged]
+            self._rewrite_file_with_new_header(new_fieldnames, batched)
+            return
+
+        # Fast path: write rows with current header
+        try:
             self._writer.writerows(batched)
-            try:
-                self._fh.flush()
-            except Exception:
-                pass
+            self._fh.flush()
+        except Exception:
+            pass
 
     def _flush_remaining(self) -> None:
         # Write anything still in the queue
-        remaining: list[list[Any]] = []
+        remaining = []
         while True:
             try:
                 remaining.extend(self._q.get_nowait())
             except Empty:
                 break
         if remaining:
-            self._writer.writerows(remaining)
             try:
-                self._fh.flush()
+                # Ensure no header change needed unexpectedly
+                current_set = set(self._fieldnames)
+                extra = set()
+                for d in remaining:
+                    for k in d.keys():
+                        if k in self._base_fields or k in self._ignore_legacy_fields:
+                            continue
+                        if k not in current_set:
+                            extra.add(k)
+                if extra:
+                    existing_metrics = [f for f in self._fieldnames if f not in self._base_fields and f not in self._ignore_legacy_fields]
+                    merged = sorted(set(existing_metrics).union(extra))
+                    new_fieldnames = [*self._base_fields, *merged]
+                    self._rewrite_file_with_new_header(new_fieldnames, remaining)
+                else:
+                    self._writer.writerows(remaining)
+                    self._fh.flush()
             except Exception:
                 pass
 
@@ -158,3 +212,94 @@ class CsvMetricsLogger:
             except Exception:
                 continue
         return None
+
+    # -------- file/header helpers --------
+    def _read_existing_header(self, path: Path) -> Optional[List[str]]:
+        try:
+            if not path.exists() or path.stat().st_size == 0:
+                return None
+            with open(path, mode="r", encoding="utf-8", newline="") as fh:
+                reader = csv.reader(fh)
+                header = next(reader, None)
+                if header and all(isinstance(c, str) for c in header):
+                    return [c.strip() for c in header]
+        except Exception:
+            return None
+        return None
+
+    def _init_new_file_with_header(self, fieldnames: List[str]) -> None:
+        try:
+            self._fh = open(self.path, mode="w", encoding="utf-8", newline="")
+            self._writer = csv.DictWriter(self._fh, fieldnames=fieldnames)
+            self._writer.writeheader()
+            self._fh.flush()
+        except Exception:
+            # Fallback: try append
+            self._fh = open(self.path, mode="a", encoding="utf-8", newline="")
+            self._writer = csv.DictWriter(self._fh, fieldnames=fieldnames)
+
+    def _rotate_legacy_file(self) -> None:
+        try:
+            # Choose a non-clobbering legacy path
+            base = self.path.with_suffix("")
+            legacy = base.with_suffix(".legacy.csv")
+            if legacy.exists():
+                ts = time.strftime("%Y%m%d-%H%M%S")
+                legacy = base.with_name(base.name + f".legacy-{ts}.csv")
+            self.path.replace(legacy)
+        except Exception:
+            # If rotation fails, we will overwrite in place
+            pass
+
+    def _rewrite_file_with_new_header(self, new_fieldnames: List[str], pending_rows: List[Dict[str, Any]]) -> None:
+        """Atomically rewrite the CSV with an upgraded header.
+
+        Reads existing rows (wide format) and writes them under the new header,
+        then appends the pending rows. Finally, swaps the temp file in place.
+        """
+        try:
+            # Close current handle to allow rename/replace
+            try:
+                self._fh.flush()
+            except Exception:
+                pass
+            try:
+                self._fh.close()
+            except Exception:
+                pass
+
+            tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
+            with open(tmp_path, mode="w", encoding="utf-8", newline="") as out_fh:
+                writer = csv.DictWriter(out_fh, fieldnames=new_fieldnames)
+                writer.writeheader()
+
+                # Copy old rows if any and if header was already wide
+                old_header = self._read_existing_header(self.path)
+                if old_header is not None and not ({"name", "value"}.issubset(set(old_header))):
+                    try:
+                        with open(self.path, mode="r", encoding="utf-8", newline="") as in_fh:
+                            reader = csv.DictReader(in_fh)
+                            for row in reader:
+                                writer.writerow(row)
+                    except Exception:
+                        pass
+
+                # Append pending rows
+                writer.writerows(pending_rows)
+
+            # Atomic replace
+            Path(tmp_path).replace(self.path)
+
+            # Reopen for append with new header
+            self._fieldnames = list(new_fieldnames)
+            self._fh = open(self.path, mode="a", encoding="utf-8", newline="")
+            self._writer = csv.DictWriter(self._fh, fieldnames=self._fieldnames)
+        except Exception:
+            # Best-effort fallback: reopen and write rows with current header
+            try:
+                self._fh = open(self.path, mode="a", encoding="utf-8", newline="")
+                self._writer = csv.DictWriter(self._fh, fieldnames=self._fieldnames)
+                self._writer.writerows(pending_rows)
+                self._fh.flush()
+            except Exception:
+                pass

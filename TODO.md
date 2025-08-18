@@ -2,7 +2,7 @@
 
 - FEAT: track immediate episode reward (for monitoring hyperparam change reaction)
 
-
+- Add support for quiet mode
 - BUG: action distributions are note being logged correctly (how will I log this along with our current per epoch system?)
 
 - BUG: CartPole-v1 PPO is not training as fast; 115f9c73faed6785a0bd58c37f55298324e90f43 was ok

@@ -297,10 +297,13 @@ class BaseAgent(pl.LightningModule):
         from utils.evaluation import evaluate_policy
 
         # Decide if we record a video this eval epoch
-        record_video = self.current_epoch == 0 or (self.current_epoch + 1) % self.config.eval_recording_freq_epochs == 0
+        record_video = (
+            self.current_epoch == 0
+            or (self.current_epoch + 1) % self.config.eval_recording_freq_epochs == 0
+        )
 
-        # Use run-specific video directory if available
-        video_path = self.run_manager.get_video_dir() / "eval" / "episodes" / f"rollout_epoch_{self.current_epoch}.mp4"
+        # Save eval video under runs/<run_id>/videos/eval/epoch=N.mp4
+        video_path = self.run_manager.get_video_dir() / "eval" / f"epoch={self.current_epoch}.mp4"
         video_path.parent.mkdir(parents=True, exist_ok=True)
         video_path = str(video_path)
 

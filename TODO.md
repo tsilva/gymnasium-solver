@@ -3,9 +3,7 @@
 - FEAT: Add support for specifyingpo extra reward metrics for each environment, then make the reward shaper assign value for each of those rewards
 
 - FEAT: add support for creating publishable video for youtube
-
 - Generalized scheduling for metrics, make those be logged
-
 - FEAT: ask copilot to create its own isntructrions namely to generate its own techical documentation that it keeps up to date
 - REFACTOR: rollout buffer can be much more efficient (review how sb3 does it) -- our fps is still 1000 below sb3
 - TODO: Figure out why CartPole-v1/PPO works better with Tahn activation than ReLU

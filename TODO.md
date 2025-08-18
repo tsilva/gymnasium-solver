@@ -1,4 +1,3 @@
-- BUG: best.mp4 is not symlinked to the respective video
 - BUG: `videos` folder is still being created in the run dir
 - BUG: we should be logging training metrics to a CSV file too, to be stored in run_dir as `metrics.csv`. While logging make sure you do it in a way that has the highest throughput possible and doesnt' slow down training.
 

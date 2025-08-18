@@ -80,15 +80,41 @@ class ModelCheckpointCallback(pl.Callback):
 
     @staticmethod
     def _update_symlink(link_path: Path, target_path: Path) -> None:
-        """Create or update a symlink at link_path pointing to target_path (relative target)."""
+        """Create or update a symlink at link_path pointing to target_path.
+
+        Uses a relative target path from the link's parent directory for portability.
+        Ensures parent directories exist. Falls back to copying on platforms that
+        do not support symlinks.
+        """
         try:
+            # Ensure the link directory exists
+            link_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Remove existing link/file if present
             if link_path.exists() or link_path.is_symlink():
                 try:
                     link_path.unlink()
                 except Exception:
                     pass
-            # Use a relative path so the directory can be moved/copied
-            link_path.symlink_to(Path(target_path.name))
+
+            # Compute relative target from link directory for robustness
+            try:
+                import os
+                rel_target = os.path.relpath(str(target_path), start=str(link_path.parent))
+            except Exception:
+                # Fallback to basename if relpath fails
+                rel_target = target_path.name
+
+            try:
+                link_path.symlink_to(rel_target)
+            except Exception as e:
+                # As a last resort, copy the file (maintains correctness over portability)
+                try:
+                    import shutil
+                    shutil.copy2(str(target_path), str(link_path))
+                    print(f"Info: symlink unsupported; copied {target_path} -> {link_path} ({e})")
+                except Exception as e2:
+                    print(f"Warning: failed to create symlink or copy {link_path} -> {target_path}: {e2}")
         except Exception as e:
             print(f"Warning: failed to create symlink {link_path} -> {target_path}: {e}")
 

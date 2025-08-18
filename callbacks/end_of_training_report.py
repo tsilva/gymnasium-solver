@@ -154,7 +154,8 @@ class EndOfTrainingReportCallback(pl.Callback):
             fit_start_ns = getattr(pl_module, "fit_start_time", None)
             duration_sec = None
             if fit_start_ns is not None:
-                duration_sec = max((time.time_ns() - float(fit_start_ns)) / 1e9, 0.0)
+                # Use monotonic clock for consistency with BaseAgent timing
+                duration_sec = max((time.perf_counter_ns() - float(fit_start_ns)) / 1e9, 0.0)
         except Exception:
             duration_sec = None
 

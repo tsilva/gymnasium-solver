@@ -183,7 +183,8 @@ class BaseAgent(pl.LightningModule):
         }
 
     def on_fit_start(self):
-        self.fit_start_time = time.time_ns()
+        # Use a monotonic clock for durations to avoid NTP/system time jumps
+        self.fit_start_time = time.perf_counter_ns()
 
     def train_dataloader(self):
         assert self.current_epoch == 0, "train_dataloader should only be called once at the start of training"
@@ -213,7 +214,7 @@ class BaseAgent(pl.LightningModule):
 
     def on_train_epoch_start(self):
         # Mark epoch start for instant FPS calculation
-        self.train_epoch_start_time = time.time_ns()
+        self.train_epoch_start_time = time.perf_counter_ns()
         start_metrics = self.train_collector.get_metrics()
         self.train_epoch_start_timesteps = start_metrics["total_timesteps"]
 
@@ -243,10 +244,10 @@ class BaseAgent(pl.LightningModule):
         # Calculate how many simulation timesteps are being
         # processed per second (includes model training)
         total_timesteps = rollout_metrics["total_timesteps"]
-        time_elapsed = max((time.time_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
+        time_elapsed = max((time.perf_counter_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
         fps = total_timesteps / time_elapsed
         # Per-epoch instant FPS (since on_train_epoch_start)
-        epoch_time_elapsed = max((time.time_ns() - self.train_epoch_start_time) / 1e9, sys.float_info.epsilon)
+        epoch_time_elapsed = max((time.perf_counter_ns() - self.train_epoch_start_time) / 1e9, sys.float_info.epsilon)
         epoch_timesteps_elapsed = max(0, total_timesteps - int(self.train_epoch_start_timesteps))
         fps_instant = epoch_timesteps_elapsed / epoch_time_elapsed
 
@@ -289,7 +290,7 @@ class BaseAgent(pl.LightningModule):
         if not self._should_run_eval(self.current_epoch):
             # Lightning still calls val hooks when limit_val_batches>0; guard our logic here
             return
-        self.validation_epoch_start_time = time.time_ns()
+        self.validation_epoch_start_time = time.perf_counter_ns()
         # We'll compute eval FPS based on per-call totals from evaluate_policy
         self.validation_epoch_start_timesteps = 0
 
@@ -330,7 +331,7 @@ class BaseAgent(pl.LightningModule):
         # Frequency check is already enforced in on_validation_epoch_start
 
         # Calculate FPS
-        time_elapsed = max((time.time_ns() - self.validation_epoch_start_time) / 1e9, sys.float_info.epsilon)
+        time_elapsed = max((time.perf_counter_ns() - self.validation_epoch_start_time) / 1e9, sys.float_info.epsilon)
         total_timesteps = int(eval_metrics.get("total_timesteps", 0))
         timesteps_elapsed = total_timesteps - self.validation_epoch_start_timesteps
         epoch_fps = int(timesteps_elapsed / time_elapsed)
@@ -375,7 +376,7 @@ class BaseAgent(pl.LightningModule):
 
     def on_fit_end(self):
         # Log training completion time
-        time_elapsed = max((time.time_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
+        time_elapsed = max((time.perf_counter_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
 
         # Print concise ASCII summary of key metrics for quick inspection

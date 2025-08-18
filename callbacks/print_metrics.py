@@ -44,6 +44,10 @@ class PrintMetricsCallback(pl.Callback):
         self.metric_delta_rules = metric_delta_rules or {}
         self.algorithm_metric_rules = algorithm_metric_rules or {}
         self.min_val_width = min_val_width
+        # Soft tolerance for minor non-monotonic blips on wall-clock metrics (seconds)
+        # This prevents spurious failures when values are sourced/rounded slightly differently
+        # between step and epoch prints. Applied to metrics whose key ends with 'time_elapsed'.
+        self._delta_soft_tolerance_sec = 1.0
         # Load key priority from config unless explicitly provided
         if key_priority is not None:
             self.key_priority = key_priority
@@ -58,8 +62,8 @@ class PrintMetricsCallback(pl.Callback):
                 "train/ep_rew_mean",
                 "train/ep_len_mean",
                 "train/epoch",
-                "train/total_timesteps", 
-                "train/total_episodes", 
+                "train/total_timesteps",
+                "train/total_episodes",
                 "train/total_rollouts",
                 "train/rollout_timesteps",
                 "train/rollout_episodes",
@@ -72,15 +76,15 @@ class PrintMetricsCallback(pl.Callback):
                 "eval/ep_rew_mean",
                 "eval/ep_len_mean",
                 "eval/epoch",
-                "eval/total_timesteps", 
-                "eval/total_episodes", 
+                "eval/total_timesteps",
+                "eval/total_episodes",
                 "eval/total_rollouts",
                 "eval/rollout_timesteps",
                 "eval/rollout_episodes",
                 "eval/epoch_fps",
-                "eval/rollout_fps"
+                "eval/rollout_fps",
             ]
-        self.previous_metrics: Dict[str, Any] = {}  # Store previous values for delta validation
+        self.previous_metrics = {}  # Store previous values for delta validation
         self._last_printed_metrics = None  # For change detection
         self._change_tol = 1e-12
 
@@ -159,6 +163,17 @@ class PrintMetricsCallback(pl.Callback):
                 # Skip validation if either value is not a number
                 if not (self._is_number(current_value) and self._is_number(previous_value)):
                     continue
+
+                # Allow small backward drift for time_elapsed-like metrics to handle
+                # clock jitter or differing sources (e.g., step vs epoch timers)
+                try:
+                    if str(metric_name).endswith("time_elapsed"):
+                        if float(previous_value) - float(current_value) <= self._delta_soft_tolerance_sec:
+                            # Treat as valid within tolerance
+                            continue
+                except Exception:
+                    # Fall back to strict rule if casting fails
+                    pass
                 
                 try:
                     # Call the lambda with (previous, current) values

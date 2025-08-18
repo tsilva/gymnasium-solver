@@ -1,4 +1,3 @@
-- if training ends by max timesteps last eval is not being recorded
 - add support for resuming training from a checkpoint
 - FEAT: Whenever we record a checkpoint we need to store all metrics at that point.
 - FEAT: call challenges instead of environments

@@ -659,3 +659,20 @@ class RolloutCollector():
             "baseline_mean": baseline_mean,
             "baseline_std": baseline_std
         }
+
+    def get_action_histogram_counts(self, reset: bool = False):
+        """Return a copy of the cumulative discrete action counts histogram.
+
+        Args:
+            reset: If True, zero the internal counters after returning the copy.
+
+        Returns:
+            np.ndarray | None: 1D array of counts per discrete action index, or None if no actions seen yet.
+        """
+        counts = self._action_counts
+        if counts is None:
+            return None
+        out = counts.copy()
+        if reset:
+            self._action_counts = np.zeros_like(counts)
+        return out

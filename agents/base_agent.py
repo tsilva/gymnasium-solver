@@ -240,23 +240,20 @@ class BaseAgent(pl.LightningModule):
         rollout_metrics = self.train_collector.get_metrics()
         rollout_metrics.pop("action_distribution", None)
 
-        # TODO: distinguish between instant and start
-        # Calculate how many simulation timesteps are being
-        # processed per second (includes model training)
+        # Calculate FPS metrics
         total_timesteps = rollout_metrics["total_timesteps"]
         time_elapsed = max((time.perf_counter_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
         fps = total_timesteps / time_elapsed
-        # Per-epoch instant FPS (since on_train_epoch_start)
         epoch_time_elapsed = max((time.perf_counter_ns() - self.train_epoch_start_time) / 1e9, sys.float_info.epsilon)
         epoch_timesteps_elapsed = max(0, total_timesteps - int(self.train_epoch_start_timesteps))
         fps_instant = epoch_timesteps_elapsed / epoch_time_elapsed
 
-        # Include recomputed learning rate and clip range in epoch metrics
+        # Log numeric metrics via buffer
         self.log_metrics(
             {
                 **rollout_metrics,
                 "time_elapsed": time_elapsed,
-                "epoch": self.current_epoch,  # TODO: is this the same value as in epoch_start?
+                "epoch": self.current_epoch,
                 "fps": fps,
                 "fps_instant": fps_instant,
             },
@@ -265,16 +262,31 @@ class BaseAgent(pl.LightningModule):
 
         self._flush_metrics()
 
+        # Log action distribution histogram to W&B, aligned to total_timesteps
+        try:
+            import wandb  # optional dependency at runtime
+            counts = self.train_collector.get_action_histogram_counts(reset=True)
+            if counts is not None and counts.sum() > 0:
+                num_actions = int(len(counts))
+                edges = torch.linspace(-0.5, num_actions - 0.5, steps=num_actions + 1).tolist()
+                hist = wandb.Histogram(np_histogram=(counts.tolist(), edges))
+                step_val = int(total_timesteps)
+                exp = getattr(getattr(self, "logger", None), "experiment", None)
+                payload = {"train/action_distribution": hist}
+                if exp is not None and hasattr(exp, "log"):
+                    exp.log(payload, step=step_val)
+                else:
+                    wandb.log(payload, step=step_val)
+        except Exception:
+            pass
+
         self._update_schedules()
 
-        # In case we have reached the maximum number of training timesteps then stop training
+        # Stop condition
         if self.config.n_timesteps is not None and total_timesteps >= self.config.n_timesteps:
             print(
                 f"Stopping training at epoch {self.current_epoch} with {total_timesteps} timesteps >= limit {self.config.n_timesteps}"
             )
-            # Avoid accessing the LightningModule.trainer property directly because
-            # it raises when the module isn't attached to a Trainer (our tests use a stub).
-            # Lightning stores the trainer reference internally as _trainer.
             trainer = getattr(self, "_trainer", None)
             if trainer is not None and hasattr(trainer, "should_stop"):
                 trainer.should_stop = True

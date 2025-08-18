@@ -55,9 +55,9 @@ def list_checkpoints_for_run(run_id: str) -> Tuple[List[str], Dict[str, Path], s
 
     def score(p: Path):
         name = p.name
-        if name == "best_checkpoint.ckpt":
+        if name in {"best_checkpoint.ckpt", "best.ckpt"}:  # support legacy and new names
             return (0, -p.stat().st_mtime)
-        if name == "last_checkpoint.ckpt":
+        if name in {"last_checkpoint.ckpt", "last.ckpt"}:
             return (1, -p.stat().st_mtime)
         return (2, -p.stat().st_mtime)
 
@@ -67,9 +67,9 @@ def list_checkpoints_for_run(run_id: str) -> Tuple[List[str], Dict[str, Path], s
     mapping: Dict[str, Path] = {}
     for p in files:
         label = p.name
-        if label == "best_checkpoint.ckpt":
+        if label in {"best_checkpoint.ckpt", "best.ckpt"}:
             label = "best_checkpoint.ckpt (best)"
-        elif label == "last_checkpoint.ckpt":
+        elif label in {"last_checkpoint.ckpt", "last.ckpt"}:
             label = "last_checkpoint.ckpt (last)"
         labels.append(label)
         mapping[label] = p

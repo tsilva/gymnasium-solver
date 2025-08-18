@@ -74,16 +74,16 @@ class HyperparameterScheduler(pl.Callback):
         # Set up control directory
         if self.control_dir is None:
             if hasattr(pl_module, 'run_manager') and pl_module.run_manager:
-                self.control_dir = pl_module.run_manager.run_dir / "hyperparam_control"
+                self.control_dir = pl_module.run_manager.run_dir
             else:
-                self.control_dir = Path("./runs/latest-run/hyperparam_control")
+                self.control_dir = Path("./runs/latest-run")
         else:
             self.control_dir = Path(self.control_dir)
-        
+
         self.control_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Set up control file path
-        self.control_file = self.control_dir / "hyperparameters.json"
+        self.control_file = self.control_dir / "hyperparameter.json"
         
         # Store original hyperparameters
         self.original_hyperparams = {

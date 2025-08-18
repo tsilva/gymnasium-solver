@@ -177,7 +177,7 @@ class ModelCheckpointCallback(pl.Callback):
             self.best_metric_value = current_metric_value
             epoch = pl_module.current_epoch
             step = pl_module.global_step
-            timestamped_path = checkpoint_dir / f"epoch={epoch:02d}-step={step:04d}.ckpt"
+            timestamped_path = checkpoint_dir / f"epoch={epoch:02d}.ckpt"
             self._save_checkpoint(
                 pl_module,
                 timestamped_path,
@@ -186,7 +186,7 @@ class ModelCheckpointCallback(pl.Callback):
                 current_eval_reward=current_metric_value,
             )
 
-            best_path = checkpoint_dir / "best_checkpoint.ckpt"
+            best_path = checkpoint_dir / "best.ckpt"
             self.best_checkpoint_path = self._save_checkpoint(
                 pl_module,
                 best_path,
@@ -327,7 +327,7 @@ class ModelCheckpointCallback(pl.Callback):
 
         if self.save_last:
             checkpoint_dir = self._get_checkpoint_dir(pl_module)
-            last_path = checkpoint_dir / "last_checkpoint.ckpt"
+            last_path = checkpoint_dir / "last.ckpt"
             # Capture whatever metrics are available at train epoch end
             logged_metrics = getattr(trainer, 'logged_metrics', None)
             cur_eval = None
@@ -360,7 +360,7 @@ class ModelCheckpointCallback(pl.Callback):
             best_ckpt = self.best_checkpoint_path
             if best_ckpt is None:
                 # If no explicit best was tracked, try conventional path in checkpoint_dir
-                candidate = Path(self.checkpoint_dir) / "best_checkpoint.ckpt"
+                candidate = Path(self.checkpoint_dir) / "best.ckpt"
                 if candidate.exists():
                     best_ckpt = candidate
 

@@ -668,7 +668,7 @@ class BaseAgent(pl.LightningModule):
 
         # Hyperparameter scheduler callback
         hyperparam_cb = HyperparameterScheduler(
-            control_dir=str(self.run_manager.run_dir / "hyperparam_control"),
+            control_dir=None,  # write hyperparameter.json at run root
             check_interval=2.0,
             enable_lr_scheduling=False,
             enable_manual_control=True,

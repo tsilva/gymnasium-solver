@@ -27,13 +27,13 @@ def test_find_and_list_checkpoints(tmp_path: Path):
 
     # Create multiple files with different names
     (base / "epoch=3-step=300.ckpt").write_text("x")
-    (base / "best_checkpoint.ckpt").write_text("x")
-    (base / "last_checkpoint.ckpt").write_text("x")
+    (base / "best.ckpt").write_text("x")
+    (base / "last.ckpt").write_text("x")
     (base / "threshold-epoch=2-step=200.ckpt").write_text("x")
 
     latest = find_latest_checkpoint("ppo", "CartPole-v1", checkpoint_dir=str(tmp_path / "checkpoints"))
     # Preference order chooses best then last
-    assert latest.name in {"best_checkpoint.ckpt", "last_checkpoint.ckpt"}
+    assert latest.name in {"best.ckpt", "last.ckpt", "best_checkpoint.ckpt", "last_checkpoint.ckpt"}
 
     listing = list_available_checkpoints(checkpoint_dir=str(tmp_path / "checkpoints"))
     assert "ppo" in listing and "CartPole-v1" in listing["ppo"]

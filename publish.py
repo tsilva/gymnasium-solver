@@ -183,7 +183,10 @@ def _find_best_video_for_run(run_dir: Path) -> Optional[Path]:
 
 
 def extract_run_metadata(run_dir: Path) -> dict:
-    config_path = run_dir / "configs" / "config.json"
+    # Prefer new layout: config.json at run root; fallback to legacy path
+    config_path = run_dir / "config.json"
+    if not config_path.exists():
+        config_path = run_dir / "configs" / "config.json"
     cfg = {}
     if config_path.exists():
         try:
@@ -198,7 +201,7 @@ def extract_run_metadata(run_dir: Path) -> dict:
     ckpt_dir = run_dir / "checkpoints"
     ckpt_file = None
     if ckpt_dir.exists():
-        preferred = ["best_checkpoint.ckpt", "last_checkpoint.ckpt"]
+        preferred = ["best.ckpt", "last.ckpt", "best_checkpoint.ckpt", "last_checkpoint.ckpt"]
         for name in preferred:
             p = ckpt_dir / name
             if p.exists():
@@ -385,7 +388,7 @@ def build_model_card(meta: dict, run_dir: Path) -> str:
     lines.append("This repository contains artifacts from a Gymnasium Solver training run.")
     lines.append("")
     lines.append("## Contents")
-    lines.append("- Config: `artifacts/configs/config.json`")
+    lines.append("- Config: `artifacts/config.json`")
     lines.append("- Checkpoints: `artifacts/checkpoints/*.ckpt`")
     lines.append("- Logs: `artifacts/logs/*.log`")
     if meta.get("best_video"):

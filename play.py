@@ -181,7 +181,10 @@ def load_config_from_run(run_id: str):
     if not run_path.exists():
         raise FileNotFoundError(f"Run directory not found: {run_path}")
     
-    config_file = run_path / "configs" / "config.json"
+    # Prefer new layout at run root; fallback to legacy configs/config.json
+    config_file = run_path / "config.json"
+    if not config_file.exists():
+        config_file = run_path / "configs" / "config.json"
     if not config_file.exists():
         raise FileNotFoundError(f"Config file not found: {config_file}")
     
@@ -213,13 +216,17 @@ def find_best_checkpoint_in_run(run_id: str) -> Path:
     if not checkpoints_dir.exists():
         raise FileNotFoundError(f"Checkpoints directory not found: {checkpoints_dir}")
     
-    # Look for best checkpoint first
-    best_checkpoint = checkpoints_dir / "best_checkpoint.ckpt"
+    # Look for best checkpoint first (new and legacy names)
+    best_checkpoint = checkpoints_dir / "best.ckpt"
+    if not best_checkpoint.exists():
+        best_checkpoint = checkpoints_dir / "best_checkpoint.ckpt"
     if best_checkpoint.exists():
         return best_checkpoint
     
-    # Fall back to last checkpoint
-    last_checkpoint = checkpoints_dir / "last_checkpoint.ckpt"
+    # Fall back to last checkpoint (new and legacy names)
+    last_checkpoint = checkpoints_dir / "last.ckpt"
+    if not last_checkpoint.exists():
+        last_checkpoint = checkpoints_dir / "last_checkpoint.ckpt"
     if last_checkpoint.exists():
         return last_checkpoint
     

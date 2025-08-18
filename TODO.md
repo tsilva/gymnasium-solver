@@ -1,5 +1,3 @@
-- FEAT: call challenges instead of environments
-
 - BUG: CartPole-v1 PPO is not training as fast; 115f9c73faed6785a0bd58c37f55298324e90f43 was ok
 - add support for resuming training from a checkpoint
 - FEAT: Add support for specifyingpo extra reward metrics for each environment, then make the reward shaper assign value for each of those rewards

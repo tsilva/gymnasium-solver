@@ -1,9 +1,10 @@
-- FEAT: Add support for generating end of training report. The objective of this report is to be fed to an LLM so it can suggest adjustment to the training hyperparameters in order to improve the training process, so that we can achieve a better reward (if applicable), achieve max reward faster (if max reward is already being achieved), etc.
+- FEAT: track immediate episode reward metric, we are only currently monitorning rolling averages (for monitoring hyperparam change reaction)
 
-- FEAT: track immediate episode reward (for monitoring hyperparam change reaction)
+- Add support for quiet mode; this will allow running without user prompts (just does defaults) - eg: will skip asking if trainign shouldd start
 
-- Add support for quiet mode
+
 - BUG: action distributions are note being logged correctly (how will I log this along with our current per epoch system?)
+- BUG: last video recorded video is cropped; whenever training stops for whatever reason, the last video should be recorded until episode end.
 
 - BUG: CartPole-v1 PPO is not training as fast; 115f9c73faed6785a0bd58c37f55298324e90f43 was ok
 - add support for resuming training from a checkpoint

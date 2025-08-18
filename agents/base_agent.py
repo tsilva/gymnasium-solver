@@ -136,9 +136,10 @@ class BaseAgent(pl.LightningModule):
             },
         )
 
-        # Create required models (subclasses must set self.policy_model)
+        # Create models now that environments are available. Subclasses use
+        # env shapes to build policy/value networks. Must be called before
+        # collectors which require self.policy_model.
         self.create_models()
-        assert self.policy_model is not None, "Policy model must be created in create_models()"
 
         # Rollout collectors
         from utils.rollouts import RolloutCollector
@@ -635,6 +636,7 @@ class BaseAgent(pl.LightningModule):
                 pass
 
     def _build_callbacks(self):
+        """Assemble trainer callbacks, with an optional end-of-training report."""
         # Lazy imports to avoid heavy deps at module import time
         from callbacks import (
             HyperparameterScheduler,
@@ -642,14 +644,19 @@ class BaseAgent(pl.LightningModule):
             PrintMetricsCallback,
             VideoLoggerCallback,
         )
+        # Optional report callback: import may fail in minimal environments
+        try:
+            from callbacks.end_of_training_report import EndOfTrainingReportCallback  # type: ignore
+        except Exception:
+            EndOfTrainingReportCallback = None  # type: ignore
 
-        # Create video logging callback using run-specific directory
+        # Video logger writes to run-specific media directory
         video_logger_cb = VideoLoggerCallback(
-            media_root=str(self.run_manager.get_video_dir()),  # Use run-specific video directory
+            media_root=str(self.run_manager.get_video_dir()),
             namespace_depth=1,
         )
 
-        # Create checkpoint callback using run-specific directory (skip for qlearning)
+        # Checkpointing (skip for qlearning which has no torch model)
         checkpoint_cb = None
         if self.config.algo_id != "qlearning":
             checkpoint_cb = ModelCheckpointCallback(
@@ -661,18 +668,16 @@ class BaseAgent(pl.LightningModule):
                 resume=self.config.resume,
             )
 
-        # Create algorithm-specific metric rules from metrics config
+        # Formatting/precision rules for pretty printing
         from utils.metrics import (
             get_algorithm_metric_rules,
             get_metric_delta_rules,
             get_metric_precision_dict,
         )
-
         metric_precision = get_metric_precision_dict()
         metric_delta_rules = get_metric_delta_rules()
         algo_metric_rules = get_algorithm_metric_rules(self.config.algo_id)
 
-        # Print metrics callback
         printer_cb = PrintMetricsCallback(
             every_n_steps=200,
             every_n_epochs=10,
@@ -682,16 +687,17 @@ class BaseAgent(pl.LightningModule):
             algorithm_metric_rules=algo_metric_rules,
         )
 
-        # Hyperparameter scheduler callback
         hyperparam_cb = HyperparameterScheduler(
-            control_dir=None,  # write hyperparameter.json at run root
+            control_dir=None,
             check_interval=2.0,
             enable_lr_scheduling=False,
             enable_manual_control=True,
             verbose=True,
         )
 
-        callbacks = [x for x in [printer_cb, video_logger_cb, checkpoint_cb, hyperparam_cb] if x is not None]
+        report_cb = EndOfTrainingReportCallback(filename="report.md") if EndOfTrainingReportCallback else None
+
+        callbacks = [x for x in [printer_cb, video_logger_cb, checkpoint_cb, hyperparam_cb, report_cb] if x is not None]
         return callbacks
 
     def _get_validation_controls(self):

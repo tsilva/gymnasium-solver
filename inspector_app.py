@@ -314,7 +314,8 @@ def build_ui(default_run_id: str = "latest-run"):
         try:
             TimerCls = getattr(gr, "Timer", None)
             if TimerCls is not None:
-                timer = TimerCls(0.25)
+                # ~30 FPS playback
+                timer = TimerCls(1/30)
         except Exception:
             timer = None
         with gr.Row():
@@ -426,15 +427,21 @@ def build_ui(default_run_id: str = "latest-run"):
             new_playing = not bool(playing)
             return new_playing, gr.update(value=("Pause" if new_playing else "Play"))
 
-        def _on_slider_change(frames: List[np.ndarray], val: int):
+        def _on_slider_change(frames: List[np.ndarray], val: int, playing: bool):
+            """Update current frame when user releases the slider.
+
+            Preserve current playing state so programmatic slider updates during autoplay
+            don't pause playback.
+            """
             idx = int(val) if val is not None else 0
             img = frames[idx] if (isinstance(frames, list) and 0 <= idx < len(frames)) else None
-            return gr.update(value=img), idx, False, gr.update(value="Play")
+            return gr.update(value=img), idx, playing, gr.update(value=("Pause" if playing else "Play"))
 
         prev_btn.click(_on_prev, inputs=[frames_state, index_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
         next_btn.click(_on_next, inputs=[frames_state, index_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
         play_pause_btn.click(_on_play_pause, inputs=[playing_state], outputs=[playing_state, play_pause_btn])
-        frame_slider.change(_on_slider_change, inputs=[frames_state, frame_slider], outputs=[frame_image, index_state, playing_state, play_pause_btn])
+        # Use release instead of change to avoid triggering on programmatic updates from the timer
+        frame_slider.release(_on_slider_change, inputs=[frames_state, frame_slider, playing_state], outputs=[frame_image, index_state, playing_state, play_pause_btn])
 
         # Autoplay tick handler (only if timer available)
         def _on_tick(frames: List[np.ndarray], idx: int, playing: bool):

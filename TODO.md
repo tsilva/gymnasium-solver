@@ -1,25 +1,22 @@
-- FEAT: instead of using hyperparams.json to monitor hyperparams in runtime, just using the config.json inthe run folder instead. dont create hyperparams.json anymore
+
+- FEAT: Whenever we record a checkpoint we need to store all metrics at that point; in same folder save a .json file with same name as checkpoint, containing all metrics at that point
+- FEAT: track learning hyperparams in wandb (train/hyperparams)
+- FEAT: call challenges instead of environments
 
 - BUG: action distributions are note being logged correctly (how will I log this along with our current per epoch system?)
 - BUG: CartPole-v1 PPO is not training as fast; 115f9c73faed6785a0bd58c37f55298324e90f43 was ok
 - add support for resuming training from a checkpoint
-- FEAT: Whenever we record a checkpoint we need to store all metrics at that point.
-- FEAT: call challenges instead of environments
 - FEAT: Add support for specifyingpo extra reward metrics for each environment, then make the reward shaper assign value for each of those rewards
 
 - FEAT: add support for creating publishable video for youtube
 
 - Generalized scheduling for metrics, make those be logged
-- FEAT: track learning hyperparams in wandb (train/hyperparams)
 
 - FEAT: ask copilot to create its own isntructrions namely to generate its own techical documentation that it keeps up to date
 - REFACTOR: rollout buffer can be much more efficient (review how sb3 does it) -- our fps is still 1000 below sb3
-- FEAT: add ability for the cursor agent to be able to run and adjust hyperparams by itself
 - TODO: Figure out why CartPole-v1/PPO works better with Tahn activation than ReLU
 - BUG: PPO can solve FrozenLake-v1, but REINFORCE cannot. REINFORCE is likely not implemented correctly.
 - BUG: is REINFORCE well implemented? are we waiting until the end of the episode to update the policy?
-- FEAT: improve metric descriptions
-- FEAT: write guide on how to monitor training
 - FEAT: train on cloud server
 - FEAT: normalize rewards?
 - FEAT: add normalization support
@@ -28,7 +25,6 @@
 - TEST: predict next state to learn faster
 - FEAT: add [Minari support](https://minari.farama.org/)
 - BUG: videos not logged at correct timesteps
-- FEAT: improve config structurtee
 - FEAT : Normalize returns for REINFORCE
 - FEAT: add warning confirming if ale-py has been compiled to target architecture (avoid rosetta in silicon macs)
 - BUG: baseline_mean/std are being recorded even when not used

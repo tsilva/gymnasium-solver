@@ -82,9 +82,10 @@ class HyperparameterScheduler(pl.Callback):
 
         self.control_dir.mkdir(parents=True, exist_ok=True)
 
-        # Set up control file path
-        self.control_file = self.control_dir / "hyperparameter.json"
-        
+        # Monitor the run's main configuration file for changes
+        # Users can edit this file during training to tweak hyperparameters.
+        self.control_file = self.control_dir / "config.json"
+
         # Store original hyperparameters
         self.original_hyperparams = {
             'learning_rate': pl_module.config.policy_lr,
@@ -93,54 +94,17 @@ class HyperparameterScheduler(pl.Callback):
             'vf_coef': getattr(pl_module.config, 'vf_coef', None),
             'max_grad_norm': pl_module.config.max_grad_norm,
         }
-        
-        # Create example control file
-        self._create_control_file(pl_module)
-        
+
         # Start background monitoring if enabled
         if self.enable_manual_control:
             self.start_monitoring()
-        
+
         if self.verbose:
             print(f"\n🎛️  Hyperparameter manual control enabled!")
             print(f"   Control directory: {self.control_dir}")
             print(f"   Control file: {self.control_file.name}")
             print(f"   Edit this file to adjust hyperparameters during training.")
     
-    def _create_control_file(self, pl_module: pl.LightningModule) -> None:
-        """Create the unified control file with current values."""
-        control_data = {
-            # Core hyperparameters
-            "learning_rate": pl_module.config.policy_lr,
-            "ent_coef": pl_module.config.ent_coef,
-            "max_grad_norm": pl_module.config.max_grad_norm,
-            
-            # Algorithm-specific parameters (PPO)
-            "clip_range": getattr(pl_module.config, 'clip_range', None),
-            "vf_coef": getattr(pl_module.config, 'vf_coef', None),
-            
-            # Metadata
-            "description": "Modify any hyperparameter in this file. Changes are applied at the start of the next epoch.",
-            "supported_params": [
-                "learning_rate - Learning rate for optimizer",
-                "ent_coef - Entropy coefficient", 
-                "max_grad_norm - Maximum gradient norm for clipping",
-                "clip_range - PPO clipping range (PPO only)",
-                "vf_coef - Value function coefficient (PPO only)"
-            ],
-            "last_modified": time.time()
-        }
-        
-        # Remove None values for cleaner file
-        if control_data["clip_range"] is None:
-            del control_data["clip_range"]
-        if control_data["vf_coef"] is None:
-            del control_data["vf_coef"]
-        
-        # Write file only if it doesn't exist
-        if not self.control_file.exists():
-            with open(self.control_file, 'w') as f:
-                json.dump(control_data, f, indent=2)
     
     def start_monitoring(self) -> None:
         """Start background monitoring thread."""
@@ -199,13 +163,14 @@ class HyperparameterScheduler(pl.Callback):
         """Apply hyperparameter adjustments from control file."""
         changes = []
         
-        # Learning rate
-        if "learning_rate" in data:
-            new_lr = float(data["learning_rate"])
+        # Learning rate (support either 'policy_lr' or 'learning_rate' key from config.json)
+        if "policy_lr" in data or "learning_rate" in data:
+            lr_key = "policy_lr" if "policy_lr" in data else "learning_rate"
+            new_lr = float(data[lr_key])
             old_lr = pl_module.config.policy_lr
             if abs(new_lr - old_lr) > 1e-8:
                 self._update_learning_rate(trainer, pl_module, new_lr)
-                changes.append(f"learning_rate: {old_lr:.2e} → {new_lr:.2e}")
+                changes.append(f"policy_lr: {old_lr:.2e} → {new_lr:.2e}")
         
         # Entropy coefficient
         if "ent_coef" in data:

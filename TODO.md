@@ -1,3 +1,5 @@
+- FEAT: instead of using hyperparams.json to monitor hyperparams in runtime, just using the config.json inthe run folder instead. dont create hyperparams.json anymore
+
 - BUG: action distributions are note being logged correctly (how will I log this along with our current per epoch system?)
 - BUG: CartPole-v1 PPO is not training as fast; 115f9c73faed6785a0bd58c37f55298324e90f43 was ok
 - add support for resuming training from a checkpoint

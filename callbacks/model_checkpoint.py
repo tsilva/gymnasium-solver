@@ -398,11 +398,11 @@ class ModelCheckpointCallback(pl.Callback):
                 print(f"Warning: failed to load best checkpoint for final evaluation: {e}")
                 return
 
-            # Prepare video path under the run's video directory
-            # Store alongside other eval videos: runs/<run_id>/videos/eval/best.mp4
-            video_dir = pl_module.run_manager.get_video_dir() / "eval"
-            video_dir.mkdir(parents=True, exist_ok=True)
-            video_path = video_dir / "best.mp4"
+            # Prepare video path alongside checkpoints so names align for correlation
+            # Save as checkpoints/best.mp4 next to checkpoints/best.ckpt
+            ckpt_dir = pl_module.run_manager.get_checkpoint_dir()
+            ckpt_dir.mkdir(parents=True, exist_ok=True)
+            video_path = ckpt_dir / "best.mp4"
 
             # Ensure full-length recording by temporarily disabling video_length cap
             # validation_env is a VecInfoWrapper around VecVideoRecorder -> access via .venv

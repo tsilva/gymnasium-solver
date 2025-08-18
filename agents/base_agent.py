@@ -302,9 +302,12 @@ class BaseAgent(pl.LightningModule):
             or (self.current_epoch + 1) % self.config.eval_recording_freq_epochs == 0
         )
 
-        # Save eval video under runs/<run_id>/videos/eval/epoch=N.mp4
-        video_path = self.run_manager.get_video_dir() / "eval" / f"epoch={self.current_epoch}.mp4"
-        video_path.parent.mkdir(parents=True, exist_ok=True)
+        # Save eval video alongside checkpoints to simplify correlation
+        # Use the same epoch-based naming convention as checkpoints
+        ckpt_dir = self.run_manager.get_checkpoint_dir()
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
+        # Match the zero-padded epoch format used by checkpoint files: epoch=XX.ckpt
+        video_path = ckpt_dir / f"epoch={self.current_epoch:02d}.mp4"
         video_path = str(video_path)
 
         # Run evaluation with optional recording

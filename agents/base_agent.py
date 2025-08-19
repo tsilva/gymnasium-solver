@@ -53,18 +53,24 @@ class BaseAgent(pl.LightningModule):
         #    _uses_pixel_obs = False
         #train_render_mode = "rgb_array" if _uses_pixel_obs else None
 
+        common_env_kwargs = dict(
+            seed=config.seed,
+            n_envs = config.n_envs,
+            subproc=config.subproc,
+            subproc = config.subproc,
+            obs_type = config.obs_type,
+            frame_stack = config.frame_stack,
+            norm_obs = config.normalize_obs,
+            env_wrappers=config.env_wrappers,
+            env_kwargs=config.env_kwargs,
+        )
+
+        # Train environment (vectorized; separate seed)
         from utils.environment import build_env
         self.train_env = build_env(
             config.env_id,
-            seed=config.seed,
-            n_envs=config.n_envs,
-            subproc=config.subproc,
-            obs_type=config.obs_type,
-            env_wrappers=config.env_wrappers,
-            norm_obs=config.normalize_obs,
-            frame_stack=config.frame_stack,
-            #render_mode=train_render_mode,
-            env_kwargs=config.env_kwargs,
+            **common_env_kwargs,
+            seed=config.seed + 1000
         )
 
         # Evaluation env (vectorized; separate seed)
@@ -72,14 +78,26 @@ class BaseAgent(pl.LightningModule):
         # Keep subproc=False to enable video recording.
         self.validation_env = build_env(
             config.env_id,
-            seed=config.seed + 1000,
-            n_envs=config.n_envs,
-            subproc=False,
-            env_wrappers=config.env_wrappers,
-            norm_obs=config.normalize_obs,
-            frame_stack=config.frame_stack,
-            obs_type=config.obs_type,
-            env_kwargs=config.env_kwargs,
+            **common_env_kwargs,
+            seed=config.seed + 2000,
+            subproc=False, # TODO: do I need this?
+            render_mode="rgb_array",
+            record_video=True,
+            record_video_kwargs={
+                # Record full episodes without truncation; the recorder will run
+                # until the evaluation block finishes.
+                "video_length": 100,
+                "record_env_idx": 0,  # Record only first env by default
+            }
+        )
+
+        # The test environment, this will be used for the 
+        # final post train evaluation and video recording
+        self.test_env = build_env(
+            config.env_id,
+            **common_env_kwargs,
+            seed=config.seed + 3000,
+            subproc=False, # TODO: do I need this?
             render_mode="rgb_array",
             record_video=True,
             record_video_kwargs={
@@ -87,7 +105,7 @@ class BaseAgent(pl.LightningModule):
                 # until the evaluation block finishes.
                 "video_length": None,
                 "record_env_idx": 0,  # Record only first env by default
-            },
+            }
         )
 
         # Create models now that environments are available. Subclasses use
@@ -262,7 +280,7 @@ class BaseAgent(pl.LightningModule):
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
     # TODO: there are train/fps drops caused by running the collector N times (its not only the video recording); cause currently unknown
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
-        # Respect warmup scheduling and frequency
+        # If eval shouldn't be run this epoch, skip the step (eg: warmup epochs)
         if not self._should_run_eval(self.current_epoch):
             return None
 
@@ -272,16 +290,10 @@ class BaseAgent(pl.LightningModule):
             or (self.current_epoch + 1) % self.config.eval_recording_freq_epochs == 0
         )
 
-        # Save eval video alongside checkpoints to simplify correlation
-        # Use the same epoch-based naming convention as checkpoints
+        # Run evaluation with optional recording
         ckpt_dir = self.run_manager.get_checkpoint_dir()
         ckpt_dir.mkdir(parents=True, exist_ok=True)
-
-        # Match the zero-padded epoch format used by checkpoint files: epoch=XX.ckpt
-        video_path = ckpt_dir / f"epoch={self.current_epoch:02d}.mp4"
-        video_path = str(video_path)
-
-        # Run evaluation with optional recording
+        video_path = str(ckpt_dir / f"epoch={self.current_epoch:02d}.mp4")
         with self.validation_env.recorder(video_path, record_video=record_video):
             from utils.evaluation import evaluate_policy
             eval_metrics = evaluate_policy(
@@ -308,30 +320,6 @@ class BaseAgent(pl.LightningModule):
 
         self._flush_metrics()
 
-    # ----- Evaluation scheduling helpers -----
-    def _should_run_eval(self, epoch_idx: int) -> bool:
-        """Return True if evaluation should run on this epoch index.
-
-        Scheduling uses 1-based epoch numbers for human-friendly config:
-        - Let E = epoch_idx + 1
-        - If eval_freq_epochs is None: never evaluate
-        - If E < eval_warmup_epochs: skip
-        - If E == eval_warmup_epochs: run (first eval after warmup)
-        - Otherwise: run when (E - eval_warmup_epochs) % eval_freq_epochs == 0
-        """
-        freq = self.config.eval_freq_epochs
-        if freq is None:
-            return False
-        warmup = int(self.config.eval_warmup_epochs or 0)
-        E = int(epoch_idx) + 1
-        if warmup <= 0:
-            # First epoch (E==1) then multiples of freq
-            return E == 1 or (E % int(freq) == 0)
-        # With warmup, first eval at E==warmup, then every freq epochs thereafter
-        if E < warmup:
-            return False
-        return ((E - warmup) % int(freq)) == 0
-
     def on_validation_epoch_end(self):
         # Validation epoch end is called after all validation steps are done
         # (nothing to do because we already did everything in the validation step)
@@ -345,75 +333,6 @@ class BaseAgent(pl.LightningModule):
         # Print concise ASCII summary of key metrics for quick inspection
         self._print_terminal_ascii_summary()
 
-    # -------------------------
-    # Terminal ASCII summary
-    # -------------------------
-    def _print_terminal_ascii_summary(self, max_metrics: int = 50, width: int = 48, per_metric_cap: int = 2000):
-        """Print an ASCII sparkline summary of recorded numeric metrics.
-
-        Args:
-            max_metrics: Maximum number of metrics to print to avoid long outputs.
-            width: Target width of sparklines.
-            per_metric_cap: Safety cap (ignored here but kept for future trimming consistency).
-        """
-        history = getattr(self, "_terminal_history", None)
-        if not history:
-            return
-
-        def downsample(seq, target):
-            if len(seq) <= target:
-                return seq
-            # Uniform uniform sampling by index
-            step = len(seq) / float(target)
-            return [seq[int(i * step)] for i in range(target)]
-
-        def spark(values, w):
-            blocks = "▁▂▃▄▅▆▇█"
-            if not values:
-                return ""
-            vmin = min(values)
-            vmax = max(values)
-            if vmax == vmin:
-                return "─" * max(1, min(w, len(values)))
-            data = downsample(values, max(1, w))
-            out = []
-            rng = (vmax - vmin) or 1.0
-            for v in data:
-                idx = int((v - vmin) / rng * (len(blocks) - 1))
-                out.append(blocks[max(0, min(idx, len(blocks) - 1))])
-            return "".join(out)
-
-        # Prefer train/* then eval/* then others for readability
-        keys = sorted(history.keys(), key=lambda k: (0 if k.startswith("train/") else 1 if k.startswith("eval/") else 2, k))
-        shown = 0
-        printed_header = False
-        for k in keys:
-            pts = history.get(k) or []
-            if len(pts) < 2:
-                continue
-            # Collapse duplicate steps (keep last)
-            by_step = {}
-            for s, v in pts:
-                by_step[int(s)] = float(v)
-            if not by_step:
-                continue
-            steps_sorted = sorted(by_step)
-            values = [by_step[s] for s in steps_sorted]
-            chart = spark(values, width)
-            vmin = min(values)
-            vmax = max(values)
-            vlast = values[-1]
-            if not printed_header:
-                print("\n=== Metrics Summary (ASCII) ===")
-                printed_header = True
-            print(f"{k:>26}: {chart}  min={vmin:.4g} max={vmax:.4g} last={vlast:.4g}")
-            shown += 1
-            if shown >= max_metrics:
-                break
-        if printed_header:
-            if shown == 0:
-                print("(no numeric metrics to summarize)")
-            print("=" * 30)
 
     def learn(self):
         from utils.logging import capture_all_output
@@ -490,20 +409,41 @@ class BaseAgent(pl.LightningModule):
             trainer = self._build_trainer(wandb_logger, callbacks, validation_controls)
 
             trainer.fit(self)
-
-    # Backward-compatibility: some tests and callers expect a fit() method on
-    # the agent (mirroring Lightning's Trainer.fit). Provide a thin alias so
-    # agent.fit() behaves the same as learn().
-    def fit(self):  # pragma: no cover - covered indirectly by integration test
-        return self.learn()
-
-    # -------------------------
-    # Helper methods for train()
-    # -------------------------
-
+            
+            
     @staticmethod
     def _sanitize_name(name: str) -> str:
         return name.replace("/", "-").replace("\\", "-")
+
+
+    # ----- Evaluation scheduling helpers -----
+    def _should_run_eval(self, epoch_idx: int) -> bool:
+        """Return True if evaluation should run on this epoch index.
+
+        Scheduling uses 1-based epoch numbers for human-friendly config:
+        - Let E = epoch_idx + 1
+        - If eval_freq_epochs is None: never evaluate
+        - If E < eval_warmup_epochs: skip
+        - If E == eval_warmup_epochs: run (first eval after warmup)
+        - Otherwise: run when (E - eval_warmup_epochs) % eval_freq_epochs == 0
+        """
+        # If eval_freq_epochs is None, never evaluate
+        freq = self.config.eval_freq_epochs
+        if freq is None:
+            return False
+
+        warmup = int(self.config.eval_warmup_epochs or 0)
+        E = int(epoch_idx) + 1
+        if warmup <= 0:
+            # First epoch (E==1) then multiples of freq
+            return E == 1 or (E % int(freq) == 0)
+        
+        # With warmup, first eval at E==warmup, then every freq epochs thereafter
+        if E < warmup:
+            return False
+        
+        return ((E - warmup) % int(freq)) == 0
+
 
     # -------------------------
     # Pre-prompt guidance helpers
@@ -812,3 +752,73 @@ class BaseAgent(pl.LightningModule):
             return False
         # Unrecognized input: default to Yes
         return True
+
+    # -------------------------
+    # Terminal ASCII summary
+    # -------------------------
+    def _print_terminal_ascii_summary(self, max_metrics: int = 50, width: int = 48, per_metric_cap: int = 2000):
+        """Print an ASCII sparkline summary of recorded numeric metrics.
+
+        Args:
+            max_metrics: Maximum number of metrics to print to avoid long outputs.
+            width: Target width of sparklines.
+            per_metric_cap: Safety cap (ignored here but kept for future trimming consistency).
+        """
+        history = getattr(self, "_terminal_history", None)
+        if not history:
+            return
+
+        def downsample(seq, target):
+            if len(seq) <= target:
+                return seq
+            # Uniform uniform sampling by index
+            step = len(seq) / float(target)
+            return [seq[int(i * step)] for i in range(target)]
+
+        def spark(values, w):
+            blocks = "▁▂▃▄▅▆▇█"
+            if not values:
+                return ""
+            vmin = min(values)
+            vmax = max(values)
+            if vmax == vmin:
+                return "─" * max(1, min(w, len(values)))
+            data = downsample(values, max(1, w))
+            out = []
+            rng = (vmax - vmin) or 1.0
+            for v in data:
+                idx = int((v - vmin) / rng * (len(blocks) - 1))
+                out.append(blocks[max(0, min(idx, len(blocks) - 1))])
+            return "".join(out)
+
+        # Prefer train/* then eval/* then others for readability
+        keys = sorted(history.keys(), key=lambda k: (0 if k.startswith("train/") else 1 if k.startswith("eval/") else 2, k))
+        shown = 0
+        printed_header = False
+        for k in keys:
+            pts = history.get(k) or []
+            if len(pts) < 2:
+                continue
+            # Collapse duplicate steps (keep last)
+            by_step = {}
+            for s, v in pts:
+                by_step[int(s)] = float(v)
+            if not by_step:
+                continue
+            steps_sorted = sorted(by_step)
+            values = [by_step[s] for s in steps_sorted]
+            chart = spark(values, width)
+            vmin = min(values)
+            vmax = max(values)
+            vlast = values[-1]
+            if not printed_header:
+                print("\n=== Metrics Summary (ASCII) ===")
+                printed_header = True
+            print(f"{k:>26}: {chart}  min={vmin:.4g} max={vmax:.4g} last={vlast:.4g}")
+            shown += 1
+            if shown >= max_metrics:
+                break
+        if printed_header:
+            if shown == 0:
+                print("(no numeric metrics to summarize)")
+            print("=" * 30)

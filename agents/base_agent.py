@@ -438,9 +438,7 @@ class BaseAgent(pl.LightningModule):
     
         # TODO: can I just do *
         wandb_run = wandb_logger.experiment
-        wandb_run.define_metric("train/*", step_metric="train/total_timesteps")
-        wandb_run.define_metric("train/hyperparams/*", step_metric="train/total_timesteps")
-        wandb_run.define_metric("eval/*", step_metric="train/total_timesteps")
+        wandb_run.define_metric("*", step_metric="train/total_timesteps")
 
         return wandb_logger
     

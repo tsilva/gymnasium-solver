@@ -5,6 +5,7 @@ from .model_checkpoint import ModelCheckpointCallback
 from .print_metrics import PrintMetricsCallback
 from .video_logger import VideoLoggerCallback
 from .end_of_training_report import EndOfTrainingReportCallback
+from .early_stopping import EarlyStoppingCallback
 
 __all__ = [
     "PrintMetricsCallback",
@@ -12,4 +13,5 @@ __all__ = [
     "VideoLoggerCallback",
     "HyperparameterScheduler",
     "EndOfTrainingReportCallback",
+    "EarlyStoppingCallback",
 ]

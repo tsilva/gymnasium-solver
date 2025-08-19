@@ -253,16 +253,7 @@ class BaseAgent(pl.LightningModule):
 
         self._update_schedules()
 
-        # TODO: this should be in a callback
-        # TODO: all early stopping logic should be in a callback, separate from eval logic
-        # Stop condition
-        if self.config.n_timesteps is not None and total_timesteps >= self.config.n_timesteps:
-            print(
-                f"Stopping training at epoch {self.current_epoch} with {total_timesteps} timesteps >= limit {self.config.n_timesteps}"
-            )
-            trainer = getattr(self, "_trainer", None)
-            if trainer is not None and hasattr(trainer, "should_stop"):
-                trainer.should_stop = True
+    # Early stopping moved to a dedicated callback (see callbacks.EarlyStoppingCallback)
 
     def val_dataloader(self):
         # TODO: should I just do rollouts here?
@@ -493,7 +484,8 @@ class BaseAgent(pl.LightningModule):
             ModelCheckpointCallback,
             PrintMetricsCallback,
             VideoLoggerCallback,
-            EndOfTrainingReportCallback
+            EndOfTrainingReportCallback,
+            EarlyStoppingCallback,
         )
 
         callbacks = []
@@ -548,6 +540,20 @@ class BaseAgent(pl.LightningModule):
             filename="report.md"
         )
         callbacks.append(report_cb)
+
+        # Early stopping decoupled from evaluation; driven purely by metrics
+        # Stops when train/total_timesteps reaches configured n_timesteps (if set)
+        try:
+            early_stop_cb = EarlyStoppingCallback(
+                metric_key="train/total_timesteps",
+                mode="max",
+                threshold=getattr(self.config, "n_timesteps", None),
+                verbose=True,
+            )
+            callbacks.append(early_stop_cb)
+        except Exception:
+            # Never block training due to optional callback wiring
+            pass
 
         return callbacks
 

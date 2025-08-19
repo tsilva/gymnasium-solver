@@ -57,7 +57,6 @@ class BaseAgent(pl.LightningModule):
             seed=config.seed,
             n_envs = config.n_envs,
             subproc=config.subproc,
-            subproc = config.subproc,
             obs_type = config.obs_type,
             frame_stack = config.frame_stack,
             norm_obs = config.normalize_obs,
@@ -260,7 +259,7 @@ class BaseAgent(pl.LightningModule):
                 trainer.should_stop = True
 
     def val_dataloader(self):
-        # Validation dataloader is a dummy; actual evaluation uses env rollouts.
+        # TODO: should I just do rollouts here?
         from utils.dataloaders import build_dummy_loader
         return build_dummy_loader()
 
@@ -303,8 +302,6 @@ class BaseAgent(pl.LightningModule):
                 deterministic=self.config.eval_deterministic,
             )
 
-        # Frequency check is already enforced in on_validation_epoch_start
-
         # Calculate FPS
         time_elapsed = max((time.perf_counter_ns() - self.validation_epoch_start_time) / 1e9, sys.float_info.epsilon)
         total_timesteps = int(eval_metrics.get("total_timesteps", 0))
@@ -316,7 +313,11 @@ class BaseAgent(pl.LightningModule):
         if not self.config.log_per_env_eval_metrics:
             eval_metrics = {k: v for k, v in eval_metrics.items() if not k.startswith("per_env/")}
 
-        self.log_metrics({"epoch": int(self.current_epoch), "epoch_fps": epoch_fps, **eval_metrics}, prefix="eval")
+        self.log_metrics({
+            "epoch": int(self.current_epoch), 
+            "epoch_fps": epoch_fps, 
+            **eval_metrics
+        }, prefix="eval")
 
         self._flush_metrics()
 
@@ -333,7 +334,6 @@ class BaseAgent(pl.LightningModule):
         # Print concise ASCII summary of key metrics for quick inspection
         self._print_terminal_ascii_summary()
 
-
     def learn(self):
         from utils.logging import capture_all_output
 
@@ -341,46 +341,7 @@ class BaseAgent(pl.LightningModule):
         # Before prompting, suggest better defaults if we detect mismatches
         self._maybe_warn_mlp_on_rgb_obs()
 
-        # Show environment details for transparency
-        try:
-            print("\n=== Environment Details ===")
-            # Observation space and action space from vectorized env
-            obs_space = getattr(self.train_env, "observation_space", None)
-            act_space = getattr(self.train_env, "action_space", None)
-            if obs_space is not None:
-                print(f"Observation space: {obs_space}")
-            if act_space is not None:
-                print(f"Action space: {act_space}")
-
-            # Reward range and threshold when available
-            reward_range = None
-            if hasattr(self.train_env, "get_reward_range"):
-                try:
-                    reward_range = self.train_env.get_reward_range()
-                except Exception:
-                    reward_range = None
-            if reward_range is None and hasattr(getattr(self.train_env, "envs", [None])[0], "reward_range"):
-                rr = getattr(self.train_env.envs[0], "reward_range", None)
-                if isinstance(rr, (tuple, list)) and len(rr) == 2:
-                    reward_range = tuple(rr)
-            if reward_range is not None:
-                print(f"Reward range: {reward_range}")
-
-            reward_threshold = None
-            if hasattr(self.train_env, "get_reward_threshold"):
-                try:
-                    reward_threshold = self.train_env.get_reward_threshold()
-                except Exception:
-                    reward_threshold = None
-            if reward_threshold is not None:
-                print(f"Reward threshold: {reward_threshold}")
-            print("=" * 30)
-        except Exception:
-            # Never block training if introspection fails
-            pass
-        if not self._confirm_proceed():
-            print("Training aborted by user before start.")
-            return
+        self._print_env_spec(self.train_env)
 
         print("Starting training...")
 
@@ -409,12 +370,27 @@ class BaseAgent(pl.LightningModule):
             trainer = self._build_trainer(wandb_logger, callbacks, validation_controls)
 
             trainer.fit(self)
-            
-            
+    
+    def _print_env_spec(self, env):
+        # Show environment details for transparency
+        print("\n=== Environment Details ===")
+        
+        # Observation space and action space from vectorized env
+        print(f"Observation space: {env.observation_space}")
+        print(f"Action space: {env.action_space}")
+
+        # Reward range and threshold when available
+        reward_range = env.get_reward_range()
+        print(f"Reward range: {reward_range}")
+
+        # Reward threshold if defined
+        reward_threshold = env.get_reward_threshold()
+        print(f"Reward threshold: {reward_threshold}")
+        print("=" * 30)
+
     @staticmethod
     def _sanitize_name(name: str) -> str:
         return name.replace("/", "-").replace("\\", "-")
-
 
     # ----- Evaluation scheduling helpers -----
     def _should_run_eval(self, epoch_idx: int) -> bool:
@@ -444,7 +420,6 @@ class BaseAgent(pl.LightningModule):
         
         return ((E - warmup) % int(freq)) == 0
 
-
     # -------------------------
     # Pre-prompt guidance helpers
     # -------------------------
@@ -455,43 +430,38 @@ class BaseAgent(pl.LightningModule):
         Intent: gently nudge users to use CnnPolicy when training from pixels.
         Triggered right before the start-training confirmation prompt.
         """
-        try:
-            # Normalize common strings
-            is_mlp = self.config.policy_type.lower() == "mlp"
 
-            if not is_mlp:
-                return
+        # Normalize common strings
+        is_mlp = self.config.policy_type.lower() == "mlp"
+        if not is_mlp: return
 
-            obs_space = self.train_env.observation_space
-            if obs_space is None:
-                return
+        obs_space = self.train_env.observation_space
+        if obs_space is None:
+            return
 
-            # Heuristic: RGB observations are typically uint8 Box with 3 channels stacked
-            import numpy as np
-            from gymnasium import spaces
+        # Heuristic: RGB observations are typically uint8 Box with 3 channels stacked
+        import numpy as np
+        from gymnasium import spaces
 
-            if not isinstance(obs_space, spaces.Box):
-                return
+        if not isinstance(obs_space, spaces.Box):
+            return
 
-            shape = tuple(getattr(obs_space, "shape", ()) or ())
-            if len(shape) < 3:
-                return
+        shape = tuple(getattr(obs_space, "shape", ()) or ())
+        if len(shape) < 3:
+            return
 
-            # VecFrameStack may multiply channels; dtype uint8 is a strong signal for pixels
-            is_uint8 = obs_space.dtype == np.uint8
-            channels_like = shape[-1]
-            looks_rgb = is_uint8 and (channels_like == 3 or channels_like % 3 == 0)
+        # VecFrameStack may multiply channels; dtype uint8 is a strong signal for pixels
+        is_uint8 = obs_space.dtype == np.uint8
+        channels_like = shape[-1]
+        looks_rgb = is_uint8 and (channels_like == 3 or channels_like % 3 == 0)
 
-            if not looks_rgb:
-                return
+        if not looks_rgb:
+            return
 
-            print(
-                "Warning: Detected RGB image observations with MlpPolicy. "
-                "For pixel inputs, consider using CnnPolicy for better performance."
-            )
-        except Exception:
-            # Never block training on advisory messages
-            pass
+        print(
+            "Warning: Detected RGB image observations with MlpPolicy. "
+            "For pixel inputs, consider using CnnPolicy for better performance."
+        )
 
     def _create_wandb_logger(self):
         from dataclasses import asdict
@@ -509,11 +479,7 @@ class BaseAgent(pl.LightningModule):
         run_dir = self.run_manager.setup_run_directory(wandb_logger.experiment)
         run_logs_dir = str(self.run_manager.get_logs_dir())
 
-        # Initialize high-throughput CSV metrics logger at run root
-        try:
-            self._csv_logger = CsvMetricsLogger(Path(run_dir) / "metrics.csv")
-        except Exception:
-            self._csv_logger = None  # Never block training on CSV setup
+        self._csv_logger = CsvMetricsLogger(Path(run_dir) / "metrics.csv")
             
         return run_dir, run_logs_dir
 
@@ -599,6 +565,7 @@ class BaseAgent(pl.LightningModule):
         # Keep Lightning validation cadence driven by eval_freq_epochs; warmup is enforced in hooks.
         eval_freq = self.config.eval_freq_epochs
         warmup = self.config.eval_warmup_epochs or 0
+
         # If warmup is active, request validation every epoch and gate in hooks
         eff_freq = 1 if (eval_freq is not None and warmup > 0) else eval_freq
         return self._compute_validation_controls(eff_freq)
@@ -677,27 +644,22 @@ class BaseAgent(pl.LightningModule):
         """
         self._metrics_buffer.log(metrics, prefix=prefix)
 
-        # Capture lightweight numeric history for terminal ASCII summary
-        try:
-            if prefix:
-                prefixed = {f"{prefix}/{k}": v for k, v in metrics.items()}
-            else:
-                prefixed = dict(metrics)
+        if prefix:
+            prefixed = {f"{prefix}/{k}": v for k, v in metrics.items()}
+        else:
+            prefixed = dict(metrics)
 
-            # Update last known step from canonical metric if present
-            step_val = prefixed.get("train/total_timesteps")
-            if isinstance(step_val, (int, float)):
-                self._last_step_for_terminal = int(step_val)
+        # Update last known step from canonical metric if present
+        step_val = prefixed.get("train/total_timesteps")
+        if isinstance(step_val, (int, float)):
+            self._last_step_for_terminal = int(step_val)
 
-            for k, v in prefixed.items():
-                if k.endswith("action_distribution"): continue
-                if not isinstance(v, (int, float)): continue
-                history = self._terminal_history.setdefault(k, [])
-                step = self._last_step_for_terminal if k != "train/total_timesteps" else int(v)
-                history.append((step, float(v)))
-        except Exception:
-            # Never fail due to bookkeeping issues
-            pass
+        for k, v in prefixed.items():
+            if k.endswith("action_distribution"): continue
+            if not isinstance(v, (int, float)): continue
+            history = self._terminal_history.setdefault(k, [])
+            step = self._last_step_for_terminal if k != "train/total_timesteps" else int(v)
+            history.append((step, float(v)))
 
     def _flush_metrics(self):
         # Flush via buffer abstraction
@@ -708,15 +670,6 @@ class BaseAgent(pl.LightningModule):
     def on_fit_end(self):
         self._csv_logger.close()
         return super().on_fit_end()
-
-    # -------------------------
-    # Pre-training summary & confirmation helpers
-    # -------------------------
-
-    # TODO: get rid of this
-    def _print_pretraining_summary(self):
-        # Keep output concise and avoid duplication: config and model details were already printed.
-        print("\nReview the configuration and model above.")
 
     # TODO: encapsulate this
     def _confirm_proceed(self) -> bool:

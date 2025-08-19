@@ -1,5 +1,3 @@
-import sys
-import time
 import torch
 import pytorch_lightning as pl
 
@@ -61,11 +59,10 @@ class BaseAgent(pl.LightningModule):
         # Train environment (vectorized; separate seed)
         self.train_env = build_env(
             config.env_id,
-            **dict(
-                **common_env_kwargs,
-                # TODO: solve this
-                #seed=config.seed + 1000
-            )
+            **{
+                **common_env_kwargs, 
+                "seed": config.seed + 1000
+            }
         )
         from utils.rollouts import RolloutCollector
         self.train_collector = RolloutCollector(
@@ -75,25 +72,22 @@ class BaseAgent(pl.LightningModule):
             **self.rollout_collector_hyperparams(),
         )
 
-
         # Evaluation env (vectorized; separate seed)
         # Use the same level of vectorization as training for fair evaluation when desired.
         # Keep subproc=False to enable video recording.
         self.validation_env = build_env(
             config.env_id,
-            **dict(
-                **common_env_kwargs,
-                #seed=config.seed + 2000,
-                #subproc=False, # TODO: do I need this?
-                render_mode="rgb_array",
-                record_video=True,
-                record_video_kwargs={
-                    # Record full episodes without truncation; the recorder will run
-                    # until the evaluation block finishes.
+            **{
+                **common_env_kwargs, 
+                "seed": config.seed + 2000,
+                "subproc": False,
+                "render_mode": "rgb_array", 
+                "record_video": True,
+                "record_video_kwargs": {
                     "video_length": 100,
-                    "record_env_idx": 0,  # Record only first env by default
+                    "record_env_idx": 0
                 }
-            )
+            }
         )
         # TODO: is this being used for evaluate_policy?
         self.validation_collector = RolloutCollector(
@@ -107,16 +101,16 @@ class BaseAgent(pl.LightningModule):
         # final post train evaluation and video recording
         self.test_env = build_env(
             config.env_id,
-            **common_env_kwargs,
-            #seed=config.seed + 3000,
-            #subproc=False, # TODO: do I need this?
-            render_mode="rgb_array",
-            record_video=True,
-            record_video_kwargs={
-                # Record full episodes without truncation; the recorder will run
-                # until the evaluation block finishes.
-                "video_length": None,
-                "record_env_idx": 0,  # Record only first env by default
+            **{
+                **common_env_kwargs,
+                "seed": config.seed + 3000,
+                "subproc" : False,
+                "render_mode" : "rgb_array",
+                "record_video" : True,
+                "record_video_kwargs" : {
+                    "video_length": None,
+                    "record_env_idx": 0
+                }
             }
         )
         # TODO: is this being used for evaluate_policy?

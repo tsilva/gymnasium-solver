@@ -219,3 +219,17 @@ class VecInfoWrapper(VecEnvWrapper):
         elif hasattr(action_space, 'shape') and action_space.shape:  # Continuous action space
             return action_space.shape[0]
         return None
+    
+    def print_spec(self):
+        # Observation space and action space from vectorized env
+        print(f"Observation space: {self.observation_space}")
+        print(f"Action space: {self.action_space}")
+
+        # Reward range and threshold when available
+        reward_range = self.get_reward_range()
+        print(f"Reward range: {reward_range}")
+
+        # Reward threshold if defined
+        reward_threshold = self.get_reward_threshold()
+        print(f"Reward threshold: {reward_threshold}")
+        

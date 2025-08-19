@@ -328,67 +328,76 @@ class BaseAgent(pl.LightningModule):
         if history: print_terminal_ascii_summary(history)
 
     def learn(self):
-        from utils.logging import capture_all_output
-        from utils.user import prompt_confirm
-        from utils.run_manager import RunManager
-
-        # Ensure learn() is only called once at the start of training
         assert self.run_manager is None, "learn() should only be called once at the start of training"
 
-        # Setup run directory management
+        from utils.logging import stream_output_to_log
+        from utils.run_manager import RunManager
+        
+        # Initialize W&B logger and create a run
         wandb_logger = self._create_wandb_logger()
+        wandb_run = wandb_logger.experiment
 
-        run = wandb_logger.experiment
-        self.run_manager = RunManager(run.id)
+        # Initilize run manager (use W&B run ID as run_id)
+        self.run_manager = RunManager(wandb_run.id)
+        
+        # Save configuration to run directory
+        config_path = self.run_manager.ensure_path("config.json")
+        self.config.save_to_json(config_path)
+        
+        # Set up comprehensive logging using run-specific logs directory
+        log_path = self.run_manager.ensure_path("run.log")
+        with stream_output_to_log(log_path): self._learn(wandb_logger)
+
+    def _learn(self, wandb_logger):
+        # Prompt user to start training, return if user declines
+        if not self._prompt_user_start_training(): return
+
+        # Setup run directory management
         csv_path = self.run_manager.ensure_path("metrics.csv")
-
         self._csv_logger = CsvMetricsLogger(csv_path)
 
+        # Build callbacks and trainer
+        callbacks = self._build_trainer_callbacks()
 
-         # Ask for confirmation before any heavy setup (keep prior prints grouped)
+        # Keep Lightning validation cadence driven by eval_freq_epochs; warmup is enforced in hooks.
+        eval_freq = self.config.eval_freq_epochs
+        warmup = self.config.eval_warmup_epochs or 0
+
+        # If warmup is active, request validation every epoch and gate in hooks
+        eval_freq_epochs = 1 if (eval_freq is not None and warmup > 0) else eval_freq
+        limit_val_batches = 0 if eval_freq_epochs is None else 1.0
+        check_val_every_n_epoch = eval_freq_epochs if eval_freq_epochs is not None else 1
+
+        trainer = self._build_trainer(
+            wandb_logger, 
+            callbacks, 
+            {
+                "limit_val_batches": limit_val_batches,
+                "check_val_every_n_epoch": check_val_every_n_epoch,
+            }
+        )
+        trainer.fit(self)
+    
+    def _prompt_user_start_training(self):
+        from utils.user import prompt_confirm
+
+        print("\n=== Run Details ===")
+        print(f"Run directory: {self.run_manager.get_run_dir()}")
+        print(f"Run ID: {self.run_manager.get_run_id()}")
+        print("=" * 30)
+
+        print("\n=== Environment Details ===")
+        self.train_env.print_spec()
+        print("=" * 30)
+
+        # Ask for confirmation before any heavy setup (keep prior prints grouped)
         # Before prompting, suggest better defaults if we detect mismatches
         self._maybe_warn_observation_policy_mismatch()
 
-        self._print_env_spec(self.train_env)
-
-        print("Starting training...")
-        print(f"Run directory: {self.run_manager.get_run_dir()}")
-        print(f"Run ID: {self.run_manager.get_run_id()}")
-
+        # Prompt if user wants to start training
         start_training = prompt_confirm("Start training?", default=True, quiet=self.config.quiet)
-        if not start_training: return
+        return start_training
 
-        # Set up comprehensive logging using run-specific logs directory
-        logs_dir = self.run_manager.ensure_path("logs/")
-        with capture_all_output(config=self.config, log_dir=logs_dir):
-            # Save configuration to run directory
-            config_path = self.run_manager.save_config(self.config)
-            print(f"Configuration saved to: {config_path}")
-
-            # Build callbacks and trainer
-            callbacks = self._build_trainer_callbacks()
-
-            # Keep Lightning validation cadence driven by eval_freq_epochs; warmup is enforced in hooks.
-            eval_freq = self.config.eval_freq_epochs
-            warmup = self.config.eval_warmup_epochs or 0
-
-            # If warmup is active, request validation every epoch and gate in hooks
-            eval_freq_epochs = 1 if (eval_freq is not None and warmup > 0) else eval_freq
-            limit_val_batches = 0 if eval_freq_epochs is None else 1.0
-            check_val_every_n_epoch = eval_freq_epochs if eval_freq_epochs is not None else 1
-    
-            trainer = self._build_trainer(
-                wandb_logger, 
-                callbacks, 
-                {
-                    "limit_val_batches": limit_val_batches,
-                    "check_val_every_n_epoch": check_val_every_n_epoch,
-                }
-            )
-
-            trainer.fit(self)
-    
-    # TODO: move this somewhere else?
     def _maybe_warn_observation_policy_mismatch(self):
         from utils.environment import is_rgb_env
         
@@ -409,24 +418,6 @@ class BaseAgent(pl.LightningModule):
                 "For non-image inputs, consider using MLP for better performance."
             )
     
-    # TODO: print_env() direclty in env
-    def _print_env_spec(self, env):
-        # Show environment details for transparency
-        print("\n=== Environment Details ===")
-        
-        # Observation space and action space from vectorized env
-        print(f"Observation space: {env.observation_space}")
-        print(f"Action space: {env.action_space}")
-
-        # Reward range and threshold when available
-        reward_range = env.get_reward_range()
-        print(f"Reward range: {reward_range}")
-
-        # Reward threshold if defined
-        reward_threshold = env.get_reward_threshold()
-        print(f"Reward threshold: {reward_threshold}")
-        print("=" * 30)
-        
     # ----- Evaluation scheduling helpers -----
     def _should_run_eval(self, epoch_idx: int) -> bool:
         """Return True if evaluation should run on this epoch index.
@@ -476,9 +467,10 @@ class BaseAgent(pl.LightningModule):
         )
     
         # TODO: can I just do *
-        #wandb_logger.experiment.define_metric("train/*", step_metric="train/total_timesteps")
-        #wandb_logger.experiment.define_metric("train/hyperparams/*", step_metric="train/total_timesteps")
-        #wandb_logger.experiment.define_metric("eval/*", step_metric="train/total_timesteps")
+        wandb_run = wandb_logger.experiment
+        wandb_run.define_metric("train/*", step_metric="train/total_timesteps")
+        wandb_run.define_metric("train/hyperparams/*", step_metric="train/total_timesteps")
+        wandb_run.define_metric("eval/*", step_metric="train/total_timesteps")
 
         return wandb_logger
     

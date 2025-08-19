@@ -205,139 +205,15 @@ class StreamRedirector:
 # Global log file manager instance
 _log_manager = None
 
-
-def setup_logging(log_dir: str = "logs", max_log_files: int = 10) -> LogFileManager:
-    """
-    Set up the global logging system.
-    
-    Args:
-        log_dir: Directory to store log files
-        max_log_files: Maximum number of log files to keep
-        
-    Returns:
-        LogFileManager instance
-    """
-    global _log_manager
-    _log_manager = LogFileManager(log_dir, max_log_files)
-    return _log_manager
-
-
 def get_log_manager() -> Optional[LogFileManager]:
     """Get the global log manager instance."""
     return _log_manager
 
-
 @contextmanager
-def capture_all_output(config=None, log_dir: str = "logs", max_log_files: int = 10):
-    """
-    Context manager that captures all stdout/stderr to both console and log file.
-    
-    Args:
-        config: Optional configuration object for log file naming
-        log_dir: Directory to store log files
-        max_log_files: Maximum number of log files to keep
-        
-    Usage:
-        with capture_all_output(config):
-            # All print statements and other stdout/stderr will be logged
-            print("This goes to both console and log file")
-            # ... run training ...
-    """
-    logs_path = Path(log_dir)
-    if logs_path.name == "logs":
-        # Legacy/generic mode: create timestamped logs under a 'logs' directory
-        # Set up log manager if not already done, or if target dir changed
-        target_dir = logs_path
-        if _log_manager is None or getattr(_log_manager, 'log_dir', None) != target_dir:
-            setup_logging(str(target_dir), max_log_files)
-        # Create timestamped log file under logs/
-        log_file = _log_manager.create_log_file(config)
-    else:
-        # Run-root mode: write a stable run.log directly in the provided directory
-        try:
-            logs_path.mkdir(parents=True, exist_ok=True)
-        except Exception:
-            # If directory creation fails, fallback to current directory
-            logs_path = Path(".")
-        stable_path = logs_path / "run.log"
-        # Always overwrite on new session start
-        log_file = open(stable_path, 'w', encoding='utf-8', buffering=1)
-        # Write a header similar to LogFileManager
-        log_file.write(f"=== Training Session Started ===\n")
-        log_file.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-        log_file.write(f"Log file: {stable_path}\n")
-        if config:
-            log_file.write(f"Algorithm: {getattr(config, 'algo_id', 'unknown')}\n")
-            log_file.write(f"Environment: {getattr(config, 'env_id', 'unknown')}\n")
-            log_file.write(f"Seed: {getattr(config, 'seed', 'unknown')}\n")
-        log_file.write("=" * 50 + "\n\n")
-        log_file.flush()
-    
-    # Use stream redirector
+def stream_output_to_log(log_file_path: str):
+    log_file = open(log_file_path, 'w', encoding='utf-8', buffering=1)
     with StreamRedirector(log_file, redirect_stdout=True, redirect_stderr=True):
         try:
             yield log_file
         finally:
-            if log_file and not log_file.closed:
-                log_file.close()
-
-
-def log_config_details(config, log_file: Optional[TextIO] = None):
-    """
-    Log detailed configuration information.
-    
-    Args:
-        config: Configuration object
-        log_file: Optional log file handle. If None, just prints to stdout.
-    """
-    from dataclasses import asdict, is_dataclass
-    
-    output_lines = [
-        "\n=== Configuration Details ===",
-    ]
-    
-    if is_dataclass(config):
-        config_dict = asdict(config)
-        for key, value in sorted(config_dict.items()):
-            output_lines.append(f"{key}: {value}")
-    else:
-        # Handle other config types
-        for attr in sorted(dir(config)):
-            if not attr.startswith('_'):
-                try:
-                    value = getattr(config, attr)
-                    if not callable(value):
-                        output_lines.append(f"{attr}: {value}")
-                except Exception:
-                    pass
-    
-    output_lines.append("=" * 30)
-    output_lines.append("")
-    
-    output_text = "\n".join(output_lines)
-    
-    if log_file and not log_file.closed:
-        log_file.write(output_text)
-        log_file.flush()
-    
-    # Always print to stdout as well (will be captured by TeeStream if active)
-    print(output_text)
-
-
-def create_algorithm_logger(config) -> Optional[TextIO]:
-    """
-    Create a dedicated log file for a specific algorithm run.
-    
-    Args:
-        config: Configuration object containing algorithm and environment info
-        
-    Returns:
-        Log file handle or None if setup failed
-    """
-    try:
-        if _log_manager is None:
-            setup_logging()
-        return _log_manager.create_log_file(config)
-    except Exception as e:
-        print(f"Warning: Failed to create algorithm log file: {e}")
-        return None
+            if log_file and not log_file.closed: log_file.close()

@@ -13,12 +13,10 @@ Notes:
 import json
 import queue
 import threading
-import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 import pytorch_lightning as pl
-
 
 class HyperparamSyncCallback(pl.Callback):
     """
@@ -71,20 +69,13 @@ class HyperparamSyncCallback(pl.Callback):
         
     def on_fit_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         """Initialize control files and start monitoring."""
-        # Set up control directory
-        if self.control_dir is None:
-            if hasattr(pl_module, 'run_manager') and pl_module.run_manager:
-                self.control_dir = pl_module.run_manager.run_dir
-            else:
-                self.control_dir = Path("./runs/latest-run")
-        else:
-            self.control_dir = Path(self.control_dir)
 
-        self.control_dir.mkdir(parents=True, exist_ok=True)
+        run_dir = pl_module.run_manager.get_run_dir()
+        assert run_dir.exists(), f"Run directory {run_dir} does not exist."
 
-        # Monitor the run's main configuration file for changes
-        # Users can edit this file during training to tweak hyperparameters.
+        self.control_dir = Path(run_dir)
         self.control_file = self.control_dir / "config.json"
+        assert self.control_file.exists(), f"Control file {self.control_file} does not exist."
 
         # Store original hyperparameters
         self.original_hyperparams = {
@@ -100,11 +91,7 @@ class HyperparamSyncCallback(pl.Callback):
             self.start_monitoring()
 
         # Log initial hyperparameters to W&B under train/hyperparams
-        try:
-            self._log_hyperparams(pl_module)
-        except Exception:
-            # Never block training on telemetry issues
-            pass
+        self._log_hyperparams(pl_module)
 
         if self.verbose:
             print(f"\n🎛️  Hyperparameter manual control enabled!")

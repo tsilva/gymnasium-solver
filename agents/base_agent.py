@@ -170,7 +170,7 @@ class BaseAgent(pl.LightningModule):
         # MultiPassRandomSampler (allows showing same data N times 
         # per epoch without suffering lightning's epoch turnover costs)
         from utils.dataloaders import build_index_collate_loader_from_collector
-        from utils.random_utils import get_global_torch_generator
+        from utils.random import get_global_torch_generator
         generator = get_global_torch_generator(self.config.seed)
         return build_index_collate_loader_from_collector(
             collector=self.train_collector,

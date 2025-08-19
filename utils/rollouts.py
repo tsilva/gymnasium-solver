@@ -5,7 +5,7 @@ from typing import NamedTuple, Optional, Tuple
 import numpy as np
 import torch
 
-from utils.torch_utils import _device_of, inference_ctx
+from utils.torch import _device_of, inference_ctx
 
 
 # -----------------------------

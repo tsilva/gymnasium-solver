@@ -13,7 +13,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 import torch
 
-from .torch_utils import _device_of, inference_ctx
+from .torch import _device_of, inference_ctx
 
 
 def _balanced_targets(n_envs: int, total_episodes: int) -> List[int]:

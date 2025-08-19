@@ -20,7 +20,7 @@ from typing import Any, Dict, Optional
 import pytorch_lightning as pl
 
 
-class HyperparameterScheduler(pl.Callback):
+class HyperparamSyncCallback(pl.Callback):
     """
     Callback that enables manual hyperparameter adjustment during training.
 

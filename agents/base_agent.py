@@ -481,7 +481,7 @@ class BaseAgent(pl.LightningModule):
         """Assemble trainer callbacks, with an optional end-of-training report."""
         # Lazy imports to avoid heavy deps at module import time
         from callbacks import (
-            HyperparameterScheduler,
+            HyperparamSyncCallback,
             ModelCheckpointCallback,
             PrintMetricsCallback,
             VideoLoggerCallback,
@@ -528,19 +528,15 @@ class BaseAgent(pl.LightningModule):
         )
         callbacks.append(printer_cb)
 
-        hyperparam_cb = HyperparameterScheduler(
+        # Read hyperparamters from config file (eg: user modified during training)
+        hyperparam_sync_cb = HyperparamSyncCallback(
             control_dir=None,
             check_interval=2.0,
             enable_lr_scheduling=False,
             enable_manual_control=True,
             verbose=True,
         )
-        callbacks.append(hyperparam_cb)
-
-        report_cb = EndOfTrainingReportCallback(
-            filename="report.md"
-        )
-        callbacks.append(report_cb)
+        callbacks.append(hyperparam_sync_cb)
 
         # TODO: add multi-metric support to EarlyStoppingCallback
         # Early stop after reaching a certain number of timesteps
@@ -571,6 +567,12 @@ class BaseAgent(pl.LightningModule):
             verbose=True,
         ) if self.config.early_stop_on_eval_threshold else None
         if earlystop_eval_reward_cb: callbacks.append(earlystop_eval_reward_cb)
+
+        # When training ends, write a report describing on the training went
+        report_cb = EndOfTrainingReportCallback(
+            filename="report.md"
+        )
+        callbacks.append(report_cb)
 
         return callbacks
 

@@ -1,4 +1,4 @@
-from wrappers.env_wrapper_registry import EnvWrapperRegistry
+from gym_wrappers.env_wrapper_registry import EnvWrapperRegistry
 
 
 def is_alepy_env_id(env_id: str) -> bool:
@@ -53,9 +53,9 @@ def build_env(
         VecNormalize,
     )
 
-    from wrappers.vec_info import VecInfoWrapper
-    from wrappers.vec_normalize_static import VecNormalizeStatic
-    from wrappers.vec_video_recorder import VecVideoRecorder
+    from gym_wrappers.vec_info import VecInfoWrapper
+    from gym_wrappers.vec_normalize_static import VecNormalizeStatic
+    from gym_wrappers.vec_video_recorder import VecVideoRecorder
     
     # If recording video was requrested, assert valid render mode and subproc disabled 
     if record_video:

@@ -1,6 +1,6 @@
 import types
 
-from wrappers.env_wrapper_registry import EnvWrapperRegistry
+from gym_wrappers.env_wrapper_registry import EnvWrapperRegistry
 
 
 class DummyWrapper:

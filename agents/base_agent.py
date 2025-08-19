@@ -441,7 +441,7 @@ class BaseAgent(pl.LightningModule):
     def _build_trainer_callbacks(self):
         """Assemble trainer callbacks, with an optional end-of-training report."""
         # Lazy imports to avoid heavy deps at module import time
-        from callbacks import (
+        from trainer_callbacks import (
             HyperparamSyncCallback,
             ModelCheckpointCallback,
             PrintMetricsCallback,

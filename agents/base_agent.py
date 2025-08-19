@@ -225,26 +225,6 @@ class BaseAgent(pl.LightningModule):
             prefix="train",
         )
 
-        # Log action distribution histogram to W&B, aligned to total_timesteps
-        try:
-            import wandb  # optional dependency at runtime
-            counts = self.train_collector.get_action_histogram_counts(reset=True)
-            if counts is not None and counts.sum() > 0:
-                num_actions = int(len(counts))
-                edges = torch.linspace(-0.5, num_actions - 0.5, steps=num_actions + 1).tolist()
-                hist = wandb.Histogram(np_histogram=(counts.tolist(), edges))
-                step_val = int(total_timesteps)
-                exp = getattr(getattr(self, "logger", None), "experiment", None)
-                payload = {"train/action_dist": hist}
-                if exp is not None and hasattr(exp, "log"):
-                    exp.log(payload, step=step_val)
-                else:
-                    wandb.log(payload, step=step_val)
-        except Exception:
-            pass
-
-        # CSV flushing is handled by CsvMetricsLoggerCallback
-
         self._update_schedules()
 
     def val_dataloader(self):

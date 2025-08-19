@@ -17,12 +17,11 @@ class PPO(BaseAgent):
     def create_models(self):
         input_dim = self.train_env.get_input_dim()
         output_dim = self.train_env.get_output_dim()
-        policy_type = getattr(self.config, 'policy', 'MlpPolicy')
         policy_kwargs = dict(getattr(self.config, 'policy_kwargs', None) or {})
         activation = policy_kwargs.pop('activation', getattr(self.config, 'activation', 'tanh'))
 
         model = create_actor_critic_policy(
-            policy_type,
+            self.config.policy,
             input_dim=input_dim,
             action_dim=output_dim,
             hidden=self.config.hidden_dims,

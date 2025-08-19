@@ -10,12 +10,11 @@ class REINFORCE(BaseAgent):
     def create_models(self):
         input_dim = self.train_env.get_input_dim()
         output_dim = self.train_env.get_output_dim()
-        policy_type = getattr(self.config, 'policy', 'MlpPolicy')
         policy_kwargs = getattr(self.config, 'policy_kwargs', None) or {}
         activation = getattr(self.config, 'activation', 'tanh')
 
         self.policy_model = create_policy_only(
-            policy_type,
+            self.config.policy_type,
             input_dim=input_dim,
             action_dim=output_dim,
             hidden=self.config.hidden_dims,

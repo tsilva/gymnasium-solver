@@ -50,7 +50,7 @@ def create_actor_critic_policy(
 ):
     """Create an Actor-Critic policy model based on policy_type.
 
-    policy_type: 'MlpPolicy' or 'CnnPolicy' (case-insensitive) or a Module class.
+    policy_type: 'mlp' or 'cnn' (case-insensitive) or a Module class.
     activation: string or nn.Module class/instance; forwarded to underlying model.
     obs_space: Gymnasium observation space (required for CNN policies to infer shape).
     policy_kwargs: forwarded to the underlying model constructor.

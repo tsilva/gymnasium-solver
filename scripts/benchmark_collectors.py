@@ -231,7 +231,7 @@ def run_sb3_collector(cfg, *, subproc_override: Optional[bool], rollouts: Option
         policy_kwargs["activation_fn"] = nn.ReLU
 
     model = PPO(
-        policy="MlpPolicy",
+        policy="mlp",
         env=vec_env,
         n_steps=cfg.n_steps,
         batch_size=cfg.batch_size,

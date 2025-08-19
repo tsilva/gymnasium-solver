@@ -1,56 +1,12 @@
 import sys
 import time
-import types
-
 import torch
 from pathlib import Path
+import pytorch_lightning as pl
 
-# Optional dependency: PyTorch Lightning
-try:
-    import pytorch_lightning as pl
-except Exception:  # pragma: no cover - lightweight test stub when PL isn't installed
-    class _LightningModuleStub:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        # Methods used indirectly by BaseAgent
-        def save_hyperparameters(self, *args, **kwargs):
-            pass
-
-        def log_dict(self, *args, **kwargs):
-            pass
-
-        def manual_backward(self, *args, **kwargs):
-            pass
-
-        def optimizers(self):
-            return []
-
-        # Properties accessed in a few places
-        @property
-        def current_epoch(self):
-            return 0
-
-        @property
-        def trainer(self):
-            # Minimal shape to satisfy .should_stop assignment in tests if reached
-            return types.SimpleNamespace(should_stop=False)
-
-    class _PLStub:
-        LightningModule = _LightningModuleStub
-
-    pl = _PLStub()  # type: ignore
-
-# Optional decorator (lightweight). Fallback to pass-through if missing.
-try:
-    from utils.decorators import must_implement
-except Exception:  # pragma: no cover
-    def must_implement(fn):
-        return fn
-
-# Safe/lightweight import
 from utils.metrics_buffer import MetricsBuffer
 from utils.csv_logger import CsvMetricsLogger
+from utils.decorators import must_implement
 
 
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
@@ -85,23 +41,20 @@ class BaseAgent(pl.LightningModule):
         # CSV metrics logger (initialized with run manager)
         self._csv_logger = None
 
-        # Create the environments (lazy import of heavy deps)
-        from utils.environment import build_env
-
         # Training env(s)
         # If using pixel observations, Gymnasium's PixelObservationWrapper requires the
         # base env to be created with render_mode='rgb_array'. Detect that case here.
-        _uses_pixel_obs = False
-        try:
-            _uses_pixel_obs = any(
-                isinstance(w, dict) and str(w.get("id")) == "PixelObservationWrapper"
-                for w in (config.env_wrappers or [])
-            )
-        except Exception:
-            _uses_pixel_obs = False
+        #_uses_pixel_obs = False
+        #try:
+        #    _uses_pixel_obs = any(
+        #        isinstance(w, dict) and str(w.get("id")) == "PixelObservationWrapper"
+        #        for w in (config.env_wrappers or [])
+        #    )
+        #except Exception:
+        #    _uses_pixel_obs = False
+        #train_render_mode = "rgb_array" if _uses_pixel_obs else None
 
-        train_render_mode = "rgb_array" if _uses_pixel_obs else None
-
+        from utils.environment import build_env
         self.train_env = build_env(
             config.env_id,
             seed=config.seed,
@@ -111,7 +64,7 @@ class BaseAgent(pl.LightningModule):
             env_wrappers=config.env_wrappers,
             norm_obs=config.normalize_obs,
             frame_stack=config.frame_stack,
-            render_mode=train_render_mode,
+            #render_mode=train_render_mode,
             env_kwargs=config.env_kwargs,
         )
 
@@ -192,14 +145,12 @@ class BaseAgent(pl.LightningModule):
         # Collect the first rollout
         self._trajectories = self.train_collector.collect()
 
-        # Use a shared generator for reproducible shuffles across the app
+        # Build efficient index-collate dataloader backed by 
+        # MultiPassRandomSampler (allows showing same data N times 
+        # per epoch without suffering lightning's epoch turnover costs)
+        from utils.dataloaders import build_index_collate_loader_from_collector
         from utils.random_utils import get_global_torch_generator
         generator = get_global_torch_generator(self.config.seed)
-
-        # Build efficient index-collate dataloader backed by MultiPassRandomSampler
-        # Use a getter to ensure fresh trajectories are used by the collate function
-        from utils.dataloaders import build_index_collate_loader_from_collector
-
         return build_index_collate_loader_from_collector(
             collector=self.train_collector,
             trajectories_getter=lambda: self._trajectories,
@@ -294,7 +245,6 @@ class BaseAgent(pl.LightningModule):
     def val_dataloader(self):
         # Validation dataloader is a dummy; actual evaluation uses env rollouts.
         from utils.dataloaders import build_dummy_loader
-
         return build_dummy_loader()
 
     def on_validation_epoch_start(self):
@@ -302,6 +252,8 @@ class BaseAgent(pl.LightningModule):
         if not self._should_run_eval(self.current_epoch):
             # Lightning still calls val hooks when limit_val_batches>0; guard our logic here
             return
+        
+
         self.validation_epoch_start_time = time.perf_counter_ns()
         # We'll compute eval FPS based on per-call totals from evaluate_policy
         self.validation_epoch_start_timesteps = 0
@@ -568,20 +520,13 @@ class BaseAgent(pl.LightningModule):
         Triggered right before the start-training confirmation prompt.
         """
         try:
-            policy_type = getattr(self.config, "policy", "MlpPolicy")
             # Normalize common strings
-            is_mlp = False
-            if isinstance(policy_type, str):
-                s = policy_type.lower()
-                is_mlp = s in ("mlppolicy", "mlp", "mlp_policy")
-            # If policy was provided as a class, heuristically treat non-CNN as MLP
-            else:
-                is_mlp = True
+            is_mlp = self.config.policy_type.lower() == "mlp"
 
             if not is_mlp:
                 return
 
-            obs_space = getattr(self.train_env, "observation_space", None)
+            obs_space = self.train_env.observation_space
             if obs_space is None:
                 return
 
@@ -597,7 +542,7 @@ class BaseAgent(pl.LightningModule):
                 return
 
             # VecFrameStack may multiply channels; dtype uint8 is a strong signal for pixels
-            is_uint8 = getattr(obs_space, "dtype", None) == np.uint8
+            is_uint8 = obs_space.dtype == np.uint8
             channels_like = shape[-1]
             looks_rgb = is_uint8 and (channels_like == 3 or channels_like % 3 == 0)
 
@@ -628,11 +573,13 @@ class BaseAgent(pl.LightningModule):
         self.run_manager = RunManager()
         run_dir = self.run_manager.setup_run_directory(wandb_logger.experiment)
         run_logs_dir = str(self.run_manager.get_logs_dir())
+
         # Initialize high-throughput CSV metrics logger at run root
         try:
             self._csv_logger = CsvMetricsLogger(Path(run_dir) / "metrics.csv")
         except Exception:
             self._csv_logger = None  # Never block training on CSV setup
+            
         return run_dir, run_logs_dir
 
     def _define_wandb_metrics(self, wandb_logger):

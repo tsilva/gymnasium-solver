@@ -70,8 +70,8 @@ class Config:
     # ['tanh','relu','leaky_relu','elu','selu','gelu','silu','swish','identity']
     activation: str = "tanh"
     # Policy selection and kwargs
-    # policy can be 'MlpPolicy' or 'CnnPolicy'
-    policy: str = 'MlpPolicy'
+    # policy can be 'mlp' or 'cnn'
+    policy: str = 'mlp'
     # Optional policy kwargs (dict). When using environment YAML, this can be a mapping.
     policy_kwargs: Optional[Dict[str, Any]] = None
 
@@ -495,8 +495,8 @@ class Config:
         if isinstance(self.devices, str) and self.devices != "auto":
             raise ValueError("devices may be an int, 'auto', or None")
         # Policy
-        if isinstance(self.policy, str) and self.policy.lower() not in {"mlppolicy", "cnnpolicy"}:
-            raise ValueError("policy must be 'MlpPolicy' or 'CnnPolicy'")
+        if isinstance(self.policy, str) and self.policy.lower() not in {"mlp", "cnn"}:
+            raise ValueError("policy must be 'MLP' or 'CNN'")
 
 def load_config(config_id: str, algo_id: str = None, config_dir: str = "config/environments") -> Config:
     """Convenience function to load configuration."""

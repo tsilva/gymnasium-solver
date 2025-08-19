@@ -670,9 +670,7 @@ class RolloutCollector():
             np.ndarray | None: 1D array of counts per discrete action index, or None if no actions seen yet.
         """
         counts = self._action_counts
-        if counts is None:
-            return None
+        if counts is None: return None
         out = counts.copy()
-        if reset:
-            self._action_counts = np.zeros_like(counts)
+        if reset: self._action_counts = np.zeros_like(counts)
         return out

@@ -324,8 +324,6 @@ class BaseAgent(pl.LightningModule):
         # Prompt user to start training, return if user declines
         if not self._prompt_user_start_training(): return
 
-    # CSV logger is now owned by a Trainer callback; no setup needed here
-
         # Build callbacks and trainer
         callbacks = self._build_trainer_callbacks()
 

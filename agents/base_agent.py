@@ -534,9 +534,9 @@ class BaseAgent(pl.LightningModule):
         # TODO: add multi-metric support to EarlyStoppingCallback
         # Early stop after reaching a certain number of timesteps
         earlystop_timesteps_cb = EarlyStoppingCallback(
-            metric_key="train/total_timesteps",
+            "train/total_timesteps",
+            self.config.n_timesteps,
             mode="max",
-            threshold=self.config.n_timesteps,
             verbose=True,
         ) if self.config.n_timesteps else None
         if earlystop_timesteps_cb: callbacks.append(earlystop_timesteps_cb)
@@ -544,9 +544,9 @@ class BaseAgent(pl.LightningModule):
         # Early stop when mean train reward reaches a threshold
         reward_threshold = self.train_env.get_reward_threshold()
         earlystop_train_reward_cb = EarlyStoppingCallback(
-            metric_key="train/ep_rew_mean",
+            "train/ep_rew_mean",
+            reward_threshold,
             mode="max",
-            threshold=reward_threshold,
             verbose=True,
         ) if self.config.early_stop_on_train_threshold else None
         if earlystop_train_reward_cb: callbacks.append(earlystop_train_reward_cb)
@@ -554,9 +554,9 @@ class BaseAgent(pl.LightningModule):
         # Early stop when mean validation reward reaches a threshold
         reward_threshold = self.validation_env.get_reward_threshold()
         earlystop_eval_reward_cb = EarlyStoppingCallback(
-            metric_key="eval/ep_rew_mean",
+            "eval/ep_rew_mean",
+            reward_threshold,
             mode="max",
-            threshold=reward_threshold,
             verbose=True,
         ) if self.config.early_stop_on_eval_threshold else None
         if earlystop_eval_reward_cb: callbacks.append(earlystop_eval_reward_cb)

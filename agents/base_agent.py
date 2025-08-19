@@ -31,6 +31,9 @@ class BaseAgent(pl.LightningModule):
         # Shared metrics buffer across epochs
         self._metrics_buffer = MetricsBuffer()
 
+        from utils.timing import TimingTracker
+        self.timing = TimingTracker()
+
         # Lightweight history to render ASCII summary at training end
         # Maps metric name -> list[(step, value)]
         # TODO: move this inside callback
@@ -148,8 +151,7 @@ class BaseAgent(pl.LightningModule):
         }
 
     def on_fit_start(self):
-        # Use a monotonic clock for durations to avoid NTP/system time jumps
-        self.fit_start_time = time.perf_counter_ns()
+        self.timing.restart("on_fit_start", steps=0)
 
     def train_dataloader(self):
         assert self.current_epoch == 0, "train_dataloader should only be called once at the start of training"
@@ -176,10 +178,9 @@ class BaseAgent(pl.LightningModule):
         )
 
     def on_train_epoch_start(self):
-        # Mark epoch start for instant FPS calculation
-        self.train_epoch_start_time = time.perf_counter_ns()
-        start_metrics = self.train_collector.get_metrics()
-        self.train_epoch_start_timesteps = start_metrics["total_timesteps"]
+        # Start epoch timer
+        total_timesteps = self.train_collector.get_metrics()["total_timesteps"]
+        self.timing.restart("on_train_epoch_start", steps=total_timesteps)
 
         # Collect fresh trajectories at the start of each training epoch
         self._trajectories = self.train_collector.collect()
@@ -200,16 +201,15 @@ class BaseAgent(pl.LightningModule):
 
     # TODO: aggregate logging
     def on_train_epoch_end(self):
+        # Pull cumulative steps once
         rollout_metrics = self.train_collector.get_metrics()
         rollout_metrics.pop("action_dist", None)
 
-        # Calculate FPS metrics
-        total_timesteps = rollout_metrics["total_timesteps"]
-        time_elapsed = max((time.perf_counter_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
-        fps = total_timesteps / time_elapsed
-        epoch_time_elapsed = max((time.perf_counter_ns() - self.train_epoch_start_time) / 1e9, sys.float_info.epsilon)
-        epoch_timesteps_elapsed = max(0, total_timesteps - int(self.train_epoch_start_timesteps))
-        fps_instant = epoch_timesteps_elapsed / epoch_time_elapsed
+        # Global & instant FPS from the same tracker
+        total_timesteps = int(rollout_metrics["total_timesteps"])
+        time_elapsed = self.timing.seconds_since("on_fit_start")
+        fps_total = self.timing.fps_since("on_fit_start", steps_now=total_timesteps)
+        fps_instant = self.timing.fps_since("on_train_epoch_start", steps_now=total_timesteps)
 
         # Log metrics to the buffer
         self.log_metrics(
@@ -217,11 +217,13 @@ class BaseAgent(pl.LightningModule):
                 **rollout_metrics,
                 "time_elapsed": time_elapsed,
                 "epoch": self.current_epoch,
-                "fps": fps,
+                "fps": fps_total, # TODO: epoch_fps vs run_fps
                 "fps_instant": fps_instant,
             },
             prefix="train",
         )
+
+        #self._flush_metrics()
 
         self._update_schedules()
 
@@ -235,10 +237,7 @@ class BaseAgent(pl.LightningModule):
         if not self._should_run_eval(self.current_epoch):
             return
 
-        self.validation_epoch_start_time = time.perf_counter_ns()
-
-        # We'll compute eval FPS based on per-call totals from evaluate_policy
-        self.validation_epoch_start_timesteps = 0
+        self.timing.restart("on_validation_epoch_start", steps=0)
 
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
@@ -265,12 +264,10 @@ class BaseAgent(pl.LightningModule):
                 n_episodes=int(self.config.eval_episodes),
                 deterministic=self.config.eval_deterministic,
             )
-
-        # Calculate FPS
-        time_elapsed = max((time.perf_counter_ns() - self.validation_epoch_start_time) / 1e9, sys.float_info.epsilon)
+        
+        
         total_timesteps = int(eval_metrics.get("total_timesteps", 0))
-        timesteps_elapsed = total_timesteps - self.validation_epoch_start_timesteps
-        epoch_fps = int(timesteps_elapsed / time_elapsed)
+        epoch_fps = self.timing.fps_since("on_validation_epoch_start", steps_now=total_timesteps)
 
         # Log metrics
         if not self.config.log_per_env_eval_metrics:
@@ -291,7 +288,7 @@ class BaseAgent(pl.LightningModule):
 
     def on_fit_end(self):
         # Log training completion time
-        time_elapsed = max((time.perf_counter_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
+        time_elapsed = self.timing.seconds_since("on_fit_start")
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
 
         # TODO: encapsulate in callback
@@ -614,11 +611,7 @@ class BaseAgent(pl.LightningModule):
             step = self._last_step_for_terminal if k != "train/total_timesteps" else int(v)
             history.append((step, float(v)))
 
+    # TODO: not sure about this 
     def _flush_metrics(self):
-        """Flush buffered metrics to Lightning; return means for external sinks.
-
-        The CsvMetricsLoggerCallback will call this hook and forward the
-        returned dict to the CSV writer asynchronously.
-        """
         means = self._metrics_buffer.flush_to(self.log_dict)
         return means

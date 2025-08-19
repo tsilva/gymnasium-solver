@@ -281,16 +281,42 @@ class BaseAgent(pl.LightningModule):
         history = getattr(self, "_terminal_history", None)
         if history: print_terminal_ascii_summary(history)
 
+        # Record final evaluation video and save associated metrics JSON next to it
         video_path = self.run_manager.ensure_path("checkpoints/final.mp4")
         # recorder expects a str path (normalize PathLike issues)
         with self.test_env.recorder(str(video_path), record_video=True):
             from utils.evaluation import evaluate_policy
-            evaluate_policy(
+            final_metrics = evaluate_policy(
                 self.test_env,
                 self.policy_model,
                 n_episodes=1,
                 deterministic=self.config.eval_deterministic,
             )
+
+        # Save metrics to checkpoints/final.json with indent=2
+        try:
+            import json
+            json_path = video_path.with_suffix(".json")
+            # Ensure metrics are JSON-serializable
+            def _to_py(val):
+                try:
+                    import torch
+                    import numpy as np
+                    if isinstance(val, torch.Tensor):
+                        return val.item() if val.ndim == 0 else val.detach().cpu().tolist()
+                    if isinstance(val, (np.floating, np.integer)):
+                        return val.item()
+                except Exception:
+                    pass
+                if isinstance(val, (int, float, bool, str)):
+                    return val
+                return str(val)
+
+            sanitized = {str(k): _to_py(v) for k, v in dict(final_metrics).items()}
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(sanitized, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Warning: failed to write final metrics JSON: {e}")
         
     def learn(self):
         assert self.run_manager is None, "learn() should only be called once at the start of training"

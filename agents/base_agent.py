@@ -28,8 +28,6 @@ class BaseAgent(pl.LightningModule):
         self.validation_epoch_start_time = None
         self.validation_epoch_start_timesteps = None
 
-    # CSV metrics logger moved to a Trainer Callback (CsvMetricsLoggerCallback)
-
         # Shared metrics buffer across epochs
         self._metrics_buffer = MetricsBuffer()
 

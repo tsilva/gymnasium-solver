@@ -1,33 +1,8 @@
 from __future__ import annotations
 
-import warnings
 import pytorch_lightning as pl
 
-# Silence PL's advisory about low num_workers on the validation DataLoader.
-# Our validation loop uses environment rollouts; the val_dataloader is a dummy.
-try:  # PL <= 2.x (pytorch_lightning namespace)
-    from pytorch_lightning.utilities.warnings import PossibleUserWarning as _PLPossibleUserWarning  # type: ignore
-except Exception:  # pragma: no cover - fallback for different versions
-    try:  # PL >= 2.x (lightning.pytorch namespace)
-        from lightning.pytorch.utilities.warnings import PossibleUserWarning as _PLPossibleUserWarning  # type: ignore
-    except Exception:  # pragma: no cover
-        _PLPossibleUserWarning = None  # type: ignore
-
-# Apply a targeted filter that matches only the val_dataloader workers hint
-_warning_categories = [c for c in (_PLPossibleUserWarning, UserWarning, Warning) if c is not None]
-for _cat in _warning_categories:
-    warnings.filterwarnings(
-        "ignore",
-        message=r".*'val_dataloader' does not have many workers.*",
-        category=_cat,
-    )
-
-
 def build_trainer(*, logger, callbacks, validation_controls, max_epochs, accelerator="cpu", devices=None) -> pl.Trainer:
-    """Small wrapper that centralizes our Trainer construction defaults.
-
-    Keeping this here reduces BaseAgent bloat and makes defaults easy to reuse.
-    """
     # Lightning requires an explicit positive int for CPU devices; coerce sensible default
     eff_devices = devices
     if (accelerator == "cpu"):

@@ -598,6 +598,21 @@ class BaseAgent(pl.LightningModule):
             history.append((step, float(v)))
 
     # TODO: not sure about this 
-    def _flush_metrics(self):
-        means = self._metrics_buffer.flush_to(self.log_dict)
+    def _flush_metrics(self, *, log_to_lightning: bool = True):
+        """
+        Compute means from the metrics buffer and clear it.
+
+        When log_to_lightning is True (default), forward the aggregated
+        metrics to Lightning's logger via self.log_dict. Some lifecycle hooks
+        (e.g., on_fit_end) disallow self.log(), so callers can set
+        log_to_lightning=False to avoid Lightning logging in those contexts.
+        """
+        means = self._metrics_buffer.means()
+        try:
+            if log_to_lightning:
+                # Forward aggregated metrics to Lightning when allowed
+                self.log_dict(means)
+        finally:
+            # Always clear buffer regardless of logging outcome
+            self._metrics_buffer.clear()
         return means

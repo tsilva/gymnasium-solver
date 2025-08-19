@@ -20,14 +20,6 @@ class BaseAgent(pl.LightningModule):
         # We'll handle optimization manually in training_step
         self.automatic_optimization = False
 
-        # Initialize throughput counters
-        # TODO: abstract away these measurements, no need to have all these attributes
-        self.fit_start_time = None
-        self.train_epoch_start_time = None
-        self.train_epoch_start_timesteps = None
-        self.validation_epoch_start_time = None
-        self.validation_epoch_start_timesteps = None
-
         # Shared metrics buffer across epochs
         self._metrics_buffer = MetricsBuffer()
 

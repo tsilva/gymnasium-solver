@@ -282,7 +282,8 @@ class BaseAgent(pl.LightningModule):
         if history: print_terminal_ascii_summary(history)
 
         video_path = self.run_manager.ensure_path("checkpoints/final.mp4")
-        with self.test_env.recorder(video_path, record_video=True):
+        # recorder expects a str path (normalize PathLike issues)
+        with self.test_env.recorder(str(video_path), record_video=True):
             from utils.evaluation import evaluate_policy
             evaluate_policy(
                 self.test_env,

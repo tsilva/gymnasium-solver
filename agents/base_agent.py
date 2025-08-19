@@ -281,6 +281,16 @@ class BaseAgent(pl.LightningModule):
         history = getattr(self, "_terminal_history", None)
         if history: print_terminal_ascii_summary(history)
 
+        video_path = self.run_manager.ensure_path("checkpoints/final.mp4")
+        with self.test_env.recorder(video_path, record_video=True):
+            from utils.evaluation import evaluate_policy
+            evaluate_policy(
+                self.test_env,
+                self.policy_model,
+                n_episodes=1,
+                deterministic=self.config.eval_deterministic,
+            )
+        
     def learn(self):
         assert self.run_manager is None, "learn() should only be called once at the start of training"
 

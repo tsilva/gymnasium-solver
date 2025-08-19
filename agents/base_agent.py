@@ -2,7 +2,6 @@ import sys
 import time
 import torch
 import wandb
-from pathlib import Path
 import pytorch_lightning as pl
 
 from utils.metrics_buffer import MetricsBuffer
@@ -33,18 +32,29 @@ class BaseAgent(pl.LightningModule):
         # CSV metrics logger (initialized with run manager)
         self._csv_logger = None
 
-        # Training env(s)
-        # If using pixel observations, Gymnasium's PixelObservationWrapper requires the
-        # base env to be created with render_mode='rgb_array'. Detect that case here.
-        #_uses_pixel_obs = False
-        #try:
-        #    _uses_pixel_obs = any(
-        #        isinstance(w, dict) and str(w.get("id")) == "PixelObservationWrapper"
-        #        for w in (config.env_wrappers or [])
-        #    )
-        #except Exception:
-        #    _uses_pixel_obs = False
-        #train_render_mode = "rgb_array" if _uses_pixel_obs else None
+        # Shared metrics buffer across epochs
+        self._metrics_buffer = MetricsBuffer()
+
+        # Lightweight history to render ASCII summary at training end
+        # Maps metric name -> list[(step, value)]
+        # TODO: move this inside callback
+        self._terminal_history = {}
+        self._last_step_for_terminal = 0
+
+        self.run_manager = None
+
+        # TODO: review this
+        from utils.environment import build_env
+        self._spec_env = build_env(config.env_id)
+        self.observation_space = self._spec_env.observation_space
+        self.action_space = self._spec_env.action_space
+        self.input_dim = self._spec_env.get_input_dim()
+        self.output_dim = self._spec_env.get_output_dim()
+
+        # Create models now that environments are available. Subclasses use
+        # env shapes to build policy/value networks. Must be called before
+        # collectors which require self.policy_model.
+        self.create_models()
 
         common_env_kwargs = dict(
             seed=config.seed,
@@ -58,7 +68,6 @@ class BaseAgent(pl.LightningModule):
         )
 
         # Train environment (vectorized; separate seed)
-        from utils.environment import build_env
         self.train_env = build_env(
             config.env_id,
             **dict(
@@ -126,20 +135,6 @@ class BaseAgent(pl.LightningModule):
             n_steps=self.config.n_steps,
             **self.rollout_collector_hyperparams(),
         )
-
-        # Create models now that environments are available. Subclasses use
-        # env shapes to build policy/value networks. Must be called before
-        # collectors which require self.policy_model.
-        self.create_models()
-
-        # Shared metrics buffer across epochs
-        self._metrics_buffer = MetricsBuffer()
-
-        # Lightweight history to render ASCII summary at training end
-        # Maps metric name -> list[(step, value)]
-        # TODO: move this inside callback
-        self._terminal_history = {}
-        self._last_step_for_terminal = 0
 
     @must_implement
     def create_models(self):
@@ -263,7 +258,6 @@ class BaseAgent(pl.LightningModule):
     def on_validation_epoch_start(self):
         # Skip validation entirely during warmup epochs to avoid evaluation overhead
         if not self._should_run_eval(self.current_epoch):
-            # Lightning still calls val hooks when limit_val_batches>0; guard our logic here
             return
 
         self.validation_epoch_start_time = time.perf_counter_ns()
@@ -287,7 +281,7 @@ class BaseAgent(pl.LightningModule):
         )
 
         # Run evaluation with optional recording
-        checkpoint_dir = self.run_manager.ensure_dir("checkpoints")
+        checkpoint_dir = self.run_manager.ensure_path("checkpoints/")
         video_path = str(checkpoint_dir / f"epoch={self.current_epoch:02d}.mp4")
         with self.validation_env.recorder(video_path, record_video=record_video):
             from utils.evaluation import evaluate_policy
@@ -344,17 +338,28 @@ class BaseAgent(pl.LightningModule):
         # Setup run directory management
         wandb_logger = self._create_wandb_logger()
 
-        self.run_manager = RunManager(wandb.run.id)
+        run = wandb_logger.experiment
+        self.run_manager = RunManager(run.id)
         csv_path = self.run_manager.ensure_path("metrics.csv")
 
         self._csv_logger = CsvMetricsLogger(csv_path)
 
-        self.run_manager.print_details()  # Print run details before starting training
+
+         # Ask for confirmation before any heavy setup (keep prior prints grouped)
+        # Before prompting, suggest better defaults if we detect mismatches
+        self._maybe_warn_observation_policy_mismatch()
+
+        self._print_env_spec(self.train_env)
+
+        print("Starting training...")
+        print(f"Run directory: {self.run_manager.get_run_dir()}")
+        print(f"Run ID: {self.run_manager.get_run_id()}")
+
         start_training = prompt_confirm("Start training?", default=True, quiet=self.config.quiet)
         if not start_training: return
 
         # Set up comprehensive logging using run-specific logs directory
-        logs_dir = self.run_manager.ensure_dir("logs")
+        logs_dir = self.run_manager.ensure_path("logs/")
         with capture_all_output(config=self.config, log_dir=logs_dir):
             # Save configuration to run directory
             config_path = self.run_manager.save_config(self.config)
@@ -383,6 +388,45 @@ class BaseAgent(pl.LightningModule):
 
             trainer.fit(self)
     
+    # TODO: move this somewhere else?
+    def _maybe_warn_observation_policy_mismatch(self):
+        from utils.environment import is_rgb_env
+        
+        # In case the observation space is RGB, warn if MLP policy is used
+        is_rgb = is_rgb_env(self.train_env)
+        is_mlp = self.config.policy.lower() == "mlp"
+        if is_rgb and is_mlp:
+            print(
+                "Warning: Detected RGB image observations with MLP policy. "
+                "For pixel inputs, consider using CNN for better performance."
+            )
+
+        # In case the observation space is not RGB, warn if CNN policy is used
+        is_cnn = self.config.policy.lower() == "cnn"
+        if not is_rgb and is_cnn:
+            print(
+                "Warning: Detected non-RGB observations with CNN policy. "
+                "For non-image inputs, consider using MLP for better performance."
+            )
+    
+    # TODO: print_env() direclty in env
+    def _print_env_spec(self, env):
+        # Show environment details for transparency
+        print("\n=== Environment Details ===")
+        
+        # Observation space and action space from vectorized env
+        print(f"Observation space: {env.observation_space}")
+        print(f"Action space: {env.action_space}")
+
+        # Reward range and threshold when available
+        reward_range = env.get_reward_range()
+        print(f"Reward range: {reward_range}")
+
+        # Reward threshold if defined
+        reward_threshold = env.get_reward_threshold()
+        print(f"Reward threshold: {reward_threshold}")
+        print("=" * 30)
+        
     # ----- Evaluation scheduling helpers -----
     def _should_run_eval(self, epoch_idx: int) -> bool:
         """Return True if evaluation should run on this epoch index.
@@ -454,7 +498,7 @@ class BaseAgent(pl.LightningModule):
         callbacks = []
 
         # Video logger writes to run-specific media directory
-        video_dir = self.run_manager.ensure_dir("videos")
+        video_dir = self.run_manager.ensure_path("videos/")
         video_logger_cb = VideoLoggerCallback(
             media_root=video_dir,
             namespace_depth=1,
@@ -462,7 +506,7 @@ class BaseAgent(pl.LightningModule):
         callbacks.append(video_logger_cb)
 
         # Checkpointing (skip for qlearning which has no torch model)
-        checkpoint_dir = self.run_manager.ensure_dir("checkpoints")
+        checkpoint_dir = self.run_manager.ensure_path("checkpoints/")
         checkpoint_cb = ModelCheckpointCallback(
             checkpoint_dir=checkpoint_dir,
             monitor="eval/ep_rew_mean",

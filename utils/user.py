@@ -1,5 +1,8 @@
 def prompt_confirm(prompt: str, default: bool = True, quiet: bool = False) -> bool:
     """Prompt user with yes/no. Defaults on empty, non-interactive, EOF, or quiet mode."""
+    
+    import sys
+
     yn = "Y/n" if default else "y/N"
     full = f"{prompt} [{yn}]: "
 

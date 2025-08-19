@@ -4,6 +4,31 @@ from wrappers.env_wrapper_registry import EnvWrapperRegistry
 def is_alepy_env_id(env_id: str) -> bool:
     return env_id.startswith("ALE/")
 
+def is_rgb_env(env):
+    import numpy as np
+    from gymnasium import spaces
+
+    # In case the observation space is not a box then it's not RGB
+    if not isinstance(env.observation_space, spaces.Box):
+        return False
+
+    # If the observation space is not a 3D array then it's not RGB
+    if len(env.observation_space.shape) < 3:
+        return False
+
+    # If the observation space is not uint8 then it's not RGB
+    is_uint8 = env.observation_space.dtype == np.uint8
+    if not is_uint8:
+        return False
+    
+    # If the observation space is not 3 channels then it's not RGB
+    n_channels = env.observation_space[-1]
+    if not n_channels == 3:
+        return False
+    
+    # Return True if all checks passed (is RGB)
+    return True
+    
 def build_env(
     env_id, 
     n_envs=1, 

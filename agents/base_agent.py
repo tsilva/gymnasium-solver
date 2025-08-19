@@ -1,3 +1,4 @@
+from operator import is_
 import sys
 import time
 import torch
@@ -68,8 +69,10 @@ class BaseAgent(pl.LightningModule):
         from utils.environment import build_env
         self.train_env = build_env(
             config.env_id,
-            **common_env_kwargs,
-            seed=config.seed + 1000
+            **dict(
+                **common_env_kwargs,
+                seed=config.seed + 1000
+            )
         )
 
         # Evaluation env (vectorized; separate seed)
@@ -77,17 +80,19 @@ class BaseAgent(pl.LightningModule):
         # Keep subproc=False to enable video recording.
         self.validation_env = build_env(
             config.env_id,
-            **common_env_kwargs,
-            seed=config.seed + 2000,
-            subproc=False, # TODO: do I need this?
-            render_mode="rgb_array",
-            record_video=True,
-            record_video_kwargs={
-                # Record full episodes without truncation; the recorder will run
-                # until the evaluation block finishes.
-                "video_length": 100,
-                "record_env_idx": 0,  # Record only first env by default
-            }
+            **dict(
+                **common_env_kwargs,
+                seed=config.seed + 2000,
+                subproc=False, # TODO: do I need this?
+                render_mode="rgb_array",
+                record_video=True,
+                record_video_kwargs={
+                    # Record full episodes without truncation; the recorder will run
+                    # until the evaluation block finishes.
+                    "video_length": 100,
+                    "record_env_idx": 0,  # Record only first env by default
+                }
+            )
         )
 
         # The test environment, this will be used for the 
@@ -249,6 +254,8 @@ class BaseAgent(pl.LightningModule):
 
         self._update_schedules()
 
+        # TODO: this should be in a callback
+        # TODO: all early stopping logic should be in a callback, separate from eval logic
         # Stop condition
         if self.config.n_timesteps is not None and total_timesteps >= self.config.n_timesteps:
             print(
@@ -290,9 +297,9 @@ class BaseAgent(pl.LightningModule):
         )
 
         # Run evaluation with optional recording
-        ckpt_dir = self.run_manager.get_checkpoint_dir()
-        ckpt_dir.mkdir(parents=True, exist_ok=True)
-        video_path = str(ckpt_dir / f"epoch={self.current_epoch:02d}.mp4")
+        checkpoint_dir = self.run_manager.get_checkpoint_dir()
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        video_path = str(checkpoint_dir / f"epoch={self.current_epoch:02d}.mp4")
         with self.validation_env.recorder(video_path, record_video=record_video):
             from utils.evaluation import evaluate_policy
             eval_metrics = evaluate_policy(
@@ -345,10 +352,8 @@ class BaseAgent(pl.LightningModule):
 
         print("Starting training...")
 
-        # Create wandb logger and run manager
-        wandb_logger = self._create_wandb_logger()
-
         # Setup run directory management
+        wandb_logger = self._create_wandb_logger()
         run_dir, run_logs_dir = self._init_run_manager(wandb_logger)
 
         print(f"Run directory: {run_dir}")
@@ -424,45 +429,26 @@ class BaseAgent(pl.LightningModule):
     # Pre-prompt guidance helpers
     # -------------------------
 
-    def _maybe_warn_mlp_on_rgb_obs(self):
-        """If obs space appears to be RGB images and policy is MLP, print a warning.
-
-        Intent: gently nudge users to use CnnPolicy when training from pixels.
-        Triggered right before the start-training confirmation prompt.
-        """
-
-        # Normalize common strings
+    def _maybe_warn_observation_policy_mismatch(self):
+        from utils.environment import is_rgb_env
+        
+        # In case the observation space is RGB, warn if MLP policy is used
+        is_rgb = is_rgb_env(self.train_env)
         is_mlp = self.config.policy_type.lower() == "mlp"
-        if not is_mlp: return
+        if is_rgb and is_mlp:
+            print(
+                "Warning: Detected RGB image observations with MLP policy. "
+                "For pixel inputs, consider using CNN for better performance."
+            )
 
-        obs_space = self.train_env.observation_space
-        if obs_space is None:
-            return
-
-        # Heuristic: RGB observations are typically uint8 Box with 3 channels stacked
-        import numpy as np
-        from gymnasium import spaces
-
-        if not isinstance(obs_space, spaces.Box):
-            return
-
-        shape = tuple(getattr(obs_space, "shape", ()) or ())
-        if len(shape) < 3:
-            return
-
-        # VecFrameStack may multiply channels; dtype uint8 is a strong signal for pixels
-        is_uint8 = obs_space.dtype == np.uint8
-        channels_like = shape[-1]
-        looks_rgb = is_uint8 and (channels_like == 3 or channels_like % 3 == 0)
-
-        if not looks_rgb:
-            return
-
-        print(
-            "Warning: Detected RGB image observations with MlpPolicy. "
-            "For pixel inputs, consider using CnnPolicy for better performance."
-        )
-
+        # In case the observation space is not RGB, warn if CNN policy is used
+        is_cnn = self.config.policy_type.lower() == "cnn"
+        if not is_rgb and is_cnn:
+            print(
+                "Warning: Detected non-RGB observations with CNN policy. "
+                "For non-image inputs, consider using MLP for better performance."
+            )
+            
     def _create_wandb_logger(self):
         from dataclasses import asdict
         from pytorch_lightning.loggers import WandbLogger
@@ -644,10 +630,7 @@ class BaseAgent(pl.LightningModule):
         """
         self._metrics_buffer.log(metrics, prefix=prefix)
 
-        if prefix:
-            prefixed = {f"{prefix}/{k}": v for k, v in metrics.items()}
-        else:
-            prefixed = dict(metrics)
+        prefixed = {f"{prefix}/{k}": v for k, v in metrics.items()} if prefix else dict(metrics)
 
         # Update last known step from canonical metric if present
         step_val = prefixed.get("train/total_timesteps")

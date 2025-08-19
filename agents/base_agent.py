@@ -219,7 +219,7 @@ class BaseAgent(pl.LightningModule):
         epoch_timesteps_elapsed = max(0, total_timesteps - int(self.train_epoch_start_timesteps))
         fps_instant = epoch_timesteps_elapsed / epoch_time_elapsed
 
-        # Log numeric metrics via buffer
+        # Log metrics to the buffer
         self.log_metrics(
             {
                 **rollout_metrics,
@@ -231,6 +231,7 @@ class BaseAgent(pl.LightningModule):
             prefix="train",
         )
 
+        # Flush all metrics logged so far
         self._flush_metrics()
 
         # Log action distribution histogram to W&B, aligned to total_timesteps
@@ -541,19 +542,35 @@ class BaseAgent(pl.LightningModule):
         )
         callbacks.append(report_cb)
 
-        # Early stopping decoupled from evaluation; driven purely by metrics
-        # Stops when train/total_timesteps reaches configured n_timesteps (if set)
-        try:
-            early_stop_cb = EarlyStoppingCallback(
-                metric_key="train/total_timesteps",
-                mode="max",
-                threshold=getattr(self.config, "n_timesteps", None),
-                verbose=True,
-            )
-            callbacks.append(early_stop_cb)
-        except Exception:
-            # Never block training due to optional callback wiring
-            pass
+        # TODO: add multi-metric support to EarlyStoppingCallback
+        # Early stop after reaching a certain number of timesteps
+        earlystop_timesteps_cb = EarlyStoppingCallback(
+            metric_key="train/total_timesteps",
+            mode="max",
+            threshold=self.config.n_timesteps,
+            verbose=True,
+        ) if self.config.n_timesteps else None
+        if earlystop_timesteps_cb: callbacks.append(earlystop_timesteps_cb)
+
+        # Early stop when mean train reward reaches a threshold
+        reward_threshold = self.train_env.get_reward_threshold()
+        earlystop_train_reward_cb = EarlyStoppingCallback(
+            metric_key="train/ep_rew_mean",
+            mode="max",
+            threshold=reward_threshold,
+            verbose=True,
+        ) if self.config.early_stop_on_train_threshold else None
+        if earlystop_train_reward_cb: callbacks.append(earlystop_train_reward_cb)
+
+        # Early stop when mean validation reward reaches a threshold
+        reward_threshold = self.validation_env.get_reward_threshold()
+        earlystop_eval_reward_cb = EarlyStoppingCallback(
+            metric_key="eval/ep_rew_mean",
+            mode="max",
+            threshold=reward_threshold,
+            verbose=True,
+        ) if self.config.early_stop_on_eval_threshold else None
+        if earlystop_eval_reward_cb: callbacks.append(earlystop_eval_reward_cb)
 
         return callbacks
 

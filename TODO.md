@@ -2,7 +2,6 @@
 - BUG: CartPole-v1 PPO is not training as fast; 115f9c73faed6785a0bd58c37f55298324e90f43 was ok
 - add support for resuming training from a checkpoint
 - FEAT: Add support for specifyingpo extra reward metrics for each environment, then make the reward shaper assign value for each of those rewards
-
 - FEAT: add support for creating publishable video for youtube
 - Generalized scheduling for metrics, make those be logged
 - FEAT: ask copilot to create its own isntructrions namely to generate its own techical documentation that it keeps up to date
@@ -10,7 +9,7 @@
 - TODO: Figure out why CartPole-v1/PPO works better with Tahn activation than ReLU
 - BUG: PPO can solve FrozenLake-v1, but REINFORCE cannot. REINFORCE is likely not implemented correctly.
 - BUG: is REINFORCE well implemented? are we waiting until the end of the episode to update the policy?
-- FEAT: train on cloud server
+- FEAT: train on cloud server (eg: lightning cloud)
 - FEAT: normalize rewards?
 - FEAT: add normalization support
 - FEAT: add discrete env support

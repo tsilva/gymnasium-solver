@@ -1,4 +1,3 @@
-from operator import is_
 import sys
 import time
 import torch
@@ -71,7 +70,7 @@ class BaseAgent(pl.LightningModule):
             config.env_id,
             **dict(
                 **common_env_kwargs,
-                seed=config.seed + 1000
+                #seed=config.seed + 1000
             )
         )
 
@@ -82,8 +81,8 @@ class BaseAgent(pl.LightningModule):
             config.env_id,
             **dict(
                 **common_env_kwargs,
-                seed=config.seed + 2000,
-                subproc=False, # TODO: do I need this?
+                #seed=config.seed + 2000,
+                #subproc=False, # TODO: do I need this?
                 render_mode="rgb_array",
                 record_video=True,
                 record_video_kwargs={
@@ -100,8 +99,8 @@ class BaseAgent(pl.LightningModule):
         self.test_env = build_env(
             config.env_id,
             **common_env_kwargs,
-            seed=config.seed + 3000,
-            subproc=False, # TODO: do I need this?
+            #seed=config.seed + 3000,
+            #subproc=False, # TODO: do I need this?
             render_mode="rgb_array",
             record_video=True,
             record_video_kwargs={
@@ -346,7 +345,7 @@ class BaseAgent(pl.LightningModule):
 
         # Ask for confirmation before any heavy setup (keep prior prints grouped)
         # Before prompting, suggest better defaults if we detect mismatches
-        self._maybe_warn_mlp_on_rgb_obs()
+        self._maybe_warn_observation_policy_mismatch()
 
         self._print_env_spec(self.train_env)
 
@@ -434,7 +433,7 @@ class BaseAgent(pl.LightningModule):
         
         # In case the observation space is RGB, warn if MLP policy is used
         is_rgb = is_rgb_env(self.train_env)
-        is_mlp = self.config.policy_type.lower() == "mlp"
+        is_mlp = self.config.policy.lower() == "mlp"
         if is_rgb and is_mlp:
             print(
                 "Warning: Detected RGB image observations with MLP policy. "
@@ -442,7 +441,7 @@ class BaseAgent(pl.LightningModule):
             )
 
         # In case the observation space is not RGB, warn if CNN policy is used
-        is_cnn = self.config.policy_type.lower() == "cnn"
+        is_cnn = self.config.policy.lower() == "cnn"
         if not is_rgb and is_cnn:
             print(
                 "Warning: Detected non-RGB observations with CNN policy. "
@@ -497,23 +496,25 @@ class BaseAgent(pl.LightningModule):
             EndOfTrainingReportCallback
         )
 
+        callbacks = []
+
         # Video logger writes to run-specific media directory
         video_logger_cb = VideoLoggerCallback(
             media_root=str(self.run_manager.get_video_dir()),
             namespace_depth=1,
         )
+        callbacks.append(video_logger_cb)
 
         # Checkpointing (skip for qlearning which has no torch model)
-        checkpoint_cb = None
-        if self.config.algo_id != "qlearning":
-            checkpoint_cb = ModelCheckpointCallback(
-                checkpoint_dir=str(self.run_manager.get_checkpoint_dir()),
-                monitor="eval/ep_rew_mean",
-                mode="max",
-                save_last=True,
-                save_threshold_reached=True,
-                resume=self.config.resume,
-            )
+        checkpoint_cb = ModelCheckpointCallback(
+            checkpoint_dir=str(self.run_manager.get_checkpoint_dir()),
+            monitor="eval/ep_rew_mean",
+            mode="max",
+            save_last=True,
+            save_threshold_reached=True,
+            resume=self.config.resume,
+        )
+        callbacks.append(checkpoint_cb)
 
         # Formatting/precision rules for pretty printing
         from utils.metrics import (
@@ -524,7 +525,6 @@ class BaseAgent(pl.LightningModule):
         metric_precision = get_metric_precision_dict()
         metric_delta_rules = get_metric_delta_rules()
         algo_metric_rules = get_algorithm_metric_rules(self.config.algo_id)
-
         printer_cb = PrintMetricsCallback(
             every_n_steps=200,
             every_n_epochs=10,
@@ -533,6 +533,7 @@ class BaseAgent(pl.LightningModule):
             metric_delta_rules=metric_delta_rules,
             algorithm_metric_rules=algo_metric_rules,
         )
+        callbacks.append(printer_cb)
 
         hyperparam_cb = HyperparameterScheduler(
             control_dir=None,
@@ -541,10 +542,13 @@ class BaseAgent(pl.LightningModule):
             enable_manual_control=True,
             verbose=True,
         )
+        callbacks.append(hyperparam_cb)
 
-        report_cb = EndOfTrainingReportCallback(filename="report.md") if EndOfTrainingReportCallback else None
+        report_cb = EndOfTrainingReportCallback(
+            filename="report.md"
+        )
+        callbacks.append(report_cb)
 
-        callbacks = [x for x in [printer_cb, video_logger_cb, checkpoint_cb, hyperparam_cb, report_cb] if x is not None]
         return callbacks
 
     def _get_validation_controls(self):
@@ -573,9 +577,7 @@ class BaseAgent(pl.LightningModule):
         }
 
     def _build_trainer(self, wandb_logger, callbacks, validation_controls):
-        # Backward-compat shim; delegate to factory. Kept to avoid breaking imports/tests.
         from utils.trainer_factory import build_trainer
-
         return build_trainer(
             logger=wandb_logger,
             callbacks=callbacks,
@@ -654,41 +656,24 @@ class BaseAgent(pl.LightningModule):
         self._csv_logger.close()
         return super().on_fit_end()
 
-    # TODO: encapsulate this
-    def _confirm_proceed(self) -> bool:
-        """Ask user to confirm proceeding. Default to Yes on empty input or non-interactive sessions."""
-        # Honor quiet mode to avoid any interactive prompts
-        try:
-            if getattr(getattr(self, "config", object()), "quiet", False):
-                print("Proceed with training? [Y/n]: Y (quiet)")
-                return True
-        except Exception:
-            pass
-        prompt = "Proceed with training? [Y/n]: "
-        try:
-            # If not a TTY (e.g., running in CI), default-accept
-            import sys
-            if not sys.stdin or not sys.stdin.isatty():
-                print(f"{prompt}Y (auto)")
-                return True
-        except Exception:
-            # On any introspection failure, default-accept
-            print(f"{prompt}Y (auto)")
-            return True
+    def confirm(prompt: str, default: bool = True, quiet: bool = False) -> bool:
+        """Prompt user with yes/no. Defaults on empty, non-interactive, EOF, or quiet mode."""
+        yn = "Y/n" if default else "y/N"
+        full = f"{prompt} [{yn}]: "
 
-        try:
-            resp = input(prompt).strip().lower()
-        except EOFError:
-            # Default to yes if input cannot be read
-            print("Y")
-            return True
-        if resp == "" or resp.startswith("y"):
-            return True
-        if resp.startswith("n"):
-            return False
-        # Unrecognized input: default to Yes
-        return True
+        if quiet:
+            print(f"{full}{'Y' if default else 'N'} (quiet)")
+            return default
 
+        if not (sys.stdin and sys.stdin.isatty()):
+            print(f"{full}{'Y' if default else 'N'} (auto)")
+            return default
+
+        try: resp = input(full).strip().lower()
+        except EOFError: return default
+
+        return resp.startswith("y") if resp else default
+    
     # -------------------------
     # Terminal ASCII summary
     # -------------------------

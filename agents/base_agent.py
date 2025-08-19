@@ -200,7 +200,7 @@ class BaseAgent(pl.LightningModule):
     # TODO: aggregate logging
     def on_train_epoch_end(self):
         rollout_metrics = self.train_collector.get_metrics()
-        rollout_metrics.pop("action_distribution", None)
+        rollout_metrics.pop("action_dist", None)
 
         # Calculate FPS metrics
         total_timesteps = rollout_metrics["total_timesteps"]
@@ -235,7 +235,7 @@ class BaseAgent(pl.LightningModule):
                 hist = wandb.Histogram(np_histogram=(counts.tolist(), edges))
                 step_val = int(total_timesteps)
                 exp = getattr(getattr(self, "logger", None), "experiment", None)
-                payload = {"train/action_distribution": hist}
+                payload = {"train/action_dist": hist}
                 if exp is not None and hasattr(exp, "log"):
                     exp.log(payload, step=step_val)
                 else:
@@ -438,7 +438,12 @@ class BaseAgent(pl.LightningModule):
 
         project_name = self.config.project_id if self.config.project_id else self._sanitize_name(self.config.env_id)
         experiment_name = f"{self.config.algo_id}-{self.config.seed}"
-        wandb_logger = WandbLogger(project=project_name, name=experiment_name, log_model=True, config=asdict(self.config))
+        wandb_logger = WandbLogger(
+            project=project_name, 
+            name=experiment_name,
+            og_model=True, 
+            config=asdict(self.config)
+        )
         return wandb_logger
 
     def _init_run_manager(self, wandb_logger):
@@ -657,7 +662,7 @@ class BaseAgent(pl.LightningModule):
             self._last_step_for_terminal = int(step_val)
 
         for k, v in prefixed.items():
-            if k.endswith("action_distribution"): continue
+            if k.endswith("action_dist"): continue
             if not isinstance(v, (int, float)): continue
             history = self._terminal_history.setdefault(k, [])
             step = self._last_step_for_terminal if k != "train/total_timesteps" else int(v)

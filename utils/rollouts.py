@@ -625,9 +625,9 @@ class RolloutCollector():
             var_a = float(((idxs - mean_a) ** 2 * self._action_counts).sum() / total)
             action_mean = mean_a
             action_std = float(np.sqrt(max(0.0, var_a)))
-            action_distribution = None  # keep optional distribution disabled to avoid large logs
+            action_dist = None  # keep optional distribution disabled to avoid large logs
         else:
-            action_mean, action_std, action_distribution = 0.0, 0.0, None
+            action_mean, action_std, action_dist = 0.0, 0.0, None
 
         # Baseline statistics from global aggregates
         if self._base_count > 0:
@@ -655,7 +655,7 @@ class RolloutCollector():
             "reward_std": reward_std,
             "action_mean": action_mean,
             "action_std": action_std,
-            "action_distribution": action_distribution,
+            "action_dist": action_dist,
             "baseline_mean": baseline_mean,
             "baseline_std": baseline_std
         }

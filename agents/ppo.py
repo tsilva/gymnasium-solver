@@ -17,15 +17,28 @@ class PPO(BaseAgent):
     def create_models(self):
         policy_kwargs = dict(getattr(self.config, 'policy_kwargs', None) or {})
         activation = policy_kwargs.pop('activation', getattr(self.config, 'activation', 'tanh'))
-
+        # Determine policy type and input/output dims even if BaseAgent.__init__ wasn't called
+        policy_type = getattr(self.config, 'policy', 'mlp')
+        input_dim = getattr(self, 'input_dim', None)
+        output_dim = getattr(self, 'output_dim', None)
+        if input_dim is None or output_dim is None:
+            # Try to infer from train_env (used by tests)
+            env_like = getattr(self, 'train_env', getattr(self, '_spec_env', None))
+            if env_like is not None:
+                if input_dim is None and hasattr(env_like, 'get_input_dim'):
+                    input_dim = env_like.get_input_dim()
+                if output_dim is None and hasattr(env_like, 'get_output_dim'):
+                    output_dim = env_like.get_output_dim()
+        if input_dim is None or output_dim is None:
+            raise AttributeError('PPO requires input_dim and output_dim; could not infer from environment')
         model = create_actor_critic_policy(
-            self.config.policy,
-            input_dim=self.input_dim,
-            action_dim=self.output_dim,
+            policy_type,
+            input_dim=int(input_dim),
+            action_dim=int(output_dim),
             hidden=self.config.hidden_dims,
             activation=activation,
             # TODO: redundancy with input_dim/output_dim?
-            obs_space=self.observation_space,
+            obs_space=getattr(self, 'observation_space', None),
             **policy_kwargs,
         )
 

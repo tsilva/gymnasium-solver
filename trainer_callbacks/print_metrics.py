@@ -3,11 +3,24 @@
 import re
 from typing import Any, Dict, Iterable, List, Optional
 
-import pytorch_lightning as pl
+# Optional dependency shim for pytorch_lightning.Callback
+try:  # pragma: no cover
+    import pytorch_lightning as pl  # type: ignore
+    BaseCallback = getattr(pl, "Callback", object)
+    TrainerType = getattr(pl, "Trainer", object)
+    LightningModuleType = getattr(pl, "LightningModule", object)
+except Exception:  # pragma: no cover
+    pl = None  # type: ignore
+    BaseCallback = object
+    class TrainerType:  # minimal placeholders for type annotations
+        pass
+    class LightningModuleType:
+        pass
+
 import torch
 
 
-class PrintMetricsCallback(pl.Callback):
+class PrintMetricsCallback(BaseCallback):
     """
     Periodically prints a table to stdout with the *latest value* for each logged metric.
 
@@ -103,28 +116,28 @@ class PrintMetricsCallback(pl.Callback):
         )
 
     # ---------- hooks ----------
-    def on_train_batch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule", outputs, batch, batch_idx):
+    def on_train_batch_end(self, trainer: TrainerType, pl_module: LightningModuleType, outputs, batch, batch_idx):
         if self.every_n_steps is None:
             return
         # global_step increments after optimizer step; print when divisible
         if trainer.global_step > 0 and trainer.global_step % self.every_n_steps == 0:
             self._maybe_print(trainer, stage="train-step")
 
-    def on_validation_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"):
+    def on_validation_epoch_end(self, trainer: TrainerType, pl_module: LightningModuleType):
         if self.every_n_epochs is not None and (trainer.current_epoch + 1) % self.every_n_epochs == 0:
             self._maybe_print(trainer, stage="val-epoch")
 
-    def on_train_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"):
+    def on_train_epoch_end(self, trainer: TrainerType, pl_module: LightningModuleType):
         if self.every_n_epochs is not None and (trainer.current_epoch + 1) % self.every_n_epochs == 0:
             self._maybe_print(trainer, stage="train-epoch")
 
-    def on_test_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule"):
+    def on_test_epoch_end(self, trainer: TrainerType, pl_module: LightningModuleType):
         # Always print at test end if enabled by epoch cadence
         if self.every_n_epochs is not None:
             self._maybe_print(trainer, stage="test-epoch")
 
     # ---------- internals ----------
-    def _maybe_print(self, trainer: "pl.Trainer", stage: str):
+    def _maybe_print(self, trainer: TrainerType, stage: str):
         # Only the main process prints
         if hasattr(trainer, "is_global_zero") and not trainer.is_global_zero:
             return
@@ -254,7 +267,7 @@ class PrintMetricsCallback(pl.Callback):
                 except Exception as e:
                     print(f"⚠️  Error checking algorithm metric rule for '{metric_name}': {str(e)}")
 
-    def _collect_metrics(self, trainer: "pl.Trainer") -> Dict[str, Any]:
+    def _collect_metrics(self, trainer: TrainerType) -> Dict[str, Any]:
         combo: Dict[str, Any] = {}
 
         # Merge, with later sources taking precedence

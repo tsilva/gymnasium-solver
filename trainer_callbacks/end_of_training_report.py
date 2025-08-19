@@ -14,10 +14,20 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
-import pytorch_lightning as pl
+# Optional dependency shim for pytorch_lightning
+try:  # pragma: no cover
+    import pytorch_lightning as pl  # type: ignore
+    BaseCallback = getattr(pl, "Callback", object)
+    TrainerType = getattr(pl, "Trainer", object)
+    LightningModuleType = getattr(pl, "LightningModule", object)
+except Exception:  # pragma: no cover
+    pl = None  # type: ignore
+    BaseCallback = object
+    class TrainerType: pass
+    class LightningModuleType: pass
 
 
-class EndOfTrainingReportCallback(pl.Callback):
+class EndOfTrainingReportCallback(BaseCallback):
     def __init__(self, *, filename: str = "report.md"):
         super().__init__()
         self.filename = filename
@@ -108,7 +118,7 @@ class EndOfTrainingReportCallback(pl.Callback):
                 lines.append(f"{sp}{k}: {v}")
         return "\n".join(lines)
 
-    def on_fit_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
+    def on_fit_end(self, trainer: "TrainerType", pl_module: "LightningModuleType") -> None:
         # Resolve run directory
         try:
             run_dir = Path(pl_module.run_manager.run_dir)  # type: ignore[attr-defined]

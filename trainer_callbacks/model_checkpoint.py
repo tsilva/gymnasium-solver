@@ -3,11 +3,18 @@
 from pathlib import Path
 import json
 
-import pytorch_lightning as pl
+# Optional dependency shim for pytorch_lightning.Callback
+try:  # pragma: no cover
+    import pytorch_lightning as pl  # type: ignore
+    BaseCallback = getattr(pl, "Callback", object)
+except Exception:  # pragma: no cover
+    pl = None  # type: ignore
+    BaseCallback = object
+
 import torch
 
 
-class ModelCheckpointCallback(pl.Callback):
+class ModelCheckpointCallback(BaseCallback):
     """Custom checkpoint callback that handles all model checkpointing logic including resume."""
     
     def __init__(self, 

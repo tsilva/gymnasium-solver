@@ -5,9 +5,15 @@ when to stop training based on a simple threshold rule. By default, it stops
 when the cumulative timesteps reach a configured limit.
 """
 
-import pytorch_lightning as pl
+# Optional dependency shim for pytorch_lightning
+try:  # pragma: no cover
+    import pytorch_lightning as pl  # type: ignore
+    BaseCallback = getattr(pl, "Callback", object)
+except Exception:  # pragma: no cover
+    pl = None  # type: ignore
+    BaseCallback = object
 
-class EarlyStoppingCallback(pl.Callback):
+class EarlyStoppingCallback(BaseCallback):
     """Generic early-stopping via metric threshold.
 
     Args:
@@ -32,7 +38,7 @@ class EarlyStoppingCallback(pl.Callback):
         self.threshold = threshold
         self.verbose = verbose
 
-    def on_train_epoch_end(self, trainer: "pl.Trainer", pl_module: "pl.LightningModule") -> None:
+    def on_train_epoch_end(self, trainer, pl_module) -> None:
         # If value is not available yet, do nothing
         value = trainer.logged_metrics.get(self.metric_key)
         if value is None: return

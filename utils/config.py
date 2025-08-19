@@ -120,7 +120,7 @@ class Config:
     # Optional target reward threshold to drive early-stopping or checkpointing heuristics
     reward_threshold: Optional[float] = None
     # Enable early stopping when eval mean reward reaches threshold
-    early_stop_on_eval_threshold: bool = False
+    early_stop_on_eval_threshold: bool = True
     # Enable early stopping when training mean episode reward reaches threshold
     early_stop_on_train_threshold: bool = False
     # Control verbosity of evaluation metric logging: when False, suppress per_env/* metrics in logs

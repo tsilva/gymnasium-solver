@@ -1,6 +1,7 @@
 import sys
 import time
 import torch
+import wandb
 from pathlib import Path
 import pytorch_lightning as pl
 
@@ -62,9 +63,18 @@ class BaseAgent(pl.LightningModule):
             config.env_id,
             **dict(
                 **common_env_kwargs,
+                # TODO: solve this
                 #seed=config.seed + 1000
             )
         )
+        from utils.rollouts import RolloutCollector
+        self.train_collector = RolloutCollector(
+            self.train_env,
+            self.policy_model,
+            n_steps=self.config.n_steps,
+            **self.rollout_collector_hyperparams(),
+        )
+
 
         # Evaluation env (vectorized; separate seed)
         # Use the same level of vectorization as training for fair evaluation when desired.
@@ -85,6 +95,13 @@ class BaseAgent(pl.LightningModule):
                 }
             )
         )
+        # TODO: is this being used for evaluate_policy?
+        self.validation_collector = RolloutCollector(
+            self.validation_env,
+            self.policy_model,
+            n_steps=self.config.n_steps,
+            **self.rollout_collector_hyperparams(),
+        )
 
         # The test environment, this will be used for the 
         # final post train evaluation and video recording
@@ -102,33 +119,25 @@ class BaseAgent(pl.LightningModule):
                 "record_env_idx": 0,  # Record only first env by default
             }
         )
+        # TODO: is this being used for evaluate_policy?
+        self.test_collector = RolloutCollector(
+            self.test_env,
+            self.policy_model,
+            n_steps=self.config.n_steps,
+            **self.rollout_collector_hyperparams(),
+        )
 
         # Create models now that environments are available. Subclasses use
         # env shapes to build policy/value networks. Must be called before
         # collectors which require self.policy_model.
         self.create_models()
 
-        # Rollout collectors
-        from utils.rollouts import RolloutCollector
-        self.train_collector = RolloutCollector(
-            self.train_env,
-            self.policy_model,
-            n_steps=self.config.n_steps,
-            **self.rollout_collector_hyperparams(),
-        )
-
-        self.validation_collector = RolloutCollector(
-            self.validation_env,
-            self.policy_model,
-            n_steps=self.config.n_steps,
-            **self.rollout_collector_hyperparams(),
-        )
-
         # Shared metrics buffer across epochs
         self._metrics_buffer = MetricsBuffer()
 
         # Lightweight history to render ASCII summary at training end
         # Maps metric name -> list[(step, value)]
+        # TODO: move this inside callback
         self._terminal_history = {}
         self._last_step_for_terminal = 0
 
@@ -246,8 +255,6 @@ class BaseAgent(pl.LightningModule):
 
         self._update_schedules()
 
-    # Early stopping moved to a dedicated callback (see callbacks.EarlyStoppingCallback)
-
     def val_dataloader(self):
         # TODO: should I just do rollouts here?
         from utils.dataloaders import build_dummy_loader
@@ -280,8 +287,7 @@ class BaseAgent(pl.LightningModule):
         )
 
         # Run evaluation with optional recording
-        checkpoint_dir = self.run_manager.get_checkpoint_dir()
-        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        checkpoint_dir = self.run_manager.ensure_dir("checkpoints")
         video_path = str(checkpoint_dir / f"epoch={self.current_epoch:02d}.mp4")
         with self.validation_env.recorder(video_path, record_video=record_video):
             from utils.evaluation import evaluate_policy
@@ -329,60 +335,54 @@ class BaseAgent(pl.LightningModule):
 
     def learn(self):
         from utils.logging import capture_all_output
+        from utils.user import prompt_confirm
+        from utils.run_manager import RunManager
 
-        # Ask for confirmation before any heavy setup (keep prior prints grouped)
-        # Before prompting, suggest better defaults if we detect mismatches
-        self._maybe_warn_observation_policy_mismatch()
-
-        self._print_env_spec(self.train_env)
-
-        print("Starting training...")
+        # Ensure learn() is only called once at the start of training
+        assert self.run_manager is None, "learn() should only be called once at the start of training"
 
         # Setup run directory management
         wandb_logger = self._create_wandb_logger()
-        run_dir, run_logs_dir = self._init_run_manager(wandb_logger)
 
-        print(f"Run directory: {run_dir}")
-        print(f"Run ID: {self.run_manager.run_id}")
-        print(f"Logs will be saved to: {run_logs_dir}")
+        self.run_manager = RunManager(wandb.run.id)
+        csv_path = self.run_manager.ensure_path("metrics.csv")
+
+        self._csv_logger = CsvMetricsLogger(csv_path)
+
+        self.run_manager.print_details()  # Print run details before starting training
+        start_training = prompt_confirm("Start training?", default=True, quiet=self.config.quiet)
+        if not start_training: return
 
         # Set up comprehensive logging using run-specific logs directory
-        with capture_all_output(config=self.config, log_dir=run_logs_dir):
+        logs_dir = self.run_manager.ensure_dir("logs")
+        with capture_all_output(config=self.config, log_dir=logs_dir):
             # Save configuration to run directory
             config_path = self.run_manager.save_config(self.config)
             print(f"Configuration saved to: {config_path}")
 
-            # Define step-based metrics to ensure proper ordering
-            self._define_wandb_metrics(wandb_logger)
-
             # Build callbacks and trainer
-            callbacks = self._build_callbacks()
-            validation_controls = self._get_validation_controls()
-            trainer = self._build_trainer(wandb_logger, callbacks, validation_controls)
+            callbacks = self._build_trainer_callbacks()
+
+            # Keep Lightning validation cadence driven by eval_freq_epochs; warmup is enforced in hooks.
+            eval_freq = self.config.eval_freq_epochs
+            warmup = self.config.eval_warmup_epochs or 0
+
+            # If warmup is active, request validation every epoch and gate in hooks
+            eval_freq_epochs = 1 if (eval_freq is not None and warmup > 0) else eval_freq
+            limit_val_batches = 0 if eval_freq_epochs is None else 1.0
+            check_val_every_n_epoch = eval_freq_epochs if eval_freq_epochs is not None else 1
+    
+            trainer = self._build_trainer(
+                wandb_logger, 
+                callbacks, 
+                {
+                    "limit_val_batches": limit_val_batches,
+                    "check_val_every_n_epoch": check_val_every_n_epoch,
+                }
+            )
 
             trainer.fit(self)
     
-    def _print_env_spec(self, env):
-        # Show environment details for transparency
-        print("\n=== Environment Details ===")
-        
-        # Observation space and action space from vectorized env
-        print(f"Observation space: {env.observation_space}")
-        print(f"Action space: {env.action_space}")
-
-        # Reward range and threshold when available
-        reward_range = env.get_reward_range()
-        print(f"Reward range: {reward_range}")
-
-        # Reward threshold if defined
-        reward_threshold = env.get_reward_threshold()
-        print(f"Reward threshold: {reward_threshold}")
-        print("=" * 30)
-
-    @staticmethod
-    def _sanitize_name(name: str) -> str:
-        return name.replace("/", "-").replace("\\", "-")
-
     # ----- Evaluation scheduling helpers -----
     def _should_run_eval(self, epoch_idx: int) -> bool:
         """Return True if evaluation should run on this epoch index.
@@ -415,69 +415,30 @@ class BaseAgent(pl.LightningModule):
     # Pre-prompt guidance helpers
     # -------------------------
 
-    def _maybe_warn_observation_policy_mismatch(self):
-        from utils.environment import is_rgb_env
-        
-        # In case the observation space is RGB, warn if MLP policy is used
-        is_rgb = is_rgb_env(self.train_env)
-        is_mlp = self.config.policy.lower() == "mlp"
-        if is_rgb and is_mlp:
-            print(
-                "Warning: Detected RGB image observations with MLP policy. "
-                "For pixel inputs, consider using CNN for better performance."
-            )
-
-        # In case the observation space is not RGB, warn if CNN policy is used
-        is_cnn = self.config.policy.lower() == "cnn"
-        if not is_rgb and is_cnn:
-            print(
-                "Warning: Detected non-RGB observations with CNN policy. "
-                "For non-image inputs, consider using MLP for better performance."
-            )
-            
     def _create_wandb_logger(self):
         from dataclasses import asdict
         from pytorch_lightning.loggers import WandbLogger
 
-        project_name = self.config.project_id if self.config.project_id else self._sanitize_name(self.config.env_id)
+        def _sanitize_name(name: str) -> str:
+            return name.replace("/", "-").replace("\\", "-")
+
+        project_name = self.config.project_id if self.config.project_id else _sanitize_name(self.config.env_id)
         experiment_name = f"{self.config.algo_id}-{self.config.seed}"
         wandb_logger = WandbLogger(
             project=project_name, 
             name=experiment_name,
-            og_model=True, 
+            log_model=True, 
             config=asdict(self.config)
         )
+    
+        # TODO: can I just do *
+        #wandb_logger.experiment.define_metric("train/*", step_metric="train/total_timesteps")
+        #wandb_logger.experiment.define_metric("train/hyperparams/*", step_metric="train/total_timesteps")
+        #wandb_logger.experiment.define_metric("eval/*", step_metric="train/total_timesteps")
+
         return wandb_logger
-
-    def _init_run_manager(self, wandb_logger):
-        from utils.run_manager import RunManager
-
-        self.run_manager = RunManager()
-        run_dir = self.run_manager.setup_run_directory(wandb_logger.experiment)
-        run_logs_dir = str(self.run_manager.get_logs_dir())
-
-        self._csv_logger = CsvMetricsLogger(Path(run_dir) / "metrics.csv")
-            
-        return run_dir, run_logs_dir
-
-    # TODO: review this
-    def _define_wandb_metrics(self, wandb_logger):
-        if wandb_logger.experiment:
-            wandb_logger.experiment.define_metric("train/*", step_metric="train/total_timesteps")
-            wandb_logger.experiment.define_metric("train/hyperparams/*", step_metric="train/total_timesteps")
-            wandb_logger.experiment.define_metric("eval/*", step_metric="train/total_timesteps")
-            # Expose metric bounds to the W&B run config for dashboard consumption
-            try:
-                from utils.metrics import get_metric_bounds
-                bounds = get_metric_bounds()
-                if isinstance(bounds, dict) and bounds:
-                    # Store under a dedicated namespace to avoid clutter
-                    wandb_logger.experiment.config.update({"metric_bounds": bounds}, allow_val_change=True)
-            except Exception:
-                # Never block training on telemetry metadata
-                pass
-
-    def _build_callbacks(self):
+    
+    def _build_trainer_callbacks(self):
         """Assemble trainer callbacks, with an optional end-of-training report."""
         # Lazy imports to avoid heavy deps at module import time
         from callbacks import (
@@ -489,21 +450,24 @@ class BaseAgent(pl.LightningModule):
             EarlyStoppingCallback,
         )
 
+        # Initialize callbacks list
         callbacks = []
 
         # Video logger writes to run-specific media directory
+        video_dir = self.run_manager.ensure_dir("videos")
         video_logger_cb = VideoLoggerCallback(
-            media_root=str(self.run_manager.get_video_dir()),
+            media_root=video_dir,
             namespace_depth=1,
         )
         callbacks.append(video_logger_cb)
 
         # Checkpointing (skip for qlearning which has no torch model)
+        checkpoint_dir = self.run_manager.ensure_dir("checkpoints")
         checkpoint_cb = ModelCheckpointCallback(
-            checkpoint_dir=str(self.run_manager.get_checkpoint_dir()),
+            checkpoint_dir=checkpoint_dir,
             monitor="eval/ep_rew_mean",
             mode="max",
-            save_last=True,
+            save_last=True, 
             save_threshold_reached=True,
             resume=self.config.resume,
         )
@@ -575,31 +539,6 @@ class BaseAgent(pl.LightningModule):
         callbacks.append(report_cb)
 
         return callbacks
-
-    def _get_validation_controls(self):
-        # Keep Lightning validation cadence driven by eval_freq_epochs; warmup is enforced in hooks.
-        eval_freq = self.config.eval_freq_epochs
-        warmup = self.config.eval_warmup_epochs or 0
-
-        # If warmup is active, request validation every epoch and gate in hooks
-        eff_freq = 1 if (eval_freq is not None and warmup > 0) else eval_freq
-        return self._compute_validation_controls(eff_freq)
-
-    @staticmethod
-    def _compute_validation_controls(eval_freq_epochs):
-        """Pure helper: map eval frequency to PL validation controls.
-
-        Args:
-            eval_freq_epochs: int | None
-        Returns:
-            dict with keys 'limit_val_batches' and 'check_val_every_n_epoch'
-        """
-        limit_val_batches = 0 if eval_freq_epochs is None else 1.0
-        check_val_every_n_epoch = eval_freq_epochs if eval_freq_epochs is not None else 1
-        return {
-            "limit_val_batches": limit_val_batches,
-            "check_val_every_n_epoch": check_val_every_n_epoch,
-        }
 
     def _build_trainer(self, wandb_logger, callbacks, validation_controls):
         from utils.trainer_factory import build_trainer
@@ -675,22 +614,3 @@ class BaseAgent(pl.LightningModule):
         # Flush via buffer abstraction
         means = self._metrics_buffer.flush_to(self.log_dict)
         self._csv_logger.log_metrics(means)
-
-    def confirm(prompt: str, default: bool = True, quiet: bool = False) -> bool:
-        """Prompt user with yes/no. Defaults on empty, non-interactive, EOF, or quiet mode."""
-        yn = "Y/n" if default else "y/N"
-        full = f"{prompt} [{yn}]: "
-
-        if quiet:
-            print(f"{full}{'Y' if default else 'N'} (quiet)")
-            return default
-
-        if not (sys.stdin and sys.stdin.isatty()):
-            print(f"{full}{'Y' if default else 'N'} (auto)")
-            return default
-
-        try: resp = input(full).strip().lower()
-        except EOFError: return default
-
-        return resp.startswith("y") if resp else default
-    

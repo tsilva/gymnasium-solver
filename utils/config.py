@@ -498,9 +498,13 @@ class Config:
         if isinstance(self.policy, str) and self.policy.lower() not in {"mlp", "cnn"}:
             raise ValueError("policy must be 'MLP' or 'CNN'")
 
+    def save_to_json(self, path: str) -> None:
+        """Save configuration to a JSON file."""
+        import json
+        from dataclasses import asdict
+        with open(path, "w") as f:
+            json.dump(asdict(self), f, indent=2, default=str)
+
 def load_config(config_id: str, algo_id: str = None, config_dir: str = "config/environments") -> Config:
     """Convenience function to load configuration."""
     return Config.load_from_yaml(config_id, algo_id, config_dir)
-
-
-# metrics helpers moved to utils.metrics

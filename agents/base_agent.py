@@ -10,15 +10,6 @@ from utils.decorators import must_implement
 
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class BaseAgent(pl.LightningModule):
-    """Base class for RL agents orchestrating envs, rollouts, and training.
-
-    Responsibilities:
-    - Build training/eval environments and collectors
-    - Provide Lightning hooks for train/eval loops with manual optimization
-    - Aggregate and flush metrics efficiently via MetricsBuffer
-    - Delegate algorithm-specific pieces to subclasses (models, losses)
-    """
-
     def __init__(self, config):
         super().__init__()
 
@@ -329,8 +320,10 @@ class BaseAgent(pl.LightningModule):
         time_elapsed = max((time.perf_counter_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
 
+        self._csv_logger.close()
         # Print concise ASCII summary of key metrics for quick inspection
         self._print_terminal_ascii_summary()
+
 
     def learn(self):
         from utils.logging import capture_all_output
@@ -675,11 +668,6 @@ class BaseAgent(pl.LightningModule):
         # Flush via buffer abstraction
         means = self._metrics_buffer.flush_to(self.log_dict)
         self._csv_logger.log_metrics(means)
-
-    # Ensure CSV logger is closed cleanly when training ends
-    def on_fit_end(self):
-        self._csv_logger.close()
-        return super().on_fit_end()
 
     def confirm(prompt: str, default: bool = True, quiet: bool = False) -> bool:
         """Prompt user with yes/no. Defaults on empty, non-interactive, EOF, or quiet mode."""

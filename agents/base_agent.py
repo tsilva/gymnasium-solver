@@ -448,7 +448,7 @@ class BaseAgent(pl.LightningModule):
         """Assemble trainer callbacks, with an optional end-of-training report."""
         # Lazy imports to avoid heavy deps at module import time
         from trainer_callbacks import (
-            CsvMetricsLoggerCallback,
+            CSVMetricsLoggerCallback,
             PrintMetricsCallback,
             HyperparamSyncCallback,
             ModelCheckpointCallback,
@@ -461,7 +461,7 @@ class BaseAgent(pl.LightningModule):
 
         # CSV Metrics Logger (writes metrics.csv under the run directory)
         csv_path = self.run_manager.ensure_path("metrics.csv")
-        callbacks.append(CsvMetricsLoggerCallback(csv_path=str(csv_path)))
+        callbacks.append(CSVMetricsLoggerCallback(csv_path=str(csv_path)))
 
         # Formatting/precision rules for pretty printing
         from utils.metrics import (

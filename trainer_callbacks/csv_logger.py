@@ -13,7 +13,7 @@ import pytorch_lightning as pl
 from utils.csv_logger import CsvMetricsLogger
 
 
-class CsvMetricsLoggerCallback(pl.Callback):
+class CSVMetricsLoggerCallback(pl.Callback):
     """Flushes aggregated metrics from the LightningModule to a wide-form CSV.
 
     This callback expects the LightningModule to accumulate metrics in a

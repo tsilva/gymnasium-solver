@@ -8,7 +8,6 @@ from utils.metrics_buffer import MetricsBuffer
 from utils.csv_logger import CsvMetricsLogger
 from utils.decorators import must_implement
 
-
 # TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class BaseAgent(pl.LightningModule):
     """Base class for RL agents orchestrating envs, rollouts, and training.
@@ -252,9 +251,9 @@ class BaseAgent(pl.LightningModule):
         if not self._should_run_eval(self.current_epoch):
             # Lightning still calls val hooks when limit_val_batches>0; guard our logic here
             return
-        
 
         self.validation_epoch_start_time = time.perf_counter_ns()
+
         # We'll compute eval FPS based on per-call totals from evaluate_policy
         self.validation_epoch_start_timesteps = 0
 
@@ -266,8 +265,6 @@ class BaseAgent(pl.LightningModule):
         # Respect warmup scheduling and frequency
         if not self._should_run_eval(self.current_epoch):
             return None
-        # New evaluation using vectorized env policy runner
-        from utils.evaluation import evaluate_policy
 
         # Decide if we record a video this eval epoch
         record_video = (
@@ -279,12 +276,14 @@ class BaseAgent(pl.LightningModule):
         # Use the same epoch-based naming convention as checkpoints
         ckpt_dir = self.run_manager.get_checkpoint_dir()
         ckpt_dir.mkdir(parents=True, exist_ok=True)
+
         # Match the zero-padded epoch format used by checkpoint files: epoch=XX.ckpt
         video_path = ckpt_dir / f"epoch={self.current_epoch:02d}.mp4"
         video_path = str(video_path)
 
         # Run evaluation with optional recording
         with self.validation_env.recorder(video_path, record_video=record_video):
+            from utils.evaluation import evaluate_policy
             eval_metrics = evaluate_policy(
                 self.validation_env,
                 self.policy_model,
@@ -344,11 +343,7 @@ class BaseAgent(pl.LightningModule):
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
 
         # Print concise ASCII summary of key metrics for quick inspection
-        try:
-            self._print_terminal_ascii_summary()
-        except Exception:
-            # Never block program end on summary printing
-            pass
+        self._print_terminal_ascii_summary()
 
     # -------------------------
     # Terminal ASCII summary
@@ -426,6 +421,7 @@ class BaseAgent(pl.LightningModule):
         # Ask for confirmation before any heavy setup (keep prior prints grouped)
         # Before prompting, suggest better defaults if we detect mismatches
         self._maybe_warn_mlp_on_rgb_obs()
+
         # Show environment details for transparency
         try:
             print("\n=== Environment Details ===")
@@ -559,7 +555,6 @@ class BaseAgent(pl.LightningModule):
 
     def _create_wandb_logger(self):
         from dataclasses import asdict
-
         from pytorch_lightning.loggers import WandbLogger
 
         project_name = self.config.project_id if self.config.project_id else self._sanitize_name(self.config.env_id)
@@ -582,6 +577,7 @@ class BaseAgent(pl.LightningModule):
             
         return run_dir, run_logs_dir
 
+    # TODO: review this
     def _define_wandb_metrics(self, wandb_logger):
         if wandb_logger.experiment:
             wandb_logger.experiment.define_metric("train/*", step_metric="train/total_timesteps")
@@ -606,12 +602,8 @@ class BaseAgent(pl.LightningModule):
             ModelCheckpointCallback,
             PrintMetricsCallback,
             VideoLoggerCallback,
+            EndOfTrainingReportCallback
         )
-        # Optional report callback: import may fail in minimal environments
-        try:
-            from callbacks.end_of_training_report import EndOfTrainingReportCallback  # type: ignore
-        except Exception:
-            EndOfTrainingReportCallback = None  # type: ignore
 
         # Video logger writes to run-specific media directory
         video_logger_cb = VideoLoggerCallback(
@@ -701,32 +693,14 @@ class BaseAgent(pl.LightningModule):
         )
 
     def _backpropagate_and_step(self, losses):
-        # Try to get optimizers from Lightning; if not attached to a Trainer
-        # (as in our lightweight integration tests), fall back to a cached
-        # manual optimizer created via configure_optimizers().
-        try:
-            optimizers = self.optimizers()
-        except Exception:
-            optimizers = getattr(self, "_manual_optimizers", None)
-            if optimizers is None:
-                optimizers = self.configure_optimizers()
-                if not isinstance(optimizers, (list, tuple)):
-                    optimizers = [optimizers]
-                self._manual_optimizers = optimizers
-
-        if not isinstance(losses, (list, tuple)):
-            losses = [losses]
-        if not isinstance(optimizers, (list, tuple)):
-            optimizers = [optimizers]
+        optimizers = self.optimizers()
+        if not isinstance(losses, (list, tuple)): losses = [losses]
+        if not isinstance(optimizers, (list, tuple)): optimizers = [optimizers]
 
         for idx, optimizer in enumerate(optimizers):
             loss = losses[idx]
             optimizer.zero_grad()
-            # Use Lightning's manual_backward when available; otherwise, raw autograd
-            try:
-                self.manual_backward(loss)
-            except Exception:
-                loss.backward()
+            self.manual_backward(loss) # TODO: this or loss.backward()?
             torch.nn.utils.clip_grad_norm_(self.policy_model.parameters(), self.config.max_grad_norm)
             optimizer.step()
 
@@ -751,22 +725,10 @@ class BaseAgent(pl.LightningModule):
         self.log_metrics({"learning_rate": new_learning_rate}, prefix="train/hyperparams")
 
     def _change_optimizers_learning_rate(self, learning_rate):
-        # Obtain optimizers from Lightning when attached; otherwise, fall back
-        # to manual optimizers created via configure_optimizers().
-        try:
-            optimizers = self.optimizers()
-        except Exception:
-            optimizers = getattr(self, "_manual_optimizers", None)
-            if optimizers is None:
-                optimizers = self.configure_optimizers()
-                if not isinstance(optimizers, (list, tuple)):
-                    optimizers = [optimizers]
-                self._manual_optimizers = optimizers
-        if not isinstance(optimizers, (list, tuple)):
-            optimizers = [optimizers]
+        optimizers = self.optimizers()
+        if not isinstance(optimizers, (list, tuple)): optimizers = [optimizers]
         for opt in optimizers:
-            for pg in opt.param_groups:
-                pg["lr"] = learning_rate
+            for pg in opt.param_groups: pg["lr"] = learning_rate
 
     def log_metrics(self, metrics, *, prefix=None):
         """
@@ -788,10 +750,8 @@ class BaseAgent(pl.LightningModule):
                 self._last_step_for_terminal = int(step_val)
 
             for k, v in prefixed.items():
-                if k.endswith("action_distribution"):
-                    continue
-                if not isinstance(v, (int, float)):
-                    continue
+                if k.endswith("action_distribution"): continue
+                if not isinstance(v, (int, float)): continue
                 history = self._terminal_history.setdefault(k, [])
                 step = self._last_step_for_terminal if k != "train/total_timesteps" else int(v)
                 history.append((step, float(v)))
@@ -802,34 +762,23 @@ class BaseAgent(pl.LightningModule):
     def _flush_metrics(self):
         # Flush via buffer abstraction
         means = self._metrics_buffer.flush_to(self.log_dict)
-        # Also enqueue to CSV logger (asynchronous, non-blocking)
-        try:
-            if self._csv_logger is not None:
-                self._csv_logger.log_metrics(means)
-        except Exception:
-            pass
+        self._csv_logger.log_metrics(means)
 
     # Ensure CSV logger is closed cleanly when training ends
     def on_fit_end(self):
-        try:
-            if self._csv_logger is not None:
-                self._csv_logger.close()
-        except Exception:
-            pass
-        # Call super if available
-        try:
-            return super().on_fit_end()
-        except Exception:
-            return None
+        self._csv_logger.close()
+        return super().on_fit_end()
 
     # -------------------------
     # Pre-training summary & confirmation helpers
     # -------------------------
 
+    # TODO: get rid of this
     def _print_pretraining_summary(self):
         # Keep output concise and avoid duplication: config and model details were already printed.
         print("\nReview the configuration and model above.")
 
+    # TODO: encapsulate this
     def _confirm_proceed(self) -> bool:
         """Ask user to confirm proceeding. Default to Yes on empty input or non-interactive sessions."""
         # Honor quiet mode to avoid any interactive prompts

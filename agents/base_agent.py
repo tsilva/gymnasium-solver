@@ -1,11 +1,9 @@
 import sys
 import time
 import torch
-import wandb
 import pytorch_lightning as pl
 
 from utils.metrics_buffer import MetricsBuffer
-from utils.csv_logger import CsvMetricsLogger
 from utils.decorators import must_implement
 from utils.reports import print_terminal_ascii_summary
 
@@ -23,14 +21,14 @@ class BaseAgent(pl.LightningModule):
         self.automatic_optimization = False
 
         # Initialize throughput counters
+        # TODO: abstract away these measurements, no need to have all these attributes
         self.fit_start_time = None
         self.train_epoch_start_time = None
         self.train_epoch_start_timesteps = None
         self.validation_epoch_start_time = None
         self.validation_epoch_start_timesteps = None
 
-        # CSV metrics logger (initialized with run manager)
-        self._csv_logger = None
+    # CSV metrics logger moved to a Trainer Callback (CsvMetricsLoggerCallback)
 
         # Shared metrics buffer across epochs
         self._metrics_buffer = MetricsBuffer()
@@ -227,9 +225,6 @@ class BaseAgent(pl.LightningModule):
             prefix="train",
         )
 
-        # Flush all metrics logged so far
-        self._flush_metrics()
-
         # Log action distribution histogram to W&B, aligned to total_timesteps
         try:
             import wandb  # optional dependency at runtime
@@ -247,6 +242,8 @@ class BaseAgent(pl.LightningModule):
                     wandb.log(payload, step=step_val)
         except Exception:
             pass
+
+        # CSV flushing is handled by CsvMetricsLoggerCallback
 
         self._update_schedules()
 
@@ -308,7 +305,7 @@ class BaseAgent(pl.LightningModule):
             **eval_metrics
         }, prefix="eval")
 
-        self._flush_metrics()
+    # CSV flushing is handled by CsvMetricsLoggerCallback
 
     def on_validation_epoch_end(self):
         # Validation epoch end is called after all validation steps are done
@@ -319,9 +316,6 @@ class BaseAgent(pl.LightningModule):
         # Log training completion time
         time_elapsed = max((time.perf_counter_ns() - self.fit_start_time) / 1e9, sys.float_info.epsilon)
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
-
-        # TODO: encapsulate in callback
-        self._csv_logger.close()
 
         # TODO: encapsulate in callback
         history = getattr(self, "_terminal_history", None)
@@ -352,9 +346,7 @@ class BaseAgent(pl.LightningModule):
         # Prompt user to start training, return if user declines
         if not self._prompt_user_start_training(): return
 
-        # Setup run directory management
-        csv_path = self.run_manager.ensure_path("metrics.csv")
-        self._csv_logger = CsvMetricsLogger(csv_path)
+    # CSV logger is now owned by a Trainer callback; no setup needed here
 
         # Build callbacks and trainer
         callbacks = self._build_trainer_callbacks()
@@ -478,36 +470,20 @@ class BaseAgent(pl.LightningModule):
         """Assemble trainer callbacks, with an optional end-of-training report."""
         # Lazy imports to avoid heavy deps at module import time
         from trainer_callbacks import (
+            CsvMetricsLoggerCallback,
+            PrintMetricsCallback,
             HyperparamSyncCallback,
             ModelCheckpointCallback,
-            PrintMetricsCallback,
             VideoLoggerCallback,
             EndOfTrainingReportCallback,
             EarlyStoppingCallback,
         )
-
         # Initialize callbacks list
         callbacks = []
 
-        # Video logger writes to run-specific media directory
-        video_dir = self.run_manager.ensure_path("videos/")
-        video_logger_cb = VideoLoggerCallback(
-            media_root=video_dir,
-            namespace_depth=1,
-        )
-        callbacks.append(video_logger_cb)
-
-        # Checkpointing (skip for qlearning which has no torch model)
-        checkpoint_dir = self.run_manager.ensure_path("checkpoints/")
-        checkpoint_cb = ModelCheckpointCallback(
-            checkpoint_dir=checkpoint_dir,
-            monitor="eval/ep_rew_mean",
-            mode="max",
-            save_last=True, 
-            save_threshold_reached=True,
-            resume=self.config.resume,
-        )
-        callbacks.append(checkpoint_cb)
+        # CSV Metrics Logger (writes metrics.csv under the run directory)
+        csv_path = self.run_manager.ensure_path("metrics.csv")
+        callbacks.append(CsvMetricsLoggerCallback(csv_path=str(csv_path)))
 
         # Formatting/precision rules for pretty printing
         from utils.metrics import (
@@ -537,6 +513,26 @@ class BaseAgent(pl.LightningModule):
             verbose=True,
         )
         callbacks.append(hyperparam_sync_cb)
+
+        # Checkpointing (skip for qlearning which has no torch model)
+        checkpoint_dir = self.run_manager.ensure_path("checkpoints/")
+        checkpoint_cb = ModelCheckpointCallback(
+            checkpoint_dir=checkpoint_dir,
+            monitor="eval/ep_rew_mean",
+            mode="max",
+            save_last=True, 
+            save_threshold_reached=True,
+            resume=self.config.resume,
+        )
+        callbacks.append(checkpoint_cb)
+
+        # Video logger writes to run-specific media directory
+        video_dir = self.run_manager.ensure_path("videos/")
+        video_logger_cb = VideoLoggerCallback(
+            media_root=video_dir,
+            namespace_depth=1,
+        )
+        callbacks.append(video_logger_cb)
 
         # TODO: add multi-metric support to EarlyStoppingCallback
         # Early stop after reaching a certain number of timesteps
@@ -647,6 +643,10 @@ class BaseAgent(pl.LightningModule):
             history.append((step, float(v)))
 
     def _flush_metrics(self):
-        # Flush via buffer abstraction
+        """Flush buffered metrics to Lightning; return means for external sinks.
+
+        The CsvMetricsLoggerCallback will call this hook and forward the
+        returned dict to the CSV writer asynchronously.
+        """
         means = self._metrics_buffer.flush_to(self.log_dict)
-        self._csv_logger.log_metrics(means)
+        return means

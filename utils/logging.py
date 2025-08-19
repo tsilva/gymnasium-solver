@@ -217,3 +217,65 @@ def stream_output_to_log(log_file_path: str):
             yield log_file
         finally:
             if log_file and not log_file.closed: log_file.close()
+
+
+@contextmanager
+def capture_all_output(config=None, *, log_dir: str = "logs", max_log_files: int = 10):
+    """
+    Redirect stdout and stderr to both console and a timestamped log file.
+
+    Creates a log directory if needed and rotates old logs based on max_log_files.
+    Yields the opened log file handle for optional direct writes.
+    """
+    # Prepare manager and create a new log file for this session
+    manager = LogFileManager(log_dir=log_dir, max_log_files=max_log_files)
+    log_file = manager.create_log_file(config)
+    # Redirect streams within the context
+    with StreamRedirector(log_file, redirect_stdout=True, redirect_stderr=True):
+        try:
+            yield log_file
+        finally:
+            try:
+                if log_file and not log_file.closed:
+                    log_file.close()
+            except Exception:
+                pass
+
+
+def log_config_details(config, file: Optional[TextIO] = None) -> None:
+    """
+    Write human-readable configuration details to the provided file (or stdout).
+    Ensures a recognizable header so tests can assert its presence.
+    """
+    out: TextIO = file or sys.stdout
+    try:
+        out.write("=== Configuration Details ===\n")
+        # Prefer dataclass asdict, fall back to attribute introspection
+        items = None
+        try:
+            from dataclasses import asdict, is_dataclass
+            if config is not None and is_dataclass(config):
+                items = asdict(config).items()
+        except Exception:
+            items = None
+        if items is None:
+            # Collect public, non-callable attributes
+            attrs = {}
+            if config is not None:
+                for name in dir(config):
+                    if name.startswith("_"):
+                        continue
+                    try:
+                        value = getattr(config, name)
+                    except Exception:
+                        continue
+                    if callable(value):
+                        continue
+                    attrs[name] = value
+            items = attrs.items()
+        for k, v in sorted(items):
+            out.write(f"{k}: {v}\n")
+        out.flush()
+    except Exception:
+        # Do not let logging issues crash the program
+        pass

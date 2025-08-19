@@ -240,7 +240,6 @@ class BaseAgent(pl.LightningModule):
         # We'll compute eval FPS based on per-call totals from evaluate_policy
         self.validation_epoch_start_timesteps = 0
 
-    # TODO: check how sb3 does eval_async
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
     # TODO: there are train/fps drops caused by running the collector N times (its not only the video recording); cause currently unknown
@@ -581,8 +580,7 @@ class BaseAgent(pl.LightningModule):
 
     # TODO: generalize scheduling support
     def _update_schedules__learning_rate(self):
-        if self.config.learning_rate_schedule != "linear":
-            return
+        if self.config.learning_rate_schedule != "linear": return
         progress = self._get_training_progress()
         new_learning_rate = max(self.config.learning_rate * (1.0 - progress), 0.0)
         self._change_optimizers_learning_rate(new_learning_rate)

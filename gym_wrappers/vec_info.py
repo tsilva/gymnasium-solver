@@ -15,7 +15,10 @@ class VecInfoWrapper(VecEnvWrapper):
     def _first_base_env(self):
         """
         Try to get the first underlying (unwrapped) gym env from this vec env.
-        Works for DummyVecEnv directly; for SubprocVecEnv fall back to get_attr.
+        Works for DummyVecEnv directly; for SubprocVecEnv we avoid fetching
+        the env instance over IPC because it may not be picklable (e.g.,
+        ALEInterface). In that case, return None and let callers use
+        picklable attributes via get_attr instead.
         """
         # Walk through nested vec wrappers until we reach something that exposes .envs
         v = self.venv
@@ -29,12 +32,10 @@ class VecInfoWrapper(VecEnvWrapper):
             env0 = v.envs[0]
             return getattr(env0, "unwrapped", env0)
 
-        # Otherwise, try the vector API (works for SubprocVecEnv)
-        try:
-            # ask worker 0 for its unwrapped env (may fail if not picklable)
-            return self.venv.get_attr("unwrapped", indices=[0])[0]
-        except Exception:
-            return None
+        # For SubprocVecEnv (no local .envs), do not attempt to fetch
+        # the env object via get_attr("unwrapped") as it can contain
+        # non-picklable handles. Return None to signal unavailable.
+        return None
 
     # --- public API ----------------------------------------------------------
 
@@ -104,7 +105,6 @@ class VecInfoWrapper(VecEnvWrapper):
 
         Attempts the following, in order:
         - Direct attribute on first base env (DummyVecEnv path)
-        - get_attr('reward_range') on the VecEnv (SubprocVecEnv path)
         - Fallback to Gymnasium registry by resolving spec and instantiating a temp env
         """
         # Try reading from the first underlying base env
@@ -118,20 +118,12 @@ class VecInfoWrapper(VecEnvWrapper):
         except Exception:
             pass
 
-        # Try vec env API (works for SubprocVecEnv)
-        try:
-            rr = self.venv.get_attr("reward_range", indices=[0])[0]
-            if isinstance(rr, (tuple, list)) and len(rr) == 2:
-                return tuple(rr)
-        except Exception:
-            pass
-
         # Last resort: resolve via env spec and a temporary instance
         try:
-            base = self._first_base_env()
             env_id = None
-            if base is not None:
-                env_id = getattr(base, "id", None) or getattr(getattr(base, "spec", None), "id", None)
+            spec = self.get_spec()
+            if spec is not None:
+                env_id = getattr(spec, "id", None)
             if env_id:
                 import gymnasium as gym
                 if env_id.startswith("ALE/"):

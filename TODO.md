@@ -1,6 +1,8 @@
 - TODO: create script that runs all configurations for N timesteps (few) to just smoke test that all environment configuraitons are working=
-- inspect.py: add LLM debugging support
 - runs: along with each checkpoint we are saving a json file with the metrics at that checkpoint. We also want to save a CSV with the rollout data for that epoch; this data should contain exactly the same data as the table in inspect.py, so we can encapsualte the function that generates the csv and reuse it in both places.
+
+
+- inspect.py: add LLM debugging support
 - BUG: checkpoint jsons not storing correct metrics
 - BUG: CartPole-v1 PPO is not training as fast; 115f9c73faed6785a0bd58c37f55298324e90f43 was ok
 - add support for resuming training from a checkpoint

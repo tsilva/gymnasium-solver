@@ -150,7 +150,7 @@ class VecVideoRecorder(VecEnvWrapper):
             # Create overlay text (stacked vertically)
             lines = [
                 f"Episode: {self.current_episode + 1}",
-                f"Step: {self.current_step + 1}",
+                f"Step: {self.current_step}",
                 f"Reward: {self.accumulated_reward:.2f}",
             ]
             

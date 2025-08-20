@@ -422,6 +422,7 @@ def build_ui(default_run_id: str = "latest-run"):
         frames_state = gr.State([])  # type: ignore[var-annotated]
         index_state = gr.State(0)
         playing_state = gr.State(False)
+        rows_state = gr.State([])  # type: ignore[var-annotated]
 
         # Timer for autoplay (fallback if Timer doesn't exist in older Gradio)
         timer = None
@@ -432,19 +433,22 @@ def build_ui(default_run_id: str = "latest-run"):
                 timer = TimerCls(1/30)
         except Exception:
             timer = None
+        # Table headers are reused for CSV export
+        table_headers = [
+            "done",
+            "step",
+            "action",
+            "probs",
+            "reward",
+            "cum_reward",
+            "mc_return",
+            "value",
+            "gae_adv",
+        ]
+
         with gr.Row():
             step_table = gr.Dataframe(
-                headers=[
-                    "done",
-                    "step",
-                    "action",
-                    "probs",
-                    "reward",
-                    "cum_reward",
-                    "mc_return",
-                    "value",
-                    "gae_adv",
-                ],
+                headers=table_headers,
                 datatype=[
                     "bool",   # done
                     "number", # step
@@ -461,6 +465,9 @@ def build_ui(default_run_id: str = "latest-run"):
                 label="Per-step details",
                 interactive=True,
             )
+        with gr.Row():
+            export_btn = gr.Button("Export table to CSV")
+            download_btn = gr.DownloadButton(label="Download CSV", visible=False)
         with gr.Row():
             with gr.Tabs():
                 with gr.Tab("Environment"):
@@ -508,12 +515,18 @@ def build_ui(default_run_id: str = "latest-run"):
                 0,                                          # index_state
                 False,                                      # playing_state
                 gr.update(value="▶"),                    # play_pause_btn label
+                rows,                                       # rows_state
             )
         run_btn.click(
             _inspect,
             inputs=[run_id, checkpoint, deterministic, max_steps],
-            outputs=[frame_image, frame_slider, step_table, env_spec_json, model_spec_json, ckpt_metrics_json, frames_state, index_state, playing_state, play_pause_btn],
+            outputs=[frame_image, frame_slider, step_table, env_spec_json, model_spec_json, ckpt_metrics_json, frames_state, index_state, playing_state, play_pause_btn, rows_state],
         )
+
+        # Keep rows_state in sync if the user edits the table
+        def _on_table_change(df_rows):
+            return df_rows
+        step_table.change(_on_table_change, inputs=[step_table], outputs=[rows_state])
 
         # When a user selects a cell in the step table, select the corresponding frame in the gallery
         def _on_step_select(frames: List[np.ndarray], evt=None):
@@ -595,6 +608,26 @@ def build_ui(default_run_id: str = "latest-run"):
 
         if timer is not None:
             timer.tick(_on_tick, inputs=[frames_state, index_state, playing_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
+
+        # CSV export handler
+        def _export_csv(rows: List[List[Any]] | None, rid: str, ckpt_label: str | None):
+            import csv
+            import tempfile
+            import os
+            if not rows:
+                return gr.update(visible=False)
+            safe_rid = str(rid).replace("/", "-").replace(" ", "_")
+            safe_ckpt = str(ckpt_label or "ckpt").replace("/", "-").replace(" ", "_")
+            file_name = f"{safe_rid}_{safe_ckpt}_steps.csv"
+            tmp_dir = tempfile.gettempdir()
+            file_path = os.path.join(tmp_dir, file_name)
+            with open(file_path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(table_headers)
+                writer.writerows(rows)
+            return gr.update(value=file_path, visible=True, label="Download CSV")
+
+        export_btn.click(_export_csv, inputs=[rows_state, run_id, checkpoint], outputs=[download_btn])
 
     return demo
 

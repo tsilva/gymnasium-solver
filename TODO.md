@@ -1,7 +1,4 @@
-- inspect.py: add support for exporting table to CSV
 - inspect.py: BUG: mc_return in last step should be zero
-- inspect.py: BUG: it seems that the latest_run symlink is updated when I run inspector, this should not happen, no run should be created 
-- inspect.py: add support for using random policy?
 - inspect.py: add LLM debugging support
 - runs: along with each checkpoint we are saving a json file with the metrics at that checkpoint. We also want to save a CSV with the rollout data for that epoch; this data should contain exactly the same data as the table in inspect.py, so we can encapsualte the function that generates the csv and reuse it in both places.
 - BUG: checkpoint jsons not storing correct metrics

@@ -738,9 +738,33 @@ def build_ui(default_run_id: str = "latest-run"):
             import csv
             import tempfile
             import os
-            if not rows:
-                # No rows to export; do nothing
+
+            # Normalize possible pandas.DataFrame or None → list of lists
+            if rows is None:
                 return None, gr.update(visible=False)
+            try:
+                # Detect DataFrame by attribute presence to avoid strict import dependency
+                if hasattr(rows, "empty") and hasattr(rows, "to_numpy"):
+                    try:
+                        import pandas as pd  # type: ignore
+                        rows = rows.where(pd.notnull(rows), None).to_numpy().tolist()  # type: ignore[attr-defined]
+                    except Exception:
+                        rows = rows.to_numpy().tolist()  # type: ignore[assignment]
+            except Exception:
+                pass
+
+            # Ensure rows is a list and check emptiness safely
+            if isinstance(rows, list):
+                if len(rows) == 0:
+                    return None, gr.update(visible=False)
+            else:
+                try:
+                    rows = list(rows)  # type: ignore[arg-type]
+                except Exception:
+                    return None, gr.update(visible=False)
+                if len(rows) == 0:
+                    return None, gr.update(visible=False)
+
             safe_rid = str(rid).replace("/", "-").replace(" ", "_")
             safe_ckpt = str(ckpt_label or "ckpt").replace("/", "-").replace(" ", "_")
             file_name = f"{safe_rid}_{safe_ckpt}_steps.csv"

@@ -401,9 +401,19 @@ def build_ui(default_run_id: str = "latest-run"):
             max_steps = gr.Slider(label="Max steps", minimum=10, maximum=5000, value=1000, step=10)
             run_btn = gr.Button("Inspect")
 
-        # Display only the current frame (hide the thumbnail strip previously provided by Gallery)
+        # Display the current frame with a per-step stats table on the right
         with gr.Row():
-            frame_image = gr.Image(label="Frame", height=400, type="numpy", image_mode="RGB")
+            with gr.Column(scale=7):
+                frame_image = gr.Image(label="Frame", height=400, type="numpy", image_mode="RGB")
+            with gr.Column(scale=5):
+                current_step_table = gr.Dataframe(
+                    headers=["stat", "value"],
+                    datatype=["str", "str"],
+                    row_count=(0, "dynamic"),
+                    col_count=(2, "fixed"),
+                    label="Current step stats",
+                    interactive=False,
+                )
 
         # Horizontal navigation slider with integrated play/pause
         with gr.Row():
@@ -423,6 +433,7 @@ def build_ui(default_run_id: str = "latest-run"):
         index_state = gr.State(0)
         playing_state = gr.State(False)
         rows_state = gr.State([])  # type: ignore[var-annotated]
+        steps_state = gr.State([])  # raw step dicts for precise right-side stats
 
         # Timer for autoplay (fallback if Timer doesn't exist in older Gradio)
         timer = None
@@ -433,7 +444,7 @@ def build_ui(default_run_id: str = "latest-run"):
                 timer = TimerCls(1/30)
         except Exception:
             timer = None
-        # Table headers are reused for CSV export
+        # Table headers are reused for CSV export and for the current-step vertical view
         table_headers = [
             "done",
             "step",
@@ -452,8 +463,8 @@ def build_ui(default_run_id: str = "latest-run"):
                 datatype=[
                     "bool",   # done
                     "number", # step
-                    "number", # action
                     "str",    # probs (formatted string)
+                    "number", # action
                     "number", # reward
                     "number", # cum_reward
                     "number", # mc_return
@@ -486,6 +497,22 @@ def build_ui(default_run_id: str = "latest-run"):
 
         run_id.change(_on_run_change, inputs=run_id, outputs=checkpoint)
 
+        def _format_stat_value(v: Any) -> str:
+            try:
+                if isinstance(v, float):
+                    return f"{v:.3f}"
+                if isinstance(v, (list, tuple)):
+                    return "[" + ", ".join(_format_stat_value(x) for x in v) + "]"
+                return str(v) if v is not None else ""
+            except Exception:
+                return str(v)
+
+        def _verticalize_row(row: List[Any]) -> List[List[str]]:
+            pairs: List[List[str]] = []
+            for name, val in zip(table_headers, row):
+                pairs.append([name, _format_stat_value(val)])
+            return pairs
+
         def _inspect(rid: str, ckpt_label: str | None, det: bool, nsteps: int):
             frames, steps, info = run_episode(rid, ckpt_label, det, int(nsteps))
             rows = []
@@ -504,9 +531,24 @@ def build_ui(default_run_id: str = "latest-run"):
             # Initialize gallery selection, states, and play button label
             # Initialize the image (first frame) and slider range
             first_frame = frames[0] if frames else None
+            # Compute vertical from raw dict for highest fidelity
+            def _vertical_from_step_dict(step_dict: Dict[str, Any]) -> List[List[str]]:
+                row_vals = [
+                    bool(step_dict.get("done")),
+                    int(step_dict.get("step", 0)),
+                    step_dict.get("probs"),
+                    step_dict.get("action"),
+                    step_dict.get("reward"),
+                    step_dict.get("cum_reward"),
+                    step_dict.get("mc_return"),
+                    step_dict.get("value"),
+                    step_dict.get("gae_adv"),
+                ]
+                return _verticalize_row(row_vals)
             return (
                 gr.update(value=first_frame),  # frame_image
                 gr.update(minimum=0, maximum=(len(frames) - 1 if frames else 0), step=1, value=0),  # frame_slider
+                (_vertical_from_step_dict(steps[0]) if steps else []), # current_step_table
                 rows,                                       # step_table
                 info.get("env_spec", {}),                   # env_spec_json
                 info.get("model_spec", {}),                 # model_spec_json
@@ -516,11 +558,12 @@ def build_ui(default_run_id: str = "latest-run"):
                 False,                                      # playing_state
                 gr.update(value="▶"),                    # play_pause_btn label
                 rows,                                       # rows_state
+                steps,                                      # steps_state
             )
         run_btn.click(
             _inspect,
             inputs=[run_id, checkpoint, deterministic, max_steps],
-            outputs=[frame_image, frame_slider, step_table, env_spec_json, model_spec_json, ckpt_metrics_json, frames_state, index_state, playing_state, play_pause_btn, rows_state],
+            outputs=[frame_image, frame_slider, current_step_table, step_table, env_spec_json, model_spec_json, ckpt_metrics_json, frames_state, index_state, playing_state, play_pause_btn, rows_state, steps_state],
         )
 
         # Keep rows_state in sync if the user edits the table
@@ -529,7 +572,7 @@ def build_ui(default_run_id: str = "latest-run"):
         step_table.change(_on_table_change, inputs=[step_table], outputs=[rows_state])
 
         # When a user selects a cell in the step table, select the corresponding frame in the gallery
-        def _on_step_select(frames: List[np.ndarray], evt=None):
+        def _on_step_select(frames: List[np.ndarray], steps: List[Dict[str, Any]] | None, evt=None):
             """When a table cell is selected, select the corresponding frame in the gallery.
 
             Supports Gradio's SelectData event object or a dict payload with an
@@ -554,21 +597,38 @@ def build_ui(default_run_id: str = "latest-run"):
 
             # Update the displayed image and slider; also pause playback and sync index state
             img = frames[row_idx] if (isinstance(frames, list) and 0 <= row_idx < len(frames)) else None
+            if steps and 0 <= row_idx < len(steps):
+                s = steps[row_idx]
+                row_vals = [
+                    bool(s.get("done")),
+                    int(s.get("step", 0)),
+                    s.get("probs"),
+                    s.get("action"),
+                    s.get("reward"),
+                    s.get("cum_reward"),
+                    s.get("mc_return"),
+                    s.get("value"),
+                    s.get("gae_adv"),
+                ]
+                row_val = _verticalize_row(row_vals)
+            else:
+                row_val = []
             return (
                 gr.update(value=img),               # frame_image
                 gr.update(value=row_idx),           # frame_slider
+                gr.update(value=row_val),           # current_step_table
                 row_idx,                            # index_state
                 False,                              # playing_state
                 gr.update(value="▶"),           # play_pause_btn label
             )
-        step_table.select(_on_step_select, inputs=[frames_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
+        step_table.select(_on_step_select, inputs=[frames_state, steps_state], outputs=[frame_image, frame_slider, current_step_table, index_state, playing_state, play_pause_btn])
 
         # Play/Pause handler
         def _on_play_pause(playing: bool):
             new_playing = not bool(playing)
             return new_playing, gr.update(value=("⏸" if new_playing else "▶"))
 
-        def _on_slider_change(frames: List[np.ndarray], val: int, playing: bool):
+        def _on_slider_change(frames: List[np.ndarray], val: int, playing: bool, steps: List[Dict[str, Any]] | None):
             """Update current frame when user releases the slider.
 
             Preserve current playing state so programmatic slider updates during autoplay
@@ -576,38 +636,102 @@ def build_ui(default_run_id: str = "latest-run"):
             """
             idx = int(val) if val is not None else 0
             img = frames[idx] if (isinstance(frames, list) and 0 <= idx < len(frames)) else None
-            return gr.update(value=img), idx, playing, gr.update(value=("⏸" if playing else "▶"))
+            if steps and 0 <= idx < len(steps):
+                s = steps[idx]
+                row_vals = [
+                    bool(s.get("done")),
+                    int(s.get("step", 0)),
+                    s.get("probs"),
+                    s.get("action"),
+                    s.get("reward"),
+                    s.get("cum_reward"),
+                    s.get("mc_return"),
+                    s.get("value"),
+                    s.get("gae_adv"),
+                ]
+                row_val = _verticalize_row(row_vals)
+            else:
+                row_val = []
+            return gr.update(value=img), gr.update(value=row_val), idx, playing, gr.update(value=("⏸" if playing else "▶"))
         play_pause_btn.click(_on_play_pause, inputs=[playing_state], outputs=[playing_state, play_pause_btn])
         # While dragging, update the frame live for fast visual scanning (and pause playback)
-        def _on_slider_input(frames: List[np.ndarray], val: int | float | None):
+        def _on_slider_input(frames: List[np.ndarray], val: int | float | None, steps: List[Dict[str, Any]] | None):
             # Use the slider's current value passed as an input to avoid any evt.value staleness
             idx = int(val) if val is not None else 0
             img = frames[idx] if (isinstance(frames, list) and 0 <= idx < len(frames)) else None
             # Pause while scrubbing for smoother UX and to avoid race with autoplay
-            return gr.update(value=img), idx, False, gr.update(value="▶")
+            if steps and 0 <= idx < len(steps):
+                s = steps[idx]
+                row_vals = [
+                    bool(s.get("done")),
+                    int(s.get("step", 0)),
+                    s.get("probs"),
+                    s.get("action"),
+                    s.get("reward"),
+                    s.get("cum_reward"),
+                    s.get("mc_return"),
+                    s.get("value"),
+                    s.get("gae_adv"),
+                ]
+                row_val = _verticalize_row(row_vals)
+            else:
+                row_val = []
+            return gr.update(value=img), gr.update(value=row_val), idx, False, gr.update(value="▶")
 
         frame_slider.input(
             _on_slider_input,
-            inputs=[frames_state, frame_slider],
-            outputs=[frame_image, index_state, playing_state, play_pause_btn],
+            inputs=[frames_state, frame_slider, steps_state],
+            outputs=[frame_image, current_step_table, index_state, playing_state, play_pause_btn],
         )
 
         # Use release instead of change to avoid triggering on programmatic updates from the timer
-        frame_slider.release(_on_slider_change, inputs=[frames_state, frame_slider, playing_state], outputs=[frame_image, index_state, playing_state, play_pause_btn])
+        frame_slider.release(_on_slider_change, inputs=[frames_state, frame_slider, playing_state, steps_state], outputs=[frame_image, current_step_table, index_state, playing_state, play_pause_btn])
 
         # Autoplay tick handler (only if timer available)
-        def _on_tick(frames: List[np.ndarray], idx: int, playing: bool):
+        def _on_tick(frames: List[np.ndarray], idx: int, playing: bool, steps: List[Dict[str, Any]] | None):
             if not playing or not frames:
-                return gr.update(), gr.update(), idx, playing, gr.update()
+                return gr.update(), gr.update(), gr.update(), idx, playing, gr.update()
             if int(idx) < len(frames) - 1:
                 new_idx = int(idx) + 1
-                return gr.update(value=frames[new_idx]), gr.update(value=new_idx), new_idx, True, gr.update(value="⏸")
+                if steps and 0 <= new_idx < len(steps):
+                    s = steps[new_idx]
+                    row_vals = [
+                        bool(s.get("done")),
+                        int(s.get("step", 0)),
+                        s.get("probs"),
+                        s.get("action"),
+                        s.get("reward"),
+                        s.get("cum_reward"),
+                        s.get("mc_return"),
+                        s.get("value"),
+                        s.get("gae_adv"),
+                    ]
+                    row_val = _verticalize_row(row_vals)
+                else:
+                    row_val = []
+                return gr.update(value=frames[new_idx]), gr.update(value=new_idx), gr.update(value=row_val), new_idx, True, gr.update(value="⏸")
             # Reached end: stop
             last_idx = len(frames) - 1
-            return gr.update(value=frames[last_idx]), gr.update(value=last_idx), last_idx, False, gr.update(value="▶")
+            if steps and 0 <= last_idx < len(steps):
+                s = steps[last_idx]
+                row_vals = [
+                    bool(s.get("done")),
+                    int(s.get("step", 0)),
+                    s.get("probs"),
+                    s.get("action"),
+                    s.get("reward"),
+                    s.get("cum_reward"),
+                    s.get("mc_return"),
+                    s.get("value"),
+                    s.get("gae_adv"),
+                ]
+                row_val = _verticalize_row(row_vals)
+            else:
+                row_val = []
+            return gr.update(value=frames[last_idx]), gr.update(value=last_idx), gr.update(value=row_val), last_idx, False, gr.update(value="▶")
 
         if timer is not None:
-            timer.tick(_on_tick, inputs=[frames_state, index_state, playing_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
+            timer.tick(_on_tick, inputs=[frames_state, index_state, playing_state, steps_state], outputs=[frame_image, frame_slider, current_step_table, index_state, playing_state, play_pause_btn])
 
         # CSV export handler
         def _export_csv(rows: List[List[Any]] | None, rid: str, ckpt_label: str | None):

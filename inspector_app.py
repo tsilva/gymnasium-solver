@@ -296,7 +296,7 @@ def build_ui(default_run_id: str = "latest-run"):
 
         # Display only the current frame (hide the thumbnail strip previously provided by Gallery)
         with gr.Row():
-            frame_image = gr.Image(label="Frame", height=400)
+            frame_image = gr.Image(label="Frame", height=400, type="numpy", image_mode="RGB")
 
         # Horizontal navigation slider for quick mouse-based scrubbing
         with gr.Row():
@@ -450,6 +450,29 @@ def build_ui(default_run_id: str = "latest-run"):
         prev_btn.click(_on_prev, inputs=[frames_state, index_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
         next_btn.click(_on_next, inputs=[frames_state, index_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
         play_pause_btn.click(_on_play_pause, inputs=[playing_state], outputs=[playing_state, play_pause_btn])
+        # While dragging, update the frame live for fast visual scanning (and pause playback)
+        def _on_slider_input(frames: List[np.ndarray], evt=None):
+            # Read the live slider value from the event payload to avoid Slider preprocess on None
+            val = None
+            try:
+                if isinstance(evt, dict):
+                    val = evt.get("value")
+                else:
+                    val = getattr(evt, "value", None)
+            except Exception:
+                val = None
+
+            idx = int(val) if val is not None else 0
+            img = frames[idx] if (isinstance(frames, list) and 0 <= idx < len(frames)) else None
+            # Pause while scrubbing for smoother UX and to avoid race with autoplay
+            return gr.update(value=img), idx, False, gr.update(value="Play")
+
+        frame_slider.input(
+            _on_slider_input,
+            inputs=[frames_state],
+            outputs=[frame_image, index_state, playing_state, play_pause_btn],
+        )
+
         # Use release instead of change to avoid triggering on programmatic updates from the timer
         frame_slider.release(_on_slider_change, inputs=[frames_state, frame_slider, playing_state], outputs=[frame_image, index_state, playing_state, play_pause_btn])
 

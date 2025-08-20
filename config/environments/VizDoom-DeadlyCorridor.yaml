@@ -4,6 +4,8 @@ __VizDoom-DeadlyCorridor:
   # Pixel env; use CNN policy and frame stacking
   policy: 'cnn'
   frame_stack: 4
+  accelerator: 'gpu'
+  devices: 'auto'
   # Optional: path to scenarios if not auto-discovered; set via env var or here
   # env_kwargs:
   #   config_path: "/path/to/deadly_corridor.cfg"

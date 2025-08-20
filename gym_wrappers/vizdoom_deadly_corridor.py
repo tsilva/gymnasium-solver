@@ -177,6 +177,11 @@ class VizDoomDeadlyCorridorEnv(gym.Env):
             return self._get_screen()
         return None
 
+    # Expose Gymnasium-compatible render_mode attribute for wrappers/introspection
+    @property
+    def render_mode(self) -> Optional[str]:
+        return self._render_mode
+
     def close(self) -> None:
         try:
             self._game.close()

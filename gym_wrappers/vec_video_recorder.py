@@ -367,5 +367,11 @@ class VecVideoRecorder(VecEnvWrapper):
 
     def __del__(self) -> None:
         """Warn the user in case last video wasn't saved."""
-        if len(self.recorded_frames) > 0:  # pragma: no cover
-            logger.warn("Unable to save last video! Did you call close()?")
+        # Access via __dict__ to avoid VecEnvWrapper __getattr__ forwarding during interpreter shutdown
+        frames = self.__dict__.get("recorded_frames", [])
+        try:
+            if isinstance(frames, list) and len(frames) > 0:  # pragma: no cover
+                logger.warn("Unable to save last video! Did you call close()?")
+        except Exception:
+            # Be resilient during GC/teardown
+            pass

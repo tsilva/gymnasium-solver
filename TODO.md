@@ -4,7 +4,6 @@
 - FEAT: add vizdoom support
 - FEAT: add stable-retro support
 
-
 - inspect.py: add LLM debugging support
 - BUG: checkpoint jsons not storing correct metrics
 - BUG: CartPole-v1 PPO is not training as fast; 115f9c73faed6785a0bd58c37f55298324e90f43 was ok

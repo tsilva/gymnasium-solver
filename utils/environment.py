@@ -118,6 +118,12 @@ def build_env(
     vec_env_kwargs = {"start_method": "spawn"} if vec_env_cls == SubprocVecEnv else {}
     env = make_vec_env(env_fn, n_envs=n_envs, seed=seed, vec_env_cls=vec_env_cls, vec_env_kwargs=vec_env_kwargs)
 
+    # Ensure the vectorized env exposes render_mode for downstream wrappers (e.g., video recorder)
+    try:
+        setattr(env, "render_mode", render_mode)
+    except Exception:
+        pass
+
     # Enable observation normalization if requested
     if norm_obs == "static": env = VecNormalizeStatic(env)
     elif norm_obs is True: env = VecNormalize(env, norm_obs=norm_obs)

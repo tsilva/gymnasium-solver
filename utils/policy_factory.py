@@ -59,7 +59,7 @@ def create_actor_critic_policy(
     if isinstance(policy_type, type) and issubclass(policy_type, nn.Module):
         return policy_type(input_dim, action_dim, hidden_dims=hidden, activation=activation, **policy_kwargs)
 
-    if isinstance(policy_type, str) and policy_type.lower() == "cnnpolicy":
+    if isinstance(policy_type, str) and policy_type.lower() in {"cnn", "cnnpolicy", "cnn_actor_critic", "cnnac"}:
         hwc = _infer_hwc_from_space(obs_space, input_dim)
         return CNNActorCritic(
             obs_shape=hwc,

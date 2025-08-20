@@ -266,18 +266,7 @@ class HyperparamSyncCallback(BaseCallback):
     def on_fit_end(self, trainer: TrainerType, pl_module: LightningModuleType) -> None:
         """Clean up monitoring when training ends."""
         self.stop_monitoring_thread()
-        
-        # TODO: this is innacurate
-        if self.verbose:
-            print(f"\n📊 Final hyperparameters:")
-            print(f"   Learning rate: {pl_module.config.policy_lr:.2e}")
-            print(f"   Entropy coef: {pl_module.config.ent_coef:.3f}")
-            print(f"   Max grad norm: {pl_module.config.max_grad_norm:.3f}")
-            if hasattr(pl_module.config, 'clip_range'):
-                print(f"   Clip range: {pl_module.config.clip_range:.3f}")
-            if hasattr(pl_module.config, 'vf_coef'):
-                print(f"   Value function coef: {pl_module.config.vf_coef:.3f}")
-    
+
     def reset_to_original(self, trainer: TrainerType, pl_module: LightningModuleType) -> None:
         """Reset all hyperparameters to their original values."""
         if self.verbose:

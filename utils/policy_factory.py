@@ -14,7 +14,7 @@ import torch.nn as nn
 from .models import (
     ActorCritic,
     CNNActorCritic,
-    PolicyOnly,
+    MLPPolicy,
     CNNPolicyOnly,
 )
 
@@ -57,7 +57,7 @@ def create_actor_critic_policy(
     """
     # Accept direct module classes for extensibility
     if isinstance(policy_type, type) and issubclass(policy_type, nn.Module):
-        return policy_type(input_dim, action_dim, hidden=hidden, activation=activation, **policy_kwargs)
+        return policy_type(input_dim, action_dim, hidden_dims=hidden, activation=activation, **policy_kwargs)
 
     if isinstance(policy_type, str) and policy_type.lower() == "cnnpolicy":
         hwc = _infer_hwc_from_space(obs_space, input_dim)
@@ -69,7 +69,7 @@ def create_actor_critic_policy(
             **policy_kwargs,
         )
     # Default: MLP-based actor-critic
-    return ActorCritic(input_dim, action_dim, hidden=hidden, activation=activation,)
+    return ActorCritic(input_dim, action_dim, hidden_dims=hidden, activation=activation,)
 
 
 def create_policy_only(
@@ -77,7 +77,7 @@ def create_policy_only(
     *,
     input_dim: int,
     action_dim: int,
-    hidden: Iterable[int] | int,
+    hidden_dims: Iterable[int] | int,
     activation: "str | type[nn.Module] | nn.Module" = "tanh",
     obs_space=None,
     **policy_kwargs,
@@ -87,15 +87,20 @@ def create_policy_only(
     Used by REINFORCE and other algorithms without a learned baseline.
     """
     if isinstance(policy_type, type) and issubclass(policy_type, nn.Module):
-        return policy_type(input_dim, action_dim, hidden=hidden, activation=activation, **policy_kwargs)
+        return policy_type(input_dim, action_dim, hidden_dims=hidden_dims, activation=activation, **policy_kwargs)
 
     if isinstance(policy_type, str) and policy_type.lower() == "cnnpolicy":
         hwc = _infer_hwc_from_space(obs_space, input_dim)
         return CNNPolicyOnly(
             obs_shape=hwc,
             action_dim=action_dim,
-            hidden=hidden,
+            hidden_dims=hidden_dims,
             activation=activation,
             **policy_kwargs,
         )
-    return PolicyOnly(input_dim, action_dim, hidden=hidden, activation=activation)
+    return MLPPolicy(
+        input_dim, 
+        action_dim, 
+        hidden_dims=hidden_dims, 
+        activation=activation
+    )

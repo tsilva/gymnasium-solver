@@ -8,10 +8,12 @@ returns flattened observations.
 """
 
 import math
+from typing import Iterable
 
 import torch
-import torch.nn as nn
 from torch.distributions import Categorical
+import torch.nn as nn
+from .torch import init_model_weights
 
 
 def resolve_activation(act: "str | type[nn.Module] | nn.Module" = nn.Tanh) -> type[nn.Module]:
@@ -42,6 +44,9 @@ def resolve_activation(act: "str | type[nn.Module] | nn.Module" = nn.Tanh) -> ty
 
 
 def mlp(in_dim, hidden, act: "str | type[nn.Module] | nn.Module" = nn.Tanh):
+    # Allow an int or an iterable of ints
+    if isinstance(hidden, int):
+        hidden = (hidden,)
     act_cls = resolve_activation(act)
     layers, last = [], in_dim
     for h in hidden:
@@ -88,22 +93,25 @@ class NatureCNN(nn.Module):
             x = torch.flatten(x, 1)
         return x
 
-class PolicyOnly(nn.Module):
-    def __init__(self, state_dim: int, action_dim: int, hidden=(64, 64), activation: "str | type[nn.Module] | nn.Module" = nn.Tanh):
+class MLPPolicy(nn.Module):
+    def __init__(
+        self, 
+        input_dim: int, 
+        output_dim: int, 
+        hidden_dims: Iterable[int] | int = (64, 64), activation: "str | type[nn.Module] | nn.Module" = nn.Tanh
+    ):
         super().__init__()
-        self.backbone = mlp(state_dim, hidden, activation)
-        self.policy_head = nn.Linear(hidden[-1], action_dim)
-        self._init_weights()
 
-    def _init_weights(self):
-        # Orthogonal init for backbone
-        for m in self.backbone.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.orthogonal_(m.weight, gain=math.sqrt(2))
-                nn.init.constant_(m.bias, 0.0)
-        # Small init for policy head
-        nn.init.orthogonal_(self.policy_head.weight, gain=0.01)
-        nn.init.constant_(self.policy_head.bias, 0.0)
+        # Normalize hidden dims and create MLP backbone
+        if isinstance(hidden_dims, int):
+            hidden_dims = (hidden_dims,)
+        self.backbone = mlp(input_dim, hidden_dims, activation)
+
+        # Create the policy head
+        self.policy_head = nn.Linear(hidden_dims[-1], output_dim)
+
+        # Reusable initialization
+        init_model_weights(self, default_activation=activation, policy_heads=[self.policy_head])
 
     def forward(self, obs: torch.Tensor):
         x = self.backbone(obs)
@@ -126,30 +134,39 @@ class PolicyOnly(nn.Module):
         return torch.zeros(obs.shape[0], device=obs.device)
 
 class ActorCritic(nn.Module):
-    def __init__(self, state_dim: int, action_dim: int, hidden=(64, 64), activation: "str | type[nn.Module] | nn.Module" = nn.Tanh):
+    def __init__(self, input_dim: int, output_dim: int, hidden_dims: Iterable[int] | int = (64, 64), activation: "str | type[nn.Module] | nn.Module" = nn.Tanh):
         super().__init__()
-        self.backbone = mlp(state_dim, hidden, activation)
-        self.policy_head = nn.Linear(hidden[-1], action_dim)
-        self.value_head  = nn.Linear(hidden[-1], 1)
-        self._init_weights()
 
-    def _init_weights(self):
-        # Orthogonal init for backbone
-        for m in self.backbone.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.orthogonal_(m.weight, gain=math.sqrt(2))
-                nn.init.constant_(m.bias, 0.0)
-        # Small init for policy head helps PPO stability
-        nn.init.orthogonal_(self.policy_head.weight, gain=0.01)
-        nn.init.constant_(self.policy_head.bias, 0.0)
-        # Value head with unit gain
-        nn.init.orthogonal_(self.value_head.weight, gain=1.0)
-        nn.init.constant_(self.value_head.bias, 0.0)
+        # Normalize hidden dims and create MLP backbone
+        if isinstance(hidden_dims, int):
+            hidden_dims = (hidden_dims,)
+        self.backbone = mlp(input_dim, hidden_dims, activation)
+
+        # Create the policy head
+        self.policy_head = nn.Linear(hidden_dims[-1], output_dim)
+
+        # Create the value head
+        self.value_head = nn.Linear(hidden_dims[-1], 1)
+
+        # Reusable initialization
+        init_model_weights(
+            self,
+            default_activation=activation,
+            policy_heads=[self.policy_head],
+            value_heads=[self.value_head],
+        )
 
     def forward(self, obs: torch.Tensor):
+        # Forward observation through backbone
         x = self.backbone(obs)
+
+        # Forward through policy head and get policy logits
         logits = self.policy_head(x)
+
+        # Create categorical distribution from logits
         dist = Categorical(logits=logits)
+
+        # Forward through value head and get value
         value = self.value_head(x).squeeze(-1)
         return dist, value
 
@@ -237,18 +254,12 @@ class CNNActorCritic(nn.Module):
         self.policy_head = nn.Linear(last_dim, action_dim)
         self.value_head = nn.Linear(last_dim, 1)
 
-        self._init_weights()
-
-    def _init_weights(self):
-        # Orthogonal init for linear layers; convs keep defaults
-        for m in self.backbone.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.orthogonal_(m.weight, gain=math.sqrt(2))
-                nn.init.constant_(m.bias, 0.0)
-        nn.init.orthogonal_(self.policy_head.weight, gain=0.01)
-        nn.init.constant_(self.policy_head.bias, 0.0)
-        nn.init.orthogonal_(self.value_head.weight, gain=1.0)
-        nn.init.constant_(self.value_head.bias, 0.0)
+        init_model_weights(
+            self,
+            default_activation=activation,
+            policy_heads=[self.policy_head],
+            value_heads=[self.value_head],
+        )
 
     def _forward_features(self, obs_flat: torch.Tensor):
         x = self.reshape(obs_flat)
@@ -285,7 +296,7 @@ class CNNPolicyOnly(nn.Module):
         self,
         obs_shape,
         action_dim: int,
-        hidden=(256,),
+        hidden_dims=(256,),
         activation: "str | type[nn.Module] | nn.Module" = nn.ReLU,
         in_channels: int | None = None,
         channels=(32, 64, 64),
@@ -301,17 +312,11 @@ class CNNPolicyOnly(nn.Module):
         with torch.no_grad():
             feat = self.cnn(self.reshape(torch.zeros(1, H, W, C)))
             feat_dim = feat.shape[1]
-        self.backbone = mlp(feat_dim, hidden, act=activation) if hidden and len(hidden) > 0 else nn.Identity()
-        last_dim = hidden[-1] if hidden and len(hidden) > 0 else feat_dim
+        self.backbone = mlp(feat_dim, hidden_dims, act=activation) if hidden_dims and len(hidden_dims) > 0 else nn.Identity()
+        last_dim = hidden_dims[-1] if hidden_dims and len(hidden_dims) > 0 else feat_dim
         self.policy_head = nn.Linear(last_dim, action_dim)
 
-        # Init
-        for m in self.backbone.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.orthogonal_(m.weight, gain=math.sqrt(2))
-                nn.init.constant_(m.bias, 0.0)
-        nn.init.orthogonal_(self.policy_head.weight, gain=0.01)
-        nn.init.constant_(self.policy_head.bias, 0.0)
+        init_model_weights(self, default_activation=activation, policy_heads=[self.policy_head])
 
     def _forward_features(self, obs_flat: torch.Tensor):
         x = self.reshape(obs_flat)

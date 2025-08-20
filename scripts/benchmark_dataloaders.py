@@ -77,7 +77,7 @@ def make_rollout_dataset(cfg: BenchmarkConfig):
     # Build policy model compatible with env
     input_dim = env.get_input_dim()
     output_dim = env.get_output_dim()
-    policy = ActorCritic(input_dim, output_dim, hidden=exp_cfg.hidden_dims).to(torch.device("cpu"))
+    policy = ActorCritic(input_dim, output_dim, hidden_dims=exp_cfg.hidden_dims).to(torch.device("cpu"))
 
     # Build collector and collect one rollout
     from utils.rollouts import RolloutCollector

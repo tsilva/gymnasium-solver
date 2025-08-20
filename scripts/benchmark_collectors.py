@@ -99,7 +99,7 @@ def _build_policy_model(env, hidden_dims) -> ActorCritic:
     if input_dim is None or output_dim is None:
         raise RuntimeError("Could not infer model input/output dims from environment")
     hd = hidden_dims if isinstance(hidden_dims, (list, tuple)) else (hidden_dims,)
-    return ActorCritic(input_dim, output_dim, hidden=hd)
+    return ActorCritic(input_dim, output_dim, hidden_dims=hd)
 
 
 def _run_benchmark_loop(

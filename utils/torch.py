@@ -9,6 +9,7 @@ import itertools
 from contextlib import contextmanager
 
 import torch
+import torch.nn as nn
 
 
 @contextmanager
@@ -49,3 +50,119 @@ def _device_of(module: torch.nn.Module) -> torch.device:
     if not hasattr(module, "parameters"):
         return torch.device("cpu")
     return next(module.parameters()).device
+
+
+def _gain_for_activation_module(act: nn.Module) -> float | None:
+    """Best-effort gain selection based on an activation module instance.
+
+    Falls back to None if activation is unknown, allowing callers to choose a default.
+    """
+    if isinstance(act, nn.ReLU):
+        return nn.init.calculate_gain("relu")
+    if isinstance(act, nn.LeakyReLU):
+        return nn.init.calculate_gain("leaky_relu", act.negative_slope)
+    if isinstance(act, nn.Tanh):
+        return nn.init.calculate_gain("tanh")
+    if isinstance(act, nn.ELU):
+        # ELU is not directly supported; ReLU gain is a reasonable proxy
+        return nn.init.calculate_gain("relu")
+    if isinstance(act, (nn.GELU, nn.SiLU)):
+        # Common smooth ReLU-like activations
+        return nn.init.calculate_gain("relu")
+    if isinstance(act, (nn.SELU, nn.Identity)):
+        return 1.0
+    return None
+
+
+def _activation_instance_from_spec(spec: "str | type[nn.Module] | nn.Module") -> nn.Module:
+    if isinstance(spec, nn.Module):
+        return spec
+    if isinstance(spec, type) and issubclass(spec, nn.Module):
+        return spec()
+    if isinstance(spec, str):
+        key = spec.lower()
+        mapping = {
+            "tanh": nn.Tanh,
+            "relu": nn.ReLU,
+            "leaky_relu": nn.LeakyReLU,
+            "elu": nn.ELU,
+            "selu": nn.SELU,
+            "gelu": nn.GELU,
+            "silu": nn.SiLU,
+            "swish": nn.SiLU,
+            "identity": nn.Identity,
+        }
+        return mapping.get(key, nn.ReLU)()
+    return nn.ReLU()
+
+
+def init_model_weights(
+    model: nn.Module,
+    *,
+    default_activation: "str | type[nn.Module] | nn.Module" = nn.ReLU,
+    policy_heads: "list[nn.Module] | tuple[nn.Module, ...] | None" = None,
+    value_heads: "list[nn.Module] | tuple[nn.Module, ...] | None" = None,
+) -> None:
+    """Initialize weights of a model with sensible RL defaults.
+
+    Rules:
+    - Hidden Linear/Conv layers: orthogonal init with gain inferred from the
+      immediately following activation (if found in a Sequential), otherwise
+      based on ``default_activation``.
+    - Policy heads (e.g., action logits): orthogonal with small gain 0.01.
+    - Value heads: orthogonal with gain 1.0.
+    - All biases are zero-initialized.
+
+    Parameters
+    - model: the root module to initialize
+    - default_activation: used when the post-activation cannot be inferred
+    - policy_heads: sequence of head modules treated as policy outputs
+    - value_heads: sequence of head modules treated as value outputs
+    """
+
+    policy_heads = tuple(policy_heads or ())
+    value_heads = tuple(value_heads or ())
+
+    # Pre-compute gains for layers that are directly followed by an activation
+    # inside Sequentials (Conv/Linear then Activation pattern).
+    gains_by_module: dict[nn.Module, float] = {}
+    for module in model.modules():
+        if isinstance(module, nn.Sequential):
+            children = list(module.children())
+            for i, child in enumerate(children):
+                if isinstance(child, (nn.Linear, nn.Conv2d)):
+                    next_mod = children[i + 1] if i + 1 < len(children) else None
+                    if next_mod is not None:
+                        gain = _gain_for_activation_module(next_mod)
+                        if gain is not None:
+                            gains_by_module[child] = gain
+
+    default_act_inst = _activation_instance_from_spec(default_activation)
+    default_gain = _gain_for_activation_module(default_act_inst) or 1.0
+
+    def _init_linear_or_conv(layer: nn.Module, gain: float) -> None:
+        if isinstance(layer, nn.Linear):
+            nn.init.orthogonal_(layer.weight, gain=gain)
+            if layer.bias is not None:
+                nn.init.constant_(layer.bias, 0.0)
+        elif isinstance(layer, nn.Conv2d):
+            nn.init.orthogonal_(layer.weight, gain=gain)
+            if layer.bias is not None:
+                nn.init.constant_(layer.bias, 0.0)
+
+    # First, initialize all layers with inferred/default gains
+    for m in model.modules():
+        if isinstance(m, (nn.Linear, nn.Conv2d)):
+            if m in policy_heads or m in value_heads:
+                # Defer heads to the next step
+                continue
+            gain = gains_by_module.get(m, default_gain)
+            _init_linear_or_conv(m, gain)
+
+    # Then, override heads with dedicated gains
+    for head in policy_heads:
+        if isinstance(head, (nn.Linear, nn.Conv2d)):
+            _init_linear_or_conv(head, 0.01)
+    for head in value_heads:
+        if isinstance(head, (nn.Linear, nn.Conv2d)):
+            _init_linear_or_conv(head, 1.0)

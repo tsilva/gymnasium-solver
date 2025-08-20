@@ -548,10 +548,10 @@ class BaseAgent(pl.LightningModule):
         )
         callbacks.append(checkpoint_cb)
 
-        # Video logger writes to run-specific media directory
-        video_dir = self.run_manager.ensure_path("videos/")
+        # Video logger watches a run-specific media directory lazily (do not create it up-front)
+        video_dir = self.run_manager.get_run_dir() / "videos"
         video_logger_cb = VideoLoggerCallback(
-            media_root=video_dir,
+            media_root=str(video_dir),
             namespace_depth=1,
         )
         callbacks.append(video_logger_cb)

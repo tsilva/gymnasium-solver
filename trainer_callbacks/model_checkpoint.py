@@ -147,7 +147,7 @@ class ModelCheckpointCallback(BaseCallback):
             current_eval_reward: optional explicit eval reward value to store
             threshold_value: optional threshold used when saving
         """
-        from dataclasses import asdict
+        from dataclasses import asdict, is_dataclass
         
         # Helper to serialize metric values to plain Python types
         def _to_py(val):
@@ -180,10 +180,23 @@ class ModelCheckpointCallback(BaseCallback):
                     return None
 
         # Prepare checkpoint data
+        # Serialize config robustly (works with dataclass and simple objects)
+        try:
+            if is_dataclass(agent.config):
+                cfg_dict = asdict(agent.config)
+            elif isinstance(agent.config, dict):
+                cfg_dict = {str(k): _to_py(v) for k, v in dict(agent.config).items()}
+            else:
+                try:
+                    cfg_dict = {str(k): _to_py(v) for k, v in vars(agent.config).items()}
+                except Exception:
+                    cfg_dict = {"repr": str(agent.config)}
+        except Exception:
+            cfg_dict = None
         checkpoint_data = {
             'model_state_dict': agent.policy_model.state_dict(),
             'optimizer_state_dict': agent.optimizers().state_dict() if hasattr(agent.optimizers(), 'state_dict') else None,
-            'config_dict': asdict(agent.config),
+            'config_dict': cfg_dict,
             'epoch': agent.current_epoch,
             'global_step': agent.global_step,
             'total_timesteps': getattr(agent, 'total_timesteps', 0),

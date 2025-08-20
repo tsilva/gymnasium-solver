@@ -298,22 +298,19 @@ def build_ui(default_run_id: str = "latest-run"):
         with gr.Row():
             frame_image = gr.Image(label="Frame", height=400, type="numpy", image_mode="RGB")
 
-        # Horizontal navigation slider for quick mouse-based scrubbing
+        # Horizontal navigation slider with integrated play/pause
         with gr.Row():
-            frame_slider = gr.Slider(
-                label="Frame",
-                minimum=0,
-                maximum=0,
-                step=1,
-                value=0,
-                interactive=True,
-            )
-
-        # Playback controls + state
-        with gr.Row():
-            prev_btn = gr.Button("Previous", variant="secondary")
-            play_pause_btn = gr.Button(value="Play", variant="primary")
-            next_btn = gr.Button("Next", variant="secondary")
+            with gr.Column(scale=9):
+                frame_slider = gr.Slider(
+                    label="Frame",
+                    minimum=0,
+                    maximum=0,
+                    step=1,
+                    value=0,
+                    interactive=True,
+                )
+            with gr.Column(scale=1, min_width=60):
+                play_pause_btn = gr.Button(value="▶", variant="secondary")
 
         frames_state = gr.State([])  # type: ignore[var-annotated]
         index_state = gr.State(0)
@@ -395,7 +392,7 @@ def build_ui(default_run_id: str = "latest-run"):
                 frames,                                     # frames_state
                 0,                                          # index_state
                 False,                                      # playing_state
-                gr.update(value="Play"),                    # play_pause_btn label
+                gr.update(value="▶"),                    # play_pause_btn label
             )
         run_btn.click(
             _inspect,
@@ -434,28 +431,14 @@ def build_ui(default_run_id: str = "latest-run"):
                 gr.update(value=row_idx),           # frame_slider
                 row_idx,                            # index_state
                 False,                              # playing_state
-                gr.update(value="Play"),           # play_pause_btn label
+                gr.update(value="▶"),           # play_pause_btn label
             )
         step_table.select(_on_step_select, inputs=[frames_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
 
-        # Navigation handlers
-        def _on_prev(frames: List[np.ndarray], idx: int):
-            if not frames:
-                return gr.update(), gr.update(), idx, False, gr.update(value="Play")
-            new_idx = max(0, int(idx) - 1)
-            img = frames[new_idx] if 0 <= new_idx < len(frames) else None
-            return gr.update(value=img), gr.update(value=new_idx), new_idx, False, gr.update(value="Play")
-
-        def _on_next(frames: List[np.ndarray], idx: int):
-            if not frames:
-                return gr.update(), gr.update(), idx, False, gr.update(value="Play")
-            new_idx = min(len(frames) - 1, int(idx) + 1)
-            img = frames[new_idx] if 0 <= new_idx < len(frames) else None
-            return gr.update(value=img), gr.update(value=new_idx), new_idx, False, gr.update(value="Play")
-
+        # Play/Pause handler
         def _on_play_pause(playing: bool):
             new_playing = not bool(playing)
-            return new_playing, gr.update(value=("Pause" if new_playing else "Play"))
+            return new_playing, gr.update(value=("⏸" if new_playing else "▶"))
 
         def _on_slider_change(frames: List[np.ndarray], val: int, playing: bool):
             """Update current frame when user releases the slider.
@@ -465,10 +448,7 @@ def build_ui(default_run_id: str = "latest-run"):
             """
             idx = int(val) if val is not None else 0
             img = frames[idx] if (isinstance(frames, list) and 0 <= idx < len(frames)) else None
-            return gr.update(value=img), idx, playing, gr.update(value=("Pause" if playing else "Play"))
-
-        prev_btn.click(_on_prev, inputs=[frames_state, index_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
-        next_btn.click(_on_next, inputs=[frames_state, index_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
+            return gr.update(value=img), idx, playing, gr.update(value=("⏸" if playing else "▶"))
         play_pause_btn.click(_on_play_pause, inputs=[playing_state], outputs=[playing_state, play_pause_btn])
         # While dragging, update the frame live for fast visual scanning (and pause playback)
         def _on_slider_input(frames: List[np.ndarray], val: int | float | None):
@@ -476,7 +456,7 @@ def build_ui(default_run_id: str = "latest-run"):
             idx = int(val) if val is not None else 0
             img = frames[idx] if (isinstance(frames, list) and 0 <= idx < len(frames)) else None
             # Pause while scrubbing for smoother UX and to avoid race with autoplay
-            return gr.update(value=img), idx, False, gr.update(value="Play")
+            return gr.update(value=img), idx, False, gr.update(value="▶")
 
         frame_slider.input(
             _on_slider_input,
@@ -493,10 +473,10 @@ def build_ui(default_run_id: str = "latest-run"):
                 return gr.update(), gr.update(), idx, playing, gr.update()
             if int(idx) < len(frames) - 1:
                 new_idx = int(idx) + 1
-                return gr.update(value=frames[new_idx]), gr.update(value=new_idx), new_idx, True, gr.update(value="Pause")
+                return gr.update(value=frames[new_idx]), gr.update(value=new_idx), new_idx, True, gr.update(value="⏸")
             # Reached end: stop
             last_idx = len(frames) - 1
-            return gr.update(value=frames[last_idx]), gr.update(value=last_idx), last_idx, False, gr.update(value="Play")
+            return gr.update(value=frames[last_idx]), gr.update(value=last_idx), last_idx, False, gr.update(value="▶")
 
         if timer is not None:
             timer.tick(_on_tick, inputs=[frames_state, index_state, playing_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])

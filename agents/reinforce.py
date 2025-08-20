@@ -13,6 +13,7 @@ class REINFORCE(BaseAgent):
         policy_kwargs = getattr(self.config, 'policy_kwargs', None) or {}
         activation = getattr(self.config, 'activation', 'tanh')
 
+        # TODO: what is observation space being used for
         self.policy_model = create_policy_only(
             self.config.policy_type,
             input_dim=input_dim,
@@ -26,7 +27,7 @@ class REINFORCE(BaseAgent):
     def rollout_collector_hyperparams(self):
         # Override to disable GAE for REINFORCE - use pure Monte Carlo returns
         base_params = self.config.rollout_collector_hyperparams()
-        base_params['use_gae'] = False
+        base_params['use_gae'] = False # TODO: what is this for?
         return base_params
     
     def losses_for_batch(self, batch, batch_idx):

@@ -3,6 +3,10 @@
 __Acrobot-v1:
   project_id: "Acrobot-v1"
   env_id: Acrobot-v1
+  eval_freq_epochs: 100        # evaluate every 5 training epochs
+  eval_episodes: 10           # run 10 episodes per evaluation
+  eval_deterministic: true    # use greedy actions during evaluation
+
 Acrobot-v1_ppo:
   inherits: __Acrobot-v1
   algo_id: ppo

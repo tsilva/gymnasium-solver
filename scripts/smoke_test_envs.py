@@ -118,8 +118,10 @@ def run_random_steps_for_config(config_id: str, n_timesteps: int, n_envs: int) -
                 if action_space is None:
                     raise RuntimeError("Environment missing action_space")
 
+                # VecEnv.step expects a batch of actions with length == num_envs,
+                # even when num_envs == 1. Always provide a per-env list.
                 if num_envs <= 1:
-                    action = action_space.sample()
+                    action = [action_space.sample()]
                 else:
                     action = [action_space.sample() for _ in range(num_envs)]
 

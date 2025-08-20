@@ -1,6 +1,9 @@
 - TODO: create script that runs all configurations for N timesteps (few) to just smoke test that all environment configuraitons are working=
 - runs: along with each checkpoint we are saving a json file with the metrics at that checkpoint. We also want to save a CSV with the rollout data for that epoch; this data should contain exactly the same data as the table in inspect.py, so we can encapsualte the function that generates the csv and reuse it in both places.
 
+- FEAT: add vizdoom support
+- FEAT: add stable-retro support
+
 
 - inspect.py: add LLM debugging support
 - BUG: checkpoint jsons not storing correct metrics
@@ -30,9 +33,6 @@
 - Pong-RAM: Add support for byte-selection
 MaxAndSkipEnv
 - BUG: video step is still not alligned
-- BUG: step 100 = reward 99
-- FEAT: add vizdoom support
-- FEAT: add stable-retro support
 - Adjust eval policy for atari
 	•	Normalize each byte (e.g., to [0,1]) and consider embedding bits (treat bytes as 8 bits).
 	•	Try longer training and more seeds; RAM setups often need more steps to stabilize.

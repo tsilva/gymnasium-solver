@@ -19,18 +19,22 @@ class PPO(BaseAgent):
         activation = policy_kwargs.pop('activation', getattr(self.config, 'activation', 'tanh'))
         # Determine policy type and input/output dims even if BaseAgent.__init__ wasn't called
         policy_type = getattr(self.config, 'policy', 'mlp')
-        input_dim = getattr(self, 'input_dim', None)
-        output_dim = getattr(self, 'output_dim', None)
-        if input_dim is None or output_dim is None:
-            # Try to infer from train_env (used by tests)
-            env_like = getattr(self, 'train_env', getattr(self, '_spec_env', None))
-            if env_like is not None:
-                if input_dim is None and hasattr(env_like, 'get_input_dim'):
-                    input_dim = env_like.get_input_dim()
-                if output_dim is None and hasattr(env_like, 'get_output_dim'):
-                    output_dim = env_like.get_output_dim()
-        if input_dim is None or output_dim is None:
-            raise AttributeError('PPO requires input_dim and output_dim; could not infer from environment')
+        # Prefer train_env introspection when available (used by unit tests)
+        env = getattr(self, 'train_env', None)
+        if env is not None:
+            try:
+                input_dim = env.get_input_dim()  # type: ignore[attr-defined]
+            except Exception:
+                input_dim = getattr(self, 'input_dim', None)
+            try:
+                output_dim = env.get_output_dim()  # type: ignore[attr-defined]
+            except Exception:
+                output_dim = getattr(self, 'output_dim', None)
+            obs_space = getattr(env, 'observation_space', None)
+        else:
+            input_dim = getattr(self, 'input_dim', None)
+            output_dim = getattr(self, 'output_dim', None)
+            obs_space = getattr(self, 'observation_space', None)
         model = create_actor_critic_policy(
             policy_type,
             input_dim=int(input_dim),
@@ -38,7 +42,7 @@ class PPO(BaseAgent):
             hidden=self.config.hidden_dims,
             activation=activation,
             # TODO: redundancy with input_dim/output_dim?
-            obs_space=getattr(self, 'observation_space', None),
+            obs_space=obs_space,
             **policy_kwargs,
         )
 

@@ -35,20 +35,6 @@ class BaseAgent(pl.LightningModule):
 
         self.run_manager = None
 
-        # TODO: review this
-        from utils.environment import build_env
-        self._spec_env = build_env(config.env_id)
-        # Some test stubs only expose get_input_dim/get_output_dim; tolerate missing spaces
-        self.observation_space = getattr(self._spec_env, "observation_space", None)
-        self.action_space = getattr(self._spec_env, "action_space", None)
-        self.input_dim = self._spec_env.get_input_dim()
-        self.output_dim = self._spec_env.get_output_dim()
-
-        # Create models now that environments are available. Subclasses use
-        # env shapes to build policy/value networks. Must be called before
-        # collectors which require self.policy_model.
-        self.create_models()
-
         # Create the training environment
         common_env_kwargs = dict(
             seed=config.seed,
@@ -60,6 +46,7 @@ class BaseAgent(pl.LightningModule):
             env_wrappers=config.env_wrappers,
             env_kwargs=config.env_kwargs,
         )
+        from utils.environment import build_env
         self.train_env = build_env(
             config.env_id,
             **{
@@ -67,6 +54,11 @@ class BaseAgent(pl.LightningModule):
                 "seed": config.seed
             },
         )
+
+        # Create models now that the environment is available. Subclasses use
+        # env shapes to build policy/value networks. Must be called before
+        # collectors which require self.policy_model.
+        self.create_models()
 
         # Create the rollout collector for the training environment
         from utils.rollouts import RolloutCollector
@@ -566,7 +558,10 @@ class BaseAgent(pl.LightningModule):
         ) if self.config.n_timesteps else None
         if earlystop_timesteps_cb: callbacks.append(earlystop_timesteps_cb)
 
-        reward_threshold = self.train_env.get_reward_threshold()
+        try:
+            reward_threshold = self.train_env.get_reward_threshold()
+        except Exception:
+            reward_threshold = None
         earlystop_train_reward_cb = (
             EarlyStoppingCallback(
                 "train/ep_rew_mean",
@@ -581,7 +576,10 @@ class BaseAgent(pl.LightningModule):
             callbacks.append(earlystop_train_reward_cb)
 
         # Early stop when mean validation reward reaches a threshold
-        reward_threshold = self.validation_env.get_reward_threshold()
+        try:
+            reward_threshold = self.validation_env.get_reward_threshold()
+        except Exception:
+            reward_threshold = None
         earlystop_eval_reward_cb = (
             EarlyStoppingCallback(
                 "eval/ep_rew_mean",

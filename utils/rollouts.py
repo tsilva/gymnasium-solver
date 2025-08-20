@@ -81,6 +81,99 @@ def compute_gae_advantages_and_returns(
     return advantages, returns
 
 
+def compute_batched_mc_returns(
+    rewards: np.ndarray,
+    dones: np.ndarray,
+    timeouts: Optional[np.ndarray],
+    gamma: float,
+) -> np.ndarray:
+    """Compute discounted Monte Carlo-style returns for batched trajectories.
+
+    Shapes
+    - rewards: (T, N)
+    - dones: (T, N) [bool]
+    - timeouts: (T, N) [bool] or None
+
+    Behavior matches the collector logic:
+    - Resets the return accumulator only on real terminals (done and not timeout)
+    - Timeouts are treated as non-terminals (no bootstrap is added here)
+    """
+    rewards = np.asarray(rewards, dtype=np.float32)
+    dones = np.asarray(dones, dtype=bool)
+    if timeouts is None:
+        timeouts = np.zeros_like(dones, dtype=bool)
+    else:
+        timeouts = np.asarray(timeouts, dtype=bool)
+
+    T, n_envs = rewards.shape
+    returns_buf = np.zeros_like(rewards, dtype=np.float32)
+    returns_acc = np.zeros(n_envs, dtype=np.float32)
+
+    real_terminal = np.logical_and(dones, ~timeouts)
+    non_terminal = (~real_terminal).astype(np.float32)
+
+    for t in range(T - 1, -1, -1):
+        returns_acc = rewards[t] + gamma * returns_acc * non_terminal[t]
+        returns_buf[t] = returns_acc
+    return returns_buf
+
+
+def compute_batched_gae_advantages_and_returns(
+    values: np.ndarray,
+    rewards: np.ndarray,
+    dones: np.ndarray,
+    timeouts: Optional[np.ndarray],
+    last_values: np.ndarray,
+    bootstrapped_next_values: Optional[np.ndarray],
+    gamma: float,
+    gae_lambda: float,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Compute batched GAE(λ) advantages and returns for (T, N) rollouts.
+
+    - values, rewards, dones, timeouts have shape (T, N)
+    - last_values has shape (N,) and bootstraps the final step per env
+    - bootstrapped_next_values, if provided, has shape (T, N) and is used
+      as the next value at steps that were truncated by a time limit
+      (i.e., where timeouts[t, env] is True).
+    - Returns are computed as advantages + values (PPO target convention).
+    """
+    values = np.asarray(values, dtype=np.float32)
+    rewards = np.asarray(rewards, dtype=np.float32)
+    dones = np.asarray(dones, dtype=bool)
+    if timeouts is None:
+        timeouts = np.zeros_like(dones, dtype=bool)
+    else:
+        timeouts = np.asarray(timeouts, dtype=bool)
+    last_values = np.asarray(last_values, dtype=np.float32)
+
+    T, n_envs = rewards.shape
+
+    # next_values: shift values by one step in time dimension; last row uses last_values
+    next_values = np.zeros_like(values, dtype=np.float32)
+    if T > 1:
+        next_values[:-1] = values[1:]
+    next_values[-1] = last_values
+
+    # If bootstrapped_next_values provided, override next_values at timeout steps
+    if bootstrapped_next_values is not None:
+        bootstrapped_next_values = np.asarray(bootstrapped_next_values, dtype=np.float32)
+        next_values = np.where(timeouts, bootstrapped_next_values, next_values)
+
+    # Real terminals are env terminations that are not timeouts
+    real_terminal = np.logical_and(dones, ~timeouts)
+    non_terminal = (~real_terminal).astype(np.float32)
+
+    advantages = np.zeros_like(rewards, dtype=np.float32)
+    gae = np.zeros(n_envs, dtype=np.float32)
+    for t in range(T - 1, -1, -1):
+        delta = rewards[t] + gamma * next_values[t] * non_terminal[t] - values[t]
+        gae = delta + gamma * gae_lambda * gae * non_terminal[t]
+        advantages[t] = gae
+
+    returns = advantages + values
+    return advantages, returns
+
+
 class RolloutTrajectory(NamedTuple):
     observations: torch.Tensor
     actions: torch.Tensor
@@ -516,47 +609,33 @@ class RolloutCollector():
         dones_slice = self._buffer.dones_buf[start:end]
         timeouts_slice = self._buffer.timeouts_buf[start:end]
 
-        next_values_buf = np.zeros_like(values_slice, dtype=np.float32)
-        next_values_buf[:-1] = values_slice[1:]
+        # Prepare last values for each environment for the final bootstrap
         last_obs_t = torch.as_tensor(last_obs, dtype=torch.float32, device=self.device)
-        last_values = self.policy_model.predict_values(last_obs_t).detach().cpu().numpy().squeeze().astype(np.float32)
-        next_values_buf[-1] = last_values
-
-        # Override next values array with bootstrapped values from terminal states for truncated episodes
-        bootstrapped_slice = self._buffer.bootstrapped_values_buf[start:end]
-        next_values_buf = np.where(timeouts_slice, bootstrapped_slice, next_values_buf)
-
-        # Real terminal states are only the dones where environment finished but not due to a timeout
-        real_terminal = np.logical_and(dones_slice.astype(bool), ~timeouts_slice)
-        non_terminal = (~real_terminal).astype(np.float32)
+        last_values_vec = self.policy_model.predict_values(last_obs_t).detach().cpu().numpy().squeeze().astype(np.float32)
 
         if self.use_gae:
-            # Calculate the advantages using GAE(λ):
-            advantages_buf = np.zeros_like(rewards_slice, dtype=np.float32)
-            gae = np.zeros(self.n_envs, dtype=np.float32)
-            for t in reversed(range(T)):
-                # Calculate the Temporal Difference (TD) residual
-                delta = rewards_slice[t] + self.gamma * next_values_buf[t] * non_terminal[t] - values_slice[t]
-
-                # Accumulate GAE
-                gae = delta + self.gamma * self.gae_lambda * gae * non_terminal[t]
-                advantages_buf[t] = gae
-
-            # For GAE, returns are advantages + value estimates
-            returns_buf = advantages_buf + values_slice
+            bootstrapped_slice = self._buffer.bootstrapped_values_buf[start:end]
+            advantages_buf, returns_buf = compute_batched_gae_advantages_and_returns(
+                values=values_slice,
+                rewards=rewards_slice,
+                dones=dones_slice,
+                timeouts=timeouts_slice,
+                last_values=last_values_vec,
+                bootstrapped_next_values=bootstrapped_slice,
+                gamma=self.gamma,
+                gae_lambda=self.gae_lambda,
+            )
         else:
-            # Monte Carlo returns for REINFORCE
-            returns_buf = np.zeros_like(rewards_slice, dtype=np.float32)
-            returns = np.zeros(self.n_envs, dtype=np.float32)
-
-            for t in reversed(range(T)):
-                # For terminal states, return is just the reward; for non-terminal, accumulate discounted future returns
-                returns = rewards_slice[t] + self.gamma * returns * non_terminal[t]
-                returns_buf[t] = returns
+            # Monte Carlo returns for REINFORCE (no bootstrap added here)
+            returns_buf = compute_batched_mc_returns(
+                rewards=rewards_slice,
+                dones=dones_slice,
+                timeouts=timeouts_slice,
+                gamma=self.gamma,
+            )
 
             # Always calculate baseline and advantages using global running mean
             returns_flat = returns_buf.ravel()
-            # Update baseline running stats (global over samples)
             self._base_count += returns_flat.size
             self._base_sum += float(returns_flat.sum())
             self._base_sumsq += float((returns_flat * returns_flat).sum())

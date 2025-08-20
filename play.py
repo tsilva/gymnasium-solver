@@ -14,38 +14,90 @@ import torch
 
 
 def load_model(model_path, config):
-    """Load a saved model and return the policy."""
+    """Load a saved model and return the policy.
 
-    from agents import create_agent
-    
-    # Create agent with the same config
-    agent = create_agent(config)
-    
+    This function avoids constructing a full training Agent to prevent any
+    side effects (like creating run directories or symlinks). It infers the
+    policy architecture from the config and environment spec, builds the
+    appropriate policy network, and loads the checkpoint weights.
+    """
+
     # Load the saved state dict with weights_only=False since we trust our own files
     checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
-    
+
+    # Infer model architecture from config and a lightweight env spec
+    from utils.environment import build_env
+    from utils.policy_factory import create_actor_critic_policy, create_policy_only
+
+    # Build a minimal env to infer input/output dimensions and observation space
+    env = build_env(
+        config.env_id,
+        seed=42,
+        env_wrappers=config.env_wrappers,
+        norm_obs=config.normalize_obs,
+        n_envs=1,
+        frame_stack=config.frame_stack,
+        obs_type=config.obs_type,
+        render_mode=None,
+        env_kwargs=config.env_kwargs,
+        subproc=False,
+    )
+    try:
+        # VecInfoWrapper exposes helpers for dims; also keep obs_space for CNN policies
+        input_dim = env.get_input_dim()
+        output_dim = env.get_output_dim()
+        obs_space = getattr(env, "observation_space", None)
+
+        # Policy selection based on algo_id (policy-only for REINFORCE)
+        policy_type = getattr(config, "policy", "mlp")
+        policy_kwargs = dict(getattr(config, "policy_kwargs", None) or {})
+        activation = policy_kwargs.pop("activation", getattr(config, "activation", "tanh"))
+
+        if str(getattr(config, "algo_id", "")).lower() == "reinforce":
+            model = create_policy_only(
+                policy_type,
+                input_dim=int(input_dim),
+                action_dim=int(output_dim),
+                hidden=config.hidden_dims,
+                activation=activation,
+                obs_space=obs_space,
+                **policy_kwargs,
+            )
+        else:
+            model = create_actor_critic_policy(
+                policy_type,
+                input_dim=int(input_dim),
+                action_dim=int(output_dim),
+                hidden=config.hidden_dims,
+                activation=activation,
+                obs_space=obs_space,
+                **policy_kwargs,
+            )
+    finally:
+        try:
+            env.close()
+        except Exception:
+            pass
+
     # Check if this is a checkpoint format or legacy format
     if 'model_state_dict' in checkpoint:
-        agent.policy_model.load_state_dict(checkpoint['model_state_dict'])
+        model.load_state_dict(checkpoint['model_state_dict'])
     else:
         # Assume legacy format where checkpoint IS the state dict
-        agent.policy_model.load_state_dict(checkpoint)
-    
-    agent.policy_model.eval()  # Set to evaluation mode
-    
+        model.load_state_dict(checkpoint)
+
+    model.eval()  # Set to evaluation mode
+
     print(f"Loaded model from {model_path}")
     print(f"Model was trained for {checkpoint.get('total_timesteps', 'unknown')} timesteps")
-    
-    # Handle different checkpoint formats
+
+    # Handle different checkpoint formats (best-effort informational prints)
     if 'best_eval_reward' in checkpoint:
-        # New checkpoint format
         print(f"Best eval reward: {checkpoint.get('best_eval_reward', 'unknown')}")
         if 'current_eval_reward' in checkpoint:
             print(f"Current eval reward: {checkpoint.get('current_eval_reward', 'unknown')}")
         print(f"Training epoch: {checkpoint.get('epoch', 'unknown')}")
         print(f"Global step: {checkpoint.get('global_step', 'unknown')}")
-        
-        # Show checkpoint flags
         flags = []
         if checkpoint.get('is_best', False):
             flags.append("best")
@@ -53,26 +105,24 @@ def load_model(model_path, config):
             flags.append("last")
         if checkpoint.get('is_threshold', False):
             flags.append("threshold")
-        
         if flags:
             print(f"Checkpoint type: {', '.join(flags)}")
     else:
-        # Old format compatibility
         print(f"Best eval reward: {checkpoint.get('eval_reward', 'unknown')}")
         print(f"Training epoch: {checkpoint.get('epoch', 'unknown')}")
-    
+
     # Handle backward compatibility - if config is saved as object, it will be in 'config' key
     # If saved as dict, it will be in 'config_dict' key
     if 'config_dict' in checkpoint:
-        saved_config = checkpoint['config_dict']
+        _ = checkpoint['config_dict']
         print(f"Loaded config from checkpoint (dict format)")
     elif 'config' in checkpoint:
-        saved_config = checkpoint['config']
+        _ = checkpoint['config']
         print(f"Loaded config from checkpoint (object format)")
     else:
         print("No config found in checkpoint, using provided config")
-    
-    return agent.policy_model
+
+    return model
 
 
 def play_episodes(policy_model, env, num_episodes=5, deterministic=True):

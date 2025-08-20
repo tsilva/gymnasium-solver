@@ -133,6 +133,110 @@ def run_episode(
     policy_model = _load_model(ckpt_path, config)
     policy_model.eval()
 
+    # Collect environment spec for summary tabs
+    try:
+        env_spec_obj = getattr(env, "get_spec", None)() if hasattr(env, "get_spec") else None
+    except Exception:
+        env_spec_obj = None
+    try:
+        reward_range = env.get_reward_range() if hasattr(env, "get_reward_range") else None
+    except Exception:
+        reward_range = None
+    try:
+        reward_threshold = env.get_reward_threshold() if hasattr(env, "get_reward_threshold") else None
+    except Exception:
+        reward_threshold = None
+    try:
+        input_dim = env.get_input_dim() if hasattr(env, "get_input_dim") else None
+    except Exception:
+        input_dim = None
+    try:
+        output_dim = env.get_output_dim() if hasattr(env, "get_output_dim") else None
+    except Exception:
+        output_dim = None
+    try:
+        observation_space_str = str(getattr(env, "observation_space", None))
+    except Exception:
+        observation_space_str = None
+    try:
+        action_space_str = str(getattr(env, "action_space", None))
+    except Exception:
+        action_space_str = None
+    env_spec_summary: Dict[str, Any] = {
+        "env_id": config.env_id,
+        "n_envs": getattr(env, "num_envs", None),
+        "observation_space": observation_space_str,
+        "action_space": action_space_str,
+        "reward_range": reward_range,
+        "reward_threshold": reward_threshold,
+        "input_dim": input_dim,
+        "output_dim": output_dim,
+        "env_wrappers": getattr(config, "env_wrappers", None),
+        "frame_stack": getattr(config, "frame_stack", None),
+        "normalize_obs": getattr(config, "normalize_obs", None),
+        "spec_id": getattr(getattr(env_spec_obj, "id", None), "__str__", lambda: None)() if env_spec_obj is not None else None,
+    }
+
+    # Collect model spec for summary tabs
+    try:
+        num_params_total = int(sum(p.numel() for p in policy_model.parameters()))
+        num_params_trainable = int(sum(p.numel() for p in policy_model.parameters() if p.requires_grad))
+    except Exception:
+        num_params_total = None
+        num_params_trainable = None
+    try:
+        device = next(policy_model.parameters()).device.type  # type: ignore[attr-defined]
+    except Exception:
+        device = None
+    model_spec_summary: Dict[str, Any] = {
+        "algo_id": config.algo_id,
+        "policy_class": type(policy_model).__name__,
+        "device": device,
+        "num_parameters_total": num_params_total,
+        "num_parameters_trainable": num_params_trainable,
+        "policy": getattr(config, "policy", None),
+        "hidden_dims": getattr(config, "hidden_dims", None),
+        "activation": getattr(config, "activation", None),
+    }
+
+    # Collect checkpoint metrics (from sidecar json or checkpoint contents)
+    checkpoint_metrics_summary: Dict[str, Any] = {}
+    try:
+        import json
+        ckpt_data = None
+        try:
+            ckpt_data = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+        except Exception:
+            ckpt_data = None
+        if isinstance(ckpt_data, dict):
+            for k in [
+                "epoch",
+                "global_step",
+                "total_timesteps",
+                "best_eval_reward",
+                "current_eval_reward",
+                "is_best",
+                "is_last",
+                "is_threshold",
+                "threshold_value",
+            ]:
+                if k in ckpt_data:
+                    checkpoint_metrics_summary[k] = ckpt_data.get(k)
+            # Merge metrics dict if present
+            if isinstance(ckpt_data.get("metrics"), dict):
+                checkpoint_metrics_summary["metrics"] = ckpt_data.get("metrics")
+        # Sidecar JSON
+        sidecar = ckpt_path.with_suffix(".json")
+        if sidecar.exists():
+            try:
+                with open(sidecar, "r", encoding="utf-8") as f:
+                    sidecar_metrics = json.load(f)
+                checkpoint_metrics_summary["sidecar_metrics"] = sidecar_metrics
+            except Exception:
+                pass
+    except Exception:
+        pass
+
     frames: List[np.ndarray] = []
     steps: List[Dict[str, Any]] = []
 
@@ -261,6 +365,9 @@ def run_episode(
         "env_id": config.env_id,
         "algo_id": config.algo_id,
         "checkpoint_name": Path(ckpt_path).name,
+        "env_spec": env_spec_summary,
+        "model_spec": model_spec_summary,
+        "checkpoint_metrics": checkpoint_metrics_summary,
     }
 
 
@@ -355,7 +462,13 @@ def build_ui(default_run_id: str = "latest-run"):
                 interactive=True,
             )
         with gr.Row():
-            summary = gr.JSON(label="Summary")
+            with gr.Tabs():
+                with gr.Tab("Environment"):
+                    env_spec_json = gr.JSON(label="Environment spec")
+                with gr.Tab("Model"):
+                    model_spec_json = gr.JSON(label="Model spec")
+                with gr.Tab("Checkpoint"):
+                    ckpt_metrics_json = gr.JSON(label="Checkpoint metrics")
 
         def _on_run_change(selected_run: str):
             try:
@@ -388,7 +501,9 @@ def build_ui(default_run_id: str = "latest-run"):
                 gr.update(value=first_frame),  # frame_image
                 gr.update(minimum=0, maximum=(len(frames) - 1 if frames else 0), step=1, value=0),  # frame_slider
                 rows,                                       # step_table
-                info,                                       # summary
+                info.get("env_spec", {}),                   # env_spec_json
+                info.get("model_spec", {}),                 # model_spec_json
+                info.get("checkpoint_metrics", {}),         # ckpt_metrics_json
                 frames,                                     # frames_state
                 0,                                          # index_state
                 False,                                      # playing_state
@@ -397,7 +512,7 @@ def build_ui(default_run_id: str = "latest-run"):
         run_btn.click(
             _inspect,
             inputs=[run_id, checkpoint, deterministic, max_steps],
-            outputs=[frame_image, frame_slider, step_table, summary, frames_state, index_state, playing_state, play_pause_btn],
+            outputs=[frame_image, frame_slider, step_table, env_spec_json, model_spec_json, ckpt_metrics_json, frames_state, index_state, playing_state, play_pause_btn],
         )
 
         # When a user selects a cell in the step table, select the corresponding frame in the gallery

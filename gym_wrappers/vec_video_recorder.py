@@ -53,8 +53,8 @@ class VecVideoRecorder(VecEnvWrapper):
     record_env_idx: Optional[int] = 0,
         # Text overlay options
         enable_overlay: bool = True,
-        font_size: int = 24,
-        text_position: Tuple[int, int] = (10, 10),
+        font_size: int = 12,
+        text_position: Tuple[int, int] = (6, 6),
         text_color: Tuple[int, int, int] = (255, 255, 255),
         stroke_color: Tuple[int, int, int] = (0, 0, 0),
         stroke_width: int = 2,
@@ -132,7 +132,11 @@ class VecVideoRecorder(VecEnvWrapper):
         return self._font
 
     def _add_overlay_to_frame(self, frame: np.ndarray) -> np.ndarray:
-        """Add episode and step overlay to the frame."""
+        """Add episode, step and reward overlay to the frame.
+
+        The overlay is rendered as small, vertically stacked, high-contrast text
+        anchored to the top-left corner for maximum legibility.
+        """
         if not self.enable_overlay:
             return frame
             
@@ -143,34 +147,60 @@ class VecVideoRecorder(VecEnvWrapper):
             pil_image = Image.fromarray(frame)
             draw = ImageDraw.Draw(pil_image)
             
-            # Create overlay text
-            text = f"Episode: {self.current_episode + 1}  Step: {self.current_step + 1}  Reward: {self.accumulated_reward:.2f}"
+            # Create overlay text (stacked vertically)
+            lines = [
+                f"Episode: {self.current_episode + 1}",
+                f"Step: {self.current_step + 1}",
+                f"Reward: {self.accumulated_reward:.2f}",
+            ]
             
             # Get font
             font = self._get_font()
             
             if font is not None:
-                # Draw text with stroke (outline)
                 x, y = self.text_position
-                
-                # Draw stroke by drawing text in multiple positions
-                for dx in [-self.stroke_width, 0, self.stroke_width]:
-                    for dy in [-self.stroke_width, 0, self.stroke_width]:
-                        if dx != 0 or dy != 0:  # Don't draw at center position yet
-                            draw.text(
-                                (x + dx, y + dy),
-                                text,
-                                font=font,
-                                fill=self.stroke_color
-                            )
-                
-                # Draw main text
-                draw.text(
-                    self.text_position,
-                    text,
-                    font=font,
-                    fill=self.text_color
-                )
+
+                # Measure text block to draw a solid high-contrast background rectangle
+                try:
+                    # Preferred precise measurement
+                    bboxes = [draw.textbbox((0, 0), t, font=font) for t in lines]
+                    line_heights = [(b[3] - b[1]) for b in bboxes]
+                    line_widths = [(b[2] - b[0]) for b in bboxes]
+                except Exception:
+                    # Fallback sizing if textbbox is not available
+                    line_widths, line_heights = [], []
+                    for t in lines:
+                        w, h = font.getsize(t)
+                        line_widths.append(w)
+                        line_heights.append(h)
+
+                line_spacing = max(1, int(self.font_size * 0.25))
+                padding = 4
+                total_height = sum(line_heights) + line_spacing * (len(lines) - 1)
+                max_width = max(line_widths) if line_widths else 0
+
+                bg_left = x - padding
+                bg_top = y - padding
+                bg_right = x + max_width + padding
+                bg_bottom = y + total_height + padding
+
+                # Solid black background for high contrast
+                draw.rectangle([bg_left, bg_top, bg_right, bg_bottom], fill=(0, 0, 0))
+
+                # Draw each line with stroke for extra contrast
+                current_y = y
+                for i, text in enumerate(lines):
+                    # Stroke
+                    if self.stroke_width > 0:
+                        for dx in [-self.stroke_width, 0, self.stroke_width]:
+                            for dy in [-self.stroke_width, 0, self.stroke_width]:
+                                if dx != 0 or dy != 0:
+                                    draw.text((x + dx, current_y + dy), text, font=font, fill=self.stroke_color)
+                    # Main text
+                    draw.text((x, current_y), text, font=font, fill=self.text_color)
+
+                    # Advance to next line
+                    current_y += line_heights[i] + line_spacing
             
             # Convert back to numpy array
             return np.array(pil_image)

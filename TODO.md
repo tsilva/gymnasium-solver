@@ -1,8 +1,8 @@
-- inspect.py: in the bottom where there is a summary, that should be a tabbed component, with one of the tabs showing the environment spec, the other showing the model spec, the other showing the checkpoint metrics
 - inspect.py: add support for exporting table to CSV
 - inspect.py: BUG: mc_return in last step should be zero
 - inspect.py: BUG: it seems that the latest_run symlink is updated when I run inspector, this should not happen, no run should be created 
 - inspect.py: add support for using random policy?
+- inspect.py: add LLM debugging support
 - runs: along with each checkpoint we are saving a json file with the metrics at that checkpoint. We also want to save a CSV with the rollout data for that epoch; this data should contain exactly the same data as the table in inspect.py, so we can encapsualte the function that generates the csv and reuse it in both places.
 - BUG: checkpoint jsons not storing correct metrics
 - BUG: CartPole-v1 PPO is not training as fast; 115f9c73faed6785a0bd58c37f55298324e90f43 was ok
@@ -10,7 +10,6 @@
 - FEAT: Add support for specifyingpo extra reward metrics for each environment, then make the reward shaper assign value for each of those rewards
 - FEAT: add support for creating publishable video for youtube
 - Generalized scheduling for metrics, make those be logged
-- FEAT: ask copilot to create its own isntructrions namely to generate its own techical documentation that it keeps up to date
 - REFACTOR: rollout buffer can be much more efficient (review how sb3 does it) -- our fps is still 1000 below sb3
 - TODO: Figure out why CartPole-v1/PPO works better with Tahn activation than ReLU
 - BUG: PPO can solve FrozenLake-v1, but REINFORCE cannot. REINFORCE is likely not implemented correctly.

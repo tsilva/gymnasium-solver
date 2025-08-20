@@ -64,6 +64,11 @@ def build_env(
 
     _is_alepy = is_alepy_env_id(env_id)
 
+    # Default to RGB observations for ALE environments when obs_type is not specified.
+    # Some callers (e.g., smoke tests) bypass full Config defaults and may pass None.
+    if _is_alepy and obs_type is None:
+        obs_type = "rgb"
+
     def env_fn():
         # In case this is an ale-based Atari environment
         if _is_alepy: 

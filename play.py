@@ -334,11 +334,16 @@ def main():
             print(f"Falling back to config from files: {args.config}/{args.algo}")
     
     # Set up logging for play session
-    from utils.logging import capture_all_output
+    from utils.logging import capture_all_output, log_config_details
     
     with capture_all_output(config=config, log_dir=args.log_dir):
         print(f"=== Play Session Started ===")
         print(f"Command: {' '.join(['python', 'play.py'] + ['--run-id', args.run_id] + (['--config', args.config] if args.config else []) + (['--algo', args.algo] if args.algo else []) + (['--model', args.model] if args.model else []) + (['--stochastic'] if args.stochastic else []))}")
+        # Log configuration for the play session as well
+        try:
+            log_config_details(config)
+        except Exception:
+            pass
         
         # Set random seed
         from stable_baselines3.common.utils import set_random_seed

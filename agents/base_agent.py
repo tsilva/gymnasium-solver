@@ -389,6 +389,13 @@ class BaseAgent(pl.LightningModule):
                 pass
         print("=" * 30)
 
+        # Also log configuration details for reproducibility
+        try:
+            from utils.logging import log_config_details
+            log_config_details(self.config)
+        except Exception:
+            pass
+
         # Ask for confirmation before any heavy setup (keep prior prints grouped)
         # Before prompting, suggest better defaults if we detect mismatches
         self._maybe_warn_observation_policy_mismatch()

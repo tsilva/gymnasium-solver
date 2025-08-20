@@ -5,6 +5,7 @@ description = "Environment for gymnasium-solver (uv/jupyter kernel)"
 requires-python = ">=3.9"
 dependencies = [
     "gymnasium[classic-control,atari,box2d,mujoco,other]",
+    "gymnasium-robotics",
     "ale-py",
     "minari[hdf5]",
     "torch",

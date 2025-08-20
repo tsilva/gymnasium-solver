@@ -41,9 +41,16 @@ def concatenate_episodes_to_arrays(dataset) -> Tuple[np.ndarray, np.ndarray]:
     observations_list = []
     actions_list = []
     for episode in dataset.iterate_episodes():
-        # Episode arrays are already np.ndarrays with shapes [T, obs_dim] and [T, action_dim or scalar]
-        observations_list.append(episode.observations)
-        actions_list.append(episode.actions)
+        # Episode arrays typically have shapes [T, obs_dim] and [T, action_dim or scalar].
+        # Some datasets include an extra terminal observation (length T+1). Align by trimming to min length.
+        obs = np.asarray(episode.observations)
+        act = np.asarray(episode.actions)
+        if obs.shape[0] != act.shape[0]:
+            min_len = min(obs.shape[0], act.shape[0])
+            obs = obs[:min_len]
+            act = act[:min_len]
+        observations_list.append(obs)
+        actions_list.append(act)
     observations_array = np.concatenate(observations_list, axis=0)
     actions_array = np.concatenate(actions_list, axis=0)
     return observations_array, actions_array
@@ -149,6 +156,13 @@ def main() -> None:
             input_dim=observations.shape[1], action_low=action_low, action_high=action_high
         )
         criterion = nn.MSELoss()
+
+    # Final safety alignment: ensure observations and actions have the same number of samples
+    final_len = min(observations.shape[0], actions.shape[0])
+    if observations.shape[0] != final_len:
+        observations = observations[:final_len]
+    if actions.shape[0] != final_len:
+        actions = actions[:final_len]
 
     optimizer = optim.Adam(policy.parameters(), lr=1e-3)
 

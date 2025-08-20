@@ -11,6 +11,8 @@ _global:
   key_priority:
     - "train/ep_rew_mean"
     - "train/ep_len_mean"
+    - "train/ep_rew_last"
+    - "train/ep_len_last"
     - "train/epoch"
     - "train/total_timesteps"
     - "train/total_episodes"
@@ -26,6 +28,8 @@ _global:
     - "train/entropy_loss"
     - "eval/ep_rew_mean"
     - "eval/ep_len_mean"
+    - "eval/ep_rew_last"
+    - "eval/ep_len_last"
     - "eval/epoch"
     - "eval/total_timesteps"
     - "eval/total_episodes"

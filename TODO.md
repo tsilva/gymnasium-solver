@@ -1,3 +1,4 @@
+- 
 - FEAT: sort metrics summary using same order as metrics during training
 - BUG: evaluation is recording full episodes every epoch (this is not correct)
 - BUG: CartPole-v1 PPO is not training as fast; 115f9c73faed6785a0bd58c37f55298324e90f43 was ok

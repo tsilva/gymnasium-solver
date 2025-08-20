@@ -20,15 +20,17 @@ def compute_mc_returns(rewards: np.ndarray, gamma: float) -> np.ndarray:
 
     Returns
     - returns: shape (T,), R_t = r_t + gamma * R_{t+1}
+
+    Implementation detail: delegates to the batched variant for consistency.
     """
     rewards = np.asarray(rewards, dtype=np.float32)
-    T = rewards.shape[0]
-    out = np.zeros(T, dtype=np.float32)
-    running = 0.0
-    for t in range(T - 1, -1, -1):
-        running = float(rewards[t]) + gamma * running
-        out[t] = running
-    return out
+    # Shape to (T, 1) and use no terminals/timeouts so accumulator never resets
+    rewards_b = rewards.reshape(-1, 1)
+    T = rewards_b.shape[0]
+    dones_b = np.zeros((T, 1), dtype=bool)
+    timeouts_b = np.zeros((T, 1), dtype=bool)
+    returns_b = compute_batched_mc_returns(rewards_b, dones_b, timeouts_b, gamma)
+    return returns_b.reshape(-1)
 
 
 def compute_gae_advantages_and_returns(
@@ -40,45 +42,32 @@ def compute_gae_advantages_and_returns(
     gamma: float,
     gae_lambda: float,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Compute GAE(λ) advantages and corresponding returns for a single env trajectory.
+    """Compute GAE(λ) advantages and returns for a single-trajectory (T,) case.
 
-    Mirrors the logic used in RolloutCollector for a 1D trajectory (T,).
-
-    Notes
-    - "dones" are environment terminations (can include time-limit truncations if you OR'd them).
-    - "timeouts" marks steps that were truncated by a time limit (no true terminal); if provided and the
-      final step is a timeout, we bootstrap using last_value. For intermediate steps in a single-episode
-      trajectory, timeouts is typically all False except possibly the last step.
-    - Returns are computed as advantages + values, matching PPO-style training targets.
+    Delegates to the batched implementation with batch size 1 to ensure
+    consistent behavior with the collector.
     """
-    values = np.asarray(values, dtype=np.float32)
-    rewards = np.asarray(rewards, dtype=np.float32)
-    dones = np.asarray(dones, dtype=bool)
+    values = np.asarray(values, dtype=np.float32).reshape(-1, 1)
+    rewards = np.asarray(rewards, dtype=np.float32).reshape(-1, 1)
+    dones = np.asarray(dones, dtype=bool).reshape(-1, 1)
     if timeouts is None:
         timeouts = np.zeros_like(dones, dtype=bool)
     else:
-        timeouts = np.asarray(timeouts, dtype=bool)
+        timeouts = np.asarray(timeouts, dtype=bool).reshape(-1, 1)
 
-    T = rewards.shape[0]
-    # Build next_values by shifting and bootstrapping the last with last_value
-    next_values = np.zeros_like(values, dtype=np.float32)
-    if T > 1:
-        next_values[:-1] = values[1:]
-    next_values[-1] = float(last_value)
+    last_values = np.asarray([float(last_value)], dtype=np.float32)
 
-    # Real terminals are dones that are not timeouts
-    real_terminal = np.logical_and(dones, ~timeouts)
-    non_terminal = (~real_terminal).astype(np.float32)
-
-    advantages = np.zeros(T, dtype=np.float32)
-    gae = 0.0
-    for t in range(T - 1, -1, -1):
-        delta = rewards[t] + gamma * next_values[t] * non_terminal[t] - values[t]
-        gae = float(delta + gamma * gae_lambda * gae * non_terminal[t])
-        advantages[t] = gae
-
-    returns = advantages + values
-    return advantages, returns
+    adv_b, ret_b = compute_batched_gae_advantages_and_returns(
+        values=values,
+        rewards=rewards,
+        dones=dones,
+        timeouts=timeouts,
+        last_values=last_values,
+        bootstrapped_next_values=None,
+        gamma=gamma,
+        gae_lambda=gae_lambda,
+    )
+    return adv_b.reshape(-1), ret_b.reshape(-1)
 
 
 def compute_batched_mc_returns(

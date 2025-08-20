@@ -100,7 +100,7 @@ def main() -> None:
     import gymnasium as gym
 
     print(f"Loading Minari dataset: {args.dataset_id}")
-    dataset = minari.load_dataset(args.dataset_id)
+    dataset = minari.load_dataset(args.dataset_id, download=True)
 
     # Determine observation/action spaces from dataset if available; otherwise from recovered env
     obs_space = getattr(dataset, "observation_space", None)

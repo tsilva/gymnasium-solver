@@ -6,6 +6,7 @@ requires-python = ">=3.9"
 dependencies = [
     "gymnasium[classic-control,atari,box2d,mujoco,other]",
     "ale-py",
+    "minari[hdf5]",
     "torch",
     "numpy",
     "stable-baselines3>=2.0.0",

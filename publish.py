@@ -210,7 +210,7 @@ def extract_run_metadata(run_dir: Path) -> dict:
     ckpt_dir = run_dir / "checkpoints"
     ckpt_file = None
     if ckpt_dir.exists():
-        preferred = ["best.ckpt", "last.ckpt", "best_checkpoint.ckpt", "last_checkpoint.ckpt"]
+        preferred = ["best.ckpt", "last.ckpt", "best.ckpt", "last.ckpt"]
         for name in preferred:
             p = ckpt_dir / name
             if p.exists():

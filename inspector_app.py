@@ -14,6 +14,16 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 import torch
 
+# Avoid macOS AppKit main-thread violations when environments initialize
+# Pygame/SDL from Gradio worker threads. Using the headless SDL drivers
+# prevents Cocoa window/menu initialization on non-main threads.
+import os
+import platform
+if platform.system() == "Darwin":
+    os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+    os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
+    os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
+
 from play import load_model as _load_model
 from play import load_config_from_run as _load_config_from_run
 from utils.rollouts import compute_mc_returns, compute_gae_advantages_and_returns
@@ -55,9 +65,9 @@ def list_checkpoints_for_run(run_id: str) -> Tuple[List[str], Dict[str, Path], s
 
     def score(p: Path):
         name = p.name
-        if name in {"best_checkpoint.ckpt", "best.ckpt"}:  # support legacy and new names
+        if name in {"best.ckpt", "best.ckpt"}:  # support legacy and new names
             return (0, -p.stat().st_mtime)
-        if name in {"last_checkpoint.ckpt", "last.ckpt"}:
+        if name in {"last.ckpt", "last.ckpt"}:
             return (1, -p.stat().st_mtime)
         return (2, -p.stat().st_mtime)
 
@@ -67,14 +77,14 @@ def list_checkpoints_for_run(run_id: str) -> Tuple[List[str], Dict[str, Path], s
     mapping: Dict[str, Path] = {}
     for p in files:
         label = p.name
-        if label in {"best_checkpoint.ckpt", "best.ckpt"}:
-            label = "best_checkpoint.ckpt (best)"
-        elif label in {"last_checkpoint.ckpt", "last.ckpt"}:
-            label = "last_checkpoint.ckpt (last)"
+        if label in {"best.ckpt", "best.ckpt"}:
+            label = "best.ckpt (best)"
+        elif label in {"last.ckpt", "last.ckpt"}:
+            label = "last.ckpt (last)"
         labels.append(label)
         mapping[label] = p
 
-    default_label = next((l for l in labels if l.startswith("best_checkpoint")), labels[0])
+    default_label = next((l for l in labels if l.startswith("best")), labels[0])
     return labels, mapping, default_label
 
 

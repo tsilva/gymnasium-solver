@@ -127,8 +127,8 @@ def list_available_checkpoints(checkpoint_dir: str = "checkpoints") -> Dict[str,
             if env_checkpoints:
                 # Sort checkpoints: best first, then timestamped by name
                 env_checkpoints.sort(key=lambda x: (
-                    0 if x == "best_checkpoint.ckpt" else
-                    1 if x == "last_checkpoint.ckpt" else
+                    0 if x == "best.ckpt" else
+                    1 if x == "last.ckpt" else
                     2 if x.startswith("threshold-") else
                     3
                 ))

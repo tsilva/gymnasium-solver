@@ -1,3 +1,4 @@
+
 def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48, per_metric_cap: int = 2000):
     """Print an ASCII sparkline summary of recorded numeric metrics.
 
@@ -6,12 +7,6 @@ def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48
         width: Target width of sparklines.
         per_metric_cap: Safety cap (ignored here but kept for future trimming consistency).
     """
-    # Local import to avoid heavier dependencies at import-time
-    try:
-        from utils.metrics import get_key_priority
-        KEY_PRIORITY = get_key_priority() or []
-    except Exception:
-        KEY_PRIORITY = []
 
     def downsample(seq, target):
         if len(seq) <= target:
@@ -36,45 +31,11 @@ def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48
             out.append(blocks[max(0, min(idx, len(blocks) - 1))])
         return "".join(out)
 
-    # Build stable order consistent with training table printer:
-    # 1) Group by namespace (train, eval first, then others alpha)
-    # 2) Within each namespace, order by key_priority, then alpha
-    def _split_ns(key: str):
-        if "/" in key:
-            ns, sub = key.split("/", 1)
-            return ns, sub
-        return "", key
-
-    # Namespace order: train, eval, then alphabetical of remaining namespaces (including empty "")
-    namespaces = {}
-    for k in history.keys():
-        ns, sub = _split_ns(k)
-        namespaces.setdefault(ns, set()).add(sub)
-
-    fixed_first = [ns for ns in ("train", "eval") if ns in namespaces]
-    remaining = sorted([ns for ns in namespaces.keys() if ns not in ("train", "eval")])
-    ns_order = fixed_first + remaining
-
-    # Sorting helper within a namespace
-    def _sort_key(ns: str, sub: str):
-        full = f"{ns}/{sub}" if ns else sub
-        try:
-            idx = KEY_PRIORITY.index(full)
-            return (0, idx)
-        except ValueError:
-            # Fall back to alpha by sub-key (case-insensitive)
-            return (1, sub.lower())
-
-    ordered_keys = []
-    for ns in ns_order:
-        subs = sorted(list(namespaces[ns]), key=lambda s: _sort_key(ns, s))
-        for sub in subs:
-            full = f"{ns}/{sub}" if ns else sub
-            if full in history:
-                ordered_keys.append(full)
+    # Prefer train/* then eval/* then others for readability
+    keys = sorted(history.keys(), key=lambda k: (0 if k.startswith("train/") else 1 if k.startswith("eval/") else 2, k))
     shown = 0
     printed_header = False
-    for k in ordered_keys:
+    for k in keys:
         pts = history.get(k) or []
         if len(pts) < 2:
             continue

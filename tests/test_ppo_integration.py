@@ -65,6 +65,11 @@ def _install_trainer_factory_stub(monkeypatch):
 
             epochs = int(self.max_epochs) if self.max_epochs is not None else 1
             for _ep in range(epochs):
+                # Emulate PL-maintained epoch counter used by callbacks
+                try:
+                    setattr(lightning_module, "current_epoch", _ep)
+                except Exception:
+                    pass
                 if hasattr(lightning_module, "on_train_epoch_start"):
                     lightning_module.on_train_epoch_start()
 
@@ -131,6 +136,17 @@ class DummyVecEnvForPPO:
             for d in dones
         ]
         return self._obs.copy(), rewards, dones, infos
+
+    # Minimal video recorder context manager used at the end of training
+    def recorder(self, *_args, **_kwargs):
+        class _Rec:
+            def __enter__(_self):
+                return self
+
+            def __exit__(_self, exc_type, exc, tb):  # noqa: ARG002
+                return False
+
+        return _Rec()
 
 
 @pytest.mark.unit

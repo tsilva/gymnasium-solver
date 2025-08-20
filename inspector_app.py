@@ -191,8 +191,6 @@ def run_episode(
                 truncated = bool(truncated[0])
 
             total_reward += float(reward)
-            t += 1
-
             # Record for MC/GAE
             rewards_buf.append(float(reward))
             values_buf.append(float(val) if val is not None else 0.0)
@@ -214,6 +212,8 @@ def run_episode(
                 "done": bool(terminated or truncated),
                 "probs": probs,
             })
+
+            t += 1
 
             if terminated or truncated:
                 break

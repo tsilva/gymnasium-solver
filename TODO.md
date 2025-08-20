@@ -56,5 +56,3 @@ MaxAndSkipEnv
 - FEAT: add multitask heads support (eg: Atari, Sega Genesis) -- consider large output space
 - Ask agent for next learning steps/tasks (prompt file)
 - REFACTOR: add type hints where applicable
-
-- REINFORCE:

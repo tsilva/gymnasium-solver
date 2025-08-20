@@ -3,11 +3,18 @@
 from pathlib import Path
 import json
 
-import pytorch_lightning as pl
+# Optional dependency shim for pytorch_lightning.Callback
+try:  # pragma: no cover
+    import pytorch_lightning as pl  # type: ignore
+    BaseCallback = getattr(pl, "Callback", object)
+except Exception:  # pragma: no cover
+    pl = None  # type: ignore
+    BaseCallback = object
+
 import torch
 
 
-class ModelCheckpointCallback(pl.Callback):
+class ModelCheckpointCallback(BaseCallback):
     """Custom checkpoint callback that handles all model checkpointing logic including resume."""
     
     def __init__(self, 
@@ -202,7 +209,7 @@ class ModelCheckpointCallback(pl.Callback):
             if serialized_metrics is not None:
                 json_path = checkpoint_path.with_suffix(".json")
                 with open(json_path, "w", encoding="utf-8") as f:
-                    json.dump(serialized_metrics, f, ensure_ascii=False)
+                    json.dump(serialized_metrics, f, ensure_ascii=False, indent=2)
         except Exception as e:
             # Don't fail training if metrics JSON can't be written
             print(f"Warning: failed to write metrics JSON for {checkpoint_path.name}: {e}")

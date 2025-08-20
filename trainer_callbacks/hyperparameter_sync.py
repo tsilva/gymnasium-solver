@@ -16,9 +16,24 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import pytorch_lightning as pl
+# Optional dependency: fall back when pytorch_lightning isn't available or lacks Callback
+try:  # pragma: no cover - trivial import guard
+    import pytorch_lightning as pl  # type: ignore
+    BaseCallback = getattr(pl, "Callback", object)
+    TrainerType = getattr(pl, "Trainer", object)
+    LightningModuleType = getattr(pl, "LightningModule", object)
+except Exception:  # pragma: no cover - used in lightweight test stubs
+    pl = None  # type: ignore
+    BaseCallback = object
 
-class HyperparamSyncCallback(pl.Callback):
+    class TrainerType:  # minimal placeholders for type annotations
+        pass
+
+    class LightningModuleType:
+        pass
+
+
+class HyperparamSyncCallback(BaseCallback):
     """
     Callback that enables manual hyperparameter adjustment during training.
 
@@ -67,7 +82,7 @@ class HyperparamSyncCallback(pl.Callback):
         self.stop_monitoring = threading.Event()
         self.adjustment_queue = queue.Queue()
         
-    def on_fit_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+    def on_fit_start(self, trainer: TrainerType, pl_module: LightningModuleType) -> None:
         """Initialize control files and start monitoring."""
 
         run_dir = pl_module.run_manager.get_run_dir()
@@ -140,7 +155,7 @@ class HyperparamSyncCallback(pl.Callback):
                     print(f"⚠️  Error in file monitoring: {e}")
                 self.stop_monitoring.wait(self.check_interval)
     
-    def on_train_epoch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+    def on_train_epoch_start(self, trainer: TrainerType, pl_module: LightningModuleType) -> None:
         """Process any pending hyperparameter adjustments."""
         # Process adjustments from file monitoring
         while not self.adjustment_queue.empty():
@@ -153,7 +168,7 @@ class HyperparamSyncCallback(pl.Callback):
                 if self.verbose:
                     print(f"⚠️  Error applying adjustment: {e}")
     
-    def _apply_adjustments(self, trainer: pl.Trainer, pl_module: pl.LightningModule, data: Dict[str, Any]) -> None:
+    def _apply_adjustments(self, trainer: TrainerType, pl_module: LightningModuleType, data: Dict[str, Any]) -> None:
         """Apply hyperparameter adjustments from control file."""
         changes = []
         changed_for_log: Dict[str, float] = {}
@@ -213,7 +228,7 @@ class HyperparamSyncCallback(pl.Callback):
         if changes and self.verbose:
             print(f"🎛️  Hyperparameters updated (epoch {trainer.current_epoch}): {', '.join(changes)}")
     
-    def _update_learning_rate(self, trainer: pl.Trainer, pl_module: pl.LightningModule, new_lr: float) -> None:
+    def _update_learning_rate(self, trainer: TrainerType, pl_module: LightningModuleType, new_lr: float) -> None:
         """Update the learning rate of all optimizers."""
         optimizers = trainer.optimizers
         if not isinstance(optimizers, list):
@@ -231,7 +246,7 @@ class HyperparamSyncCallback(pl.Callback):
         if self.verbose and abs(new_lr - old_lr) > 1e-8:
             print(f"📈 Learning rate updated: {old_lr:.2e} → {new_lr:.2e} (epoch {trainer.current_epoch})")
 
-    def _log_hyperparams(self, pl_module: pl.LightningModule) -> None:
+    def _log_hyperparams(self, pl_module: LightningModuleType) -> None:
         """Helper to log current hyperparameters under train/hyperparams."""
         hp: Dict[str, float] = {}
         try:
@@ -248,7 +263,7 @@ class HyperparamSyncCallback(pl.Callback):
             pl_module.log_metrics(hp, prefix="train/hyperparams")
     
     
-    def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+    def on_fit_end(self, trainer: TrainerType, pl_module: LightningModuleType) -> None:
         """Clean up monitoring when training ends."""
         self.stop_monitoring_thread()
         
@@ -263,7 +278,7 @@ class HyperparamSyncCallback(pl.Callback):
             if hasattr(pl_module.config, 'vf_coef'):
                 print(f"   Value function coef: {pl_module.config.vf_coef:.3f}")
     
-    def reset_to_original(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+    def reset_to_original(self, trainer: TrainerType, pl_module: LightningModuleType) -> None:
         """Reset all hyperparameters to their original values."""
         if self.verbose:
             print("🔄 Resetting hyperparameters to original values...")

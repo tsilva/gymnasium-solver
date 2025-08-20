@@ -8,12 +8,22 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-import pytorch_lightning as pl
+# Optional dependency shim
+try:  # pragma: no cover
+    import pytorch_lightning as pl  # type: ignore
+    BaseCallback = getattr(pl, "Callback", object)
+    TrainerType = getattr(pl, "Trainer", object)
+    LightningModuleType = getattr(pl, "LightningModule", object)
+except Exception:  # pragma: no cover
+    pl = None  # type: ignore
+    BaseCallback = object
+    class TrainerType: pass
+    class LightningModuleType: pass
 
 from utils.csv_logger import CsvMetricsLogger
 
 
-class CSVMetricsLoggerCallback(pl.Callback):
+class CSVMetricsLoggerCallback(BaseCallback):
     """Flushes aggregated metrics from the LightningModule to a wide-form CSV.
 
     This callback expects the LightningModule to accumulate metrics in a
@@ -36,26 +46,26 @@ class CSVMetricsLoggerCallback(pl.Callback):
         self._queue_size = int(queue_size)
 
     # ---- lifecycle hooks ----
-    def on_fit_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+    def on_fit_start(self, trainer: TrainerType, pl_module: LightningModuleType) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._logger = CsvMetricsLogger(self._path, queue_size=self._queue_size)
 
-    def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+    def on_train_epoch_end(self, trainer: TrainerType, pl_module: LightningModuleType) -> None:
         self._flush_from_module(pl_module, allow_lightning_logging=True)
 
-    def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+    def on_validation_epoch_end(self, trainer: TrainerType, pl_module: LightningModuleType) -> None:
         self._flush_from_module(pl_module, allow_lightning_logging=True)
 
-    def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+    def on_fit_end(self, trainer: TrainerType, pl_module: LightningModuleType) -> None:
         # on_fit_end does not allow LightningModule.log(); flush without forwarding to Lightning
         self._flush_from_module(pl_module, allow_lightning_logging=False)
         self._close()
 
-    def teardown(self, trainer: pl.Trainer, pl_module: pl.LightningModule, stage: str | None = None) -> None:
+    def teardown(self, trainer: TrainerType, pl_module: LightningModuleType, stage: str | None = None) -> None:
         self._close()
 
     # ---- internals ----
-    def _flush_from_module(self, pl_module: pl.LightningModule, *, allow_lightning_logging: bool) -> None:
+    def _flush_from_module(self, pl_module: LightningModuleType, *, allow_lightning_logging: bool) -> None:
         # Use module's flush if available, otherwise do nothing.
         flush_fn = getattr(pl_module, "_flush_metrics", None)
         if flush_fn is None:

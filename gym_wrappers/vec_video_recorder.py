@@ -286,6 +286,13 @@ class VecVideoRecorder(VecEnvWrapper):
                     obs, rewards, dones, infos = env.step(actions)
                 # Recording stops automatically when exiting the with block
         """
+        # Normalize to string in case a PathLike was provided
+        try:
+            video_path = os.fspath(video_path)
+        except Exception:
+            # Fallback: ensure it's a string for downstream APIs
+            video_path = str(video_path)
+
         if not record_video:
             yield self
             return
@@ -313,11 +320,17 @@ class VecVideoRecorder(VecEnvWrapper):
     def save_recording(self, video_path: str) -> None:
         assert len(self.recorded_frames) > 0, "No frames recorded to save."
 
-        assert video_path.endswith(".mp4"), "Video file must have .mp4 extension"
+        # Normalize potential PathLike to str for safety
+        try:
+            path_str = os.fspath(video_path)
+        except Exception:
+            path_str = str(video_path)
+
+        assert path_str.endswith(".mp4"), "Video file must have .mp4 extension"
 
         from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
         clip = ImageSequenceClip(self.recorded_frames, fps=self.frames_per_sec)
-        clip.write_videofile(video_path, audio=False, logger=None)
+        clip.write_videofile(path_str, audio=False, logger=None)
         
         # Clear recorded frames after saving to prevent warning in __del__
         self.recorded_frames = []

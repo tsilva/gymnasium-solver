@@ -5,14 +5,25 @@ import time
 from pathlib import Path
 from typing import Iterable
 
-import pytorch_lightning as pl
-from watchdog.events import FileSystemEventHandler
-from watchdog.observers import Observer
+# Optional dependency shims for Lightning and watchdog
+try:  # pragma: no cover
+    import pytorch_lightning as pl  # type: ignore
+    BaseCallback = getattr(pl, "Callback", object)
+except Exception:  # pragma: no cover
+    pl = None  # type: ignore
+    BaseCallback = object
+
+try:  # pragma: no cover
+    from watchdog.events import FileSystemEventHandler  # type: ignore
+    from watchdog.observers import Observer  # type: ignore
+except Exception:  # pragma: no cover
+    FileSystemEventHandler = None  # type: ignore
+    Observer = None  # type: ignore
 
 import wandb
 
 
-class VideoLoggerCallback(pl.Callback):
+class VideoLoggerCallback(BaseCallback):
     """
     Watches multiple media directories for new files and logs them to Weights & Biases
     on epoch end. Supports separate directories for train and eval videos.
@@ -92,9 +103,15 @@ class VideoLoggerCallback(pl.Callback):
         if self._observer:
             return
 
+        # If watchdog isn't available, skip live watching; we'll scan on epoch end
+        if Observer is None or FileSystemEventHandler is None:
+            self._train_root = train_root.resolve()
+            self._eval_root = eval_root.resolve()
+            return
+
         train_root = train_root.resolve()
         eval_root = eval_root.resolve()
-        
+
         # Do NOT create directories here; only watch ones that already exist
         train_exists = train_root.exists()
         eval_exists = eval_root.exists()
@@ -103,12 +120,12 @@ class VideoLoggerCallback(pl.Callback):
             self._train_root = train_root
             self._eval_root = eval_root
             return
-        
+
         self._train_root = train_root
         self._eval_root = eval_root
 
         outer = self
-        
+
         class CreatedOrMovedInHandler(FileSystemEventHandler):
             def _maybe_add(self, p: Path):
                 if p.suffix.lower() in outer.exts:
@@ -144,7 +161,7 @@ class VideoLoggerCallback(pl.Callback):
                 src_in_train = _is_under(src, train_root)
                 dst_in_eval = _is_under(dst, eval_root)
                 src_in_eval = _is_under(src, eval_root)
-                
+
                 if (dst_in_train and not src_in_train) or (dst_in_eval and not src_in_eval):
                     self._maybe_add(dst)
 
@@ -156,13 +173,13 @@ class VideoLoggerCallback(pl.Callback):
 
         self._handler = CreatedOrMovedInHandler()
         self._observer = Observer()
-        
+
         # Watch existing directories only
         if train_exists:
             self._observer.schedule(self._handler, str(train_root), recursive=True)
         if eval_exists:
             self._observer.schedule(self._handler, str(eval_root), recursive=True)
-        
+
         # Start observer only if at least one directory is scheduled
         if train_exists or eval_exists:
             self._observer.start()

@@ -22,6 +22,8 @@ class BaseAgent(pl.LightningModule):
         # Shared metrics buffer across epochs
         self._metrics_buffer = MetricsBuffer()
 
+        # Initialize timing tracker for training 
+        # loop performance measurements
         from utils.timing import TimingTracker
         self.timing = TimingTracker()
 
@@ -47,6 +49,7 @@ class BaseAgent(pl.LightningModule):
         # collectors which require self.policy_model.
         self.create_models()
 
+        # Create the training environment
         common_env_kwargs = dict(
             seed=config.seed,
             n_envs=config.n_envs,
@@ -57,12 +60,15 @@ class BaseAgent(pl.LightningModule):
             env_wrappers=config.env_wrappers,
             env_kwargs=config.env_kwargs,
         )
-
-        # Train environment (vectorized; separate seed)
         self.train_env = build_env(
             config.env_id,
-            **{**common_env_kwargs, "seed": config.seed + 1000},
+            **{
+                **common_env_kwargs, 
+                "seed": config.seed
+            },
         )
+
+        # Create the rollout collector for the training environment
         from utils.rollouts import RolloutCollector
         self.train_collector = RolloutCollector(
             self.train_env,
@@ -71,21 +77,26 @@ class BaseAgent(pl.LightningModule):
             **self.rollout_collector_hyperparams(),
         )
 
-        # Evaluation env (vectorized; separate seed)
-        # Use the same level of vectorization as training for fair evaluation when desired.
-        # Keep subproc=False to enable video recording.
+        # Create the validation environment, used to perform
+        # evaluation during training at certain intervals,
+        # measuring performance and recording videos (allows
+        # early stopping based on eval metrics)
         self.validation_env = build_env(
             config.env_id,
             **{
                 **common_env_kwargs,
-                "seed": config.seed + 2000,
+                "seed": config.seed + 1000, # Use different seed to minimize correlation with training environment
                 "subproc": False,
                 "render_mode": "rgb_array",
                 "record_video": True,
-                "record_video_kwargs": {"video_length": 100, "record_env_idx": 0},
+                "record_video_kwargs": {
+                    "video_length": 100, # Record only for N steps to avoid bottlenecking training
+                    "record_env_idx": 0  # Record only the first environment instance
+                },
             },
         )
-        # TODO: is this being used for evaluate_policy?
+
+        # Create the rollout collector for the validation environment
         self.validation_collector = RolloutCollector(
             self.validation_env,
             self.policy_model,
@@ -93,20 +104,24 @@ class BaseAgent(pl.LightningModule):
             **self.rollout_collector_hyperparams(),
         )
 
-        # The test environment, this will be used for the
+        # Create test environment, this will be used for the
         # final post train evaluation and video recording
         self.test_env = build_env(
             config.env_id,
             **{
                 **common_env_kwargs,
-                "seed": config.seed + 3000,
+                "seed": config.seed + 2000, # Use different seed to minimize correlation with training and validation environments
                 "subproc": False,
                 "render_mode": "rgb_array",
                 "record_video": True,
-                "record_video_kwargs": {"video_length": None, "record_env_idx": 0},
+                "record_video_kwargs": {
+                    "video_length": None, # Record full video
+                    "record_env_idx": 0   # Record only the first environment instance
+                }
             },
         )
-        # TODO: is this being used for evaluate_policy?
+
+        # Create the rollout collector for the test environment
         self.test_collector = RolloutCollector(
             self.test_env,
             self.policy_model,
@@ -116,27 +131,29 @@ class BaseAgent(pl.LightningModule):
 
     @must_implement
     def create_models(self):
+        # Subclasses must implement this to create their own models (eg: policy, value)
         pass
 
     @must_implement
     def losses_for_batch(self, batch, batch_idx):
+        # Subclasses must implement this to compute the losses for each training steps' batch
         pass
 
     def rollout_collector_hyperparams(self):
         return {
             **self.config.rollout_collector_hyperparams(),
-            "gamma": self.config.gamma,
+            "gamma": self.config.gamma, # TODO: shouldn't this be in the config?
             "gae_lambda": self.config.gae_lambda,
         }
 
     def on_fit_start(self):
-        self.timing.restart("on_fit_start", steps=0)
+        # Start the timing tracker for the entire training run
+        self.timing.restart("on_fit_start", steps=0) # TODO: allow tracking arbitrary associated values
 
     def train_dataloader(self):
         # Some lightweight Trainer stubs used in tests don't manage current_epoch on the module.
         # Guard the assertion to avoid AttributeError while still catching repeated calls.
-        if getattr(self, "current_epoch", 0) != 0:
-            assert False, "train_dataloader should only be called once at the start of training"
+        assert self.current_epoch == 0, "train_dataloader should only be called once at the start of training"
 
         # Collect the first rollout
         self._trajectories = self.train_collector.collect()
@@ -247,7 +264,6 @@ class BaseAgent(pl.LightningModule):
                 deterministic=self.config.eval_deterministic,
             )
         
-        
         total_timesteps = int(eval_metrics.get("total_timesteps", 0))
         epoch_fps = self.timing.fps_since("on_validation_epoch_start", steps_now=total_timesteps)
 
@@ -279,7 +295,6 @@ class BaseAgent(pl.LightningModule):
 
         # Record final evaluation video and save associated metrics JSON next to it
         video_path = self.run_manager.ensure_path("checkpoints/final.mp4")
-        # recorder expects a str path (normalize PathLike issues)
         with self.test_env.recorder(str(video_path), record_video=True):
             from utils.evaluation import evaluate_policy
             final_metrics = evaluate_policy(

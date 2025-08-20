@@ -1,5 +1,5 @@
-- inspect.py: values in steps column should start with zero
-- inspect.py: column order: done, step, action, probs, reward, cum_reward, mc_return, value, gae_adv
+- inspect.py: make steps be zero-based (they currently start at 1)
+- inspect.py: in the bottom where there is a summary, that should be a tabbed component, with one of the tabs showing the environment spec, the other showing the model spec, the other showing the checkpoint metrics
 - inspect.py: add support for exporting table to CSV
 - inspect.py: BUG: mc_return in last step should be zero
 - inspect.py: BUG: it seems that the latest_run symlink is updated when I run inspector, this should not happen, no run should be created 

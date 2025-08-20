@@ -1,17 +1,17 @@
 from __future__ import annotations
-
 from typing import Callable, Dict, Mapping, MutableMapping
-
 from .dict_utils import prefix_dict_keys
-
 
 class MetricsBuffer:
     """
-    Lightweight buffer to collect metrics during an epoch and flush means once.
-
-    Encapsulates BaseAgent's ad-hoc dict of lists and mean computation.
+    A simple buffer to collect metrics during training or evaluation.
+    This is useful for aggregating metrics before logging them to a logger
+    or for further processing. 
+    
+    NOTE: This bypasses the a training bottleneck issue with using the Lightning's 
+    logging facilities multiple times per step/epoch; this way we can log metrics
+    multiple times per step/epoch and only flush them to the logger at the end of the epoch.
     """
-
     def __init__(self) -> None:
         self._data: Dict[str, list] = {}
 
@@ -31,7 +31,15 @@ class MetricsBuffer:
         Flush means to the provided logger function (e.g., LightningModule.log_dict)
         and clear internal buffers. Returns the computed means for external sinks.
         """
-        m = self.means()
-        log_fn(m)
+
+        # Calculate metric means (eg: epoch averages)
+        means = self.means()
+
+        # Logs the means to the provided logger function (eg: LightningModule.log_dict)
+        log_fn(means)
+
+        # Clear the buffer after logging (eg: fresh data for the next epoch)
         self.clear()
-        return m
+
+        # Return the means for any further processing
+        return means

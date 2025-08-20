@@ -1,4 +1,3 @@
-# utils/timing.py
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, Optional
@@ -14,9 +13,6 @@ class Marker:
 
 @dataclass
 class TimingTracker:
-    """Generic timing + throughput helper.
-    Create named markers, then query elapsed seconds or FPS since that marker.
-    """
     markers: Dict[str, Marker] = field(default_factory=dict)
 
     def restart(self, name: str, *, steps: int = 0, now_ns: Optional[int] = None) -> None:
@@ -31,8 +27,3 @@ class TimingTracker:
         dt = self.seconds_since(name, now_ns=now_ns)
         dsteps = max(int(steps_now) - m.started_steps, 0)
         return float(dsteps) / dt if dt > 0 else 0.0
-
-    # Convenience: create once if absent
-    def ensure(self, name: str, *, steps: int = 0) -> None:
-        if name not in self.markers:
-            self.restart(name, steps=steps)

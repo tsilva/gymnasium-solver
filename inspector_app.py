@@ -437,8 +437,8 @@ def build_ui(default_run_id: str = "latest-run"):
         table_headers = [
             "done",
             "step",
-            "action",
             "probs",
+            "action",
             "reward",
             "cum_reward",
             "mc_return",
@@ -493,8 +493,8 @@ def build_ui(default_run_id: str = "latest-run"):
                 rows.append([
                     s["done"],
                     s["step"],
-                    s["action"],
                     "[" + ", ".join(f"{p:.3f}" for p in (s["probs"] or [])) + "]" if s["probs"] else None,
+                    s["action"],
                     s["reward"],
                     s["cum_reward"],
                     s.get("mc_return", None),

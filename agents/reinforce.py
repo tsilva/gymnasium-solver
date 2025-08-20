@@ -1,6 +1,6 @@
 import torch
 
-from utils.policy_factory import create_policy_only
+from utils.policy_factory import create_policy
 
 from .base_agent import BaseAgent
 
@@ -14,11 +14,11 @@ class REINFORCE(BaseAgent):
         activation = getattr(self.config, 'activation', 'tanh')
 
         # TODO: what is observation space being used for
-        self.policy_model = create_policy_only(
+        self.policy_model = create_policy(
             self.config.policy,
             input_dim=input_dim,
             action_dim=output_dim,
-            hidden=self.config.hidden_dims,
+            hidden_dims=self.config.hidden_dims,
             activation=activation,
             obs_space=getattr(self.train_env, 'observation_space', None),
             **policy_kwargs,

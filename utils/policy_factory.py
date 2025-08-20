@@ -72,7 +72,7 @@ def create_actor_critic_policy(
     return ActorCritic(input_dim, action_dim, hidden_dims=hidden, activation=activation,)
 
 
-def create_policy_only(
+def create_policy(
     policy_type: str | type[nn.Module],
     *,
     input_dim: int,

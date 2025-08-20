@@ -27,7 +27,7 @@ def load_model(model_path, config):
 
     # Infer model architecture from config and a lightweight env spec
     from utils.environment import build_env
-    from utils.policy_factory import create_actor_critic_policy, create_policy_only
+    from utils.policy_factory import create_actor_critic_policy, create_policy
 
     # Build a minimal env to infer input/output dimensions and observation space
     env = build_env(
@@ -54,7 +54,7 @@ def load_model(model_path, config):
         activation = policy_kwargs.pop("activation", getattr(config, "activation", "tanh"))
 
         if str(getattr(config, "algo_id", "")).lower() == "reinforce":
-            model = create_policy_only(
+            model = create_policy(
                 policy_type,
                 input_dim=int(input_dim),
                 action_dim=int(output_dim),

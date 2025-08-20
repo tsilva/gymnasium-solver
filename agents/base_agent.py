@@ -2,33 +2,9 @@ import torch
 import pytorch_lightning as pl
 import json
 
-# Robust imports for tests that monkeypatch a lightweight 'utils' module
-try:
-    from utils.metrics_buffer import MetricsBuffer
-except Exception:
-    class MetricsBuffer:  # minimal fallback used in tests
-        def __init__(self):
-            self._data = {}
-        def log(self, metrics, prefix=None):
-            items = metrics.items() if prefix is None else {f"{prefix}/{k}": v for k, v in metrics.items()}.items()
-            for k, v in items:
-                self._data.setdefault(k, []).ap pend(v)
-        def means(self):
-            return {k: (sum(v)/len(v) if v else 0.0) for k, v in self._data.items()}
-        def clear(self):
-            self._data.clear()
-
-try:
-    from utils.decorators import must_implement
-except Exception:
-    def must_implement(fn):
-        return fn
-
-try:
-    from utils.reports import print_terminal_ascii_summary
-except Exception:
-    def print_terminal_ascii_summary(_history):
-        return None
+from utils.metrics_buffer import MetricsBuffer
+from utils.decorators import must_implement
+from utils.reports import print_terminal_ascii_summary
 
 class BaseAgent(pl.LightningModule):
     def __init__(self, config):
@@ -395,8 +371,10 @@ class BaseAgent(pl.LightningModule):
 
         # Also log configuration details for reproducibility
         try:
-            from utils.logging import log_config_details
-            log_config_details(self.config)
+            import utils.logging as _logging_mod
+            _log_fn = getattr(_logging_mod, "log_config_details", None)
+            if callable(_log_fn):
+                _log_fn(self.config)
         except Exception:
             pass
 
@@ -411,13 +389,17 @@ class BaseAgent(pl.LightningModule):
     def _maybe_warn_observation_policy_mismatch(self):
         # utils.environment may be monkeypatched in tests without is_rgb_env. Be robust.
         try:
-            from utils.environment import is_rgb_env  # type: ignore
+            import utils.environment as _env_mod  # type: ignore
         except Exception:
+            return
+
+        is_rgb_env_fn = getattr(_env_mod, "is_rgb_env", None)
+        if not callable(is_rgb_env_fn):
             return
 
         try:
             # In case the observation space is RGB, warn if MLP policy is used
-            is_rgb = is_rgb_env(self.train_env)
+            is_rgb = is_rgb_env_fn(self.train_env)
             policy = getattr(self.config, "policy", None) or ""
             is_mlp = isinstance(policy, str) and policy.lower() == "mlp"
             if is_rgb and is_mlp:

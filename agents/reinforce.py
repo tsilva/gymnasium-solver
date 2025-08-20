@@ -15,7 +15,7 @@ class REINFORCE(BaseAgent):
 
         # TODO: what is observation space being used for
         self.policy_model = create_policy_only(
-            self.config.policy_type,
+            self.config.policy,
             input_dim=input_dim,
             action_dim=output_dim,
             hidden=self.config.hidden_dims,

@@ -1,24 +1,8 @@
-# CartPole standard challenge configurations
-
 __CartPole-v1:
   project_id: "CartPole-v1"
   env_id: CartPole-v1
-  # Sensible evaluation defaults for CartPole
-  eval_freq_epochs: 100        # evaluate every 5 training epochs
-  eval_episodes: 10           # run 10 episodes per evaluation
-  eval_deterministic: true    # use greedy actions during evaluation
-  
-__CartPole-v1_normalized:
-  inherits: __CartPole-v1
-  normalize_obs: "static"
-
-__CartPole-v1_rewardshaping:
-  inherits: __CartPole-v1
-  env_wrappers:
-    - id: CartPoleV1_RewardShaper
-      angle_reward_scale: 1.0
-      position_reward_scale: 0.25
-      clip_potential: true
+  eval_episodes: 10
+  eval_deterministic: true
 
 CartPole-v1_ppo:
   inherits: __CartPole-v1
@@ -31,24 +15,10 @@ CartPole-v1_ppo:
   gamma: 0.98
   ent_coef: 0.0
   n_epochs: 20
-  #learning_rate: 0.001
-  learning_rate: lin_0.001
-  #clip_range: 0.2
-  clip_range: lin_0.2
-  # inherit eval settings from base; can override here if needed
-CartPole-v1_rewardshaping_ppo:
-  inherits: __CartPole-v1_rewardshaping
-  algo_id: ppo
-  n_envs: 8
-  n_timesteps: 1e5
-  n_steps: 32
-  batch_size: 256
-  gae_lambda: 0.8
-  gamma: 0.98
-  ent_coef: 0.0
-  n_epochs: 20
   learning_rate: lin_0.001
   clip_range: lin_0.2
+  eval_freq_epochs: 100
+
 CartPole-v1_reinforce:
   inherits: __CartPole-v1
   algo_id: reinforce
@@ -57,25 +27,4 @@ CartPole-v1_reinforce:
   batch_size: 64
   learning_rate: 5e-4
   hidden_dims: [64]
-CartPole-v1_normalized_ppo:
-  inherits: __CartPole-v1_normalized
-  algo_id: ppo
-  n_envs: 8
-  n_timesteps: 1e6
-  n_steps: 32
-  batch_size: 256
-  gae_lambda: 0.8
-  gamma: 0.98
-  ent_coef: 0.0
-  n_epochs: 20
-  learning_rate: 1e-3
-  hidden_dims: [64]
-
-CartPole-v1_normalized_reinforce:
-  inherits: __CartPole-v1_normalized
-  algo_id: reinforce
-  n_envs: 8
-  n_steps: 512
-  batch_size: 64
-  learning_rate: 5e-4
-  hidden_dims: [64]
+  eval_freq_epochs: 5

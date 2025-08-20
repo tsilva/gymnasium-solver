@@ -456,7 +456,7 @@ class ModelCheckpointCallback(BaseCallback):
 
         # Ensure best/last symlinks are pointing to the latest epoch artifacts
         try:
-            ckpt_dir = pl_module.run_manager.get_checkpoint_dir()
+            ckpt_dir = pl_module.run_manager.ensure_path("checkpoints/")
             latest = self._find_latest_epoch_ckpt(ckpt_dir)
             if latest is not None:
                 self._update_symlink(ckpt_dir / "last.ckpt", latest)

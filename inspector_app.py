@@ -330,8 +330,28 @@ def build_ui(default_run_id: str = "latest-run"):
             timer = None
         with gr.Row():
             step_table = gr.Dataframe(
-                headers=["step", "action", "reward", "cum_reward", "value", "mc_return", "gae_adv", "done", "probs"],
-                datatype=["number", "number", "number", "number", "number", "number", "number", "bool", "str"],
+                headers=[
+                    "done",
+                    "step",
+                    "action",
+                    "probs",
+                    "reward",
+                    "cum_reward",
+                    "mc_return",
+                    "value",
+                    "gae_adv",
+                ],
+                datatype=[
+                    "bool",   # done
+                    "number", # step
+                    "number", # action
+                    "str",    # probs (formatted string)
+                    "number", # reward
+                    "number", # cum_reward
+                    "number", # mc_return
+                    "number", # value
+                    "number", # gae_adv
+                ],
                 row_count=(0, "dynamic"),
                 col_count=(9, "fixed"),
                 label="Per-step details",
@@ -354,15 +374,15 @@ def build_ui(default_run_id: str = "latest-run"):
             rows = []
             for s in steps:
                 rows.append([
+                    s["done"],
                     s["step"],
                     s["action"],
+                    "[" + ", ".join(f"{p:.3f}" for p in (s["probs"] or [])) + "]" if s["probs"] else None,
                     s["reward"],
                     s["cum_reward"],
-                    s.get("value", None),
                     s.get("mc_return", None),
+                    s.get("value", None),
                     s.get("gae_adv", None),
-                    s["done"],
-                    "[" + ", ".join(f"{p:.3f}" for p in (s["probs"] or [])) + "]" if s["probs"] else None,
                 ])
             # Initialize gallery selection, states, and play button label
             # Initialize the image (first frame) and slider range

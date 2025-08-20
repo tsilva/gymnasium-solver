@@ -5,17 +5,18 @@ from utils.metrics_buffer import MetricsBuffer
 from utils.decorators import must_implement
 from utils.reports import print_terminal_ascii_summary
 
-# TODO: don't create these before lightning module ships models to device, otherwise we will collect rollouts on CPU
 class BaseAgent(pl.LightningModule):
     def __init__(self, config):
         super().__init__()
 
+        # TODO: what is this for?
         self.save_hyperparameters()
 
-        # Store core attributes
+        # Store experiment configuration
         self.config = config
 
         # We'll handle optimization manually in training_step
+        # (this is needed for multi-model training, eg: policy + value models without shared backbone)
         self.automatic_optimization = False
 
         # Shared metrics buffer across epochs

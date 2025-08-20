@@ -11,6 +11,8 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import os
+import platform
 
 
 def load_model(model_path, config):
@@ -200,8 +202,13 @@ def play_episodes(policy_model, env, num_episodes=5, deterministic=True):
             episode_reward += reward
             step_count += 1
             
-            # Render the environment
-            env.render()
+            # Render only if a render mode was set
+            try:
+                rm = getattr(env, "render_mode", None)
+            except Exception:
+                rm = None
+            if rm in ("human", "rgb_array"):
+                env.render()
             
             # Small delay to make it watchable
             #time.sleep(0.05)
@@ -307,6 +314,8 @@ def main():
     parser.add_argument("--seed", type=int, default=42,
                        help="Random seed for reproducibility")
     parser.add_argument("--log-dir", type=str, default="logs", help="Directory for log files (default: logs)")
+    parser.add_argument("--render", type=str, default="auto", choices=["auto", "human", "rgb_array", "none"],
+                       help="Rendering mode: auto (default), human, rgb_array, or none")
     
     args = parser.parse_args()
     
@@ -401,7 +410,22 @@ def main():
         # Load the trained model
         policy_model = load_model(model_path, config)
         
-        # Create environment with human rendering
+        # Decide render mode (auto-detect headless/WSL)
+        def _choose_render_mode():
+            if args.render in {"human", "rgb_array", "none"}:
+                return None if args.render == "none" else args.render
+            # auto
+            is_wsl = ("microsoft" in platform.release().lower()) or ("WSL_INTEROP" in os.environ)
+            has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY") or os.environ.get("MIR_SOCKET"))
+            if is_wsl:
+                return "rgb_array"
+            if has_display:
+                return "human"
+            return "rgb_array"
+
+        chosen_render_mode = _choose_render_mode()
+
+        # Create environment with chosen rendering
         from utils.environment import build_env
         env = build_env(
             config.env_id,
@@ -411,7 +435,7 @@ def main():
             n_envs=1,  # Force single environment for playing
             frame_stack=config.frame_stack,
             obs_type=config.obs_type,
-            render_mode="human",  # Human-readable rendering
+            render_mode=chosen_render_mode,
             env_kwargs=config.env_kwargs,
             subproc=False  # Force DummyVecEnv for playing
         )
@@ -429,6 +453,11 @@ def main():
         print(f"Algorithm: {config.algo_id}")
         print(f"Deterministic: {not args.stochastic}")
         print(f"Episodes to play: {args.episodes}")
+        try:
+            rm = getattr(env, "render_mode", chosen_render_mode)
+            print(f"Render mode: {rm}")
+        except Exception:
+            pass
         
         try:
             # Play episodes

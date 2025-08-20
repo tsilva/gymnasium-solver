@@ -566,47 +566,30 @@ class BaseAgent(pl.LightningModule):
         ) if self.config.n_timesteps else None
         if earlystop_timesteps_cb: callbacks.append(earlystop_timesteps_cb)
 
-        # Early stop when mean train reward reaches a threshold
-        def _safe_reward_threshold(env, env_id: str | None):
-            # Try env method
-            try:
-                return env.get_reward_threshold()
-            except Exception:
-                pass
-            # Try Gymnasium spec
-            try:
-                import gymnasium as gym
-                spec = gym.spec(env_id) if env_id else None
-                if spec is not None and hasattr(spec, "reward_threshold"):
-                    return getattr(spec, "reward_threshold")
-            except Exception:
-                pass
-            return None
-
-        train_thr = _safe_reward_threshold(self.train_env, getattr(self.config, "env_id", None))
+        reward_threshold = self.train_env.get_reward_threshold()
         earlystop_train_reward_cb = (
             EarlyStoppingCallback(
                 "train/ep_rew_mean",
-                float(train_thr),
+                reward_threshold,
                 mode="max",
                 verbose=True,
             )
-            if (self.config.early_stop_on_train_threshold and train_thr is not None)
+            if (self.config.early_stop_on_train_threshold and reward_threshold is not None)
             else None
         )
         if earlystop_train_reward_cb:
             callbacks.append(earlystop_train_reward_cb)
 
         # Early stop when mean validation reward reaches a threshold
-        eval_thr = _safe_reward_threshold(self.validation_env, getattr(self.config, "env_id", None))
+        reward_threshold = self.validation_env.get_reward_threshold()
         earlystop_eval_reward_cb = (
             EarlyStoppingCallback(
                 "eval/ep_rew_mean",
-                float(eval_thr),
+                reward_threshold,
                 mode="max",
                 verbose=True,
             )
-            if (self.config.early_stop_on_eval_threshold and eval_thr is not None)
+            if (self.config.early_stop_on_eval_threshold and reward_threshold is not None)
             else None
         )
         if earlystop_eval_reward_cb:

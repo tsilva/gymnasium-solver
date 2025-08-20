@@ -466,8 +466,8 @@ def build_ui(default_run_id: str = "latest-run"):
                 interactive=False,
             )
         with gr.Row():
-            export_btn = gr.Button("Export table to CSV")
-            download_btn = gr.DownloadButton(label="Download CSV", visible=False)
+            download_btn = gr.DownloadButton(label="Export CSV")
+            csv_link = gr.File(label="CSV file", visible=False)
         with gr.Row():
             with gr.Tabs():
                 with gr.Tab("Environment"):
@@ -615,7 +615,8 @@ def build_ui(default_run_id: str = "latest-run"):
             import tempfile
             import os
             if not rows:
-                return gr.update(visible=False)
+                # No rows to export; do nothing
+                return None, gr.update(visible=False)
             safe_rid = str(rid).replace("/", "-").replace(" ", "_")
             safe_ckpt = str(ckpt_label or "ckpt").replace("/", "-").replace(" ", "_")
             file_name = f"{safe_rid}_{safe_ckpt}_steps.csv"
@@ -625,9 +626,11 @@ def build_ui(default_run_id: str = "latest-run"):
                 writer = csv.writer(f)
                 writer.writerow(table_headers)
                 writer.writerows(rows)
-            return gr.update(value=file_path, visible=True, label="Download CSV")
-
-        export_btn.click(_export_csv, inputs=[rows_state, run_id, checkpoint], outputs=[download_btn])
+            # Return for both: triggers download and shows a visible link as fallback
+            return file_path, gr.update(value=file_path, visible=True)
+        # Wire the download to the same button so clicking it both generates and downloads the CSV,
+        # and also shows a link in case auto-download is blocked by the browser.
+        download_btn.click(_export_csv, inputs=[rows_state, run_id, checkpoint], outputs=[download_btn, csv_link])
 
     return demo
 

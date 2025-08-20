@@ -1,5 +1,4 @@
-- TODO: create script that runs all configurations for N timesteps (few) to just smoke test that all environment configuraitons are working
-- Generalize timing tracker to allow tracking arbitrary values
+- TODO: create script that runs all configurations for N timesteps (few) to just smoke test that all environment configuraitons are working=
 - inspect.py: add LLM debugging support
 - runs: along with each checkpoint we are saving a json file with the metrics at that checkpoint. We also want to save a CSV with the rollout data for that epoch; this data should contain exactly the same data as the table in inspect.py, so we can encapsualte the function that generates the csv and reuse it in both places.
 - BUG: checkpoint jsons not storing correct metrics
@@ -14,7 +13,7 @@
 - BUG: is REINFORCE well implemented? are we waiting until the end of the episode to update the policy?
 - FEAT: train on cloud server (eg: lightning cloud)
 - FEAT: normalize rewards?
-- FEAT: add normalization support
+- FEAT: add normalization support 
 - FEAT: add discrete env support
 - Create benchmarking script to find optimal parallelization for env/machine combo
 - TEST: predict next state to learn faster
@@ -44,7 +43,6 @@ MaxAndSkipEnv
 - BUG: fix thread safety issues with async eval collector (copy model weights with lock)
 - FEAT: consider computing mean reward by timesteps, this way in eval we just have to request n_steps = reward_threshold * N, this will make it easier to support vectorized envs
 - FEAT: a2c (only after reinforce/ppo is stable)
-- FEAT: support for softcoding activations
 - FEAT: add same linear decay features as rlzoo
 - FEAT: add interactive mode support
 - CHECK: run rollout through dataloader process, do we always get n_batches? assert it 

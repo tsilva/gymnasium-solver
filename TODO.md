@@ -1,5 +1,10 @@
-- 
-- FEAT: sort metrics summary using same order as metrics during training
+- inspect.py: values in steps column should start with zero
+- inspect.py: column order: done, step, action, probs, reward, cum_reward, mc_return, value, gae_adv
+- inspect.py: add support for exporting table to CSV
+- inspect.py: BUG: mc_return in last step should be zero
+- inspect.py: BUG: it seems that the latest_run symlink is updated when I run inspector, this should not happen, no run should be created 
+- runs: along with each checkpoint we are saving a json file with the metrics at that checkpoint. We also want to save a CSV with the rollout data for that epoch; this data should contain exactly the same data as the table in inspect.py, so we can encapsualte the function that generates the csv and reuse it in both places.
+
 - BUG: evaluation is recording full episodes every epoch (this is not correct)
 - BUG: CartPole-v1 PPO is not training as fast; 115f9c73faed6785a0bd58c37f55298324e90f43 was ok
 - add support for resuming training from a checkpoint

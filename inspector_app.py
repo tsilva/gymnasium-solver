@@ -451,17 +451,8 @@ def build_ui(default_run_id: str = "latest-run"):
         next_btn.click(_on_next, inputs=[frames_state, index_state], outputs=[frame_image, frame_slider, index_state, playing_state, play_pause_btn])
         play_pause_btn.click(_on_play_pause, inputs=[playing_state], outputs=[playing_state, play_pause_btn])
         # While dragging, update the frame live for fast visual scanning (and pause playback)
-        def _on_slider_input(frames: List[np.ndarray], evt=None):
-            # Read the live slider value from the event payload to avoid Slider preprocess on None
-            val = None
-            try:
-                if isinstance(evt, dict):
-                    val = evt.get("value")
-                else:
-                    val = getattr(evt, "value", None)
-            except Exception:
-                val = None
-
+        def _on_slider_input(frames: List[np.ndarray], val: int | float | None):
+            # Use the slider's current value passed as an input to avoid any evt.value staleness
             idx = int(val) if val is not None else 0
             img = frames[idx] if (isinstance(frames, list) and 0 <= idx < len(frames)) else None
             # Pause while scrubbing for smoother UX and to avoid race with autoplay
@@ -469,7 +460,7 @@ def build_ui(default_run_id: str = "latest-run"):
 
         frame_slider.input(
             _on_slider_input,
-            inputs=[frames_state],
+            inputs=[frames_state, frame_slider],
             outputs=[frame_image, index_state, playing_state, play_pause_btn],
         )
 

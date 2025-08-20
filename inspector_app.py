@@ -463,7 +463,7 @@ def build_ui(default_run_id: str = "latest-run"):
                 row_count=(0, "dynamic"),
                 col_count=(9, "fixed"),
                 label="Per-step details",
-                interactive=True,
+                interactive=False,
             )
         with gr.Row():
             export_btn = gr.Button("Export table to CSV")

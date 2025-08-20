@@ -7,7 +7,7 @@ __MountainCar-v0_rewardshaping:
   inherits: __MountainCar-v0
   frame_stack: 3
   env_wrappers:
-    - id: RewardShaper_MountainCarV0
+    - id: MountainCarV0_RewardShaper
       position_reward_scale: 100.0
       velocity_reward_scale: 10.0
       height_reward_scale: 50.0

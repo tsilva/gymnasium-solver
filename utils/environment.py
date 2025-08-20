@@ -4,6 +4,11 @@ from gym_wrappers.env_wrapper_registry import EnvWrapperRegistry
 def is_alepy_env_id(env_id: str) -> bool:
     return env_id.startswith("ALE/")
 
+def is_vizdoom_env_id(env_id: str) -> bool:
+    # Support a simple custom id for deadly corridor
+    # Users can specify 'VizDoom-DeadlyCorridor-v0' in env_id to trigger this
+    return env_id in {"VizDoom-DeadlyCorridor-v0", "vizdoom-deadly-corridor"}
+
 def is_rgb_env(env):
     import numpy as np
     from gymnasium import spaces
@@ -63,6 +68,7 @@ def build_env(
         if subproc: raise ValueError("Subprocess vector environments do not support video recording yet")
 
     _is_alepy = is_alepy_env_id(env_id)
+    _is_vizdoom = is_vizdoom_env_id(env_id)
 
     # Default to RGB observations for ALE environments when obs_type is not specified.
     # Some callers (e.g., smoke tests) bypass full Config defaults and may pass None.
@@ -85,6 +91,10 @@ def build_env(
             # Otherwise, create the standard ALE environment
             else:
                 env = gym.make(env_id, obs_type=obs_type, render_mode=render_mode, **env_kwargs)
+        # VizDoom Deadly Corridor custom integration
+        elif _is_vizdoom:
+            from gym_wrappers.vizdoom_deadly_corridor import VizDoomDeadlyCorridorEnv
+            env = VizDoomDeadlyCorridorEnv(render_mode=render_mode, **env_kwargs)
         # Otherwise, create a standard gym environment
         else: 
             env = gym.make(env_id, render_mode=render_mode, **env_kwargs)

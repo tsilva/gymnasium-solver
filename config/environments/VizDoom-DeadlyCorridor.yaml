@@ -1,0 +1,29 @@
+__VizDoom-DeadlyCorridor:
+  project_id: "VizDoom-DeadlyCorridor"
+  env_id: VizDoom-DeadlyCorridor-v0
+  # Pixel env; use CNN policy and frame stacking
+  policy: 'cnn'
+  frame_stack: 4
+  # Optional: path to scenarios if not auto-discovered; set via env var or here
+  # env_kwargs:
+  #   config_path: "/path/to/deadly_corridor.cfg"
+
+VizDoom-DeadlyCorridor_ppo:
+  inherits: __VizDoom-DeadlyCorridor
+  algo_id: ppo
+  n_envs: 8
+  n_steps: 128
+  batch_size: 256
+  n_epochs: 4
+  clip_range: 0.1
+  learning_rate: 2.5e-4
+  eval_freq_epochs: 50
+  eval_episodes: 5
+  # CNN defaults suitable for 84x84 if preprocessed; leave raw res for now
+  policy_kwargs:
+    activation: relu
+    channels: [32, 64, 64]
+    kernel_sizes: [8, 4, 3]
+    strides: [4, 2, 1]
+
+

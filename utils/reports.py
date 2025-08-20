@@ -50,11 +50,22 @@ def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48
         chart = spark(values, width)
         vmin = min(values)
         vmax = max(values)
+        vmean = sum(values) / len(values)
+        # population std (stable for streams); avoid tiny negatives from fp error
+        if len(values) > 1:
+            mean = vmean
+            var = sum((x - mean) ** 2 for x in values) / len(values)
+            vstd = var ** 0.5
+        else:
+            vstd = 0.0
         vlast = values[-1]
         if not printed_header:
             print("\n=== Metrics Summary (ASCII) ===")
             printed_header = True
-        print(f"{k:>26}: {chart}  min={vmin:.4g} max={vmax:.4g} last={vlast:.4g}")
+        # Pipe-separated stats for easier parsing/reading
+        print(
+            f"{k:>26}: {chart} | min={vmin:.4g} | max={vmax:.4g} | mean={vmean:.4g} | std={vstd:.4g} | last={vlast:.4g}"
+        )
         shown += 1
         if shown >= max_metrics:
             break

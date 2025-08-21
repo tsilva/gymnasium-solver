@@ -202,13 +202,11 @@ def play_episodes(policy_model, env, num_episodes=5, deterministic=True):
             episode_reward += reward
             step_count += 1
             
-            # Render only if a render mode was set
+            # Always attempt to render; some vectorized wrappers don't expose render_mode
             try:
-                rm = getattr(env, "render_mode", None)
-            except Exception:
-                rm = None
-            if rm in ("human", "rgb_array"):
                 env.render()
+            except Exception:
+                pass
             
             # Small delay to make it watchable
             #time.sleep(0.05)
@@ -416,17 +414,30 @@ def main():
                 return None if args.render == "none" else args.render
             # auto
             is_wsl = ("microsoft" in platform.release().lower()) or ("WSL_INTEROP" in os.environ)
-            has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY") or os.environ.get("MIR_SOCKET"))
-            if is_wsl:
-                return "rgb_array"
+            has_display = bool(
+                os.environ.get("DISPLAY")
+                or os.environ.get("WAYLAND_DISPLAY")
+                or os.environ.get("MIR_SOCKET")
+            )
+            # Prefer human rendering whenever a display is available, even on WSL/WSLg
             if has_display:
                 return "human"
+            # Fallback to rgb_array for headless environments
             return "rgb_array"
 
         chosen_render_mode = _choose_render_mode()
 
         # Create environment with chosen rendering
         from utils.environment import build_env
+        # On WSL, some OpenGL drivers (GLX) may fail due to libstdc++ mismatches from Conda.
+        # Prefer SDL software renderer to avoid GLX context creation issues when using human rendering.
+        try:
+            if chosen_render_mode == "human":
+                is_wsl = ("microsoft" in platform.release().lower()) or ("WSL_INTEROP" in os.environ)
+                if is_wsl:
+                    os.environ.setdefault("SDL_RENDER_DRIVER", "software")
+        except Exception:
+            pass
         env = build_env(
             config.env_id,
             seed=args.seed,

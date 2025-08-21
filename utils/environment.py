@@ -39,6 +39,8 @@ def build_env(
     n_envs=1, 
     seed=None, 
     env_wrappers=[], 
+    grayscale_obs=False,
+    resize_obs=False,
     norm_obs=False, 
     frame_stack=None, 
     obs_type=None,
@@ -55,13 +57,14 @@ def build_env(
         DummyVecEnv,
         SubprocVecEnv,
         VecFrameStack,
-        VecNormalize,
+        VecNormalize
     )
 
     from gym_wrappers.vec_info import VecInfoWrapper
     from gym_wrappers.vec_normalize_static import VecNormalizeStatic
     from gym_wrappers.vec_video_recorder import VecVideoRecorder
     
+        
     # If recording video was requrested, assert valid render mode and subproc disabled 
     if record_video:
         if render_mode != "rgb_array": raise ValueError("Video recording requires render_mode='rgb_array'")
@@ -103,10 +106,19 @@ def build_env(
     # impacting tabular algorithms (e.g., Q-Learning) that rely on
     # Discrete observation IDs. Instead, VecInfoWrapper exposes an
     # input_dim for Discrete spaces (1), enabling MLP policies to work.
+        
+        # Important: resize before grayscale to avoid cv2 dropping the channel dim on (H,W,1)
+        if resize_obs: 
+            from gymnasium.wrappers import ResizeObservation
+            env = ResizeObservation(env, shape=(84, 84)) # TODO: softcode this
+
+        if grayscale_obs: 
+            from gymnasium.wrappers import GrayscaleObservation 
+            env = GrayscaleObservation(env, keep_dim=True)
 
         # Apply configured env wrappers
         for wrapper in env_wrappers:
-            env = EnvWrapperRegistry.apply(env, wrapper)
+            env = EnvWrapperRegistry.apply(env, wrapper) # type: ignore
 
         # Return the environment
         return env
@@ -130,10 +142,24 @@ def build_env(
     except Exception:
         pass
 
-    # Enable observation normalization if requested
-    if norm_obs == "static": env = VecNormalizeStatic(env)
-    elif norm_obs is True: env = VecNormalize(env, norm_obs=norm_obs)
-    
+    # Detect image observations and transpose to channel-first for SB3 CNN policies
+    from stable_baselines3.common.preprocessing import is_image_space
+    try:
+        is_image = is_image_space(env.observation_space, check_channels=False)
+    except Exception:
+        is_image = False
+
+    from stable_baselines3.common.vec_env import VecTransposeImage
+    if is_image:
+        env = VecTransposeImage(env)  # (N, C, H, W)
+
+    # Enable observation normalization only for non-image observations
+    if not is_image:
+        if norm_obs == "static":
+            env = VecNormalizeStatic(env)
+        elif norm_obs is True:
+            env = VecNormalize(env, norm_obs=norm_obs)
+
     # Enable frame stacking if requested
     if frame_stack and frame_stack > 1: env = VecFrameStack(env, n_stack=frame_stack)
     

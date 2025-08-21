@@ -2,6 +2,8 @@ __VizDoom-DeadlyCorridor:
   project_id: "VizDoom-DeadlyCorridor"
   env_id: VizDoom-DeadlyCorridor-v0
   policy: 'cnn'
+  grayscale_obs: true
+  resize_obs: true
   frame_stack: 4
   accelerator: 'gpu'
   devices: 'auto'
@@ -17,7 +19,7 @@ VizDoom-DeadlyCorridor_ppo:
   n_epochs: 4
   clip_range: 0.1
   learning_rate: 2.5e-4
-  # CNN defaults suitable for 84x84 if preprocessed; leave raw res for now
+  # CNN defaults suitable for 84x84 inputs
   policy_kwargs:
     activation: relu
     channels: [32, 64, 64]

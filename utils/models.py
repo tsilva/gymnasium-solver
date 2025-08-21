@@ -207,12 +207,20 @@ class _ReshapeFlatToImage(nn.Module):
     def forward(self, x: torch.Tensor):
         N = x.shape[0]
         H, W, C = self.hwc
+        # Flat inputs: (N, H*W*C)
         if x.ndim == 2:
             x = x.view(N, H, W, C)
-        # Convert HWC -> CHW
-        x = x.permute(0, 3, 1, 2).contiguous()
-        # Normalize uint8-like ranges if needed (assume already float)
-        return x
+            return x.permute(0, 3, 1, 2).contiguous()
+        # 4D inputs: either HWC or CHW
+        if x.ndim == 4:
+            # If already channel-first (N, C, H, W), pass through
+            if x.shape[1] == C and x.shape[2] == H and x.shape[3] == W:
+                return x.contiguous()
+            # If channel-last (N, H, W, C), permute to channel-first
+            if x.shape[1] == H and x.shape[2] == W and x.shape[3] == C:
+                return x.permute(0, 3, 1, 2).contiguous()
+        # Fallback: try to interpret as HWC and permute
+        return x.permute(0, 3, 1, 2).contiguous()
 
 
 class CNNActorCritic(nn.Module):

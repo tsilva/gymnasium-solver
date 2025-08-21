@@ -7,7 +7,6 @@ from .CartPoleV1.reward_shaper import CartPoleV1_RewardShaper
 from .pixel_observation import PixelObservationWrapper as _PixelObservationWrapper
 from .vizdoom_deadly_corridor import VizDoomDeadlyCorridorEnv
 
-
 class PixelObservationWrapper(_PixelObservationWrapper):
     """Alias wrapper to expose Gymnasium's PixelObservationWrapper via registry.
 
@@ -15,11 +14,12 @@ class PixelObservationWrapper(_PixelObservationWrapper):
     """
     pass
 
-EnvWrapperRegistry.register([
+_wrappers_to_register = [
     DiscreteToBinary,
     PongV5_FeatureExtractor,
     PongV5_RewardShaper,
     MountainCarV0_RewardShaper,
     CartPoleV1_RewardShaper,
     PixelObservationWrapper,
-])
+]
+EnvWrapperRegistry.register(_wrappers_to_register)

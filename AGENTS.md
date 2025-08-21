@@ -2,6 +2,9 @@
 
 This repository allows autonomous and assisted agents to make changes and answer questions. This document defines the default rules those agents must follow.
 
+### Start-of-task requirements
+- Before starting any task, read `INTERNALS.md` and `README.md` end-to-end to ensure up-to-date context.
+
 ### Decision hierarchy
 - **Safety first**: Security, privacy, and data integrity rules override all other instructions.
 - **User intent next**: Follow explicit user instructions in the current session unless they are unsafe.
@@ -27,6 +30,9 @@ This repository allows autonomous and assisted agents to make changes and answer
 - **Imports and deps**: Add required imports and update configuration/dependency files if needed.
 - **Tests**: When behavior changes or is newly added, create or update tests.
 - **Config/docs**: Update `README.md`, `EXPERIMENTS.md`, and relevant configs when user-facing behavior or defaults change.
+
+### Documentation maintenance
+- After completing any task, update `INTERNALS.md` and `README.md` with relevant changes. If no updates are needed, leave them untouched.
 
 ### Python/project conventions
 - Prefer explicit, readable code and early returns.

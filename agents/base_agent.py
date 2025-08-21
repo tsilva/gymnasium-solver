@@ -43,6 +43,8 @@ class BaseAgent(pl.LightningModule):
             subproc=config.subproc,
             obs_type=config.obs_type,
             frame_stack=config.frame_stack,
+            grayscale_obs=config.grayscale_obs,
+            resize_obs=config.resize_obs,
             norm_obs=config.normalize_obs,
             env_wrappers=config.env_wrappers,
             env_kwargs=config.env_kwargs,

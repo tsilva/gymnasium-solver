@@ -30,7 +30,15 @@ def _infer_hwc_from_space(obs_space, input_dim: int) -> Tuple[int, int, int]:
         side = int(max(input_dim, 1) ** 0.5)
         return (side, side, 1)
     if len(obs_shape) == 3:
-        return (obs_shape[0], obs_shape[1], obs_shape[2])
+        # Try to detect channel-first (C, H, W) vs channel-last (H, W, C)
+        C_first, H_mid, W_last = int(obs_shape[0]), int(obs_shape[1]), int(obs_shape[2])
+        # Heuristics: small channel count typically 1..8; spatial dims usually >= 16
+        is_chw = (C_first <= 8 and H_mid >= 16 and W_last >= 16)
+        if is_chw:
+            # Convert CHW -> HWC for downstream reshape utility
+            return (H_mid, W_last, C_first)
+        # Otherwise assume HWC already
+        return (C_first, H_mid, W_last)
     if len(obs_shape) == 2:
         return (obs_shape[0], obs_shape[1], 1)
     # Fallback heuristic

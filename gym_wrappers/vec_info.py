@@ -184,6 +184,20 @@ class VecInfoWrapper(VecEnvWrapper):
                 return str(spec.id)
         except Exception:
             pass
+        # Fallbacks: try attributes exposed on the vectorized env itself
+        try:
+            venv_env_id = getattr(self.venv, "env_id", None)
+            if venv_env_id:
+                return str(venv_env_id)
+        except Exception:
+            pass
+        try:
+            # If running under SubprocVecEnv, attempt IPC-safe attribute fetch
+            env_id_attr = self.venv.get_attr("env_id", indices=[0])[0]
+            if env_id_attr:
+                return str(env_id_attr)
+        except Exception:
+            pass
         return None
 
     def _load_complement_yaml(self) -> Optional[Dict[str, Any]]:

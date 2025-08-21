@@ -58,6 +58,10 @@ class Config:
     normalize_obs: bool = False
     # Enable reward normalization (currently for completeness; may be unused in some algorithms)
     normalize_reward: bool = False
+    # Convert observations to grayscale
+    grayscale_obs: bool = False
+    # Resize observations to a specific shape
+    resize_obs: bool = False
     # Stack the last N frames along the channel dimension (useful for pixel/ram-based envs)
     frame_stack: int = 1
     # Observation type for ALE environments: 'rgb' (default), 'ram', 'grayscale', or 'objects'

@@ -6,7 +6,7 @@ __VizDoom-DeadlyCorridor:
   frame_stack: 4
   accelerator: 'gpu'
   devices: 'auto'
-  eval_freq_epochs: 5
+  eval_freq_epochs: 1
   eval_episodes: 1
   # Optional: path to scenarios if not auto-discovered; set via env var or here
   # env_kwargs:

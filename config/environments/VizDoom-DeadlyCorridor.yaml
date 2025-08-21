@@ -6,6 +6,8 @@ __VizDoom-DeadlyCorridor:
   frame_stack: 4
   accelerator: 'gpu'
   devices: 'auto'
+  eval_freq_epochs: 5
+  eval_episodes: 1
   # Optional: path to scenarios if not auto-discovered; set via env var or here
   # env_kwargs:
   #   config_path: "/path/to/deadly_corridor.cfg"
@@ -19,8 +21,6 @@ VizDoom-DeadlyCorridor_ppo:
   n_epochs: 4
   clip_range: 0.1
   learning_rate: 2.5e-4
-  eval_freq_epochs: 50
-  eval_episodes: 5
   # CNN defaults suitable for 84x84 if preprocessed; leave raw res for now
   policy_kwargs:
     activation: relu

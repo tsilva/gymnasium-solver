@@ -436,6 +436,13 @@ class RolloutCollector():
 
     def _collect(self, deterministic=False):
         """Collect a single rollout and return trajectories and stats."""
+        # Sync collector/buffer device with the policy model's current device.
+        # Lightning may move the module after this collector is constructed.
+        current_device = _device_of(self.policy_model)
+        if current_device != self.device:
+            self.device = current_device
+            if self._buffer is not None:
+                self._buffer.device = self.device
         # Initialize environment if needed
         if self.obs is None:
             self.obs = self.env.reset()

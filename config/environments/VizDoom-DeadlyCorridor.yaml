@@ -1,16 +1,12 @@
 __VizDoom-DeadlyCorridor:
   project_id: "VizDoom-DeadlyCorridor"
   env_id: VizDoom-DeadlyCorridor-v0
-  # Pixel env; use CNN policy and frame stacking
   policy: 'cnn'
   frame_stack: 4
   accelerator: 'gpu'
   devices: 'auto'
   eval_freq_epochs: 1
   eval_episodes: 1
-  # Optional: path to scenarios if not auto-discovered; set via env var or here
-  # env_kwargs:
-  #   config_path: "/path/to/deadly_corridor.cfg"
 
 VizDoom-DeadlyCorridor_ppo:
   inherits: __VizDoom-DeadlyCorridor

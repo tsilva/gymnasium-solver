@@ -124,6 +124,12 @@ def build_env(
     except Exception:
         pass
 
+    # Expose original env_id on the vectorized env for downstream introspection (e.g., YAML fallbacks)
+    try:
+        setattr(env, "env_id", env_id)
+    except Exception:
+        pass
+
     # Enable observation normalization if requested
     if norm_obs == "static": env = VecNormalizeStatic(env)
     elif norm_obs is True: env = VecNormalize(env, norm_obs=norm_obs)

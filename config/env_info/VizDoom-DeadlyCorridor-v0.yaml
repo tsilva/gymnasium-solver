@@ -1,0 +1,16 @@
+# Complementary environment info for ViZDoom Deadly Corridor
+# Source: ViZDoom docs and scenario config
+reward_structure:
+  description: Deadly Corridor rewards approaching armor vest; penalizes retreat and death.
+  components:
+    - name: distance_shaping
+      sign: positive
+      note: Reward proportional to decrease in distance to vest each step.
+    - name: retreat_penalty
+      sign: negative
+      note: Penalty proportional to increase in distance to vest.
+    - name: death_penalty
+      value: -100.0
+      note: Large penalty on death.
+reward_threshold: 1000.0
+reward_range: [-100.0, 1000.0]

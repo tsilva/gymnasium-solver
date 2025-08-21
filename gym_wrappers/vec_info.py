@@ -1,5 +1,10 @@
+import os
+from pathlib import Path
+from typing import Any, Dict, Optional, Tuple
+
 import gymnasium as gym
 import numpy as np
+import yaml
 from stable_baselines3.common.vec_env.base_vec_env import VecEnvWrapper
 
 
@@ -72,11 +77,19 @@ class VecInfoWrapper(VecEnvWrapper):
         """
         Return the reward_threshold from the env's spec, or None if unavailable.
         """
+        # 1) Try env spec
         spec = self.get_spec()
         if spec is not None:
-            return getattr(spec, "reward_threshold", None)
+            thr = getattr(spec, "reward_threshold", None)
+            if thr is not None:
+                return thr
+
+        # 2) Try complementary env info YAML
+        yaml_thr = self._get_complement_threshold()
+        if yaml_thr is not None:
+            return yaml_thr
             
-        # Fallback: If we can't get spec from the vectorized environment,
+        # 3) Fallback: If we can't get spec from the vectorized environment,
         # try to create a single instance to get the environment spec
         try:
             # Try to get env_id from the first environment
@@ -118,6 +131,11 @@ class VecInfoWrapper(VecEnvWrapper):
         except Exception:
             pass
 
+        # Try complementary env info YAML
+        yaml_rr = self._get_complement_reward_range()
+        if isinstance(yaml_rr, (tuple, list)) and len(yaml_rr) == 2:
+            return tuple(yaml_rr)
+
         # Last resort: resolve via env spec and a temporary instance
         try:
             env_id = None
@@ -147,6 +165,88 @@ class VecInfoWrapper(VecEnvWrapper):
         except Exception:
             pass
 
+        return None
+    
+    # --- complementary info (YAML) ------------------------------------------
+    def _get_env_id(self) -> Optional[str]:
+        """Best-effort retrieval of the base environment id (e.g., 'CartPole-v1')."""
+        try:
+            base = self._first_base_env()
+            if base is not None:
+                env_id = getattr(base, "id", None) or getattr(getattr(base, "spec", None), "id", None)
+                if env_id:
+                    return str(env_id)
+        except Exception:
+            pass
+        try:
+            spec = self.get_spec()
+            if spec is not None and getattr(spec, "id", None):
+                return str(spec.id)
+        except Exception:
+            pass
+        return None
+
+    def _load_complement_yaml(self) -> Optional[Dict[str, Any]]:
+        """
+        Load complementary env info YAML by env_id.
+
+        Search order:
+          1) Path from ENV_INFO_DIR environment variable
+          2) Project default: <project_root>/config/env_info
+
+        File name is '<env_id>.yaml'. Returns parsed dict or None.
+        """
+        env_id = self._get_env_id()
+        if not env_id:
+            return None
+
+        # Determine candidate directories
+        candidates = []
+        custom_dir = os.environ.get("ENV_INFO_DIR")
+        if custom_dir:
+            candidates.append(Path(custom_dir))
+        try:
+            # Project root: two parents up from this file (gym_wrappers/vec_info.py)
+            project_root = Path(__file__).resolve().parents[1]
+            candidates.append(project_root / "config" / "env_info")
+        except Exception:
+            pass
+
+        # Try loading YAML from candidates
+        for base_dir in candidates:
+            try:
+                path = base_dir / f"{env_id}.yaml"
+                if path.is_file():
+                    with open(path, "r", encoding="utf-8") as f:
+                        data = yaml.safe_load(f) or {}
+                    if isinstance(data, dict):
+                        return data
+            except Exception:
+                continue
+        return None
+
+    def _get_complement_threshold(self) -> Optional[float]:
+        data = self._load_complement_yaml()
+        if isinstance(data, dict):
+            thr = data.get("reward_threshold")
+            try:
+                return float(thr) if thr is not None else None
+            except Exception:
+                return None
+        return None
+
+    def _get_complement_reward_range(self) -> Optional[Tuple[float, float]]:
+        data = self._load_complement_yaml()
+        if isinstance(data, dict):
+            rr = data.get("reward_range")
+            if isinstance(rr, (list, tuple)) and len(rr) == 2:
+                try:
+                    lo = float(rr[0]) if rr[0] is not None else None
+                    hi = float(rr[1]) if rr[1] is not None else None
+                    if lo is not None and hi is not None:
+                        return (lo, hi)
+                except Exception:
+                    return None
         return None
     
     def get_input_dim(self):

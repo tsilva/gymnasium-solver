@@ -1,4 +1,6 @@
-- TODO: create script that runs all configurations for N timesteps (few) to just smoke test that all environment configuraitons are working=
+- TODO: add config file beautifier that ensure attributes are set in the correct order
+- TODO: add config file validator that ensures that all attributes are set and that they are set to the correct type
+
 - runs: along with each checkpoint we are saving a json file with the metrics at that checkpoint. We also want to save a CSV with the rollout data for that epoch; this data should contain exactly the same data as the table in inspect.py, so we can encapsualte the function that generates the csv and reuse it in both places.
 
 - FEAT: add vizdoom support

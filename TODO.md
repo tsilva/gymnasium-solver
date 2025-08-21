@@ -1,3 +1,6 @@
+- add action labels and use them in inspect
+- add todo list for each env
+- print effective rollout step size
 - TODO: add config file beautifier that ensure attributes are set in the correct order
 - TODO: add config file validator that ensures that all attributes are set and that they are set to the correct type
 - TODO: inspect.py add support for showing raw vs processed frames, including frame stacks

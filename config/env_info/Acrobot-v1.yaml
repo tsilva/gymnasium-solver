@@ -1,5 +1,32 @@
-# Complementary environment info for Acrobot-v1
+# Acrobot-v1
 source: https://gymnasium.farama.org/environments/classic_control/acrobot/
-reward_range: [-500.0, 0.0]
+description: Swing the double pendulum to raise the end effector above a threshold.
 
+action_space:
+  discrete: 3
+  labels: {0: torque_negative, 1: torque_zero, 2: torque_positive}
 
+observation_space:
+  default: state
+  variants:
+    state:
+      shape: [6]
+      dtype: float32
+      components:
+        - {name: cos(theta1), range: [-1.0, 1.0]}
+        - {name: sin(theta1), range: [-1.0, 1.0]}
+        - {name: cos(theta2), range: [-1.0, 1.0]}
+        - {name: sin(theta2), range: [-1.0, 1.0]}
+        - {name: thetaDot1, range: [-inf, inf]}
+        - {name: thetaDot2, range: [-inf, inf]}
+
+rewards:
+  per_step: -1
+  termination_goal: end effector above threshold height
+  range: [-500, 0]
+
+defaults:
+  max_episode_steps: 500
+
+versions:
+  v1: Increased max steps to 500; standardized termination and truncation

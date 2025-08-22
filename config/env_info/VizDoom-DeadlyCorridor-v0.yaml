@@ -1,26 +1,38 @@
-# Complementary environment info for ViZDoom Deadly Corridor
+"""
+NOTE: This file documents the environment semantics. The actual wrapper defines
+the observation and action spaces dynamically from ViZDoom. Keep labels synced
+with `gym_wrappers/vizdoom_deadly_corridor.py`.
+"""
+
+# VizDoom-DeadlyCorridor-v0
 source: https://vizdoom.cs.put.edu.pl/competitions/cig-2017/scenarios/#deadly-corridor
-reward_structure:
-  description: Deadly Corridor rewards approaching armor vest; penalizes retreat and death.
+description: Reach the armor vest through a corridor of enemies; survive and progress forward.
+
+action_space:
+  discrete: 9
+  labels: {0: noop, 1: forward, 2: backward, 3: strafe_left, 4: strafe_right, 5: turn_left, 6: turn_right, 7: attack, 8: forward_attack}
+
+observation_space:
+  default: rgb
+  variants:
+    rgb:
+      shape: [height, width, 3]
+      dtype: uint8
+      range: [0, 255]
+      note: Height/width depend on the ViZDoom cfg; wrapper enforces RGB24 and HWC.
+
+rewards:
+  description: Dense shaping towards the vest; penalties for retreat and death.
   components:
-    - name: distance_shaping
-      sign: positive
-      note: Reward proportional to decrease in distance to vest each step.
-    - name: retreat_penalty
-      sign: negative
-      note: Penalty proportional to increase in distance to vest.
-    - name: death_penalty
-      value: -100.0
-      note: Large penalty on death.
-reward_threshold: 1000.0
-reward_range: [-100.0, 1000.0]
-action_labels:
-  0: noop
-  1: forward
-  2: backward
-  3: strafe_left
-  4: strafe_right
-  5: turn_left
-  6: turn_right
-  7: attack
-  8: forward_attack
+    - {name: distance_shaping, sign: positive}
+    - {name: retreat_penalty, sign: negative}
+    - {name: death_penalty, value: -100.0}
+  threshold_solved: 1000
+  range: [-100, 1000]
+
+defaults:
+  render_mode: rgb_array
+  frame_skip: 1
+
+versions:
+  v0: Initial wrapper; RGB24 observations; exposes render_mode and frame_skip

@@ -1,7 +1,24 @@
-# Complementary environment info for Taxi-v3
+# Taxi-v3
 source: https://gymnasium.farama.org/environments/toy_text/taxi/
-reward_structure:
-  description: -1 per step, +20 for successful drop-off, -10 for illegal pickup/drop.
-reward_range: [-800.0, 20.0]
+description: Navigate a taxi to pick up and drop off a passenger at a destination.
 
+action_space:
+  discrete: 6
+  labels: {0: south, 1: north, 2: east, 3: west, 4: pickup, 5: dropoff}
 
+observation_space:
+  default: encoded_state
+  variants:
+    encoded_state: {n: 500, dtype: int64}
+
+rewards:
+  per_step: -1
+  successful_dropoff: +20
+  illegal_action: -10
+  range: [-800, 20]
+
+defaults:
+  map_size: 5x5
+
+versions:
+  v3: Deterministic transitions and seeding improvements; clarified termination rules

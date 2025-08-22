@@ -1,5 +1,33 @@
-# Complementary environment info for LunarLander-v3
+# LunarLander-v3
 source: https://gymnasium.farama.org/environments/box2d/lunar_lander/
-reward_threshold: 200.0
+description: Land a lunar module safely between flags on the surface.
 
+action_space:
+  discrete: 4
+  labels: {0: do_nothing, 1: fire_left, 2: fire_main, 3: fire_right}
 
+observation_space:
+  default: state
+  variants:
+    state:
+      shape: [8]
+      dtype: float32
+      components:
+        - {name: x_position, range: [-inf, inf]}
+        - {name: y_position, range: [-inf, inf]}
+        - {name: x_velocity, range: [-inf, inf]}
+        - {name: y_velocity, range: [-inf, inf]}
+        - {name: angle, range: [-inf, inf]}
+        - {name: angular_velocity, range: [-inf, inf]}
+        - {name: left_leg_contact, values: [0, 1]}
+        - {name: right_leg_contact, values: [0, 1]}
+
+rewards:
+  shaping: dense; +100..140 for landing, -100 for crash; small per-step shaping
+  threshold_solved: 200
+
+defaults:
+  continuous_variant: false
+
+versions:
+  v3: Updated termination/truncation; reproducible seeding; Box2D upgrade

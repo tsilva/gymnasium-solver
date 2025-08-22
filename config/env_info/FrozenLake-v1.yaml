@@ -1,7 +1,25 @@
-# Complementary environment info for FrozenLake-v1
+# FrozenLake-v1
 source: https://gymnasium.farama.org/environments/toy_text/frozen_lake/
-reward_structure:
-  description: Sparse rewards; +1 for reaching goal, 0 otherwise.
-reward_range: [0.0, 1.0]
+description: Navigate a grid world from start to goal without falling into holes.
 
+action_space:
+  discrete: 4
+  labels: {0: LEFT, 1: DOWN, 2: RIGHT, 3: UP}
 
+observation_space:
+  default: grid_4x4
+  variants:
+    grid_4x4: {n: 16, dtype: int64}
+    grid_8x8: {n: 64, dtype: int64}
+
+rewards:
+  on_goal: +1
+  otherwise: 0
+  range: [0, 1]
+
+defaults:
+  map_size: 4x4
+  is_slippery: true
+
+versions:
+  v1: Deterministic seeding; updated termination/truncation semantics; added render fixes

@@ -1,8 +1,28 @@
-# Complementary environment info for MountainCar-v0
+# MountainCar-v0
 source: https://gymnasium.farama.org/environments/classic_control/mountain_car/
-reward_structure:
-  description: Reward of -1 per timestep until reaching the goal.
-reward_threshold: -110.0
-reward_range: [-200.0, 0.0]
+description: Drive up the mountain by building momentum on a 1D track.
 
+action_space:
+  discrete: 3
+  labels: {0: push_left, 1: no_push, 2: push_right}
 
+observation_space:
+  default: state
+  variants:
+    state:
+      shape: [2]
+      dtype: float32
+      components:
+        - {name: position, range: [-1.2, 0.6]}
+        - {name: velocity, range: [-0.07, 0.07]}
+
+rewards:
+  per_step: -1
+  episodic: negative of steps to reach goal (lower is worse)
+  range: [-200, 0]
+
+defaults:
+  max_episode_steps: 200
+
+versions:
+  v0: Classic control original specification

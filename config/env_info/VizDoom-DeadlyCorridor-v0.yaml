@@ -1,9 +1,3 @@
-"""
-NOTE: This file documents the environment semantics. The actual wrapper defines
-the observation and action spaces dynamically from ViZDoom. Keep labels synced
-with `gym_wrappers/vizdoom_deadly_corridor.py`.
-"""
-
 # VizDoom-DeadlyCorridor-v0
 source: https://vizdoom.cs.put.edu.pl/competitions/cig-2017/scenarios/#deadly-corridor
 description: Reach the armor vest through a corridor of enemies; survive and progress forward.

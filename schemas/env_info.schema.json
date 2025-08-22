@@ -9,7 +9,6 @@
     "action_space",
     "observation_space",
     "rewards",
-    "defaults",
     "versions"
   ],
   "additionalProperties": true,
@@ -76,26 +75,7 @@
         }
       }
     },
-    "defaults": {
-      "type": "object",
-      "additionalProperties": true,
-      "properties": {
-        "frameskip": {
-          "oneOf": [
-            { "type": "integer" },
-            {
-              "type": "array",
-              "minItems": 2,
-              "maxItems": 2,
-              "items": { "type": "integer" }
-            }
-          ]
-        },
-        "map_size": { "oneOf": [ {"type": "string"}, {"type": "integer"} ] },
-        "obs_type": { "oneOf": [ {"type": "string"}, {"type": "integer"} ] },
-        "render_mode": { "oneOf": [ {"type": "string"}, {"type": "integer"} ] }
-      }
-    },
+    
     "versions": {
       "type": "object",
       "description": "Mapping version tag to description.",

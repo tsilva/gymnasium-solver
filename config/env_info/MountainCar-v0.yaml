@@ -21,8 +21,5 @@ rewards:
   episodic: negative of steps to reach goal (lower is worse)
   range: [-200, 0]
 
-defaults:
-  max_episode_steps: 200
-
 versions:
   v0: Classic control original specification

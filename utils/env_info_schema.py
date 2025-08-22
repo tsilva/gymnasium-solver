@@ -196,7 +196,7 @@ def validate_env_info(env: Mapping[str, Any]) -> List[ValidationError]:
     errors: List[ValidationError] = []
 
     # required top-level keys
-    required_keys = ["source", "description", "action_space", "observation_space", "rewards", "defaults", "versions"]
+    required_keys = ["source", "description", "action_space", "observation_space", "rewards", "versions"]
     for key in required_keys:
         if key not in env:
             errors.append((key, "missing required key"))

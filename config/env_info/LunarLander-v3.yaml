@@ -26,8 +26,5 @@ rewards:
   shaping: dense; +100..140 for landing, -100 for crash; small per-step shaping
   threshold_solved: 200
 
-defaults:
-  continuous_variant: false
-
 versions:
   v3: Updated termination/truncation; reproducible seeding; Box2D upgrade

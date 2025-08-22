@@ -18,12 +18,7 @@ rewards:
   per_point: +1/-1
   episodic: score difference
   range: [-21, 21]
-
-defaults:
-  obs_type: rgb
-  frameskip: 1
-  repeat_action_prob: 0.25
-
+  
 modes:
   values: [0,1]
   default: 0

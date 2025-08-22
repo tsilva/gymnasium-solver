@@ -17,9 +17,5 @@ rewards:
   otherwise: 0
   range: [0, 1]
 
-defaults:
-  map_size: 4x4
-  is_slippery: true
-
 versions:
   v1: Deterministic seeding; updated termination/truncation semantics; added render fixes

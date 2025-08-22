@@ -23,8 +23,5 @@ rewards:
   episodic: number of steps balanced (max 500)
   range: [0, 500]
 
-defaults:
-  max_episode_steps: 500
-
 versions:
   v1: Increased max steps to 500; standardized termination semantics

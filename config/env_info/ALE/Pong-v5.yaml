@@ -1,0 +1,13 @@
+# Complementary environment info for ALE/Pong-v5
+reward_structure:
+  description: +1/-1 per scored point; episodic score difference.
+reward_range: [-21.0, 21.0]
+action_labels:
+  0: NOOP
+  1: FIRE
+  2: RIGHT
+  3: LEFT
+  4: RIGHTFIRE
+  5: LEFTFIRE
+
+

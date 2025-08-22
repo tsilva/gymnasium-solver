@@ -1,0 +1,6 @@
+# Complementary environment info for FrozenLake-v1
+reward_structure:
+  description: Sparse rewards; +1 for reaching goal, 0 otherwise.
+reward_range: [0.0, 1.0]
+
+

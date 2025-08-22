@@ -1,0 +1,7 @@
+# Complementary environment info for MountainCar-v0
+reward_structure:
+  description: Reward of -1 per timestep until reaching the goal.
+reward_threshold: -110.0
+reward_range: [-200.0, 0.0]
+
+

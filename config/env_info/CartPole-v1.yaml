@@ -1,0 +1,5 @@
+# Complementary environment info for CartPole-v1
+reward_threshold: 475.0
+reward_range: [0.0, 500.0]
+
+

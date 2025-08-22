@@ -1,0 +1,4 @@
+# Complementary environment info for LunarLander-v3
+reward_threshold: 200.0
+
+

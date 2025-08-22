@@ -1,4 +1,12 @@
 # Complementary environment info for ALE/Pong-v5
+source: https://ale.farama.org/environments/pong/
+description: Control right paddle; score when ball passes opponent, lose when it passes you.
+
+action_space: Discrete(6)
+full_action_space:
+  count: 18
+  note: Set full_action_space=True to enable all 18 Atari 2600 actions.
+
 reward_structure:
   description: +1/-1 per scored point; episodic score difference.
 reward_range: [-21.0, 21.0]
@@ -9,5 +17,56 @@ action_labels:
   3: LEFT
   4: RIGHTFIRE
   5: LEFTFIRE
+
+observation_space:
+  default_obs_type: rgb
+  spaces:
+    rgb:
+      shape: [210, 160, 3]
+      dtype: uint8
+      box_range: [0, 255]
+    ram:
+      shape: [128]
+      dtype: uint8
+      box_range: [0, 255]
+    grayscale:
+      shape: [210, 160]
+      dtype: uint8
+      box_range: [0, 255]
+
+variants:
+  - id: Pong-v0
+    obs_type: rgb
+    frameskip: [2, 5]
+    repeat_action_probability: 0.25
+  - id: PongNoFrameskip-v0
+    obs_type: rgb
+    frameskip: 1
+    repeat_action_probability: 0.25
+  - id: Pong-v4
+    obs_type: rgb
+    frameskip: [2, 5]
+    repeat_action_probability: 0.00
+  - id: PongNoFrameskip-v4
+    obs_type: rgb
+    frameskip: 1
+    repeat_action_probability: 0.00
+  - id: ALE/Pong-v5
+    obs_type: rgb
+    frameskip: 4
+    repeat_action_probability: 0.25
+
+difficulty_and_modes:
+  modes:
+    available: [0, 1]
+    default: 0
+  difficulties:
+    available: [0, 1, 2, 3]
+    default: 0
+
+version_notes:
+  v5: Stickiness added back; stochastic frame-skipping removed; ALE namespace.
+  v4: Stickiness of actions removed.
+  v0: Initial versions release.
 
 

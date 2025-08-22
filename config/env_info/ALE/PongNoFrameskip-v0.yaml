@@ -1,0 +1,9 @@
+# Complementary environment info for PongNoFrameskip-v0
+source: https://ale.farama.org/environments/pong/
+description: Control right paddle; score when ball passes opponent, lose when it passes you.
+
+# Variant-specific settings
+obs_type: rgb
+frameskip: 1
+repeat_action_probability: 0.25
+

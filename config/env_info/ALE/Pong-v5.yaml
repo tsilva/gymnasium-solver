@@ -34,27 +34,12 @@ observation_space:
       dtype: uint8
       box_range: [0, 255]
 
-variants:
-  - id: Pong-v0
-    obs_type: rgb
-    frameskip: [2, 5]
-    repeat_action_probability: 0.25
-  - id: PongNoFrameskip-v0
-    obs_type: rgb
-    frameskip: 1
-    repeat_action_probability: 0.25
-  - id: Pong-v4
-    obs_type: rgb
-    frameskip: [2, 5]
-    repeat_action_probability: 0.00
-  - id: PongNoFrameskip-v4
-    obs_type: rgb
-    frameskip: 1
-    repeat_action_probability: 0.00
-  - id: ALE/Pong-v5
-    obs_type: rgb
-    frameskip: 4
-    repeat_action_probability: 0.25
+# Each variant gets its own file; keep only general info here
+
+# Variant-specific defaults for ALE/Pong-v5
+obs_type: rgb
+frameskip: 4
+repeat_action_probability: 0.25
 
 difficulty_and_modes:
   modes:

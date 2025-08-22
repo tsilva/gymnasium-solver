@@ -1,57 +1,38 @@
-# Complementary environment info for ALE/Pong-v5
+# ALE/Pong-v5
 source: https://ale.farama.org/environments/pong/
 description: Control right paddle; score when ball passes opponent, lose when it passes you.
 
-action_space: Discrete(6)
-full_action_space:
-  count: 18
-  note: Set full_action_space=True to enable all 18 Atari 2600 actions.
-
-reward_structure:
-  description: +1/-1 per scored point; episodic score difference.
-reward_range: [-21.0, 21.0]
-action_labels:
-  0: NOOP
-  1: FIRE
-  2: RIGHT
-  3: LEFT
-  4: RIGHTFIRE
-  5: LEFTFIRE
+action_space:
+  discrete: 6
+  labels: {0: NOOP, 1: FIRE, 2: RIGHT, 3: LEFT, 4: RIGHTFIRE, 5: LEFTFIRE}
+  full_space: {count: 18, enable_with: full_action_space=True}
 
 observation_space:
-  default_obs_type: rgb
-  spaces:
-    rgb:
-      shape: [210, 160, 3]
-      dtype: uint8
-      box_range: [0, 255]
-    ram:
-      shape: [128]
-      dtype: uint8
-      box_range: [0, 255]
-    grayscale:
-      shape: [210, 160]
-      dtype: uint8
-      box_range: [0, 255]
+  default: rgb
+  variants:
+    rgb: {shape: [210,160,3], dtype: uint8, range: [0,255]}
+    grayscale: {shape: [210,160], dtype: uint8, range: [0,255]}
+    ram: {shape: [128], dtype: uint8, range: [0,255]}
 
-# Each variant gets its own file; keep only general info here
+rewards:
+  per_point: +1/-1
+  episodic: score difference
+  range: [-21, 21]
 
-# Variant-specific defaults for ALE/Pong-v5
-obs_type: rgb
-frameskip: 4
-repeat_action_probability: 0.25
+defaults:
+  obs_type: rgb
+  frameskip: 4
+  repeat_action_prob: 0.25
 
-difficulty_and_modes:
-  modes:
-    available: [0, 1]
-    default: 0
-  difficulties:
-    available: [0, 1, 2, 3]
-    default: 0
+modes:
+  values: [0,1]
+  default: 0
 
-version_notes:
-  v5: Stickiness added back; stochastic frame-skipping removed; ALE namespace.
-  v4: Stickiness of actions removed.
-  v0: Initial versions release.
+difficulties:
+  values: [0,1,2,3]
+  default: 0
 
-
+versions:
+  v5: Stickiness restored; no stochastic frame-skip; ALE namespace
+  v4: Stickiness removed
+  v0: Initial release

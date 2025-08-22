@@ -1,4 +1,5 @@
 # Complementary environment info for Taxi-v3
+source: https://gymnasium.farama.org/environments/toy_text/taxi/
 reward_structure:
   description: -1 per step, +20 for successful drop-off, -10 for illegal pickup/drop.
 reward_range: [-800.0, 20.0]

@@ -1,5 +1,5 @@
 # Complementary environment info for ViZDoom Deadly Corridor
-# Source: ViZDoom docs and scenario config
+source: https://vizdoom.cs.put.edu.pl/competitions/cig-2017/scenarios/#deadly-corridor
 reward_structure:
   description: Deadly Corridor rewards approaching armor vest; penalizes retreat and death.
   components:

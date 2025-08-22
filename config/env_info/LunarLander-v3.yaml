@@ -1,4 +1,5 @@
 # Complementary environment info for LunarLander-v3
+source: https://gymnasium.farama.org/environments/box2d/lunar_lander/
 reward_threshold: 200.0
 
 

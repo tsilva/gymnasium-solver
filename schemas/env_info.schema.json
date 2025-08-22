@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/env_info.schema.json",
+  "title": "Env Info Schema",
+  "type": "object",
+  "required": [
+    "source",
+    "description",
+    "action_space",
+    "observation_space",
+    "rewards",
+    "defaults",
+    "versions"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "source": { "type": "string" },
+    "description": { "type": "string" },
+    "action_space": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "discrete": { "type": "integer", "minimum": 1 },
+        "labels": {
+          "type": "object",
+          "description": "Mapping from action index to label.",
+          "additionalProperties": { "type": "string" }
+        },
+        "full_space": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "count": { "type": "integer", "minimum": 1 },
+            "enable_with": { "type": "string" }
+          }
+        }
+      }
+    },
+    "observation_space": {
+      "type": "object",
+      "required": ["default", "variants"],
+      "additionalProperties": true,
+      "properties": {
+        "default": { "type": "string" },
+        "variants": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/obsVariant"
+          }
+        }
+      }
+    },
+    "rewards": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "range": {
+          "$ref": "#/definitions/range2"
+        },
+        "threshold_solved": {
+          "oneOf": [
+            { "type": "number" },
+            { "type": "string" }
+          ]
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "name": { "type": "string" }
+            },
+            "required": ["name"]
+          }
+        }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "frameskip": {
+          "oneOf": [
+            { "type": "integer" },
+            {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": { "type": "integer" }
+            }
+          ]
+        },
+        "map_size": { "oneOf": [ {"type": "string"}, {"type": "integer"} ] },
+        "obs_type": { "oneOf": [ {"type": "string"}, {"type": "integer"} ] },
+        "render_mode": { "oneOf": [ {"type": "string"}, {"type": "integer"} ] }
+      }
+    },
+    "versions": {
+      "type": "object",
+      "description": "Mapping version tag to description.",
+      "additionalProperties": { "type": "string" }
+    },
+    "modes": {
+      "$ref": "#/definitions/choiceBlock"
+    },
+    "difficulties": {
+      "$ref": "#/definitions/choiceBlock"
+    }
+  },
+  "definitions": {
+    "range2": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "oneOf": [ {"type": "number"}, {"type": "string"} ]
+      }
+    },
+    "obsVariant": {
+      "type": "object",
+      "additionalProperties": true,
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["n"],
+          "properties": {
+            "n": { "type": "integer", "minimum": 1 },
+            "dtype": { "type": "string" },
+            "range": { "$ref": "#/definitions/range2" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["shape"],
+          "properties": {
+            "shape": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "oneOf": [
+                  { "type": "integer", "minimum": 1 },
+                  { "type": "string" }
+                ]
+              }
+            },
+            "dtype": { "type": "string" },
+            "range": { "$ref": "#/definitions/range2" }
+          }
+        }
+      ]
+    },
+    "choiceBlock": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["values", "default"],
+      "properties": {
+        "values": { "type": "array", "minItems": 1 },
+        "default": {}
+      }
+    }
+  }
+}

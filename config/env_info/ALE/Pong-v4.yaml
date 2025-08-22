@@ -1,9 +1,39 @@
-# Complementary environment info for Pong-v4
+# ALE/Pong-v4
 source: https://ale.farama.org/environments/pong/
 description: Control right paddle; score when ball passes opponent, lose when it passes you.
 
-# Variant-specific settings
-obs_type: rgb
-frameskip: [2, 5]
-repeat_action_probability: 0.00
+action_space:
+  discrete: 6
+  labels: {0: NOOP, 1: FIRE, 2: RIGHT, 3: LEFT, 4: RIGHTFIRE, 5: LEFTFIRE}
+  full_space: {count: 18, enable_with: full_action_space=True}
+
+observation_space:
+  default: rgb
+  variants:
+    rgb: {shape: [210,160,3], dtype: uint8, range: [0,255]}
+    grayscale: {shape: [210,160], dtype: uint8, range: [0,255]}
+    ram: {shape: [128], dtype: uint8, range: [0,255]}
+
+rewards:
+  per_point: +1/-1
+  episodic: score difference
+  range: [-21, 21]
+
+defaults:
+  obs_type: rgb
+  frameskip: [2,5]
+  repeat_action_prob: 0.0
+
+modes:
+  values: [0,1]
+  default: 0
+
+difficulties:
+  values: [0,1,2,3]
+  default: 0
+
+versions:
+  v5: Stickiness restored; no stochastic frame-skip; ALE namespace
+  v4: Stickiness removed
+  v0: Initial release
 

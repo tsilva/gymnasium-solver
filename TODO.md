@@ -1,6 +1,7 @@
-- add action labels and use them in inspect
+- FEAT: add action labels and use them in inspect
+
+
 - can I create an exploration model by just making loss higher the more the model can predict the future?
-- add todo list for each env
 - print effective rollout step size
 - TODO: add config file beautifier that ensure attributes are set in the correct order
 - TODO: add config file validator that ensures that all attributes are set and that they are set to the correct type

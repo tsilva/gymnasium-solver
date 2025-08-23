@@ -129,7 +129,7 @@ def load_model(model_path, config):
     return model
 
 
-def play_episodes(policy_model, env, num_episodes=5, deterministic=True):
+def play_episodes(policy_model, env, num_episodes=5, deterministic=False):
     """Run episodes with the trained policy and render them."""
     
     for episode in range(num_episodes):
@@ -310,7 +310,7 @@ def main():
     parser.add_argument("--episodes", type=int, default=5,
                        help="Number of episodes to play")
     parser.add_argument("--stochastic", #action="store_true",
-                       default=False, help="Use stochastic policy (default: deterministic)")
+                       default=True, help="Use stochastic policy (default: deterministic)")
     parser.add_argument("--seed", type=int, default=42,
                        help="Random seed for reproducibility")
     parser.add_argument("--log-dir", type=str, default="logs", help="Directory for log files (default: logs)")
@@ -450,7 +450,10 @@ def main():
             obs_type=config.obs_type,
             render_mode=chosen_render_mode,
             env_kwargs=config.env_kwargs,
-            subproc=False  # Force DummyVecEnv for playing
+            subproc=False,  # Force DummyVecEnv for playing
+            # Match training-time preprocessing so model input shapes align
+            grayscale_obs=getattr(config, "grayscale_obs", False),
+            resize_obs=getattr(config, "resize_obs", False),
         )
         
         # Verify we have a single environment with DummyVecEnv

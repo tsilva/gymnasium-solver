@@ -5,7 +5,7 @@ from .PongV5.feature_extractor import PongV5_FeatureExtractor
 from .PongV5.reward_shaper import PongV5_RewardShaper
 from .CartPoleV1.reward_shaper import CartPoleV1_RewardShaper
 from .pixel_observation import PixelObservationWrapper as _PixelObservationWrapper
-from .vizdoom_deadly_corridor import VizDoomDeadlyCorridorEnv
+# VizDoom generic env is available via gym_wrappers.vizdoom: VizDoomEnv
 
 class PixelObservationWrapper(_PixelObservationWrapper):
     """Alias wrapper to expose Gymnasium's PixelObservationWrapper via registry.

@@ -108,25 +108,47 @@ def build_env(
                 env = gym.make(env_id, obs_type=obs_type, render_mode=render_mode, **env_kwargs)
         # VizDoom custom integrations
         elif _is_vizdoom:
-            if env_id in {"VizDoom-DeadlyCorridor-v0", "vizdoom-deadly-corridor"}:
-                from gym_wrappers.vizdoom_deadly_corridor import VizDoomDeadlyCorridorEnv
-                env = VizDoomDeadlyCorridorEnv(render_mode=render_mode, **env_kwargs)
-            elif env_id in {"VizDoom-Basic-v0", "vizdoom-basic"}:
-                from gym_wrappers.vizdoom_basic import VizDoomBasicEnv
-                env = VizDoomBasicEnv(render_mode=render_mode, **env_kwargs)
-            elif env_id in {"VizDoom-DefendTheCenter-v0", "vizdoom-defend-the-center"}:
-                from gym_wrappers.vizdoom_defend_the_center import VizDoomDefendTheCenterEnv
-                env = VizDoomDefendTheCenterEnv(render_mode=render_mode, **env_kwargs)
-            elif env_id in {"VizDoom-DefendTheLine-v0", "vizdoom-defend-the-line"}:
-                from gym_wrappers.vizdoom_defend_the_line import VizDoomDefendTheLineEnv
-                env = VizDoomDefendTheLineEnv(render_mode=render_mode, **env_kwargs)
-            elif env_id in {"VizDoom-HealthGathering-v0", "vizdoom-health-gathering"}:
-                from gym_wrappers.vizdoom_health_gathering import VizDoomHealthGatheringEnv
-                env = VizDoomHealthGatheringEnv(render_mode=render_mode, **env_kwargs)
+            from gym_wrappers.vizdoom import VizDoomEnv
+            env_id_lower = str(env_id).lower()
+            scenario_map = {
+                "vizdoom-deadly-corridor": "deadly_corridor",
+                "vizdoom-deadlycorridor-v0": "deadly_corridor",
+                "vizdoom-deadlycorridor": "deadly_corridor",
+                "vizdoom-deadlycorridor-v1": "deadly_corridor",
+                "vizdoom-deadly-corridor-v0": "deadly_corridor",
+                "vizdoom-basic": "basic",
+                "vizdoom-basic-v0": "basic",
+                "vizdoom-defend-the-center": "defend_the_center",
+                "vizdoom-defend-the-center-v0": "defend_the_center",
+                "vizdoom-defend-the-line": "defend_the_line",
+                "vizdoom-defend-the-line-v0": "defend_the_line",
+                "vizdoom-health-gathering": "health_gathering",
+                "vizdoom-health-gathering-v0": "health_gathering",
+                # Canonical IDs
+                "vizdoom-deadlycorridor-v0": "deadly_corridor",
+            }
+            # Normalize some canonical forms used by configs
+            canonical = env_id_lower.replace("/", "-")
+            if canonical.startswith("vizdoom-"):
+                scenario = scenario_map.get(canonical)
             else:
+                scenario = None
+            if scenario is None:
+                # Strict mapping for known IDs
+                if env_id in {"VizDoom-DeadlyCorridor-v0", "vizdoom-deadly-corridor"}:
+                    scenario = "deadly_corridor"
+                elif env_id in {"VizDoom-Basic-v0", "vizdoom-basic"}:
+                    scenario = "basic"
+                elif env_id in {"VizDoom-DefendTheCenter-v0", "vizdoom-defend-the-center"}:
+                    scenario = "defend_the_center"
+                elif env_id in {"VizDoom-DefendTheLine-v0", "vizdoom-defend-the-line"}:
+                    scenario = "defend_the_line"
+                elif env_id in {"VizDoom-HealthGathering-v0", "vizdoom-health-gathering"}:
+                    scenario = "health_gathering"
+            if scenario is None:
                 # Fallback to deadly corridor if unknown vizdoom id
-                from gym_wrappers.vizdoom_deadly_corridor import VizDoomDeadlyCorridorEnv
-                env = VizDoomDeadlyCorridorEnv(render_mode=render_mode, **env_kwargs)
+                scenario = "deadly_corridor"
+            env = VizDoomEnv(scenario=scenario, render_mode=render_mode, **env_kwargs)
         # PettingZoo Go (wrapped single-agent)
         elif _is_pettingzoo_go:
             # Lazy import to avoid hard dependency for users who don't need it

@@ -1,5 +1,5 @@
 - FEAT: add action labels and use them in inspect
-
+- BUG: final health gathering episode (video) performs way better than best.cpkt... why?
 
 - can I create an exploration model by just making loss higher the more the model can predict the future?
 - print effective rollout step size

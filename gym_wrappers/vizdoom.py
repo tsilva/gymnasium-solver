@@ -6,15 +6,15 @@ import gymnasium as gym
 import numpy as np
 
 
-class VizDoomHealthGatheringEnv(gym.Env):
-    """Minimal Gymnasium wrapper around ViZDoom Health Gathering scenario.
-
-    This environment expects ViZDoom to be installed (pip install vizdoom).
+class VizDoomEnv(gym.Env):
+    """Generic Gymnasium wrapper around ViZDoom scenarios.
 
     Parameters (via env_kwargs):
-        config_path: Optional[str] - Path to health_gathering.cfg. If not provided,
-            attempts to locate the scenarios directory in the installed vizdoom
-            package or the VIZDOOM_SCENARIOS_DIR environment variable.
+        scenario: Optional[str] - One of {"basic", "deadly_corridor", "defend_the_center",
+            "defend_the_line", "health_gathering"}. If provided, the wrapper will try to
+            locate the corresponding .cfg file from either VIZDOOM_SCENARIOS_DIR or the
+            installed vizdoom package. Ignored if config_path is provided.
+        config_path: Optional[str] - Path to a specific scenario .cfg file.
         render_mode: Optional[str] - 'rgb_array' (default) or 'human'.
         seed: Optional[int] - Seed for ViZDoom RNG.
         frame_skip: Optional[int] - Number of frames to repeat each action (defaults to 1).
@@ -27,6 +27,7 @@ class VizDoomHealthGatheringEnv(gym.Env):
 
     def __init__(
         self,
+        scenario: Optional[str] = None,
         config_path: Optional[str] = None,
         render_mode: Optional[str] = None,
         seed: Optional[int] = None,
@@ -39,8 +40,7 @@ class VizDoomHealthGatheringEnv(gym.Env):
             import vizdoom as vzd
         except Exception as exc:  # pragma: no cover - import-time dependency
             raise ImportError(
-                "vizdoom package is required for VizDoomHealthGatheringEnv. "
-                "Install with: pip install vizdoom"
+                "vizdoom package is required for VizDoomEnv. Install with: pip install vizdoom"
             ) from exc
 
         self._vzd = vzd
@@ -49,11 +49,12 @@ class VizDoomHealthGatheringEnv(gym.Env):
         self._game = vzd.DoomGame()
 
         # Resolve config path
-        cfg_path = self._resolve_config_path(config_path)
+        cfg_path = self._resolve_config_path(config_path=config_path, scenario=scenario)
         if cfg_path is None:
+            hint = scenario or "<unknown>"
             raise FileNotFoundError(
-                "Could not locate health_gathering.cfg. Set env_kwargs.config_path "
-                "or define VIZDOOM_SCENARIOS_DIR to the directory containing the scenario files."
+                f"Could not locate scenario cfg for '{hint}'. Set env_kwargs.config_path or define "
+                "VIZDOOM_SCENARIOS_DIR to the directory containing the scenario files."
             )
 
         self._game.load_config(str(cfg_path))
@@ -87,51 +88,71 @@ class VizDoomHealthGatheringEnv(gym.Env):
 
         # Build a small discrete action set mapped to vizdoom button vectors
         n_buttons = int(self._game.get_available_buttons_size())
-        # Helper to build binary vectors by button indices
-        def a(*on_idx: int):
-            vec = [0] * n_buttons
+
+        def _action_vector(*on_idx: int):
+            vector = [0] * n_buttons
             for i in on_idx:
                 if 0 <= i < n_buttons:
-                    vec[i] = 1
-            return vec
+                    vector[i] = 1
+            return vector
+
         # Common minimal controls. Index order follows vizdoom available buttons
         # Typical order: MOVE_LEFT, MOVE_RIGHT, MOVE_FORWARD, MOVE_BACKWARD, TURN_LEFT, TURN_RIGHT, ATTACK
         self._discrete_actions = [
-            a(),      # 0: noop
-            a(2),     # 1: forward
-            a(3),     # 2: backward
-            a(0),     # 3: strafe left
-            a(1),     # 4: strafe right
-            a(4),     # 5: turn left
-            a(5),     # 6: turn right
-            a(6),     # 7: attack
-            a(2, 6),  # 8: forward + attack
+            _action_vector(),      # 0: noop
+            _action_vector(2),     # 1: forward
+            _action_vector(3),     # 2: backward
+            _action_vector(0),     # 3: strafe left
+            _action_vector(1),     # 4: strafe right
+            _action_vector(4),     # 5: turn left
+            _action_vector(5),     # 6: turn right
+            _action_vector(6),     # 7: attack
+            _action_vector(2, 6),  # 8: forward + attack
         ]
         self.action_space = gym.spaces.Discrete(len(self._discrete_actions))
 
         self._last_obs: Optional[np.ndarray] = None
 
-    def _resolve_config_path(self, config_path: Optional[str]) -> Optional[Path]:
+    def _resolve_config_path(self, config_path: Optional[str], scenario: Optional[str]) -> Optional[Path]:
         if config_path:
             candidate = Path(config_path)
             if candidate.is_file():
                 return candidate
+
+        # Choose default cfg file name by scenario
+        cfg_by_scenario = {
+            "basic": "basic.cfg",
+            "deadly_corridor": "deadly_corridor.cfg",
+            "defend_the_center": "defend_the_center.cfg",
+            "defend_the_line": "defend_the_line.cfg",
+            "health_gathering": "health_gathering.cfg",
+        }
+
+        cfg_name = None
+        key = (scenario or "").strip().lower().replace(" ", "_")
+        if key in cfg_by_scenario:
+            cfg_name = cfg_by_scenario[key]
+
         # Try environment variable first
-        env_dir = os.environ.get("VIZDOOM_SCENARIOS_DIR")
-        if env_dir:
-            p = Path(env_dir) / "health_gathering.cfg"
-            if p.is_file():
-                return p
+        if cfg_name:
+            env_dir = os.environ.get("VIZDOOM_SCENARIOS_DIR")
+            if env_dir:
+                p = Path(env_dir) / cfg_name
+                if p.is_file():
+                    return p
+
         # Try to locate scenarios folder inside the installed vizdoom package
         try:
             import vizdoom as vzd  # type: ignore
             pkg_dir = Path(vzd.__file__).parent
             scenarios_dir = pkg_dir / "scenarios"
-            p = scenarios_dir / "health_gathering.cfg"
-            if p.is_file():
-                return p
+            if cfg_name:
+                p = scenarios_dir / cfg_name
+                if p.is_file():
+                    return p
         except Exception:
             pass
+
         return None
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None) -> Tuple[np.ndarray, Dict[str, Any]]:
@@ -165,8 +186,13 @@ class VizDoomHealthGatheringEnv(gym.Env):
             obs = self._get_screen()
 
         info: Dict[str, Any] = {}
+        # Best effort: expose common game variables when available
         try:
             info["health"] = float(self._game.get_game_variable(self._vzd.GameVariable.HEALTH))
+        except Exception:
+            pass
+        try:
+            info["ammo"] = float(self._game.get_game_variable(self._vzd.GameVariable.AMMO2))
         except Exception:
             pass
         return obs, reward, terminated, truncated, info

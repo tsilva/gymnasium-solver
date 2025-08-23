@@ -241,12 +241,33 @@ class VecInfoWrapper(VecEnvWrapper):
 
     def _get_complement_threshold(self) -> Optional[float]:
         data = self._load_complement_yaml()
-        if isinstance(data, dict):
-            thr = data.get("reward_threshold")
+        if not isinstance(data, dict):
+            return None
+
+        # Preferred: explicit top-level reward_threshold
+        candidates: list[Any] = [data.get("reward_threshold")]
+
+        # Backwards-compatible fallbacks from the env_info schema used in this repo
+        #   rewards:
+        #     threshold: <float>
+        #     threshold_solved: <float>
+        try:
+            rewards_block = data.get("rewards") or {}
+            if isinstance(rewards_block, dict):
+                candidates.append(rewards_block.get("threshold"))
+                candidates.append(rewards_block.get("threshold_solved"))
+        except Exception:
+            pass
+
+        # Return the first candidate that can be parsed as a float
+        for val in candidates:
+            if val is None:
+                continue
             try:
-                return float(thr) if thr is not None else None
+                return float(val)
             except Exception:
-                return None
+                continue
+
         return None
 
     def _get_complement_reward_range(self) -> Optional[Tuple[float, float]]:

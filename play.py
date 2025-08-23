@@ -43,6 +43,8 @@ def load_model(model_path, config):
         render_mode=None,
         env_kwargs=config.env_kwargs,
         subproc=False,
+        grayscale_obs=getattr(config, "grayscale_obs", False),
+        resize_obs=getattr(config, "resize_obs", False),
     )
     try:
         # VecInfoWrapper exposes helpers for dims; also keep obs_space for CNN policies

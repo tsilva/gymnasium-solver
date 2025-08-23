@@ -206,21 +206,24 @@ class _ReshapeFlatToImage(nn.Module):
 
     def forward(self, x: torch.Tensor):
         N = x.shape[0]
-        H, W, C = self.hwc
+        H, W, C_expected = self.hwc
         # Flat inputs: (N, H*W*C)
         if x.ndim == 2:
-            x = x.view(N, H, W, C)
+            x = x.view(N, H, W, C_expected)
             return x.permute(0, 3, 1, 2).contiguous()
-        # 4D inputs: either HWC or CHW
+        # 4D inputs: allow HWC or CHW with arbitrary channel count (e.g., frame stack)
         if x.ndim == 4:
-            # If already channel-first (N, C, H, W), pass through
-            if x.shape[1] == C and x.shape[2] == H and x.shape[3] == W:
-                return x.contiguous()
-            # If channel-last (N, H, W, C), permute to channel-first
-            if x.shape[1] == H and x.shape[2] == W and x.shape[3] == C:
+            # If channel-last (N, H, W, Cx), permute to channel-first
+            if x.shape[1] == H and x.shape[2] == W:
                 return x.permute(0, 3, 1, 2).contiguous()
-        # Fallback: try to interpret as HWC and permute
-        return x.permute(0, 3, 1, 2).contiguous()
+            # If channel-first and spatial dims match, pass through
+            if x.shape[2] == H and x.shape[3] == W:
+                return x.contiguous()
+        # Fallback: best-effort permute assuming input is HWC
+        try:
+            return x.permute(0, 3, 1, 2).contiguous()
+        except Exception:
+            return x
 
 
 class CNNActorCritic(nn.Module):

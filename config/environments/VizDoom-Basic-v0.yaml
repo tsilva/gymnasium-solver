@@ -1,0 +1,30 @@
+__VizDoom-Basic-v0:
+  project_id: "VizDoom-Basic-v0"
+  env_id: VizDoom-Basic-v0
+  policy: 'cnn'
+  grayscale_obs: true
+  resize_obs: true
+  frame_stack: 4
+  accelerator: 'gpu'
+  devices: 'auto'
+  eval_freq_epochs: 1
+  eval_episodes: 1
+
+VizDoom-Basic-v0_ppo:
+  inherits: __VizDoom-Basic-v0
+  algo_id: ppo
+  n_envs: 8
+  n_steps: 128
+  batch_size: 256
+  n_epochs: 4
+  clip_range: 0.1
+  learning_rate: 2.5e-4
+  # CNN defaults suitable for 84x84 inputs
+  policy_kwargs:
+    activation: relu
+    channels: [32, 64, 64]
+    kernel_sizes: [8, 4, 3]
+    strides: [4, 2, 1]
+
+
+

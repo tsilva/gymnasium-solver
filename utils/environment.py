@@ -5,9 +5,14 @@ def is_alepy_env_id(env_id: str) -> bool:
     return env_id.startswith("ALE/")
 
 def is_vizdoom_env_id(env_id: str) -> bool:
-    # Support a simple custom id for deadly corridor
-    # Users can specify 'VizDoom-DeadlyCorridor-v0' in env_id to trigger this
-    return env_id in {"VizDoom-DeadlyCorridor-v0", "vizdoom-deadly-corridor"}
+    # Support simple custom ids for VizDoom scenarios
+    # Users can specify 'VizDoom-DeadlyCorridor-v0' or 'VizDoom-Basic-v0' in env_id
+    return env_id in {
+        "VizDoom-DeadlyCorridor-v0",
+        "vizdoom-deadly-corridor",
+        "VizDoom-Basic-v0",
+        "vizdoom-basic",
+    }
 
 def is_rgb_env(env):
     import numpy as np
@@ -94,10 +99,18 @@ def build_env(
             # Otherwise, create the standard ALE environment
             else:
                 env = gym.make(env_id, obs_type=obs_type, render_mode=render_mode, **env_kwargs)
-        # VizDoom Deadly Corridor custom integration
+        # VizDoom custom integrations
         elif _is_vizdoom:
-            from gym_wrappers.vizdoom_deadly_corridor import VizDoomDeadlyCorridorEnv
-            env = VizDoomDeadlyCorridorEnv(render_mode=render_mode, **env_kwargs)
+            if env_id in {"VizDoom-DeadlyCorridor-v0", "vizdoom-deadly-corridor"}:
+                from gym_wrappers.vizdoom_deadly_corridor import VizDoomDeadlyCorridorEnv
+                env = VizDoomDeadlyCorridorEnv(render_mode=render_mode, **env_kwargs)
+            elif env_id in {"VizDoom-Basic-v0", "vizdoom-basic"}:
+                from gym_wrappers.vizdoom_basic import VizDoomBasicEnv
+                env = VizDoomBasicEnv(render_mode=render_mode, **env_kwargs)
+            else:
+                # Fallback to deadly corridor if unknown vizdoom id
+                from gym_wrappers.vizdoom_deadly_corridor import VizDoomDeadlyCorridorEnv
+                env = VizDoomDeadlyCorridorEnv(render_mode=render_mode, **env_kwargs)
         # Otherwise, create a standard gym environment
         else: 
             env = gym.make(env_id, render_mode=render_mode, **env_kwargs)

@@ -186,6 +186,9 @@ def run_episode(
         render_mode="rgb_array",
         env_kwargs=config.env_kwargs,
         subproc=False,
+        # Match training-time preprocessing so model input shapes align
+        grayscale_obs=getattr(config, "grayscale_obs", False),
+        resize_obs=getattr(config, "resize_obs", False),
     )
 
     policy_model = _load_model(ckpt_path, config)

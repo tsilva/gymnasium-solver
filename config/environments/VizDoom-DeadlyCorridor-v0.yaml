@@ -1,5 +1,5 @@
-__VizDoom-DeadlyCorridor:
-  project_id: "VizDoom-DeadlyCorridor"
+__VizDoom-DeadlyCorridor-v0:
+  project_id: "VizDoom-DeadlyCorridor-v0"
   env_id: VizDoom-DeadlyCorridor-v0
   policy: 'cnn'
   grayscale_obs: true
@@ -10,8 +10,8 @@ __VizDoom-DeadlyCorridor:
   eval_freq_epochs: 1
   eval_episodes: 1
 
-VizDoom-DeadlyCorridor_ppo:
-  inherits: __VizDoom-DeadlyCorridor
+VizDoom-DeadlyCorridor-v0_ppo:
+  inherits: __VizDoom-DeadlyCorridor-v0
   algo_id: ppo
   n_envs: 8
   n_steps: 128

@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import os
+import time
 import platform
 
 
@@ -131,7 +132,31 @@ def load_model(model_path, config):
 
 def play_episodes(policy_model, env, num_episodes=5, deterministic=False):
     """Run episodes with the trained policy and render them."""
-    
+    # Infer FPS for pacing playback
+    fps = None
+    try:
+        if hasattr(env, "get_render_fps"):
+            fps = env.get_render_fps()  # type: ignore[attr-defined]
+    except Exception:
+        fps = None
+    if not isinstance(fps, int) or fps <= 0:
+        try:
+            # Try reading metadata from first underlying env
+            md = None
+            if hasattr(env, "venv") and hasattr(env.venv, "get_attr"):
+                lst = env.venv.get_attr("metadata", indices=[0])
+                if isinstance(lst, list) and lst:
+                    md = lst[0]
+            elif hasattr(env, "metadata"):
+                md = getattr(env, "metadata", None)
+            if isinstance(md, dict):
+                rfps = md.get("render_fps")
+                if isinstance(rfps, (int, float)) and rfps > 0:
+                    fps = int(rfps)
+        except Exception:
+            fps = None
+    frame_interval = (1.0 / float(fps)) if isinstance(fps, int) and fps > 0 else None
+
     for episode in range(num_episodes):
         # Handle both new and old gymnasium reset API
         reset_result = env.reset()
@@ -146,6 +171,8 @@ def play_episodes(policy_model, env, num_episodes=5, deterministic=False):
         
         print(f"\n--- Episode {episode + 1} ---")
         
+        # Track time to pace frames close to the environment FPS
+        last_time = time.perf_counter()
         while True:
             # Get action from policy
             with torch.no_grad():
@@ -209,9 +236,17 @@ def play_episodes(policy_model, env, num_episodes=5, deterministic=False):
                 env.render()
             except Exception:
                 pass
-            
-            # Small delay to make it watchable
-            #time.sleep(0.05)
+
+            # Pace playback to match FPS if known
+            if frame_interval is not None:
+                try:
+                    now = time.perf_counter()
+                    sleep_s = frame_interval - (now - last_time)
+                    if sleep_s > 0:
+                        time.sleep(sleep_s)
+                    last_time = time.perf_counter()
+                except Exception:
+                    pass
             
             if terminated or truncated:
                 break

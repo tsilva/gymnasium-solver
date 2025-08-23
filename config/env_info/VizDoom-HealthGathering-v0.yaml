@@ -1,6 +1,6 @@
-# VizDoom-DeadlyCorridor-v0
-source: https://vizdoom.cs.put.edu.pl/competitions/cig-2017/scenarios/#deadly-corridor
-description: Reach the armor vest through a corridor of enemies; survive and progress forward.
+# VizDoom-HealthGathering-v0
+source: https://github.com/mwydmuch/ViZDoom/tree/master/scenarios#health-gathering
+description: Survive in a toxic environment by gathering health vials to avoid death.
 
 render_fps: 35
 
@@ -18,13 +18,15 @@ observation_space:
       note: Height/width depend on the ViZDoom cfg; wrapper enforces RGB24 and HWC.
 
 rewards:
-  description: Dense shaping towards the vest; penalties for retreat and death.
+  description: Positive for survival time and picking health; negative on death.
   components:
-    - {name: distance_shaping, sign: positive}
-    - {name: retreat_penalty, sign: negative}
+    - {name: health_pickup, sign: positive}
+    - {name: survival_time, sign: positive}
     - {name: death_penalty, value: -100.0}
   threshold_solved: 1000
-  range: [-100, 1000]
+  range: [-100, 2000]
 
 versions:
   v0: Initial wrapper; RGB24 observations; exposes render_mode and frame_skip
+
+

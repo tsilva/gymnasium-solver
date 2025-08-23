@@ -12,6 +12,12 @@ def is_vizdoom_env_id(env_id: str) -> bool:
         "vizdoom-deadly-corridor",
         "VizDoom-Basic-v0",
         "vizdoom-basic",
+        "VizDoom-DefendTheCenter-v0",
+        "vizdoom-defend-the-center",
+        "VizDoom-DefendTheLine-v0",
+        "vizdoom-defend-the-line",
+        "VizDoom-HealthGathering-v0",
+        "vizdoom-health-gathering",
     }
 
 def is_rgb_env(env):
@@ -108,6 +114,15 @@ def build_env(
             elif env_id in {"VizDoom-Basic-v0", "vizdoom-basic"}:
                 from gym_wrappers.vizdoom_basic import VizDoomBasicEnv
                 env = VizDoomBasicEnv(render_mode=render_mode, **env_kwargs)
+            elif env_id in {"VizDoom-DefendTheCenter-v0", "vizdoom-defend-the-center"}:
+                from gym_wrappers.vizdoom_defend_the_center import VizDoomDefendTheCenterEnv
+                env = VizDoomDefendTheCenterEnv(render_mode=render_mode, **env_kwargs)
+            elif env_id in {"VizDoom-DefendTheLine-v0", "vizdoom-defend-the-line"}:
+                from gym_wrappers.vizdoom_defend_the_line import VizDoomDefendTheLineEnv
+                env = VizDoomDefendTheLineEnv(render_mode=render_mode, **env_kwargs)
+            elif env_id in {"VizDoom-HealthGathering-v0", "vizdoom-health-gathering"}:
+                from gym_wrappers.vizdoom_health_gathering import VizDoomHealthGatheringEnv
+                env = VizDoomHealthGatheringEnv(render_mode=render_mode, **env_kwargs)
             else:
                 # Fallback to deadly corridor if unknown vizdoom id
                 from gym_wrappers.vizdoom_deadly_corridor import VizDoomDeadlyCorridorEnv

@@ -78,7 +78,24 @@ class VecVideoRecorder(VecEnvWrapper):
         self.env.metadata = metadata
         assert self.env.render_mode == "rgb_array", f"The render_mode must be 'rgb_array', not {self.env.render_mode}"
 
-        self.frames_per_sec = self.env.metadata.get("render_fps", 30)
+        # Try env metadata, then fall back to VecInfoWrapper helper if present
+        fps = None
+        try:
+            fps = self.env.metadata.get("render_fps")
+        except Exception:
+            fps = None
+        if not isinstance(fps, (int, float)):
+            try:
+                # Some stacks will have VecInfoWrapper above or below us; try to access helper
+                if hasattr(venv, "get_render_fps"):
+                    inferred = venv.get_render_fps()  # type: ignore[attr-defined]
+                    if isinstance(inferred, int) and inferred > 0:
+                        fps = inferred
+            except Exception:
+                fps = None
+        if not isinstance(fps, (int, float)):
+            fps = 30
+        self.frames_per_sec = int(fps)
 
         self.step_id = 0
         self.video_length = video_length

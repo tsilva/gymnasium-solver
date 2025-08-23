@@ -162,7 +162,7 @@ def _ensure_action_shape(env, action):
 def run_episode(
     run_id: str,
     checkpoint_label: str | None,
-    deterministic: bool = True,
+    deterministic: bool = False,
     max_steps: int = 1000,
 ) -> Tuple[List[np.ndarray], List[Dict[str, Any]], Dict[str, Any]]:
     config = _load_config_from_run(run_id)
@@ -473,7 +473,7 @@ def build_ui(default_run_id: str = "latest-run"):
                 value=default_label,
                 interactive=True,
             )
-            deterministic = gr.Checkbox(label="Deterministic policy", value=True)
+            deterministic = gr.Checkbox(label="Deterministic policy", value=False)
             max_steps = gr.Slider(label="Max steps", minimum=10, maximum=5000, value=1000, step=10)
             run_btn = gr.Button("Inspect")
 
@@ -514,10 +514,25 @@ def build_ui(default_run_id: str = "latest-run"):
         # Timer for autoplay (fallback if Timer doesn't exist in older Gradio)
         timer = None
         try:
+            # Try to infer FPS for smoother playback
+            inferred_fps = None
+            try:
+                # Quick attempt: load env_info YAML for the initial run's env
+                cfg = _load_config_from_run(initial_run)
+                if cfg and getattr(cfg, "env_id", None):
+                    info = _load_env_info_yaml(cfg.env_id)
+                    if isinstance(info, dict):
+                        rfps = info.get("render_fps")
+                        if isinstance(rfps, (int, float)) and rfps > 0:
+                            inferred_fps = int(rfps)
+            except Exception:
+                inferred_fps = None
+
             TimerCls = getattr(gr, "Timer", None)
             if TimerCls is not None:
-                # ~30 FPS playback
-                timer = TimerCls(1/30)
+                # Default to 30 FPS if unknown
+                fps_val = int(inferred_fps) if isinstance(inferred_fps, int) and inferred_fps > 0 else 30
+                timer = TimerCls(1/float(fps_val))
         except Exception:
             timer = None
         # Table headers are reused for CSV export and for the current-step vertical view

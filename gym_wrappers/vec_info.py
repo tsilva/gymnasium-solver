@@ -200,6 +200,57 @@ class VecInfoWrapper(VecEnvWrapper):
             pass
         return None
 
+    def get_render_fps(self) -> Optional[int]:
+        """Infer environment render FPS.
+
+        Tries, in order:
+        1) First base env metadata['render_fps']
+        2) VecEnv attribute fetch of 'metadata' then ['render_fps']
+        3) Complementary env_info YAML: top-level 'render_fps' or extras.render_fps
+        """
+        # 1) Direct from base env metadata
+        try:
+            base = self._first_base_env()
+            if base is not None:
+                md = getattr(base, "metadata", None)
+                if isinstance(md, dict):
+                    fps = md.get("render_fps")
+                    if isinstance(fps, (int, float)):
+                        return int(fps)
+        except Exception:
+            pass
+
+        # 2) Try via vec env get_attr (IPC-safe for Subproc)
+        try:
+            md_list = self.venv.get_attr("metadata", indices=[0])
+            if isinstance(md_list, list) and md_list:
+                md0 = md_list[0]
+                if isinstance(md0, dict):
+                    fps = md0.get("render_fps")
+                    if isinstance(fps, (int, float)):
+                        return int(fps)
+        except Exception:
+            pass
+
+        # 3) Complementary YAML fallback
+        data = self._load_complement_yaml()
+        if isinstance(data, dict):
+            try:
+                # Prefer top-level key
+                fps = data.get("render_fps")
+                if isinstance(fps, (int, float)):
+                    return int(fps)
+                # Extras or nested blocks may also include it
+                extras = data.get("extras")
+                if isinstance(extras, dict):
+                    fps = extras.get("render_fps")
+                    if isinstance(fps, (int, float)):
+                        return int(fps)
+            except Exception:
+                pass
+
+        return None
+
     def _load_complement_yaml(self) -> Optional[Dict[str, Any]]:
         """
         Load complementary env info YAML by env_id.

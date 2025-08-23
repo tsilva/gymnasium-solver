@@ -118,11 +118,25 @@ def build_env(
             from pettingzoo.classic import go_v5
             from gym_wrappers.pettingzoo_single_agent import PettingZooSingleAgentWrapper
 
-            board_size = int(env_kwargs.pop("board_size", env_kwargs.pop("board_size", 9)) or 9)
+            # Extract supported kwargs
+            board_size = int(env_kwargs.pop("board_size", 9) or 9)
             opponent = env_kwargs.pop("opponent", "random")  # placeholder for future extensions
 
-            # PettingZoo parallel environments are recommended; go_v5.parallel_env exists
-            pz_env = go_v5.parallel_env(board_size=board_size, render_mode=render_mode, **env_kwargs)
+            # Prefer parallel env if available, otherwise fall back to AEC env
+            try:
+                if hasattr(go_v5, "parallel_env"):
+                    pz_env = go_v5.parallel_env(board_size=board_size, render_mode=render_mode, **env_kwargs)
+                elif hasattr(go_v5, "env"):
+                    pz_env = go_v5.env(board_size=board_size, render_mode=render_mode, **env_kwargs)
+                else:
+                    pz_env = go_v5.raw_env(board_size=board_size, render_mode=render_mode, **env_kwargs)  # type: ignore[attr-defined]
+            except Exception:
+                # Final fallback in case signature differs between versions
+                if hasattr(go_v5, "env"):
+                    pz_env = go_v5.env(board_size=board_size)
+                else:
+                    pz_env = go_v5.raw_env(board_size=board_size)  # type: ignore[attr-defined]
+
             # Control the first agent by default
             env = PettingZooSingleAgentWrapper(pz_env, agent_id=None, render_mode=render_mode)
         # Otherwise, create a standard gym environment

@@ -1,8 +1,10 @@
 import numpy as np
 from typing import Any, Dict, Optional, Tuple
+import gymnasium as gym
+from gymnasium import spaces
 
 
-class PettingZooSingleAgentWrapper:
+class PettingZooSingleAgentWrapper(gym.Env):
     """
     Adapt a PettingZoo AEC/parallel environment to a Gymnasium-like single-agent API.
 
@@ -34,18 +36,41 @@ class PettingZooSingleAgentWrapper:
             agent_id = agents[0]
         self._agent_id = agent_id
 
-        # Placeholders; will be set on first reset
-        self.observation_space = None
-        self.action_space = None
+        # Try to expose spaces early if available from PettingZoo mappings
+        self.observation_space: Optional[spaces.Space] = None
+        self.action_space: Optional[spaces.Space] = None
+        try:
+            if self._agent_id is not None:
+                obs_spaces = getattr(self._env, "observation_spaces", {}) or {}
+                act_spaces = getattr(self._env, "action_spaces", {}) or {}
+                self.observation_space = obs_spaces.get(self._agent_id, None)
+                self.action_space = act_spaces.get(self._agent_id, None)
+        except Exception:
+            pass
+
+        # If spaces are still unknown, perform a lightweight reset to infer them
+        if self.observation_space is None or self.action_space is None:
+            try:
+                _ = self.reset()
+                # After reset, try again to fetch spaces
+                if self._agent_id is not None:
+                    obs_spaces = getattr(self._env, "observation_spaces", {}) or {}
+                    act_spaces = getattr(self._env, "action_spaces", {}) or {}
+                    self.observation_space = obs_spaces.get(self._agent_id, self.observation_space)
+                    self.action_space = act_spaces.get(self._agent_id, self.action_space)
+            except Exception:
+                pass
         self._opponent_ids = []
 
     # --- Gymnasium-like API -------------------------------------------------
     def reset(self, *, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None):
-        # PettingZoo parallel_env.reset returns observations dict
+        # PettingZoo parallel_env.reset returns observations dict (and optionally infos)
         obs_dict = self._env.reset(seed=seed, options=options)  # type: ignore[call-arg]
         if isinstance(obs_dict, tuple) and len(obs_dict) == 2 and isinstance(obs_dict[0], dict):
             # Some versions may return (obs, infos)
-            obs_dict = obs_dict[0]
+            obs_dict, infos_dict = obs_dict
+        else:
+            infos_dict = {}
 
         # Detect agent ids and spaces now
         try:
@@ -76,13 +101,22 @@ class PettingZooSingleAgentWrapper:
             except Exception:
                 pass
 
+        # Do NOT coerce dict observations to numpy arrays; SB3 expects mapping when observation_space is Dict
+        if not isinstance(obs, dict):
+            try:
+                obs = np.asarray(obs)
+            except Exception:
+                pass
+        # Gymnasium API: return (obs, info)
+        info = {}
         try:
-            obs = np.asarray(obs)
+            if isinstance(infos_dict, dict) and self._agent_id is not None:
+                info = dict(infos_dict.get(self._agent_id, {}) or {})
         except Exception:
-            pass
-        return obs
+            info = {}
+        return obs, info
 
-    def step(self, action) -> Tuple[Any, float, bool, Dict[str, Any]]:
+    def step(self, action) -> Tuple[Any, float, bool, bool, Dict[str, Any]]:
         # Handle action as NumPy array scalar or Python int
         if isinstance(action, (np.ndarray,)) and action.shape == ():
             action = action.item()
@@ -104,17 +138,21 @@ class PettingZooSingleAgentWrapper:
 
             obs = obs_dict.get(self._agent_id)
             reward = float(rew_dict.get(self._agent_id, 0.0))
-            done = bool((term_dict.get(self._agent_id, False)) or (trunc_dict.get(self._agent_id, False)))
+            terminated = bool(term_dict.get(self._agent_id, False))
+            truncated = bool(trunc_dict.get(self._agent_id, False))
             info = dict(info_dict.get(self._agent_id, {}) or {})
-            try:
-                obs = np.asarray(obs)
-            except Exception:
-                pass
-            return obs, reward, done, info
+            # Preserve dict observations; otherwise convert to numpy array
+            if not isinstance(obs, dict):
+                try:
+                    obs = np.asarray(obs)
+                except Exception:
+                    pass
+            return obs, reward, terminated, truncated, info
         else:
             # AEC fallback: step for our agent, random-step others until next turn of our agent
             reward_total = 0.0
-            done = False
+            terminated = False
+            truncated = False
             info: Dict[str, Any] = {}
 
             try:
@@ -130,8 +168,9 @@ class PettingZooSingleAgentWrapper:
                 try:
                     term_map = getattr(self._env, "terminations", {}) or {}
                     trunc_map = getattr(self._env, "truncations", {}) or {}
-                    done = bool(term_map.get(self._agent_id, False) or trunc_map.get(self._agent_id, False))
-                    if done:
+                    terminated = bool(term_map.get(self._agent_id, False))
+                    truncated = bool(trunc_map.get(self._agent_id, False))
+                    if terminated or truncated:
                         break
                 except Exception:
                     pass
@@ -171,12 +210,13 @@ class PettingZooSingleAgentWrapper:
                 obs = self._env.observe(self._agent_id)
             except Exception:
                 obs = None
-            try:
-                obs = np.asarray(obs)
-            except Exception:
-                pass
+            if not isinstance(obs, dict):
+                try:
+                    obs = np.asarray(obs)
+                except Exception:
+                    pass
 
-            return obs, float(reward_total), bool(done), info
+            return obs, float(reward_total), bool(terminated), bool(truncated), info
 
     def render(self) -> Any:
         try:

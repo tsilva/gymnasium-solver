@@ -377,6 +377,21 @@ class VecInfoWrapper(VecEnvWrapper):
                     dims.append(0)
             return int(sum(dims)) if dims else None
 
+        # Dict: sum flattened dims of each subspace
+        if isinstance(obs_space, spaces.Dict):
+            total = 0
+            for key, sub in obs_space.spaces.items():
+                if isinstance(sub, spaces.Discrete):
+                    total += 1
+                elif hasattr(sub, 'shape') and sub.shape:
+                    try:
+                        total += int(np.prod(sub.shape))
+                    except Exception:
+                        return None
+                else:
+                    return None
+            return int(total)
+
         # Fallback
         if hasattr(obs_space, 'shape') and obs_space.shape:
             return int(obs_space.shape[0])

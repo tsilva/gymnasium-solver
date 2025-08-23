@@ -77,7 +77,8 @@ ep_rew_mean:
   description: "Average episode reward over recent episodes window"
 
 ep_len_mean:
-  precision: 2
+  precision: 0
+  force_integer: true
   description: "Average episode length over recent episodes window"
 
 # Immediate episode stats

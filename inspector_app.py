@@ -752,8 +752,9 @@ def build_ui(default_run_id: str = "latest-run"):
                 row_vals = [
                     bool(s.get("done")),
                     int(s.get("step", 0)),
-                    s.get("probs"),
                     s.get("action"),
+                    s.get("action_label"),
+                    s.get("probs"),
                     s.get("reward"),
                     s.get("cum_reward"),
                     s.get("mc_return"),

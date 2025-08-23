@@ -106,7 +106,8 @@ def _load_env_info_yaml(env_id: str) -> Dict[str, Any] | None:
     if custom_dir:
         candidates.append(Path(custom_dir))
     try:
-        project_root = Path(__file__).resolve().parents[1]
+        # inspector_app.py lives at the project root
+        project_root = Path(__file__).resolve().parent
         candidates.append(project_root / "config" / "env_info")
     except Exception:
         pass
@@ -190,9 +191,18 @@ def run_episode(
     policy_model = _load_model(ckpt_path, config)
     policy_model.eval()
 
-    # Load action labels (if available) from env_info YAML
-    env_info_yaml = _load_env_info_yaml(config.env_id)
-    action_labels: List[str] | None = _extract_action_labels(env_info_yaml)
+    # Load action labels from vec env wrapper if available; fallback to YAML
+    action_labels: List[str] | None = None
+    try:
+        if hasattr(env, "get_action_labels"):
+            labels = env.get_action_labels()  # type: ignore[attr-defined]
+            if isinstance(labels, list):
+                action_labels = [str(x) for x in labels]
+    except Exception:
+        action_labels = None
+    if action_labels is None:
+        env_info_yaml = _load_env_info_yaml(config.env_id)
+        action_labels = _extract_action_labels(env_info_yaml)
 
     # Collect environment spec for summary tabs
     try:
@@ -580,11 +590,6 @@ def build_ui(default_run_id: str = "latest-run"):
 
         def _inspect(rid: str, ckpt_label: str | None, det: bool, nsteps: int):
             frames, steps, info = run_episode(rid, ckpt_label, det, int(nsteps))
-            labels_for_actions: List[str] | None = None
-            try:
-                labels_for_actions = info.get("env_spec", {}).get("action_labels")  # type: ignore[assignment]
-            except Exception:
-                labels_for_actions = None
             rows = []
             for s in steps:
                 # Format probabilities, optionally with labels
@@ -592,11 +597,7 @@ def build_ui(default_run_id: str = "latest-run"):
                 probs = s.get("probs")
                 if isinstance(probs, list):
                     try:
-                        if labels_for_actions and len(labels_for_actions) == len(probs):
-                            pairs = [f"{labels_for_actions[i]}: {probs[i]:.3f}" for i in range(len(probs))]
-                            probs_fmt = "[" + ", ".join(pairs) + "]"
-                        else:
-                            probs_fmt = "[" + ", ".join(f"{p:.3f}" for p in probs) + "]"
+                        probs_fmt = "[" + ", ".join(f"{float(p):.3f}" for p in probs) + "]"
                     except Exception:
                         probs_fmt = "[" + ", ".join(str(p) for p in probs) + "]"
                 rows.append([

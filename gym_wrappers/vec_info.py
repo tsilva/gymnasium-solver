@@ -263,6 +263,52 @@ class VecInfoWrapper(VecEnvWrapper):
                     return None
         return None
     
+    def _get_complement_action_labels(self) -> Optional[list]:
+        """
+        Load ordered action labels from env_info YAML if present.
+        Expected structure:
+          action_space:
+            discrete: <int>
+            labels: {0: "NOOP", 1: "FIRE", ...}
+        Returns a list of strings of length `discrete`, or None if unavailable.
+        """
+        data = self._load_complement_yaml()
+        if not isinstance(data, dict):
+            return None
+        try:
+            action_space = data.get("action_space") or {}
+            discrete = action_space.get("discrete")
+            labels = action_space.get("labels")
+            if isinstance(labels, list) and isinstance(discrete, int) and len(labels) == int(discrete):
+                # Already ordered list
+                return [str(x) for x in labels]
+            if not isinstance(discrete, int) or discrete <= 0 or not isinstance(labels, dict):
+                return None
+            ordered: list = []
+            for i in range(int(discrete)):
+                label = labels.get(i)
+                if not isinstance(label, str):
+                    return None
+                ordered.append(label)
+            return ordered
+        except Exception:
+            return None
+
+    def get_action_labels(self) -> Optional[list]:
+        """
+        Attempt to retrieve ordered action labels for discrete action spaces.
+        Currently sourced from complementary env_info YAML if available.
+        """
+        # Only makes sense for discrete action spaces
+        try:
+            if hasattr(self.venv.action_space, "n"):
+                labels = self._get_complement_action_labels()
+                if isinstance(labels, list) and len(labels) == int(self.venv.action_space.n):
+                    return labels
+        except Exception:
+            pass
+        return None
+    
     def get_input_dim(self):
         """
         Return a reasonable flat input dimension for the observation space.

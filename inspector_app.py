@@ -88,6 +88,63 @@ def list_checkpoints_for_run(run_id: str) -> Tuple[List[str], Dict[str, Path], s
     return labels, mapping, default_label
 
 
+def _load_env_info_yaml(env_id: str) -> Dict[str, Any] | None:
+    """
+    Load env_info YAML for the given env_id.
+
+    Search order:
+      1) ENV_INFO_DIR environment variable
+      2) Project default: <project_root>/config/env_info
+
+    Supports nested env IDs like 'ALE/Pong-v5' → 'ALE/Pong-v5.yaml'.
+    """
+    import yaml  # local import to avoid hard dependency when unused
+    import os
+
+    candidates: List[Path] = []
+    custom_dir = os.environ.get("ENV_INFO_DIR")
+    if custom_dir:
+        candidates.append(Path(custom_dir))
+    try:
+        project_root = Path(__file__).resolve().parents[1]
+        candidates.append(project_root / "config" / "env_info")
+    except Exception:
+        pass
+
+    for base in candidates:
+        try:
+            path = base / f"{env_id}.yaml"
+            if path.is_file():
+                with open(path, "r", encoding="utf-8") as f:
+                    data = yaml.safe_load(f) or {}
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            continue
+    return None
+
+
+def _extract_action_labels(env_info: Dict[str, Any] | None) -> List[str] | None:
+    """Return ordered list of action labels if present and valid, else None."""
+    if not isinstance(env_info, dict):
+        return None
+    try:
+        action_space = env_info.get("action_space") or {}
+        discrete = action_space.get("discrete")
+        labels_map = action_space.get("labels")
+        if not isinstance(discrete, int) or discrete <= 0 or not isinstance(labels_map, dict):
+            return None
+        ordered: List[str] = []
+        for i in range(discrete):
+            label = labels_map.get(i)
+            if not isinstance(label, str):
+                return None
+            ordered.append(label)
+        return ordered
+    except Exception:
+        return None
+
+
 def _to_batch_obs(obs) -> torch.Tensor:
     if isinstance(obs, np.ndarray) and obs.ndim > 1:
         return torch.as_tensor(obs, dtype=torch.float32)
@@ -133,6 +190,10 @@ def run_episode(
     policy_model = _load_model(ckpt_path, config)
     policy_model.eval()
 
+    # Load action labels (if available) from env_info YAML
+    env_info_yaml = _load_env_info_yaml(config.env_id)
+    action_labels: List[str] | None = _extract_action_labels(env_info_yaml)
+
     # Collect environment spec for summary tabs
     try:
         env_spec_obj = getattr(env, "get_spec", None)() if hasattr(env, "get_spec") else None
@@ -175,6 +236,7 @@ def run_episode(
         "frame_stack": getattr(config, "frame_stack", None),
         "normalize_obs": getattr(config, "normalize_obs", None),
         "spec_id": getattr(getattr(env_spec_obj, "id", None), "__str__", lambda: None)() if env_spec_obj is not None else None,
+        "action_labels": action_labels,
     }
 
     # Collect model spec for summary tabs
@@ -310,6 +372,7 @@ def run_episode(
             steps.append({
                 "step": t,
                 "action": int(action[0]) if isinstance(action, np.ndarray) else int(action),
+                "action_label": (action_labels[int(action[0]) if isinstance(action, np.ndarray) else int(action)] if action_labels is not None else None),
                 "reward": float(reward),
                 "cum_reward": float(total_reward),
                 "value": float(val) if val is not None else None,
@@ -448,8 +511,9 @@ def build_ui(default_run_id: str = "latest-run"):
         table_headers = [
             "done",
             "step",
-            "probs",
             "action",
+            "action_label",
+            "probs",
             "reward",
             "cum_reward",
             "mc_return",
@@ -463,8 +527,9 @@ def build_ui(default_run_id: str = "latest-run"):
                 datatype=[
                     "bool",   # done
                     "number", # step
-                    "str",    # probs (formatted string)
                     "number", # action
+                    "str",    # action_label
+                    "str",    # probs (formatted string)
                     "number", # reward
                     "number", # cum_reward
                     "number", # mc_return
@@ -472,7 +537,7 @@ def build_ui(default_run_id: str = "latest-run"):
                     "number", # gae_adv
                 ],
                 row_count=(0, "dynamic"),
-                col_count=(9, "fixed"),
+                col_count=(10, "fixed"),
                 label="Per-step details",
                 interactive=False,
             )
@@ -515,13 +580,31 @@ def build_ui(default_run_id: str = "latest-run"):
 
         def _inspect(rid: str, ckpt_label: str | None, det: bool, nsteps: int):
             frames, steps, info = run_episode(rid, ckpt_label, det, int(nsteps))
+            labels_for_actions: List[str] | None = None
+            try:
+                labels_for_actions = info.get("env_spec", {}).get("action_labels")  # type: ignore[assignment]
+            except Exception:
+                labels_for_actions = None
             rows = []
             for s in steps:
+                # Format probabilities, optionally with labels
+                probs_fmt = None
+                probs = s.get("probs")
+                if isinstance(probs, list):
+                    try:
+                        if labels_for_actions and len(labels_for_actions) == len(probs):
+                            pairs = [f"{labels_for_actions[i]}: {probs[i]:.3f}" for i in range(len(probs))]
+                            probs_fmt = "[" + ", ".join(pairs) + "]"
+                        else:
+                            probs_fmt = "[" + ", ".join(f"{p:.3f}" for p in probs) + "]"
+                    except Exception:
+                        probs_fmt = "[" + ", ".join(str(p) for p in probs) + "]"
                 rows.append([
                     s["done"],
                     s["step"],
-                    "[" + ", ".join(f"{p:.3f}" for p in (s["probs"] or [])) + "]" if s["probs"] else None,
                     s["action"],
+                    s.get("action_label"),
+                    probs_fmt,
                     s["reward"],
                     s["cum_reward"],
                     s.get("mc_return", None),
@@ -536,8 +619,9 @@ def build_ui(default_run_id: str = "latest-run"):
                 row_vals = [
                     bool(step_dict.get("done")),
                     int(step_dict.get("step", 0)),
-                    step_dict.get("probs"),
                     step_dict.get("action"),
+                    step_dict.get("action_label"),
+                    step_dict.get("probs"),
                     step_dict.get("reward"),
                     step_dict.get("cum_reward"),
                     step_dict.get("mc_return"),
@@ -602,8 +686,9 @@ def build_ui(default_run_id: str = "latest-run"):
                 row_vals = [
                     bool(s.get("done")),
                     int(s.get("step", 0)),
-                    s.get("probs"),
                     s.get("action"),
+                    s.get("action_label"),
+                    s.get("probs"),
                     s.get("reward"),
                     s.get("cum_reward"),
                     s.get("mc_return"),
@@ -641,8 +726,9 @@ def build_ui(default_run_id: str = "latest-run"):
                 row_vals = [
                     bool(s.get("done")),
                     int(s.get("step", 0)),
-                    s.get("probs"),
                     s.get("action"),
+                    s.get("action_label"),
+                    s.get("probs"),
                     s.get("reward"),
                     s.get("cum_reward"),
                     s.get("mc_return"),
@@ -698,8 +784,9 @@ def build_ui(default_run_id: str = "latest-run"):
                     row_vals = [
                         bool(s.get("done")),
                         int(s.get("step", 0)),
-                        s.get("probs"),
                         s.get("action"),
+                        s.get("action_label"),
+                        s.get("probs"),
                         s.get("reward"),
                         s.get("cum_reward"),
                         s.get("mc_return"),
@@ -717,8 +804,9 @@ def build_ui(default_run_id: str = "latest-run"):
                 row_vals = [
                     bool(s.get("done")),
                     int(s.get("step", 0)),
-                    s.get("probs"),
                     s.get("action"),
+                    s.get("action_label"),
+                    s.get("probs"),
                     s.get("reward"),
                     s.get("cum_reward"),
                     s.get("mc_return"),

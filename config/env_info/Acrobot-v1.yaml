@@ -24,6 +24,7 @@ rewards:
   per_step: -1
   termination_goal: end effector above threshold height
   range: [-500, 0]
+  threshold_solved: -100
 
 versions:
   v1: Increased max steps to 500; standardized termination and truncation

@@ -22,6 +22,7 @@ rewards:
   per_step: +1
   episodic: number of steps balanced (max 500)
   range: [0, 500]
+  threshold_solved: 475
 
 versions:
   v1: Increased max steps to 500; standardized termination semantics

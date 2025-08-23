@@ -16,6 +16,7 @@ rewards:
   on_goal: +1
   otherwise: 0
   range: [0, 1]
+  threshold_solved: 0.78
 
 versions:
   v1: Deterministic seeding; updated termination/truncation semantics; added render fixes

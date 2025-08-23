@@ -20,6 +20,7 @@ rewards:
   per_step: -1
   episodic: negative of steps to reach goal (lower is worse)
   range: [-200, 0]
+  threshold_solved: -110
 
 versions:
   v0: Classic control original specification

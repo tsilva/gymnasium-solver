@@ -18,6 +18,7 @@ rewards:
   per_point: +1/-1
   episodic: score difference
   range: [-21, 21]
+  threshold_solved: 19
   
 modes:
   values: [0,1]

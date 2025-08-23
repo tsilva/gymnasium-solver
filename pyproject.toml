@@ -24,7 +24,8 @@ dependencies = [
     "setuptools<80",
     "huggingface_hub>=0.22.0",
     "gradio>=4.0.0",
-    "vizdoom"
+    "vizdoom",
+    "pettingzoo>=1.25.0"
 ]
 
 [tool.pytest.ini_options]

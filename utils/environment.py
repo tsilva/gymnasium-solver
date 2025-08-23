@@ -77,6 +77,7 @@ def build_env(
 
     _is_alepy = is_alepy_env_id(env_id)
     _is_vizdoom = is_vizdoom_env_id(env_id)
+    _is_pettingzoo_go = str(env_id).lower() in {"pettingzoo/go", "pettingzoo-go", "go"}
 
     # Default to RGB observations for ALE environments when obs_type is not specified.
     # Some callers (e.g., smoke tests) bypass full Config defaults and may pass None.
@@ -111,6 +112,19 @@ def build_env(
                 # Fallback to deadly corridor if unknown vizdoom id
                 from gym_wrappers.vizdoom_deadly_corridor import VizDoomDeadlyCorridorEnv
                 env = VizDoomDeadlyCorridorEnv(render_mode=render_mode, **env_kwargs)
+        # PettingZoo Go (wrapped single-agent)
+        elif _is_pettingzoo_go:
+            # Lazy import to avoid hard dependency for users who don't need it
+            from pettingzoo.classic import go_v5
+            from gym_wrappers.pettingzoo_single_agent import PettingZooSingleAgentWrapper
+
+            board_size = int(env_kwargs.pop("board_size", env_kwargs.pop("board_size", 9)) or 9)
+            opponent = env_kwargs.pop("opponent", "random")  # placeholder for future extensions
+
+            # PettingZoo parallel environments are recommended; go_v5.parallel_env exists
+            pz_env = go_v5.parallel_env(board_size=board_size, render_mode=render_mode, **env_kwargs)
+            # Control the first agent by default
+            env = PettingZooSingleAgentWrapper(pz_env, agent_id=None, render_mode=render_mode)
         # Otherwise, create a standard gym environment
         else: 
             env = gym.make(env_id, render_mode=render_mode, **env_kwargs)

@@ -1,5 +1,6 @@
-- FEAT: add action labels and use them in inspect
-- BUG: final health gathering episode (video) performs way better than best.cpkt... why?
+- Change config files so that they only say their mention algo_id in experiment name
+- Apply atari wrapper to atari envs
+- TODO: compare atari breakout fps vs rlzoosb3
 
 - can I create an exploration model by just making loss higher the more the model can predict the future?
 - print effective rollout step size

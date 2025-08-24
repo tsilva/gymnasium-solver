@@ -4,7 +4,9 @@ __Pong-v5_rgb:
   project_id: "Pong-v5_rgb"
   env_id: ALE/Pong-v5
   obs_type: "rgb"
-  frame_stack: 4  # RGB observations typically benefit from frame stacking
+  grayscale_obs: true
+  resize_obs: true
+  frame_stack: 2  # RGB observations typically benefit from frame stacking
   policy: 'cnn'      # CNN policy for RGB observations
 
 Pong-v5_rgb_ppo:
@@ -18,7 +20,7 @@ Pong-v5_rgb_ppo:
   learning_rate: 2.5e-4    # Lower learning rate for CNN
   eval_freq_epochs: 100    # Less frequent eval due to computational cost
   eval_episodes: 5
-  
+
 Pong-v5_rgb_reinforce:
   inherits: __Pong-v5_rgb
   algo_id: reinforce

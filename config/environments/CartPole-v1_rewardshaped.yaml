@@ -5,7 +5,6 @@ __CartPole-v1_rewardshaped:
   env_id: CartPole-v1
   eval_freq_epochs: 100        # evaluate every 5 training epochs
   eval_episodes: 10           # run 10 episodes per evaluation
-  eval_deterministic: true    # use greedy actions during evaluation
   env_wrappers:
     - id: CartPoleV1_RewardShaper
       angle_reward_scale: 1.0

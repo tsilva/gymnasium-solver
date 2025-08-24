@@ -120,7 +120,7 @@ class Config:
     # Whether to decouple evaluation from training using async workers (not yet implemented)
     eval_async: bool = False
     # Use deterministic actions during evaluation (greedy for stochastic policies)
-    eval_deterministic: bool = True
+    eval_deterministic: bool = False
     # Optional target reward threshold to drive early-stopping or checkpointing heuristics
     reward_threshold: Optional[float] = None
     # Enable early stopping when eval mean reward reaches threshold

@@ -6,7 +6,6 @@ __Acrobot-v1:
   n_timesteps: 1e6
   eval_freq_epochs: 10
   eval_episodes: 10
-  eval_deterministic: true
 
 Acrobot-v1_ppo:
   inherits: __Acrobot-v1

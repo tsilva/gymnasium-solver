@@ -2,7 +2,6 @@ __Go:
   project_id: "PettingZoo-Go"
   env_id: go
   eval_episodes: 10
-  eval_deterministic: true
   # PettingZoo Go takes board_size in env_kwargs
   env_kwargs:
     board_size: 9

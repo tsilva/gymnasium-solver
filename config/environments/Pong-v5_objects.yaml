@@ -11,11 +11,11 @@ Pong-v5_objects_ppo:
   inherits: __Pong-v5_objects
   algo_id: ppo
   n_envs: 16
-  n_steps: 256             # rollout size = 8 * 512 = 4096
+  n_steps: 256             # rollout size = 16 * 256 = 4096
   batch_size: 1024          # 4 minibatches per update
   n_epochs: 10             # More epochs to better utilize data
   ent_coef: 0.003          # Higher entropy for better exploration
-  clip_range: 0.15                  # slightly tighter than 0.2 helps stability
+  clip_range: 0.15         # slightly tighter than 0.2 helps stability
   learning_rate: 3e-4      # Higher learning rate for faster learning
   hidden_dims: [128, 128]    # Larger network for complex patterns
   eval_freq_epochs: 50     # Less frequent eval to focus on training

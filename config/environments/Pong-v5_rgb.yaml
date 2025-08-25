@@ -13,11 +13,13 @@ Pong-v5_rgb_ppo:
   inherits: __Pong-v5_rgb
   algo_id: ppo
   n_envs: 8
-  n_steps: 128             # Smaller steps for CNN processing
-  batch_size: 256
-  n_epochs: 4
+  n_steps: 256             # 8*256 = 2048 samples/update
+  batch_size: 1024         # 2k rollout → 2 minibatches of 1024
+  n_epochs: 3
   clip_range: 0.1
-  learning_rate: 2.5e-4    # Lower learning rate for CNN
+  learning_rate: 1e-4      # Slightly lower LR for stability on pixels
+  frame_stack: 4           # Improve temporal information (typical Atari default)
+  activation: relu         # Use ReLU for CNNs
   eval_freq_epochs: 100    # Less frequent eval due to computational cost
   eval_episodes: 5
 

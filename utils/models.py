@@ -274,6 +274,19 @@ class CNNActorCritic(nn.Module):
 
     def _forward_features(self, obs_flat: torch.Tensor):
         x = self.reshape(obs_flat)
+        # Normalize image inputs to [0,1] if they appear to be in 0..255 range
+        # Avoid double-normalizing if inputs are already in [0,1].
+        try:
+            if x.dtype == torch.uint8:
+                x = x.float().div_(255.0)
+            else:
+                # Convert to scalar to avoid tracing data-dependent control flow
+                max_val = float(x.detach().amax().item())
+                if max_val > 1.0:
+                    x = x.div(255.0)
+        except Exception:
+            # Best-effort: fall through without normalization on errors
+            pass
         x = self.cnn(x)
         x = self.backbone(x)
         return x
@@ -331,6 +344,16 @@ class CNNPolicyOnly(nn.Module):
 
     def _forward_features(self, obs_flat: torch.Tensor):
         x = self.reshape(obs_flat)
+        # Normalize image inputs to [0,1] if likely uint8 scale
+        try:
+            if x.dtype == torch.uint8:
+                x = x.float().div_(255.0)
+            else:
+                max_val = float(x.detach().amax().item())
+                if max_val > 1.0:
+                    x = x.div(255.0)
+        except Exception:
+            pass
         x = self.cnn(x)
         x = self.backbone(x)
         return x

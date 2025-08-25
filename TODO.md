@@ -1,3 +1,5 @@
+- BUG: Pong-v5_objects not converging test fixes
+- BUG: total timesteps grwoth is not constant (print table)
 maxout pong objects / bold terminal
 - Add support for resuming training runs, this requires loading hyperparameters and schedulers to be timestep based; must also start from last timestep
 - Change config files so that they only say their mention algo_id in experiment name

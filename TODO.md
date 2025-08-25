@@ -1,3 +1,4 @@
+- recheck if deterministic version still converges with feature extractor fixes
 - TASK: solve Pong-v5_objects, then propagate to other envs
 - BUG: zero ep_rew_mean is being logged
 - BUG: run is being logged even when training is not started

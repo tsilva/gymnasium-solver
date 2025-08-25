@@ -1,5 +1,25 @@
 # Pong with object-based observations challenge configurations
 
+
+# Concrete fixes (apply 2–4 at once, then re-evaluate after ~1–2M steps)
+# - Exploration and update size
+#   - ent_coef: increase slightly to 0.005–0.008. Start 0.006.
+#   - learning_rate: add linear decay: learning_rate: lin_3e-4 to keep early speed but reduce late staleness.
+#   - clip_range: widen to 0.2 with linear decay (clip_range: 0.2, clip_range_schedule: linear). This raises clip_fraction toward ~0.1–0.2.
+# - Advantage signal and batch quality
+#   - n_steps: 512 (rollout size 8192) to improve advantage SNR on long rallies.
+#   - n_epochs: 4–6 instead of 10 to reduce overfitting per batch as rollout size grows. Try 6.
+#   - batch_size: keep 1024 (8 minibatches of 8192). If GPU room, 2048.
+#   - normalize_advantages: keep "batch".
+# - Value head
+#   - vf_coef: 0.7 to prioritize critic fit near plateau.
+#   - hidden_dims: [256, 256] for more capacity on non-linear object dynamics.
+# - Observation features
+#   - Disable clipping in `PongV5_FeatureExtractor` (clip: false) so normalized features can exceed [0,1] if calibration MIN/MAX are off.
+#   - Optionally recompute MIN/MAX from a longer random policy sweep, or enable `norm_obs: true` in config to stabilize feature scale.
+# - Evaluation cadence
+#   - eval_freq_epochs: 100 to reduce eval overhead (not a big factor, but keeps focus on training).
+
 __Pong-v5_objects:
   project_id: "Pong-v5_objects"
   env_id: ALE/Pong-v5
@@ -11,16 +31,17 @@ __Pong-v5_objects:
 Pong-v5_objects_ppo:
   inherits: __Pong-v5_objects
   algo_id: ppo
-  n_envs: 16
-  n_steps: 256             # rollout size = 16 * 256 = 4096
-  batch_size: 1024          # 4 minibatches per update
-  n_epochs: 10             # More epochs to better utilize data
-  ent_coef: 0.006 #0.003          # Higher entropy for better exploration
-  clip_range: 0.15         # slightly tighter than 0.2 helps stability
-  learning_rate: lin_3e-4 #3e-4      # Higher learning rate for faster learning
-  hidden_dims: [128, 128]    # Larger network for complex patterns
-  eval_freq_epochs: 50     # Less frequent eval to focus on training
-  eval_episodes: 10        # More episodes for reliable evaluation
+  n_envs: 32
+  vf_coef: 0.7
+  n_steps: 256
+  batch_size: 2048 
+  n_epochs: 6
+  ent_coef: 0.006
+  clip_range: lin_0.2 
+  learning_rate: lin_3e-4 
+  hidden_dims: [256, 256] 
+  eval_freq_epochs: 50 
+  eval_episodes: 10  
 
 Pong-v5_objects_reinforce:
   inherits: __Pong-v5_objects

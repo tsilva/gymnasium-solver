@@ -1,7 +1,13 @@
+- TASK: solve Pong-v5_objects, then propagate to other envs
+- BUG: zero ep_rew_mean is being logged
+- BUG: run is being logged even when training is not started
+- BUG: linear decay is being applied even when n_timesteps is not set
+- test rlib
 - BUG: Pong-v5_objects not converging test fixes
 - BUG: total timesteps grwoth is not constant (print table)
 maxout pong objects / bold terminal
 - Add support for resuming training runs, this requires loading hyperparameters and schedulers to be timestep based; must also start from last timestep
+https://github.com/kenjyoung/MinAtar
 - Change config files so that they only say their mention algo_id in experiment name
 - Apply atari wrapper to atari envs
 - TODO: compare atari breakout fps vs rlzoosb3

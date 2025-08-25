@@ -3,6 +3,7 @@
 __Pong-v5_objects:
   project_id: "Pong-v5_objects"
   env_id: ALE/Pong-v5
+  n_timesteps: 1e7
   obs_type: "objects"
   env_wrappers:
     - id: PongV5_FeatureExtractor
@@ -14,9 +15,9 @@ Pong-v5_objects_ppo:
   n_steps: 256             # rollout size = 16 * 256 = 4096
   batch_size: 1024          # 4 minibatches per update
   n_epochs: 10             # More epochs to better utilize data
-  ent_coef: 0.003          # Higher entropy for better exploration
+  ent_coef: 0.006 #0.003          # Higher entropy for better exploration
   clip_range: 0.15         # slightly tighter than 0.2 helps stability
-  learning_rate: 3e-4      # Higher learning rate for faster learning
+  learning_rate: lin_3e-4 #3e-4      # Higher learning rate for faster learning
   hidden_dims: [128, 128]    # Larger network for complex patterns
   eval_freq_epochs: 50     # Less frequent eval to focus on training
   eval_episodes: 10        # More episodes for reliable evaluation

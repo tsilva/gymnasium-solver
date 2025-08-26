@@ -50,10 +50,46 @@ def _ansi(color: Optional[str], s: str, enable: bool) -> str:
         "cyan": "36",
         "gray": "90",
         "bold": "1",
+        # Background colors
+        "bg_black": "40",
+        "bg_red": "41",
+        "bg_green": "42",
+        "bg_yellow": "43",
+        "bg_blue": "44",
+        "bg_magenta": "45",
+        "bg_cyan": "46",
+        "bg_white": "47",
     }
     if color == "bold":
         return f"\x1b[{codes['bold']}m{s}\x1b[0m"
     return f"\x1b[{codes[color]}m{s}\x1b[0m"
+
+
+def _apply_row_background(text: str, bg_color: str, enable: bool) -> str:
+    """
+    Apply a background color to an entire ANSI-formatted line, preserving
+    inner foreground color/bold segments. Ensures that any embedded resets
+    (\x1b[0m) re-apply the background so the highlight spans the full row.
+    """
+    if not enable or not bg_color:
+        return text
+    bg_map = {
+        "bg_black": "40",
+        "bg_red": "41",
+        "bg_green": "42",
+        "bg_yellow": "43",
+        "bg_blue": "44",
+        "bg_magenta": "45",
+        "bg_cyan": "46",
+        "bg_white": "47",
+    }
+    code = bg_map.get(bg_color)
+    if not code:
+        return text
+    start = f"\x1b[{code}m"
+    # Re-apply background after any full reset encountered in the row
+    body = text.replace("\x1b[0m", f"\x1b[0m{start}")
+    return f"{start}{body}\x1b[0m"
 
 
 class NamespaceTablePrinter:
@@ -158,12 +194,18 @@ class NamespaceTablePrinter:
                 val_padded = " " * val_padding + val if val_padding > 0 else val
                 # Format key cell with padding first, then apply ANSI bold if highlighted
                 key_cell = f"{sub:<{key_width}}"
+                highlight = False
                 try:
                     if sub in {"ep_rew_mean", "ep_rew_last"}:
                         key_cell = _ansi("bold", key_cell, self.color)
+                        highlight = True
                 except Exception:
                     pass
-                lines.append(f"| {' ' * indent}{key_cell} | {val_padded} |")
+                row = f"| {' ' * indent}{key_cell} | {val_padded} |"
+                if highlight:
+                    # Apply a subtle background to the entire row for visibility
+                    row = _apply_row_background(row, "bg_blue", self.color)
+                lines.append(row)
         lines.append(border)
 
         self._render_lines(lines)

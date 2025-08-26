@@ -2,6 +2,8 @@
 
 project_id: "MountainCar-v0"
 env_id: MountainCar-v0
+eval_freq_epochs: 10
+eval_episodes: 10
 frame_stack: 3
 env_wrappers:
   - id: MountainCarV0_RewardShaper

@@ -4,6 +4,8 @@ env_id: Taxi-v3
 ent_coef: 0.5
 n_envs: 16
 #n_timesteps: !!float 3e5
+eval_freq_epochs: 10
+eval_episodes: 10
 
 ppo:
   algo_id: ppo

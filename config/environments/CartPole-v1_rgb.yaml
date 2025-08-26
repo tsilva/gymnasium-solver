@@ -14,6 +14,8 @@ policy_kwargs:
   kernel_sizes: [8, 4, 3]
   strides: [4, 2, 1]
   activation: relu
+eval_freq_epochs: 10
+eval_episodes: 5
 
 ppo:
   algo_id: ppo

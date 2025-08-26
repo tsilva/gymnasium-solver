@@ -1,4 +1,6 @@
 env_id: LunarLander-v3
+eval_freq_epochs: 5
+eval_episodes: 10
 
 ppo:
   algo_id: ppo

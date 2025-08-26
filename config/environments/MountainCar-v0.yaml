@@ -1,6 +1,8 @@
 # MountainCar standard challenge configurations
 
 env_id: MountainCar-v0
+eval_freq_epochs: 10
+eval_episodes: 10
 
 ppo:
   algo_id: ppo

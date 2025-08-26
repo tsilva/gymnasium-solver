@@ -1,3 +1,4 @@
+- TODO: inspect.py add support for showing raw vs processed frames, including frame stacks
 - recheck if deterministic version still converges with feature extractor fixes
 - TASK: solve Pong-v5_objects, then propagate to other envs
 - BUG: run is being logged even when training is not started
@@ -16,7 +17,7 @@ https://github.com/kenjyoung/MinAtar
 - print effective rollout step size
 - TODO: add config file beautifier that ensure attributes are set in the correct order
 - TODO: add config file validator that ensures that all attributes are set and that they are set to the correct type
-- TODO: inspect.py add support for showing raw vs processed frames, including frame stacks
+
 - runs: along with each checkpoint we are saving a json file with the metrics at that checkpoint. We also want to save a CSV with the rollout data for that epoch; this data should contain exactly the same data as the table in inspect.py, so we can encapsualte the function that generates the csv and reuse it in both places.
 - FEAT: add stable-retro support
 

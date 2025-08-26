@@ -19,6 +19,7 @@ High-signal reference for maintainers and agents. Read this before making change
 ### Environments (`utils/environment.py`, `gym_wrappers/*`)
 - `build_env(env_id, n_envs, seed, subproc, obs_type, frame_stack, norm_obs, env_wrappers, env_kwargs, render_mode, record_video, record_video_kwargs)` builds a vectorized env:
   - ALE via `ale_py` with optional `obs_type in {'rgb','ram','objects'}` (objects uses OCAtari).
+  - For ALE RGB, applies Gymnasium's `AtariPreprocessing` (grayscale+resize+frameskip). When this is active, manual `resize_obs`/`grayscale_obs` flags are ignored to avoid conflicts.
   - VizDoom Deadly Corridor via `gym_wrappers.vizdoom_deadly_corridor.VizDoomDeadlyCorridorEnv` when `env_id` matches.
   - Standard Gymnasium otherwise.
   - Applies registry wrappers from YAML: `EnvWrapperRegistry.apply` with `{ id: WrapperName, ... }` specs.
@@ -93,5 +94,4 @@ trainer_callbacks/# logging, early stopping, checkpointing, hyperparam sync, vid
 config/           # environment YAML configs
 runs/             # run outputs: config.json, checkpoints/, videos/, metrics.csv, run.log
 ```
-
 

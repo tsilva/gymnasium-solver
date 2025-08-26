@@ -106,6 +106,33 @@ def build_env(
             # Otherwise, create the standard ALE environment
             else:
                 env = gym.make(env_id, obs_type=obs_type, render_mode=render_mode, **env_kwargs)
+
+                # Apply Gymnasium's Atari preprocessing for RGB observations.
+                # This consolidates grayscale/resize/frameskip behavior and avoids
+                # conflicts with manual wrappers configured elsewhere.
+                applied_atari_preproc = False
+                try:
+                    if str(obs_type).lower() == "rgb":
+                        try:
+                            # Prefer modern import location
+                            from gymnasium.wrappers.atari import AtariPreprocessing  # type: ignore
+                        except Exception:
+                            # Fallback for older gymnasium versions
+                            from gymnasium.wrappers import AtariPreprocessing  # type: ignore
+
+                        # Use common defaults (grayscale+resize to 84x84, frame_skip=4)
+                        env = AtariPreprocessing(
+                            env,
+                            grayscale_obs=True,
+                            scale_obs=False,
+                            screen_size=84,
+                            frame_skip=4,
+                            terminal_on_life_loss=False,
+                        )
+                        applied_atari_preproc = True
+                except Exception:
+                    # Be robust: if wrapper import/application fails, proceed without it
+                    applied_atari_preproc = False
         # VizDoom custom integrations
         elif _is_vizdoom:
             from gym_wrappers.vizdoom import VizDoomEnv
@@ -185,14 +212,17 @@ def build_env(
     # Discrete observation IDs. Instead, VecInfoWrapper exposes an
     # input_dim for Discrete spaces (1), enabling MLP policies to work.
         
-        # Important: resize before grayscale to avoid cv2 dropping the channel dim on (H,W,1)
-        if resize_obs: 
-            from gymnasium.wrappers import ResizeObservation
-            env = ResizeObservation(env, shape=(84, 84)) # TODO: softcode this
+        # Important: avoid manual resize/grayscale for ALE RGB when AtariPreprocessing is applied
+        # (it already handles grayscale+resize). For other envs, keep the knobs.
+        if not (_is_alepy and str(obs_type).lower() == "rgb" and locals().get("applied_atari_preproc", False)):
+            # Resize before grayscale to avoid cv2 dropping the channel dim on (H,W,1)
+            if resize_obs:
+                from gymnasium.wrappers import ResizeObservation
+                env = ResizeObservation(env, shape=(84, 84))  # TODO: softcode this
 
-        if grayscale_obs: 
-            from gymnasium.wrappers import GrayscaleObservation 
-            env = GrayscaleObservation(env, keep_dim=True)
+            if grayscale_obs:
+                from gymnasium.wrappers import GrayscaleObservation
+                env = GrayscaleObservation(env, keep_dim=True)
 
         # Apply configured env wrappers
         for wrapper in env_wrappers:
@@ -228,7 +258,10 @@ def build_env(
         is_image = False
 
     from stable_baselines3.common.vec_env import VecTransposeImage
-    if is_image:
+    # Only transpose if observations are channel-last images (H, W, C). Grayscale
+    # Atari after preprocessing is (H, W) and should not be transposed here.
+    obs_shape = getattr(env.observation_space, "shape", tuple())
+    if is_image and isinstance(obs_shape, tuple) and len(obs_shape) == 3:
         env = VecTransposeImage(env)  # (N, C, H, W)
 
     # Enable observation normalization only for non-image observations

@@ -8,7 +8,8 @@ from utils.env_info_schema import validate_env_info
 
 def _find_yaml_files(root: Path) -> List[Path]:
     files: List[Path] = []
-    for pattern in ("*.yaml", "*.yml"):
+    # Only consider spec files
+    for pattern in ("*.spec.yaml", "*.spec.yml"):
         files.extend(root.rglob(pattern))
     # Deduplicate while preserving order
     seen = set()
@@ -28,8 +29,8 @@ def _validate_file(path: Path) -> List[Tuple[str, str]]:
 
 
 def test_env_info_files_are_valid():
-    root = Path("config/env_info")
-    assert root.exists(), "config/env_info directory not found"
+    root = Path("config/environments")
+    assert root.exists(), "config/environments directory not found"
 
     failures: List[str] = []
     for yf in sorted(_find_yaml_files(root)):

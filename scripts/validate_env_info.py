@@ -16,7 +16,8 @@ except Exception:  # pragma: no cover
 
 
 def find_yaml_files(root: Path) -> List[Path]:
-    patterns = ["*.yaml", "*.yml"]
+    # Validate only spec files
+    patterns = ["*.spec.yaml", "*.spec.yml"]
     files: List[Path] = []
     for pattern in patterns:
         files.extend(root.rglob(pattern))
@@ -54,8 +55,8 @@ def validate_file_jsonschema(path: Path, schema_path: Path) -> List[Tuple[str, s
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate env_info YAML files against schema.")
-    parser.add_argument("paths", nargs="*", type=Path, default=[Path("config/env_info")], help="Paths to directories or files to validate")
+    parser = argparse.ArgumentParser(description="Validate env spec YAML files against schema.")
+    parser.add_argument("paths", nargs="*", type=Path, default=[Path("config/environments")], help="Paths to directories or files to validate")
     parser.add_argument("--jsonschema", action="store_true", help="Validate using JSON Schema in schemas/env_info.schema.json (optional)")
     args = parser.parse_args()
 

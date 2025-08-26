@@ -1,3 +1,7 @@
+- FEAT: Normalize returns for REINFORCE
+- FEAT: add normalization support 
+- FEAT: add discrete env support
+- TODO: Figure out why CartPole-v1/PPO works better with Tahn activation than ReLU
 - TASK: solve Pong-v5_objects, then propagate to other envs
 - BUG: run is being logged even when training is not started, bold terminal
 - https://github.com/kenjyoung/MinAtar
@@ -18,21 +22,10 @@
 - Generalized scheduling for metrics, make those be logged
 - REFACTOR: rollout buffer can be much more efficient (review how sb3 does it) -- our fps is still 1000 below sb3
 - BUG: CartPole-v1 PPO is not training as fast; 115f9c73faed6785a0bd58c37f55298324e90f43 was ok
-- TODO: Figure out why CartPole-v1/PPO works better with Tahn activation than ReLU
 - BUG: PPO can solve FrozenLake-v1, but REINFORCE cannot. REINFORCE is likely not implemented correctly.
-- FEAT: train on cloud server (eg: lightning cloud)
-- FEAT: normalize rewards?
-- FEAT: add normalization support 
-- FEAT: add discrete env support
+- FEAT: train on cloud server (eg: lightning cloud)?
 - Create benchmarking script to find optimal parallelization for env/machine combo
 - TEST: predict next state to learn faster
-- BUG: videos not logged at correct timesteps
-- FEAT : Normalize returns for REINFORCE
-- FEAT: add warning confirming if ale-py has been compiled to target architecture (avoid rosetta in silicon macs)
-- FEAT: add support for fully recording last eval
-- BUG: check that were are matching rlzoo mstop criteria
-MaxAndSkipEnv
-- BUG: video step is still not alligned
 - How to measure advantage of different seeds versus reusing same env.
 - Consider increasing sample efficiency by figuring out how different are transitions between different envs
 - FEAT: add determinism check at beginning to make sure that rollout benefits from multiple envs (eg: Pong, test on PongDeterministic)
@@ -41,9 +34,6 @@ MaxAndSkipEnv
 - BUG: fix thread safety issues with async eval collector (copy model weights with lock)
 - FEAT: consider computing mean reward by timesteps, this way in eval we just have to request n_steps = reward_threshold * N, this will make it easier to support vectorized envs
 - FEAT: a2c (only after reinforce/ppo is stable)
-- FEAT: add same linear decay features as rlzoo
-- FEAT: add interactive mode support
-- CHECK: run rollout through dataloader process, do we always get n_batches? assert it 
 - add support for plotting charts as text and feeding to llm, check how end of training does it
 - https://cs.stanford.edu/people/karpathy/reinforcejs/index.html
 - https://alazareva.github.io/rl_playground/

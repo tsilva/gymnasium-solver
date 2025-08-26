@@ -257,9 +257,10 @@ class VecInfoWrapper(VecEnvWrapper):
 
         Search order:
           1) Path from ENV_INFO_DIR environment variable
-          2) Project default: <project_root>/config/env_info
+          2) Project default: <project_root>/config/environments
 
-        File name is '<env_id>.yaml'. Returns parsed dict or None.
+        File name is '<env_id>.spec.yaml' (preferred) or legacy '<env_id>.yaml'.
+        Returns parsed dict or None.
         """
         env_id = self._get_env_id()
         if not env_id:
@@ -273,19 +274,20 @@ class VecInfoWrapper(VecEnvWrapper):
         try:
             # Project root: two parents up from this file (gym_wrappers/vec_info.py)
             project_root = Path(__file__).resolve().parents[1]
-            candidates.append(project_root / "config" / "env_info")
+            candidates.append(project_root / "config" / "environments")
         except Exception:
             pass
 
         # Try loading YAML from candidates
         for base_dir in candidates:
             try:
-                path = base_dir / f"{env_id}.yaml"
-                if path.is_file():
-                    with open(path, "r", encoding="utf-8") as f:
-                        data = yaml.safe_load(f) or {}
-                    if isinstance(data, dict):
-                        return data
+                for name in (f"{env_id}.spec.yaml", f"{env_id}.yaml"):
+                    path = base_dir / name
+                    if path.is_file():
+                        with open(path, "r", encoding="utf-8") as f:
+                            data = yaml.safe_load(f) or {}
+                        if isinstance(data, dict):
+                            return data
             except Exception:
                 continue
         return None

@@ -94,9 +94,9 @@ def _load_env_info_yaml(env_id: str) -> Dict[str, Any] | None:
 
     Search order:
       1) ENV_INFO_DIR environment variable
-      2) Project default: <project_root>/config/env_info
+      2) Project default: <project_root>/config/environments
 
-    Supports nested env IDs like 'ALE/Pong-v5' → 'ALE/Pong-v5.yaml'.
+    Supports nested env IDs like 'ALE/Pong-v5' → 'ALE/Pong-v5.spec.yaml'.
     """
     import yaml  # local import to avoid hard dependency when unused
     import os
@@ -108,18 +108,20 @@ def _load_env_info_yaml(env_id: str) -> Dict[str, Any] | None:
     try:
         # inspector_app.py lives at the project root
         project_root = Path(__file__).resolve().parent
-        candidates.append(project_root / "config" / "env_info")
+        candidates.append(project_root / "config" / "environments")
     except Exception:
         pass
 
     for base in candidates:
         try:
-            path = base / f"{env_id}.yaml"
-            if path.is_file():
-                with open(path, "r", encoding="utf-8") as f:
-                    data = yaml.safe_load(f) or {}
-                if isinstance(data, dict):
-                    return data
+            # Prefer new '.spec.yaml' suffix, then fall back to legacy '.yaml'
+            for name in (f"{env_id}.spec.yaml", f"{env_id}.yaml"):
+                path = base / name
+                if path.is_file():
+                    with open(path, "r", encoding="utf-8") as f:
+                        data = yaml.safe_load(f) or {}
+                    if isinstance(data, dict):
+                        return data
         except Exception:
             continue
     return None

@@ -20,12 +20,13 @@ def test_env_info_files_conform_to_jsonschema():
         schema = json.load(f)
     validator = Draft202012Validator(schema)
 
-    root = Path("config/env_info")
-    assert root.exists(), "config/env_info directory not found"
+    root = Path("config/environments")
+    assert root.exists(), "config/environments directory not found"
 
     def find_yaml_files(dir_path: Path) -> List[Path]:
         files: List[Path] = []
-        for pattern in ("*.yaml", "*.yml"):
+        # Only consider spec files
+        for pattern in ("*.spec.yaml", "*.spec.yml"):
             files.extend(dir_path.rglob(pattern))
         # Deduplicate
         seen = set()

@@ -205,6 +205,17 @@ class BaseAgent(pl.LightningModule):
         fps_total = self.timing.fps_since("on_fit_start", steps_now=total_timesteps)
         fps_instant = self.timing.fps_since("on_train_epoch_start", steps_now=total_timesteps)
 
+        # If no episodes have completed yet, avoid logging ep_*_mean metrics
+        # to external sinks (e.g., W&B/CSV) to prevent an initial zero spike.
+        # Keep immediate last stats available for local use/tests.
+        try:
+            if len(self.train_collector.episode_reward_deque) == 0:
+                rollout_metrics.pop("ep_rew_mean", None)
+                rollout_metrics.pop("ep_len_mean", None)
+        except Exception:
+            # Be defensive: if collector lacks the deque, proceed without pruning
+            pass
+
         # Log metrics to the buffer
         self.log_metrics(
             {
@@ -265,6 +276,15 @@ class BaseAgent(pl.LightningModule):
         # Log metrics
         if not self.config.log_per_env_eval_metrics:
             eval_metrics = {k: v for k, v in eval_metrics.items() if not k.startswith("per_env/")}
+
+        # If evaluation produced zero episodes (edge cases), avoid logging
+        # ep_*_mean to external sinks to prevent an initial zero spike.
+        try:
+            if int(eval_metrics.get("total_episodes", 0)) <= 0:
+                eval_metrics.pop("ep_rew_mean", None)
+                eval_metrics.pop("ep_len_mean", None)
+        except Exception:
+            pass
 
         self.log_metrics({
             "epoch": int(self.current_epoch), 

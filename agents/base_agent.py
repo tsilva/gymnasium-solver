@@ -177,7 +177,11 @@ class BaseAgent(pl.LightningModule):
         self.timing.restart("on_train_epoch_start", steps=total_timesteps)
 
         # Collect fresh trajectories at the start of each training epoch
-        self._trajectories = self.train_collector.collect()
+        # Avoid double-collect on the first epoch: train_dataloader() already
+        # collected an initial rollout to bootstrap the dataloader. From epoch 1
+        # onward, collect once per epoch to ensure constant timestep growth.
+        if int(self.current_epoch) > 0:
+            self._trajectories = self.train_collector.collect()
 
     def training_step(self, batch, batch_idx):
         # Calculate batch losses
@@ -523,9 +527,10 @@ class BaseAgent(pl.LightningModule):
         metric_precision = get_metric_precision_dict()
         metric_delta_rules = get_metric_delta_rules()
         algo_metric_rules = get_algorithm_metric_rules(self.config.algo_id)
+        # Print metrics once per epoch to align deltas with rollout collection
         printer_cb = PrintMetricsCallback(
-            every_n_steps=200,
-            every_n_epochs=10,
+            every_n_steps=None,
+            every_n_epochs=1,
             digits=4,
             metric_precision=metric_precision,
             metric_delta_rules=metric_delta_rules,

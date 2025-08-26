@@ -282,6 +282,17 @@ class PrintMetricsCallback(BaseCallback):
         for d in dicts:
             for k, v in d.items():
                 combo[k] = self._to_python_scalar(v)
+
+        # Opportunistically refresh canonical step metric from the module's collector
+        try:
+            pl_module = getattr(trainer, "lightning_module", None)
+            tc = getattr(pl_module, "train_collector", None) if pl_module is not None else None
+            if tc is not None and hasattr(tc, "total_steps"):
+                combo["train/total_timesteps"] = int(getattr(tc, "total_steps", 0))
+        except Exception:
+            # Never break printing due to instrumentation
+            pass
+
         # Drop common housekeeping keys if present
         for k in ["epoch", "step", "global_step"]:
             combo.pop(k, None)

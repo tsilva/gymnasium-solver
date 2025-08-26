@@ -1,9 +1,8 @@
-- TODO: inspect.py add support for showing raw vs processed frames, including frame stacks
-- TASK: solve Pong-v5_objects, then propagate to other envs
-- BUG: run is being logged even when training is not started
-maxout pong objects / bold terminal
-- https://github.com/kenjyoung/MinAtar
+
 - FEAT: add stable-retro support
+- TASK: solve Pong-v5_objects, then propagate to other envs
+- BUG: run is being logged even when training is not started, bold terminal
+- https://github.com/kenjyoung/MinAtar
 - Add support for resuming training runs, this requires loading hyperparameters and schedulers to be timestep based; must also start from last timestep
 - Change config files so that they only say their mention algo_id in experiment name
 - TODO: compare atari breakout fps vs rlzoosb3

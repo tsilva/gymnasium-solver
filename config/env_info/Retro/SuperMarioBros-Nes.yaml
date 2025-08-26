@@ -1,0 +1,35 @@
+# Retro/SuperMarioBros-Nes
+source: https://github.com/Farama-Foundation/stable-retro
+description: >
+  Side-scrolling platformer. Guide Mario through levels to reach the flagpole
+  while avoiding enemies and hazards. Observations are raw game frames; rewards
+  typically reflect in-game score/progress.
+
+render_fps: 60
+
+action_space:
+  # When using stable-retro with use_restricted_actions=FILTERED, actions are a
+  # filtered discrete set of gamepad combinations. Exact count can vary by game.
+  note: filtered discrete action set (retro.Actions.FILTERED)
+
+observation_space:
+  default: rgb
+  variants:
+    rgb:
+      shape: [240, 256, 3]
+      dtype: uint8
+      range: [0, 255]
+      note: NES native resolution; pipeline typically grayscales+resizes+stacks frames.
+
+rewards:
+  description: >
+    Environment returns score/progress deltas; death or timeouts end episodes.
+  components:
+    - {name: score_delta, sign: positive}
+    - {name: progress, sign: positive}
+    - {name: death_penalty, sign: negative}
+  # No standard "solved" threshold for this environment; success is level completion.
+
+versions:
+  default: Uses stable-retro ROM database; states denote levels (e.g., 'Level1-1').
+

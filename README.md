@@ -10,6 +10,7 @@ This project is currently for self-education purposes only. I'm doing a lot of v
 - **Config-first** ⚙️: concise YAML configs with inheritance and linear schedules (e.g., `lin_0.001`)
 - **Vectorized envs** ⚡: Dummy/Subproc, frame stacking, obs/reward normalization
 - **Atari-ready** 🕹️: ALE with `obs_type` rgb/ram/objects (via [Gymnasium](https://gymnasium.farama.org) and [OCAtari](https://github.com/Kautenja/oc-atari))
+- **Retro-ready** 🎮: Classic console games via [stable-retro](https://github.com/Farama-Foundation/stable-retro) (e.g., `Retro/SuperMarioBros-Nes`)
 - **Wrappers registry** 🧰: plug-in env wrappers by name
 - **Great UX** ✨: curated `runs/` folders, auto `latest-run` link, video capture
 - **Inspector UI** 🔎: step-by-step episode browser (Gradio)

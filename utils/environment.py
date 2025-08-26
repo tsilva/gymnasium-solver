@@ -20,6 +20,19 @@ def is_vizdoom_env_id(env_id: str) -> bool:
         "vizdoom-health-gathering",
     }
 
+def is_stable_retro_env_id(env_id: str) -> bool:
+    """Heuristics to detect stable-retro (Gym Retro) environments.
+
+    Supported patterns:
+    - Prefix form: 'Retro/<GameName>' (recommended)
+    - Direct game id for common titles (e.g., 'SuperMarioBros-Nes')
+    """
+    low = str(env_id).lower()
+    if low.startswith("retro/"):
+        return True
+    # Minimal built-ins so users can pass the game id directly
+    return env_id in {"SuperMarioBros-Nes"}
+
 def is_rgb_env(env):
     import numpy as np
     from gymnasium import spaces
@@ -83,6 +96,7 @@ def build_env(
 
     _is_alepy = is_alepy_env_id(env_id)
     _is_vizdoom = is_vizdoom_env_id(env_id)
+    _is_stable_retro = is_stable_retro_env_id(env_id)
     _is_pettingzoo_go = str(env_id).lower() in {"pettingzoo/go", "pettingzoo-go", "go"}
 
     # Default to RGB observations for ALE environments when obs_type is not specified.
@@ -176,6 +190,30 @@ def build_env(
                 # Fallback to deadly corridor if unknown vizdoom id
                 scenario = "deadly_corridor"
             env = VizDoomEnv(scenario=scenario, render_mode=render_mode, **env_kwargs)
+        # Stable-Retro (Gym Retro) integrations
+        elif _is_stable_retro:
+            try:
+                import retro  # type: ignore
+            except Exception as e:
+                raise ImportError(
+                    "stable-retro is required for Retro environments. Install with `pip install stable-retro`"
+                ) from e
+
+            # Allow both 'Retro/<Game>' and bare game id (e.g., 'SuperMarioBros-Nes')
+            if str(env_id).lower().startswith("retro/"):
+                game = str(env_id).split("/", 1)[1]
+            else:
+                game = str(env_id)
+
+            # Extract Retro-specific kwargs while keeping user overrides
+            make_kwargs = dict(env_kwargs) if isinstance(env_kwargs, dict) else {}
+            # Default to filtered (restricted) action set for saner discrete action spaces
+            make_kwargs.setdefault("use_restricted_actions", getattr(retro, "Actions").FILTERED)
+            # Support 'state' override via env_kwargs; None → retro's default state
+            state = make_kwargs.pop("state", None)
+
+            # stable-retro supports Gymnasium-style render_mode
+            env = retro.make(game=game, state=state, render_mode=render_mode, **make_kwargs)
         # PettingZoo Go (wrapped single-agent)
         elif _is_pettingzoo_go:
             # Lazy import to avoid hard dependency for users who don't need it

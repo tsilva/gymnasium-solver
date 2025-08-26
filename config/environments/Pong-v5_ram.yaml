@@ -1,13 +1,11 @@
 # Pong with RAM observations challenge configurations
 
-__Pong-v5_ram:
-  project_id: "Pong-v5_ram"
-  env_id: ALE/Pong-v5
-  obs_type: "ram"
-  normalize_obs: "static"
+project_id: "Pong-v5_ram"
+env_id: ALE/Pong-v5
+obs_type: "ram"
+normalize_obs: "static"
 
-Pong-v5_ram_ppo:
-  inherits: __Pong-v5_ram
+ppo:
   algo_id: ppo
   n_envs: 8               # Reduced for better sample efficiency
   n_steps: 512             # Reduced for more frequent updates
@@ -16,8 +14,8 @@ Pong-v5_ram_ppo:
   learning_rate: 0.0003    # Higher learning rate for faster learning
   eval_freq_epochs: 50     # Less frequent eval to focus on training
   eval_episodes: 10        # More episodes for reliable evaluation
-Pong-v5_ram_reinforce:
-  inherits: __Pong-v5_ram
+
+reinforce:
   algo_id: reinforce
   n_envs: 8
   n_steps: 1024

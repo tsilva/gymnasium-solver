@@ -1,17 +1,15 @@
-__VizDoom-DefendTheCenter-v0:
-  project_id: "VizDoom-DefendTheCenter-v0"
-  env_id: VizDoom-DefendTheCenter-v0
-  policy: 'cnn'
-  grayscale_obs: true
-  resize_obs: true
-  frame_stack: 4
-  accelerator: 'gpu'
-  devices: 'auto'
-  eval_freq_epochs: 10
-  eval_episodes: 1
+project_id: "VizDoom-DefendTheCenter-v0"
+env_id: VizDoom-DefendTheCenter-v0
+policy: 'cnn'
+grayscale_obs: true
+resize_obs: true
+frame_stack: 4
+accelerator: 'gpu'
+devices: 'auto'
+eval_freq_epochs: 10
+eval_episodes: 1
 
-VizDoom-DefendTheCenter-v0_ppo:
-  inherits: __VizDoom-DefendTheCenter-v0
+ppo:
   algo_id: ppo
   # Vectorization / rollout
   n_envs: 16
@@ -38,5 +36,4 @@ VizDoom-DefendTheCenter-v0_ppo:
     frame_skip: 4
   env_wrappers:
     - { id: VizDoom_RewardShaper, noop_penalty: 0.01, move_reward: 0.004, turn_reward: 0.004 }
-
 

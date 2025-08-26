@@ -1,26 +1,24 @@
 # Pong with RGB observations challenge configurations
 
-__Pong-v5_rgb:
-  project_id: "Pong-v5_rgb"
-  env_id: ALE/Pong-v5
-  obs_type: "rgb"
-  policy: 'cnn'
-  # CNN defaults suitable for 84x84 inputs
-  policy_kwargs:
-    activation: relu
-    channels: [32, 64, 64]
-    kernel_sizes: [8, 4, 3]
-    strides: [4, 2, 1]
-  grayscale_obs: true
-  resize_obs: true
-  frame_stack: 4
-  accelerator: 'gpu'
-  devices: 'auto'
-  eval_freq_epochs: 1
-  eval_episodes: 1
+project_id: "Pong-v5_rgb"
+env_id: ALE/Pong-v5
+obs_type: "rgb"
+policy: 'cnn'
+# CNN defaults suitable for 84x84 inputs
+policy_kwargs:
+  activation: relu
+  channels: [32, 64, 64]
+  kernel_sizes: [8, 4, 3]
+  strides: [4, 2, 1]
+grayscale_obs: true
+resize_obs: true
+frame_stack: 4
+accelerator: 'gpu'
+devices: 'auto'
+eval_freq_epochs: 1
+eval_episodes: 1
 
-Pong-v5_rgb_ppo:
-  inherits: __Pong-v5_rgb
+ppo:
   algo_id: ppo
   n_envs: 8
   n_steps: 256             # 8*256 = 2048 samples/update
@@ -33,8 +31,7 @@ Pong-v5_rgb_ppo:
   eval_freq_epochs: 10    # Less frequent eval due to computational cost
   eval_episodes: 5
 
-Pong-v5_rgb_reinforce:
-  inherits: __Pong-v5_rgb
+reinforce:
   algo_id: reinforce
   n_envs: 4                # Fewer envs due to computational complexity
   n_steps: 512

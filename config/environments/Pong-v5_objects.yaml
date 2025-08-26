@@ -20,16 +20,14 @@
 # - Evaluation cadence
 #   - eval_freq_epochs: 100 to reduce eval overhead (not a big factor, but keeps focus on training).
 
-__Pong-v5_objects:
-  project_id: "Pong-v5_objects"
-  env_id: ALE/Pong-v5
-  n_timesteps: 1e7
-  obs_type: "objects"
-  env_wrappers:
-    - id: PongV5_FeatureExtractor
+project_id: "Pong-v5_objects"
+env_id: ALE/Pong-v5
+n_timesteps: 1e7
+obs_type: "objects"
+env_wrappers:
+  - id: PongV5_FeatureExtractor
 
-Pong-v5_objects_ppo:
-  inherits: __Pong-v5_objects
+ppo:
   algo_id: ppo
   n_envs: 32
   vf_coef: 0.7
@@ -43,8 +41,7 @@ Pong-v5_objects_ppo:
   eval_freq_epochs: 50 
   eval_episodes: 10  
 
-Pong-v5_objects_reinforce:
-  inherits: __Pong-v5_objects
+reinforce:
   algo_id: reinforce
   n_envs: 8
   n_steps: 1024

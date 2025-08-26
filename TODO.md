@@ -1,5 +1,3 @@
-
-- FEAT: add stable-retro support
 - TASK: solve Pong-v5_objects, then propagate to other envs
 - BUG: run is being logged even when training is not started, bold terminal
 - https://github.com/kenjyoung/MinAtar
@@ -9,7 +7,6 @@
 - BUG: last inspect frame for atari is first frame of next episode
 - WISHLIST: impelemnt SEEDRL with PPO to massively scale training
 - can I create an exploration model by just making loss higher the more the model can predict the future?
-- print effective rollout step size
 - TODO: add config file beautifier that ensure attributes are set in the correct order
 - TODO: add config file validator that ensures that all attributes are set and that they are set to the correct type
 - runs: along with each checkpoint we are saving a json file with the metrics at that checkpoint. We also want to save a CSV with the rollout data for that epoch; this data should contain exactly the same data as the table in inspect.py, so we can encapsualte the function that generates the csv and reuse it in both places.
@@ -29,7 +26,6 @@
 - FEAT: add discrete env support
 - Create benchmarking script to find optimal parallelization for env/machine combo
 - TEST: predict next state to learn faster
-- FEAT: add [Minari support](https://minari.farama.org/)
 - BUG: videos not logged at correct timesteps
 - FEAT : Normalize returns for REINFORCE
 - FEAT: add warning confirming if ale-py has been compiled to target architecture (avoid rosetta in silicon macs)
@@ -58,3 +54,4 @@ MaxAndSkipEnv
 - FEAT: add multitask heads support (eg: Atari, Sega Genesis) -- consider large output space
 - Ask agent for next learning steps/tasks (prompt file)
 - REFACTOR: add type hints where applicable
+- FEAT: add [Minari support](https://minari.farama.org/)

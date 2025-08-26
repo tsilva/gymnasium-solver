@@ -2,14 +2,20 @@
 
 project_id: "MountainCar-v0"
 env_id: MountainCar-v0
+frame_stack: 3
+env_wrappers:
+  - id: MountainCarV0_RewardShaper
+    position_reward_scale: 100.0
+    velocity_reward_scale: 10.0
+    height_reward_scale: 50.0
 
 ppo:
   algo_id: ppo
+  normalize: true
   n_envs: 16
   n_timesteps: 1e6
   n_epochs: 10
   batch_size: 128
-  normalize: false
   n_steps: 128
   gamma: 0.999
   learning_rate: 3e-4
@@ -18,10 +24,12 @@ ppo:
 
 reinforce:
   algo_id: reinforce
+  normalize_obs: true
   n_envs: 8
   n_steps: 1024
   batch_size: 128
   gamma: 0.999
   learning_rate: 1e-3
   hidden_dims: [128, 128]
+  use_baseline: true
   max_epochs: 2000

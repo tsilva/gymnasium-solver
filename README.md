@@ -44,11 +44,15 @@ python inspect.py --run-id latest-run --port 7860 --host 127.0.0.1
 ```
 
 ### ⚙️ Configs (YAML)
-Configs live in `config/environments/*.yaml`. They support inheritance and linear schedules.
+Configs live in `config/environments/*.yaml`. New style puts base fields at the top and per-algorithm variants under their own key. Linear schedules like `lin_0.001` are parsed automatically.
 
 ```yaml
-CartPole-v1_ppo:
-  inherits: __CartPole-v1
+# New per-file style
+project_id: "CartPole-v1"
+env_id: CartPole-v1
+eval_episodes: 10
+
+ppo:
   algo_id: ppo
   n_envs: 8
   n_timesteps: 1e5
@@ -56,10 +60,11 @@ CartPole-v1_ppo:
   batch_size: 256
   learning_rate: lin_0.001   # linear schedule from 0.001 → 0
   clip_range:   lin_0.2
-  # optional wrappers
   env_wrappers:
     - { id: CartPoleV1_RewardShaper, angle_reward_scale: 1.0 }
 ```
+
+You still select a config by ID, e.g. `CartPole-v1_ppo`. The loader also remains compatible with the legacy multi-block format for a transitional period.
 
 Key fields: `env_id`, `algo_id`, `n_envs`, `n_steps`, `batch_size`, `n_timesteps`, `policy` (`mlp|cnn`), `hidden_dims`, `obs_type` (`rgb|ram|objects` for ALE).
 

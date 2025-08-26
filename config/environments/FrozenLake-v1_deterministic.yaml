@@ -1,24 +1,21 @@
 # FrozenLake-v1 deterministic challenge configurations
 
-__FrozenLake-v1_deterministic:
-  project_id: "FrozenLake-v1_deterministic"
-  env_id: FrozenLake-v1
-  env_kwargs:
-    is_slippery: false
-    map_name: "4x4"
-  eval_episodes: 10
-  eval_freq_epochs: 10
-  eval_recording_freq_epochs: 10
+project_id: "FrozenLake-v1_deterministic"
+env_id: FrozenLake-v1
+env_kwargs:
+  is_slippery: false
+  map_name: "4x4"
+eval_episodes: 10
+eval_freq_epochs: 10
+eval_recording_freq_epochs: 10
 
-FrozenLake-v1_deterministic_qlearning:
-  inherits: __FrozenLake-v1_deterministic
+qlearning:
   algo_id: qlearning
   n_steps: 512
   batch_size: 64
   learning_rate: 0.01
 
-FrozenLake-v1_deterministic_ppo:
-  inherits: __FrozenLake-v1_deterministic
+ppo:
   algo_id: ppo
   n_steps: 128                 # 16*128 = 2048 samples/update
   batch_size: 256              # 8 minibatches
@@ -29,12 +26,11 @@ FrozenLake-v1_deterministic_ppo:
 
   # Eval
   eval_episodes: 10
-FrozenLake-v1_deterministic_reinforce:
-  inherits: __FrozenLake-v1_deterministic
+
+reinforce:
   algo_id: reinforce
   n_steps: 512
   batch_size: 64
   learning_rate: 0.005
   hidden_dims: [64]
   use_baseline: true
-

@@ -167,17 +167,55 @@ class Config:
         
         # Try new environment-centric format first
         env_config_path = project_root / config_dir
-        
-        # Search for config_id in all environment challenge files
-        all_configs = {}
-        for challenge_file in env_config_path.glob("*.yaml"):
+
+        # Build an index of config_id -> raw mapping supporting BOTH formats
+        all_configs: Dict[str, Dict[str, Any]] = {}
+
+        def _is_new_style(doc: Dict[str, Any]) -> bool:
+            # Heuristic: top-level contains env_id and other Config fields (not nested under a name)
+            if not isinstance(doc, dict):
+                return False
+            fields = set(cls.__dataclass_fields__.keys())
+            return "env_id" in doc and any(k in fields for k in doc.keys())
+
+        def _collect_from_file(path: Path) -> None:
+            # Ignore helper/example files with *.new.yaml extension
+            if path.name.endswith(".new.yaml"):
+                return
             try:
-                with open(challenge_file, 'r') as f:
-                    challenge_config = yaml.safe_load(f)
-                    all_configs.update(challenge_config)
+                with open(path, "r", encoding="utf-8") as f:
+                    doc = yaml.safe_load(f) or {}
+                if not isinstance(doc, dict):
+                    return
             except Exception:
-                continue  # Skip files that can't be parsed
-        
+                return
+
+            if _is_new_style(doc):
+                # New style: base fields at root + per-variant sections (e.g., ppo: {...})
+                field_names = set(cls.__dataclass_fields__.keys())
+                base: Dict[str, Any] = {k: v for k, v in doc.items() if k in field_names}
+                project = base.get("project_id") or path.stem.replace(".new", "")
+                # Variant sections are top-level dict values whose key is not a dataclass field name
+                for k, v in doc.items():
+                    if k in field_names:
+                        continue
+                    if not isinstance(v, dict):
+                        continue
+                    variant_cfg = dict(base)
+                    variant_cfg.update(v)
+                    # Default algo_id to the variant section name when not provided
+                    variant_cfg.setdefault("algo_id", str(k))
+                    cid = f"{project}_{k}"
+                    all_configs[cid] = variant_cfg
+            else:
+                # Old style: mapping of config_id -> mapping (may include inherits)
+                for k, v in doc.items():
+                    if isinstance(v, dict):
+                        all_configs[str(k)] = v
+
+        for yf in sorted(env_config_path.glob("*.yaml")):
+            _collect_from_file(yf)
+
         if config_id in all_configs:
             return cls._load_from_environment_config(all_configs[config_id], all_configs)
         

@@ -11,17 +11,48 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
-def _load_all_env_configs(config_dir: Path) -> Dict[str, Any]:
-    all_configs: Dict[str, Any] = {}
+def _collect_env_config_map(config_dir: Path) -> Dict[str, Dict[str, Any]]:
+    """Return mapping of config_id -> raw config dict supporting legacy and new styles.
+
+    - Legacy: top-level mapping of ids -> mapping (with optional 'inherits')
+    - New: base fields at root + variant sections (e.g., ppo: {...}) create ids '<project>_<variant>'
+    Skips files ending with .new.yaml.
+    """
+    all_configs: Dict[str, Dict[str, Any]] = {}
     for path in sorted(config_dir.glob("*.yaml")):
+        if path.name.endswith(".new.yaml"):
+            continue
         try:
             with open(path, "r", encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
-            if not isinstance(data, dict):
+                doc = yaml.safe_load(f) or {}
+            if not isinstance(doc, dict):
                 continue
-            all_configs.update(data)
         except Exception:
             continue
+        # New style detection: env_id at root and dict fields present
+        if isinstance(doc.get("env_id"), str):
+            project = doc.get("project_id") or path.stem.replace(".new", "")
+            field_names = {
+                # Minimal set sufficient to disambiguate variant sections
+                "env_id", "algo_id", "n_envs", "n_steps", "batch_size", "n_epochs",
+                "gamma", "gae_lambda", "ent_coef", "vf_coef", "policy", "policy_kwargs",
+                "obs_type", "frame_stack", "grayscale_obs", "resize_obs", "env_kwargs",
+                "project_id", "accelerator", "devices", "eval_freq_epochs", "eval_episodes",
+            }
+            base = {k: v for k, v in doc.items() if k in field_names}
+            for k, v in doc.items():
+                if k in field_names or not isinstance(v, dict):
+                    continue
+                cfg = dict(base)
+                cfg.update(v)
+                cfg.setdefault("algo_id", str(k))
+                cid = f"{project}_{k}"
+                all_configs[cid] = cfg
+        else:
+            # Legacy style: ids at top-level
+            for k, v in doc.items():
+                if isinstance(v, dict):
+                    all_configs[str(k)] = v
     return all_configs
 
 
@@ -31,7 +62,7 @@ def discover_env_config_ids(config_dir: Path) -> List[str]:
     Skips base entries (e.g., keys starting with '__') and any entries that
     do not declare an algo_id (not runnable training configs).
     """
-    all_configs = _load_all_env_configs(config_dir)
+    all_configs = _collect_env_config_map(config_dir)
 
     runnable_ids: List[str] = []
     for cfg_id, cfg in all_configs.items():
@@ -82,7 +113,7 @@ def run_random_steps_for_config(config_id: str, n_timesteps: int, n_envs: int) -
         # Resolve environment-centric config without strict validation
         project_root = PROJECT_ROOT
         config_dir = project_root / "config" / "environments"
-        all_configs = _load_all_env_configs(config_dir)
+        all_configs = _collect_env_config_map(config_dir)
         cfg = _resolve_inheritance(config_id, all_configs)
 
         # Keep environment vectorization minimal for a smoke test
@@ -184,5 +215,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
 

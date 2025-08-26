@@ -13,7 +13,7 @@ High-signal reference for maintainers and agents. Read this before making change
 
 ### Configuration model (`utils/config.py`)
 - `Config` dataclass aggregates env, algo, rollout, model, optimization, eval, logging, and runtime settings.
-- `load_from_yaml(config_id, algo_id=None)`: loads from `config/environments/*.yaml` supporting `inherits`; parses schedules like `lin_0.001` into `*_schedule = 'linear'` and numeric base.
+- `load_from_yaml(config_id, algo_id=None)`: loads from `config/environments/*.yaml`, supporting both the legacy multi-block format with `inherits` and the new per-file format (base at root + per-variant sections like `ppo:`). Parses schedules like `lin_0.001` into `*_schedule = 'linear'` and numeric base.
 - Legacy loader `_load_from_legacy_config` remains for `config/hyperparams/<algo>.yaml`.
 - Key derived behaviors: evaluation defaults when `eval_freq_epochs` set; RLZoo-style `normalize` mapped to `normalize_obs/reward`; `policy` in {'mlp','cnn'}; validation via `_compute_validation_controls` helpers.
 

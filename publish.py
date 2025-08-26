@@ -257,10 +257,10 @@ def extract_run_metadata(run_dir: Path) -> dict:
 
 
 def _guess_config_id_from_environments(env_id: str, algo_id: str) -> Optional[str]:
-    """Search config/environments/*.yaml for a key matching env_id+algo_id.
+    """Search config/environments for a config_id matching env_id+algo_id.
 
-    Preference is given to keys not starting with '__'. If multiple matches
-    exist, return the first in sorted order for determinism.
+    Supports both legacy (mapping of ids) and new per-file style (base at root + variants).
+    Skips files ending with .new.yaml.
     """
     try:
         root = Path(__file__).parent
@@ -268,17 +268,32 @@ def _guess_config_id_from_environments(env_id: str, algo_id: str) -> Optional[st
         candidates: List[str] = []
         if env_dir.exists():
             for yf in sorted(env_dir.glob("*.yaml")):
+                if yf.name.endswith(".new.yaml"):
+                    continue
                 try:
-                    data = yaml.safe_load(yf.read_text()) or {}
+                    doc = yaml.safe_load(yf.read_text()) or {}
                 except Exception:
                     continue
-                if not isinstance(data, dict):
+                if not isinstance(doc, dict):
                     continue
-                for k, v in data.items():
-                    if not isinstance(v, dict):
-                        continue
-                    if v.get("env_id") == env_id and v.get("algo_id") == algo_id:
-                        candidates.append(str(k))
+                # Detect new style
+                if "env_id" in doc and isinstance(doc.get("env_id"), str):
+                    # base at root, variants under keys that are dicts
+                    project = doc.get("project_id") or yf.stem.replace(".new", "")
+                    base_env = doc.get("env_id")
+                    for k, v in doc.items():
+                        if isinstance(v, dict):
+                            # algo_id may be inside the variant, else assume section name
+                            cand_algo = v.get("algo_id") or str(k)
+                            if base_env == env_id and cand_algo == algo_id:
+                                candidates.append(f"{project}_{k}")
+                else:
+                    # Legacy style: id -> mapping
+                    for k, v in doc.items():
+                        if not isinstance(v, dict):
+                            continue
+                        if v.get("env_id") == env_id and v.get("algo_id") == algo_id:
+                            candidates.append(str(k))
         # Prefer non-hidden keys
         visible = [c for c in candidates if not c.startswith("__")]
         pool = visible or candidates

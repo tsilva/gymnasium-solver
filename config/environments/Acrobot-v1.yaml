@@ -1,14 +1,12 @@
 # Acrobot standard challenge configurations
 
-__Acrobot-v1:
-  project_id: "Acrobot-v1"
-  env_id: Acrobot-v1
-  n_timesteps: 1e6
-  eval_freq_epochs: 10
-  eval_episodes: 10
+project_id: "Acrobot-v1"
+env_id: Acrobot-v1
+n_timesteps: 1e6
+eval_freq_epochs: 10
+eval_episodes: 10
 
-Acrobot-v1_ppo:
-  inherits: __Acrobot-v1
+ppo:
   algo_id: ppo
   n_envs: 8
   n_epochs: 4
@@ -18,8 +16,7 @@ Acrobot-v1_ppo:
   gae_lambda: 0.94
   ent_coef: 0.0
 
-Acrobot-v1_reinforce:
-  inherits: __Acrobot-v1
+reinforce:
   algo_id: reinforce
   n_envs: 16
   n_steps: 512

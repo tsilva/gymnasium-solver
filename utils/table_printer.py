@@ -120,6 +120,12 @@ class NamespaceTablePrinter:
                 key_candidates.append(sub)
                 full_key = f"{ns}/{sub}" if sub else ns
                 val_str = self._format_value(v, full_key)
+                # Emphasize key episode reward metrics for readability
+                try:
+                    if sub in {"ep_rew_mean", "ep_rew_last"}:
+                        val_str = _ansi("bold", val_str, self.color)
+                except Exception:
+                    pass
                 delta_str, color_name = self._delta_for_key(ns, sub, v)
                 if delta_str:
                     delta_disp = _ansi(color_name, delta_str, self.color)
@@ -150,7 +156,14 @@ class NamespaceTablePrinter:
                 val_display_len = len(self._strip_ansi(val))
                 val_padding = val_width - val_display_len
                 val_padded = " " * val_padding + val if val_padding > 0 else val
-                lines.append(f"| {' ' * indent}{sub:<{key_width}} | {val_padded} |")
+                # Format key cell with padding first, then apply ANSI bold if highlighted
+                key_cell = f"{sub:<{key_width}}"
+                try:
+                    if sub in {"ep_rew_mean", "ep_rew_last"}:
+                        key_cell = _ansi("bold", key_cell, self.color)
+                except Exception:
+                    pass
+                lines.append(f"| {' ' * indent}{key_cell} | {val_padded} |")
         lines.append(border)
 
         self._render_lines(lines)

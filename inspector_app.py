@@ -520,7 +520,7 @@ def run_episode(
                         assume_rgb_groups = True
                         split = _split_stack(hwc, assume_rgb_groups=assume_rgb_groups, n_stack_hint=n_stack_hint)
                         # If more than one sub-frame, make a grid
-                        if isinstance(split, list) and len(split) > 1:
+                        if isinstance(split, list) and len(split) >= 1:
                             grid = _make_grid(split, cols=None)
                             if grid is not None:
                                 stack_img = grid
@@ -666,9 +666,7 @@ def build_ui(default_run_id: str = "latest-run"):
 
         frames_state = gr.State([])  # active frames displayed
         frames_raw_state = gr.State([])  # type: ignore[var-annotated]
-        frames_proc_state = gr.State([])  # type: ignore[var-annotated]
         frames_stack_state = gr.State([])  # type: ignore[var-annotated]
-        has_processed_state = gr.State(False)
         has_stack_state = gr.State(False)
         index_state = gr.State(0)
         playing_state = gr.State(False)
@@ -771,7 +769,7 @@ def build_ui(default_run_id: str = "latest-run"):
             return pairs
 
         def _inspect(rid: str, ckpt_label: str | None, det: bool, nsteps: int):
-            frames_raw, frames_proc, frames_stack, steps, info = run_episode(rid, ckpt_label, det, int(nsteps))
+            frames_raw, _frames_proc_unused, frames_stack, steps, info = run_episode(rid, ckpt_label, det, int(nsteps))
             rows = []
             for s in steps:
                 # Format probabilities, optionally with labels
@@ -813,9 +811,8 @@ def build_ui(default_run_id: str = "latest-run"):
                 ]
                 return _verticalize_row(row_vals)
             # Compute available display modes
-            has_proc = isinstance(frames_proc, list) and len(frames_proc) > 0
             has_stack = isinstance(frames_stack, list) and len(frames_stack) > 0
-            choices = ["Rendered (raw)"] + (["Processed (obs)"] if has_proc else []) + (["Frame stack"] if has_stack else [])
+            choices = ["Rendered (raw)"] + (["Processed (stack)"] if has_stack else [])
             # Set active frames to raw by default
             return (
                 gr.update(value="Rendered (raw)", choices=choices),  # display_mode
@@ -833,15 +830,13 @@ def build_ui(default_run_id: str = "latest-run"):
                 rows,                                       # rows_state
                 steps,                                      # steps_state
                 frames_raw,                                 # frames_raw_state
-                (frames_proc or []),                        # frames_proc_state
                 (frames_stack or []),                       # frames_stack_state
-                has_proc,                                   # has_processed_state
                 has_stack,                                  # has_stack_state
             )
         run_btn.click(
             _inspect,
             inputs=[run_id, checkpoint, deterministic, max_steps],
-            outputs=[display_mode, frame_image, frame_slider, current_step_table, step_table, env_spec_json, model_spec_json, ckpt_metrics_json, frames_state, index_state, playing_state, play_pause_btn, rows_state, steps_state, frames_raw_state, frames_proc_state, frames_stack_state, has_processed_state, has_stack_state],
+            outputs=[display_mode, frame_image, frame_slider, current_step_table, step_table, env_spec_json, model_spec_json, ckpt_metrics_json, frames_state, index_state, playing_state, play_pause_btn, rows_state, steps_state, frames_raw_state, frames_stack_state, has_stack_state],
         )
 
         # Keep rows_state in sync if the user edits the table
@@ -1017,14 +1012,11 @@ def build_ui(default_run_id: str = "latest-run"):
             timer.tick(_on_tick, inputs=[frames_state, index_state, playing_state, steps_state], outputs=[frame_image, frame_slider, current_step_table, index_state, playing_state, play_pause_btn])
 
         # Display mode switcher
-        def _on_display_mode(mode: str, raw: List[np.ndarray], proc: List[np.ndarray], stack: List[np.ndarray], steps: List[Dict[str, Any]] | None):
+        def _on_display_mode(mode: str, raw: List[np.ndarray], stack: List[np.ndarray], steps: List[Dict[str, Any]] | None):
             mode = str(mode or "Rendered (raw)")
-            if mode == "Processed (obs)" and isinstance(proc, list) and len(proc) > 0:
-                active = proc
-                label = "Frame (processed)"
-            elif mode == "Frame stack" and isinstance(stack, list) and len(stack) > 0:
+            if mode == "Processed (stack)" and isinstance(stack, list) and len(stack) > 0:
                 active = stack
-                label = "Frame stack (processed)"
+                label = "Frame (processed stack)"
             else:
                 active = raw if isinstance(raw, list) else []
                 label = "Frame (raw)"
@@ -1059,7 +1051,7 @@ def build_ui(default_run_id: str = "latest-run"):
 
         display_mode.change(
             _on_display_mode,
-            inputs=[display_mode, frames_raw_state, frames_proc_state, frames_stack_state, steps_state],
+            inputs=[display_mode, frames_raw_state, frames_stack_state, steps_state],
             outputs=[frame_image, frame_slider, frames_state, index_state, playing_state, play_pause_btn, current_step_table],
         )
 

@@ -1,12 +1,10 @@
 - TODO: inspect.py add support for showing raw vs processed frames, including frame stacks
-- recheck if deterministic version still converges with feature extractor fixes
 - TASK: solve Pong-v5_objects, then propagate to other envs
 - BUG: run is being logged even when training is not started
-- test rlib
-- BUG: total timesteps grwoth is not constant (print table)
 maxout pong objects / bold terminal
+- https://github.com/kenjyoung/MinAtar
+- FEAT: add stable-retro support
 - Add support for resuming training runs, this requires loading hyperparameters and schedulers to be timestep based; must also start from last timestep
-https://github.com/kenjyoung/MinAtar
 - Change config files so that they only say their mention algo_id in experiment name
 - TODO: compare atari breakout fps vs rlzoosb3
 - BUG: last inspect frame for atari is first frame of next episode
@@ -16,11 +14,8 @@ https://github.com/kenjyoung/MinAtar
 - TODO: add config file beautifier that ensure attributes are set in the correct order
 - TODO: add config file validator that ensures that all attributes are set and that they are set to the correct type
 - runs: along with each checkpoint we are saving a json file with the metrics at that checkpoint. We also want to save a CSV with the rollout data for that epoch; this data should contain exactly the same data as the table in inspect.py, so we can encapsualte the function that generates the csv and reuse it in both places.
-- FEAT: add stable-retro support
-
 - inspect.py: add LLM debugging support
 - BUG: checkpoint jsons not storing correct metrics
-
 - add support for resuming training from a checkpoint
 - FEAT: Add support for specifyingpo extra reward metrics for each environment, then make the reward shaper assign value for each of those rewards
 - FEAT: add support for creating publishable video for youtube
@@ -39,17 +34,10 @@ https://github.com/kenjyoung/MinAtar
 - BUG: videos not logged at correct timesteps
 - FEAT : Normalize returns for REINFORCE
 - FEAT: add warning confirming if ale-py has been compiled to target architecture (avoid rosetta in silicon macs)
-- BUG: baseline_mean/std are being recorded even when not used
-- BUG: metrics are not well sorted yet
 - FEAT: add support for fully recording last eval
 - BUG: check that were are matching rlzoo mstop criteria
-- Pong-RAM: Add support for byte-selection
 MaxAndSkipEnv
 - BUG: video step is still not alligned
-- Adjust eval policy for atari
-	•	Normalize each byte (e.g., to [0,1]) and consider embedding bits (treat bytes as 8 bits).
-	•	Try longer training and more seeds; RAM setups often need more steps to stabilize.
-	•	If you can, expose extra emulator registers (RAM+) to reduce partial observability.
 - How to measure advantage of different seeds versus reusing same env.
 - Consider increasing sample efficiency by figuring out how different are transitions between different envs
 - FEAT: add determinism check at beginning to make sure that rollout benefits from multiple envs (eg: Pong, test on PongDeterministic)

@@ -173,6 +173,14 @@ def run_episode(
     selected_label = checkpoint_label or default_label
     ckpt_path = mapping[selected_label]
 
+    # Important for Retro environments: load the model (which briefly creates
+    # a helper env to infer shapes) BEFORE creating the main episode env.
+    # Retro does not allow multiple emulator instances per process, so this
+    # ordering ensures the helper env is closed prior to constructing the
+    # long-lived env used for stepping/recording here.
+    policy_model = _load_model(ckpt_path, config)
+    policy_model.eval()
+
     from utils.environment import build_env
 
     env = build_env(
@@ -190,9 +198,6 @@ def run_episode(
         grayscale_obs=getattr(config, "grayscale_obs", False),
         resize_obs=getattr(config, "resize_obs", False),
     )
-
-    policy_model = _load_model(ckpt_path, config)
-    policy_model.eval()
 
     # Load action labels from vec env wrapper if available; fallback to YAML
     action_labels: List[str] | None = None

@@ -378,7 +378,9 @@ class BaseAgent(pl.LightningModule):
         if history: print_terminal_ascii_summary(history)
 
         # Record final evaluation video and save associated metrics JSON next to it
-        video_path = self.run_manager.ensure_path("checkpoints/final.mp4")
+        checkpoint_dir = self.run_manager.ensure_path("checkpoints/")
+        video_path = checkpoint_dir / "final.mp4"
+        final_metrics = None
 
         # Detect Retro and evaluate with a temporary env to avoid multi-instance limit
         try:
@@ -436,12 +438,74 @@ class BaseAgent(pl.LightningModule):
                     n_episodes=1,
                     deterministic=self.config.eval_deterministic,
                 )
-            json_path = video_path.with_suffix(".json")
-            try:
+        # Always attempt to write metrics JSON alongside the final video
+        try:
+            if final_metrics is not None:
+                json_path = video_path.with_suffix(".json")
                 with open(json_path, "w", encoding="utf-8") as f:
                     json.dump(final_metrics, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+        # Ensure a final checkpoint exists even if validation was disabled and no
+        # eval checkpoints were produced. Also create convenient last/best symlinks
+        # for both checkpoint and associated final video/json.
+        try:
+            from trainer_callbacks.model_checkpoint import ModelCheckpointCallback
+            # If there are no .ckpt files in the run's checkpoint directory, save one now
+            has_ckpt = any(p.suffix == ".ckpt" for p in checkpoint_dir.glob("*.ckpt"))
+            if not has_ckpt:
+                # Save a single snapshot checkpoint containing model and optimizer states
+                cb = ModelCheckpointCallback(checkpoint_dir=str(checkpoint_dir))
+                # Use a stable basename that won't conflict with epoch-based names
+                saved_path = checkpoint_dir / "final.ckpt"
+                cb._save_checkpoint(  # type: ignore[attr-defined]
+                    self,
+                    saved_path,
+                    is_best=False,
+                    is_last=True,
+                    is_threshold=False,
+                    metrics=final_metrics if isinstance(final_metrics, dict) else None,
+                    current_eval_reward=(
+                        float(final_metrics.get("ep_rew_mean"))
+                        if isinstance(final_metrics, dict) and "ep_rew_mean" in final_metrics
+                        else None
+                    ),
+                    threshold_value=None,
+                )
+                # Maintain last/best symlinks for convenience
+                try:
+                    cb._update_symlink(checkpoint_dir / "last.ckpt", saved_path)  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+                # If there was no best.ckpt yet, mirror last->best
+                try:
+                    best_ckpt = checkpoint_dir / "best.ckpt"
+                    if not best_ckpt.exists() and not best_ckpt.is_symlink():
+                        cb._update_symlink(best_ckpt, saved_path)  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+
+            # Create video/json best/last symlinks pointing to final artifacts when missing
+            try:
+                def _link(src_rel: str, dst: str):
+                    try:
+                        src = checkpoint_dir / src_rel
+                        dstp = checkpoint_dir / dst
+                        if not dstp.exists() and not dstp.is_symlink() and src.exists():
+                            ModelCheckpointCallback._update_symlink(dstp, src)  # type: ignore[attr-defined]
+                    except Exception:
+                        pass
+
+                _link("final.mp4", "last.mp4")
+                _link("final.mp4", "best.mp4")
+                _link("final.json", "last.json")
+                _link("final.json", "best.json")
             except Exception:
                 pass
+        except Exception:
+            # Never fail training shutdown due to checkpoint finalization issues
+            pass
         
     def learn(self):
         assert self.run_manager is None, "learn() should only be called once at the start of training"

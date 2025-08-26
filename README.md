@@ -12,7 +12,7 @@ This project is currently for self-education purposes only. I'm doing a lot of v
 - **Atari-ready** 🕹️: ALE with `obs_type` rgb/ram/objects (via [Gymnasium](https://gymnasium.farama.org) and [OCAtari](https://github.com/Kautenja/oc-atari))
 - **Retro-ready** 🎮: Classic console games via [stable-retro](https://github.com/Farama-Foundation/stable-retro) (e.g., `Retro/SuperMarioBros-Nes`)
 - **Wrappers registry** 🧰: plug-in env wrappers by name
-- **Great UX** ✨: curated `runs/` folders, auto `latest-run` link, video capture
+- **Great UX** ✨: curated `runs/` folders, auto `@latest-run` link, video capture
 - **Inspector UI** 🔎: step-by-step episode browser (Gradio)
 - **Hub publishing** 📤: push run artifacts and preview video to [Hugging Face Hub](https://huggingface.co)
 
@@ -36,11 +36,11 @@ python train.py --config CartPole-v1_ppo -q
 ```
 - **Play a trained policy** 🎮 (auto-loads best/last checkpoint from a run):
 ```bash
-python play.py --run-id latest-run --episodes 5
+python play.py --run-id @latest-run --episodes 5
 ```
 - **Inspect a run (UI)** 🔍:
 ```bash
-python inspect.py --run-id latest-run --port 7860 --host 127.0.0.1
+python inspect.py --run-id @latest-run --port 7860 --host 127.0.0.1
 ```
 
 ### ⚙️ Configs (YAML)
@@ -85,7 +85,7 @@ env_wrappers:
 
 ### 🎥 Runs, checkpoints, and videos
 - 📁 Each training creates `runs/<id>/` with `config.json`, `checkpoints/*.ckpt`, `logs/`, and `videos/`
-- 🔗 `runs/latest-run` symlink points to the most recent run
+- 🔗 `runs/@latest-run` symlink points to the most recent run
 - 🏷️ Best/last checkpoints: `best.ckpt`, `last.ckpt` (auto-detected by `play.py` and the inspector)
 
 ### 📤 Publish to Hugging Face Hub

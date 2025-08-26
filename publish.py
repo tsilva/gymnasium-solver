@@ -5,7 +5,7 @@ Usage:
     python publish.py --run-id <run_id> [--repo <org_or_user/repo-name>] [--private]
 
 Behavior:
-    - If --run-id is omitted, the latest run (runs/latest-run) is used.
+    - If --run-id is omitted, the latest run (runs/@latest-run) is used.
     - If --repo is omitted, we publish to a repo named after the run's config id
         under your user/org namespace: <owner>/<config_id>.
     - Checkpoints and logs are uploaded under artifacts/. Only the best video
@@ -40,17 +40,28 @@ def resolve_run_dir(run_id: Optional[str]) -> Path:
 
     if not run_id:
         # Prefer the most recently modified real run directory with artifacts,
-        # but keep supporting the latest-run symlink if it points to a valid dir.
-        latest = RUNS_DIR / "latest-run"
+        # but keep supporting the @latest-run symlink (or legacy latest-run) if it points to a valid dir.
+        latest = RUNS_DIR / "@latest-run"
         latest_target: Optional[Path] = None
         if latest.exists():
             try:
                 latest_target = latest.resolve()
             except Exception:
                 latest_target = latest
+        if latest_target is None:
+            # Fallback to legacy name
+            legacy = RUNS_DIR / "latest-run"
+            if legacy.exists():
+                try:
+                    latest_target = legacy.resolve()
+                except Exception:
+                    latest_target = legacy
 
-        # Collect candidate run dirs (exclude the latest-run entry itself)
-        candidates = [p for p in RUNS_DIR.iterdir() if p.is_dir() and p.name != "latest-run"]
+        # Collect candidate run dirs (exclude the latest-run entries themselves)
+        candidates = [
+            p for p in RUNS_DIR.iterdir()
+            if p.is_dir() and p.name not in {"@latest-run", "latest-run"}
+        ]
         if not candidates and not latest_target:
             raise FileNotFoundError("No runs found in runs/")
 
@@ -142,10 +153,14 @@ def _find_videos_for_run(run_dir: Path) -> List[Path]:
                 if path.is_dir():
                     vids = sorted(Path(path).rglob("*.mp4"))
                     videos.extend(vids)
-            # Also check wandb/latest-run link if present
-            latest = wandb_root / "latest-run" / "files" / "runs" / run_id / "videos"
+            # Also check wandb/@latest-run link if present (fallback to legacy)
+            latest = wandb_root / "@latest-run" / "files" / "runs" / run_id / "videos"
             if latest.exists():
                 videos.extend(sorted(latest.rglob("*.mp4")))
+            else:
+                legacy = wandb_root / "latest-run" / "files" / "runs" / run_id / "videos"
+                if legacy.exists():
+                    videos.extend(sorted(legacy.rglob("*.mp4")))
     except Exception:
         pass
     # Return unique, ordered
@@ -594,7 +609,7 @@ def publish_run(
 
 def main():
     parser = argparse.ArgumentParser(description="Publish a training run to Hugging Face Hub")
-    parser.add_argument("--run-id", type=str, default=None, help="Run ID under runs/ (defaults to latest-run)")
+    parser.add_argument("--run-id", type=str, default=None, help="Run ID under runs/ (defaults to @latest-run)")
     parser.add_argument("--repo", type=str, default=None, help="Target repo id (e.g. user/repo). If omitted, inferred.")
     parser.add_argument("--private", action="store_true", help="Create repo as private")
     args = parser.parse_args()

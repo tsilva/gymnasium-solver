@@ -123,8 +123,8 @@ class EndOfTrainingReportCallback(BaseCallback):
         try:
             run_dir = Path(pl_module.run_manager.run_dir)  # type: ignore[attr-defined]
         except Exception:
-            # Fallback to local runs/latest-run if available
-            run_dir = Path("runs/latest-run")
+            # Fallback to local runs/@latest-run if available
+            run_dir = Path("runs/@latest-run")
         run_dir.mkdir(parents=True, exist_ok=True)
 
         report_path = run_dir / self.filename

@@ -33,12 +33,16 @@ RUNS_DIR = Path("runs")
 
 
 def _resolve_run_dir(run_id: str) -> Path:
-    if run_id == "latest-run":
-        latest = RUNS_DIR / "latest-run"
+    if run_id in {"latest-run", "@latest-run"}:
+        # Prefer new '@latest-run' symlink, fallback to legacy name
+        latest = RUNS_DIR / "@latest-run"
+        if not latest.is_symlink():
+            legacy = RUNS_DIR / "latest-run"
+            latest = legacy if legacy.is_symlink() else latest
         if latest.is_symlink():
             run_id = str(latest.readlink())
         else:
-            raise FileNotFoundError("latest-run symlink not found")
+            raise FileNotFoundError("@latest-run symlink not found")
     run_path = RUNS_DIR / run_id
     if not run_path.exists():
         raise FileNotFoundError(f"Run directory not found: {run_path}")
@@ -48,7 +52,11 @@ def _resolve_run_dir(run_id: str) -> Path:
 def list_runs() -> List[str]:
     if not RUNS_DIR.exists():
         return []
-    runs = [p.name for p in RUNS_DIR.iterdir() if p.is_dir() and p.name != "latest-run"]
+    runs = [
+        p.name
+        for p in RUNS_DIR.iterdir()
+        if p.is_dir() and p.name not in {"@latest-run", "latest-run"}
+    ]
     runs.sort(key=lambda n: (RUNS_DIR / n).stat().st_mtime, reverse=True)
     return runs
 
@@ -609,12 +617,16 @@ def run_episode(
     }
 
 
-def build_ui(default_run_id: str = "latest-run"):
+def build_ui(default_run_id: str = "@latest-run"):
     import gradio as gr
 
     runs = list_runs()
-    initial_run = default_run_id if default_run_id else (runs[0] if runs else "latest-run")
-    labels, mapping, default_label = list_checkpoints_for_run(initial_run) if runs or initial_run == "latest-run" else ([], {}, None)
+    initial_run = default_run_id if default_run_id else (runs[0] if runs else "@latest-run")
+    labels, mapping, default_label = (
+        list_checkpoints_for_run(initial_run)
+        if (runs or initial_run in {"@latest-run", "latest-run"})
+        else ([], {}, None)
+    )
 
     with gr.Blocks(theme=gr.themes.Base()) as demo:
         gr.Markdown("""
@@ -625,7 +637,7 @@ def build_ui(default_run_id: str = "latest-run"):
         with gr.Row():
             run_id = gr.Dropdown(
                 label="Run ID",
-                choices=["latest-run"] + runs,
+                choices=["@latest-run"] + runs,
                 value=initial_run,
                 interactive=True,
             )
@@ -1122,7 +1134,7 @@ def build_ui(default_run_id: str = "latest-run"):
 
 def main():
     parser = argparse.ArgumentParser(description="Gradio app to inspect a run's checkpoints visually.")
-    parser.add_argument("--run-id", type=str, default="latest-run", help="Run ID under runs/ (default: latest-run)")
+    parser.add_argument("--run-id", type=str, default="@latest-run", help="Run ID under runs/ (default: @latest-run)")
     parser.add_argument("--port", type=int, default=7860)
     parser.add_argument("--host", type=str, default="127.0.0.1")
     parser.add_argument("--share", action="store_true", help="Enable Gradio share link")

@@ -12,8 +12,8 @@ class RunManager:
         self._run_dir = self._base_runs_dir / self._run_id if self._run_id else self._base_runs_dir
         if self._run_id:
             self._run_dir.mkdir(parents=True, exist_ok=True)
-            # Make `latest-run` symlink to this run
-            latest = self._base_runs_dir / "latest-run"
+            # Make `@latest-run` symlink to this run
+            latest = self._base_runs_dir / "@latest-run"
             if latest.exists() or latest.is_symlink():
                 latest.unlink()
             latest.symlink_to(Path(self._run_id))
@@ -37,14 +37,14 @@ class RunManager:
     def setup_run_directory(self, *, wandb_run) -> Path:
         """Initialize directories based on a W&B-like run object exposing .id.
 
-        Creates the run directory, a checkpoints subdir, and updates latest-run symlink.
+        Creates the run directory, a checkpoints subdir, and updates @latest-run symlink.
         """
         self._run_id = getattr(wandb_run, "id")
         self._run_dir = self._base_runs_dir / self._run_id
         self._run_dir.mkdir(parents=True, exist_ok=True)
         # Ensure checkpoints dir exists eagerly
         (self._run_dir / "checkpoints").mkdir(parents=True, exist_ok=True)
-        latest = self._base_runs_dir / "latest-run"
+        latest = self._base_runs_dir / "@latest-run"
         if latest.exists() or latest.is_symlink():
             latest.unlink()
         latest.symlink_to(Path(self._run_id))

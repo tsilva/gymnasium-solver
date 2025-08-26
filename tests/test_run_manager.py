@@ -24,7 +24,7 @@ def test_run_manager_creates_dirs_and_symlink(tmp_path: Path, monkeypatch):
     assert not (run_dir / "videos").exists()
     # configs subdir is optional in new layout
 
-    latest = Path(tmp_path / "runs" / "latest-run")
+    latest = Path(tmp_path / "runs" / "@latest-run")
     assert latest.is_symlink()
     assert latest.readlink() == Path("abc123")
 

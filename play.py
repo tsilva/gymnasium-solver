@@ -298,14 +298,17 @@ def load_config_from_run(run_id: str):
 
     from utils.config import Config
     
-    # Handle latest-run symlink
+    # Handle @latest-run symlink (with legacy fallback)
     runs_dir = Path("runs")
-    if run_id == "latest-run":
-        run_path = runs_dir / "latest-run"
+    if run_id in {"latest-run", "@latest-run"}:
+        run_path = runs_dir / "@latest-run"
+        if not run_path.is_symlink():
+            legacy = runs_dir / "latest-run"
+            run_path = legacy if legacy.is_symlink() else run_path
         if run_path.is_symlink():
             run_id = str(run_path.readlink())
         else:
-            raise FileNotFoundError("latest-run symlink not found")
+            raise FileNotFoundError("@latest-run symlink not found")
     
     run_path = runs_dir / run_id
     if not run_path.exists():
@@ -330,13 +333,16 @@ def find_best_checkpoint_in_run(run_id: str) -> Path:
     """Find the best checkpoint in a run directory."""
     runs_dir = Path("runs")
     
-    # Handle latest-run symlink
-    if run_id == "latest-run":
-        run_path = runs_dir / "latest-run"
+    # Handle @latest-run symlink (with legacy fallback)
+    if run_id in {"latest-run", "@latest-run"}:
+        run_path = runs_dir / "@latest-run"
+        if not run_path.is_symlink():
+            legacy = runs_dir / "latest-run"
+            run_path = legacy if legacy.is_symlink() else run_path
         if run_path.is_symlink():
             run_id = str(run_path.readlink())
         else:
-            raise FileNotFoundError("latest-run symlink not found")
+            raise FileNotFoundError("@latest-run symlink not found")
     
     run_path = runs_dir / run_id
     if not run_path.exists():
@@ -372,8 +378,8 @@ def find_best_checkpoint_in_run(run_id: str) -> Path:
 
 def main():
     parser = argparse.ArgumentParser(description="Play trained RL agent.")
-    parser.add_argument("--run-id", type=str, default="latest-run",
-                       help="Run ID to load model from (default: latest-run)")
+    parser.add_argument("--run-id", type=str, default="@latest-run",
+                       help="Run ID to load model from (default: @latest-run)")
     parser.add_argument("--config", type=str, default=None, 
                        help="Config ID (if not provided, load from run)")
     parser.add_argument("--algo", type=str, default=None, 

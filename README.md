@@ -48,7 +48,7 @@ Configs live in `config/environments/*.yaml`. New style puts base fields at the 
 
 ```yaml
 # New per-file style
-project_id: "CartPole-v1"
+# Tip: omit project_id to default to the filename (e.g., CartPole-v1)
 env_id: CartPole-v1
 eval_episodes: 10
 
@@ -64,7 +64,7 @@ ppo:
     - { id: CartPoleV1_RewardShaper, angle_reward_scale: 1.0 }
 ```
 
-You still select a config by ID, e.g. `CartPole-v1_ppo`. The loader also remains compatible with the legacy multi-block format for a transitional period.
+You still select a config by ID, e.g. `CartPole-v1_ppo`. The loader also remains compatible with the legacy multi-block format for a transitional period. When `project_id` is omitted in environment YAMLs, it is inferred from the file name.
 
 Key fields: `env_id`, `algo_id`, `n_envs`, `n_steps`, `batch_size`, `n_timesteps`, `policy` (`mlp|cnn`), `hidden_dims`, `obs_type` (`rgb|ram|objects` for ALE).
 

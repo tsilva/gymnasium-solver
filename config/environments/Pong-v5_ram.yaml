@@ -1,6 +1,5 @@
 # Pong with RAM observations challenge configurations
 
-project_id: "Pong-v5_ram"
 env_id: ALE/Pong-v5
 obs_type: "ram"
 normalize_obs: "static"

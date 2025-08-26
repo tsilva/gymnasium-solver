@@ -1,6 +1,5 @@
 # FrozenLake-v1 deterministic challenge configurations
 
-project_id: "FrozenLake-v1_deterministic"
 env_id: FrozenLake-v1
 env_kwargs:
   is_slippery: false

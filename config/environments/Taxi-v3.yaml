@@ -1,6 +1,5 @@
 # Taxi standard challenge configurations
 
-project_id: "Taxi-v3"
 env_id: Taxi-v3
 ent_coef: 0.5
 n_envs: 16

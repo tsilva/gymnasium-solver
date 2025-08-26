@@ -1,6 +1,5 @@
 # SuperMarioBros-Nes with RGB observations (preprocessed to grayscale+84x84+frame-stack)
 
-project_id: "SuperMarioBros-Nes_rgb"
 env_id: Retro/SuperMarioBros-Nes
 policy: 'cnn'
 policy_kwargs:

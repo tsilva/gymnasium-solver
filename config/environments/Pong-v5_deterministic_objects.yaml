@@ -1,6 +1,5 @@
 # Pong with object-based observations and deterministic environment challenge configurations
 
-project_id: "Pong-v5_deterministic_objects"
 env_id: ALE/Pong-v5
 obs_type: "objects"
 env_wrappers:

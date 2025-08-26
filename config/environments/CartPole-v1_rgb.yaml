@@ -1,6 +1,5 @@
 # CartPole-v1 from RGB pixels using CNN policy
 
-project_id: "CartPole-v1_rgb"
 env_id: CartPole-v1
 # Use environment wrapper to expose pixels as observations
 env_wrappers:

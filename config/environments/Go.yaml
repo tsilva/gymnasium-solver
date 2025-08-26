@@ -1,4 +1,3 @@
-project_id: "Go"
 env_id: go
 eval_episodes: 10
 # PettingZoo Go takes board_size in env_kwargs
@@ -20,4 +19,3 @@ ppo_small9:
   policy: mlp
   hidden_dims: [256, 256]
   eval_freq_epochs: 25
-

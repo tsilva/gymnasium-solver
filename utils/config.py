@@ -205,6 +205,11 @@ class Config:
                     variant_cfg.update(v)
                     # Default algo_id to the variant section name when not provided
                     variant_cfg.setdefault("algo_id", str(k))
+                    # Ensure a stable default project_id derived from the file name
+                    # when it isn't explicitly provided in the YAML. This lets us
+                    # omit redundant project_id entries that match the file's stem
+                    # while preserving the same behavior.
+                    variant_cfg.setdefault("project_id", project)
                     cid = f"{project}_{k}"
                     all_configs[cid] = variant_cfg
             else:

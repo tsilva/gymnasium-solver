@@ -1,6 +1,5 @@
 # MountainCar standard challenge configurations
 
-project_id: "MountainCar-v0"
 env_id: MountainCar-v0
 
 ppo:

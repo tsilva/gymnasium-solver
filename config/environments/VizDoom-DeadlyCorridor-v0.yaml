@@ -1,4 +1,3 @@
-project_id: "VizDoom-DeadlyCorridor-v0"
 env_id: VizDoom-DeadlyCorridor-v0
 policy: 'cnn'
 grayscale_obs: true
@@ -23,4 +22,3 @@ ppo:
     channels: [32, 64, 64]
     kernel_sizes: [8, 4, 3]
     strides: [4, 2, 1]
-

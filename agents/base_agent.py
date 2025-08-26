@@ -645,11 +645,15 @@ class BaseAgent(pl.LightningModule):
             optimizer.step()
 
     def _get_training_progress(self):
-        # TODO: use get_metrics, but make it fast
-        total_steps = self.train_collector.total_steps
-        total = float(self.config.n_timesteps or 1.0)
-        progress = min(max(total_steps / total, 0.0), 1.0)
-        return progress
+        # Compute progress only when n_timesteps is configured; otherwise treat as 0.
+        try:
+            total = float(self.config.n_timesteps) if self.config.n_timesteps is not None else None
+        except Exception:
+            total = None
+        if total is None or total <= 0.0:
+            return 0.0
+        total_steps = float(self.train_collector.total_steps)
+        return max(0.0, min(total_steps / total, 1.0))
 
     def _update_schedules(self):
         self._update_schedules__learning_rate()

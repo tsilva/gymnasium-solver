@@ -1,8 +1,6 @@
 - recheck if deterministic version still converges with feature extractor fixes
 - TASK: solve Pong-v5_objects, then propagate to other envs
-- BUG: zero ep_rew_mean is being logged
 - BUG: run is being logged even when training is not started
-- BUG: linear decay is being applied even when n_timesteps is not set
 - test rlib
 - BUG: Pong-v5_objects not converging test fixes
 - BUG: total timesteps grwoth is not constant (print table)
@@ -14,14 +12,12 @@ https://github.com/kenjyoung/MinAtar
 - TODO: compare atari breakout fps vs rlzoosb3
 - BUG: last inspect frame for atari is first frame of next episode
 - WISHLIST: impelemnt SEEDRL with PPO to massively scale training
-
 - can I create an exploration model by just making loss higher the more the model can predict the future?
 - print effective rollout step size
 - TODO: add config file beautifier that ensure attributes are set in the correct order
 - TODO: add config file validator that ensures that all attributes are set and that they are set to the correct type
 - TODO: inspect.py add support for showing raw vs processed frames, including frame stacks
 - runs: along with each checkpoint we are saving a json file with the metrics at that checkpoint. We also want to save a CSV with the rollout data for that epoch; this data should contain exactly the same data as the table in inspect.py, so we can encapsualte the function that generates the csv and reuse it in both places.
-
 - FEAT: add vizdoom support
 - FEAT: add stable-retro support
 

@@ -18,7 +18,6 @@ https://github.com/kenjyoung/MinAtar
 - TODO: add config file validator that ensures that all attributes are set and that they are set to the correct type
 - TODO: inspect.py add support for showing raw vs processed frames, including frame stacks
 - runs: along with each checkpoint we are saving a json file with the metrics at that checkpoint. We also want to save a CSV with the rollout data for that epoch; this data should contain exactly the same data as the table in inspect.py, so we can encapsualte the function that generates the csv and reuse it in both places.
-- FEAT: add vizdoom support
 - FEAT: add stable-retro support
 
 - inspect.py: add LLM debugging support
@@ -31,7 +30,6 @@ https://github.com/kenjyoung/MinAtar
 - REFACTOR: rollout buffer can be much more efficient (review how sb3 does it) -- our fps is still 1000 below sb3
 - TODO: Figure out why CartPole-v1/PPO works better with Tahn activation than ReLU
 - BUG: PPO can solve FrozenLake-v1, but REINFORCE cannot. REINFORCE is likely not implemented correctly.
-- BUG: is REINFORCE well implemented? are we waiting until the end of the episode to update the policy?
 - FEAT: train on cloud server (eg: lightning cloud)
 - FEAT: normalize rewards?
 - FEAT: add normalization support 

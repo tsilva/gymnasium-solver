@@ -428,6 +428,8 @@ class RolloutCollector():
 
         # Reusable arrays to avoid per-step allocations
         self._step_timeouts = np.zeros(self.n_envs, dtype=bool)
+        # Optional index remapping for MC masking to keep dataset length stable
+        self._last_rollout_index_map = None
 
     @torch.inference_mode()
     def collect(self, *args, **kwargs):
@@ -642,12 +644,50 @@ class RolloutCollector():
             else:
                 advantages_buf = returns_buf.copy()
 
+            # For pure Monte Carlo methods, train only on complete episode segments within
+            # the collected slice. Drop the trailing partial episode for each env where the
+            # episode has not terminated inside this rollout window. This ensures that the
+            # return at each included step sums rewards up to a real terminal.
+            try:
+                real_terminal = np.logical_and(dones_slice, ~timeouts_slice)
+                T, n_envs = real_terminal.shape
+                valid_mask_2d = np.zeros((T, n_envs), dtype=bool)
+                for j in range(n_envs):
+                    term_idxs = np.where(real_terminal[:, j])[0]
+                    if term_idxs.size > 0:
+                        last_term = int(term_idxs[-1])
+                        # Keep all steps up to and including the last terminal
+                        valid_mask_2d[: last_term + 1, j] = True
+                # Flatten mask in env-major order to align with flatten_slice_env_major
+                valid_mask_flat = valid_mask_2d.transpose(1, 0).reshape(-1)
+                # Build a stable index map from full range -> nearest previous valid index
+                N = int(valid_mask_flat.size)
+                if valid_mask_flat.any():
+                    idx_map = np.arange(N, dtype=np.int64)
+                    last_valid = None
+                    first_valid = int(np.argmax(valid_mask_flat))  # first True index
+                    for i in range(N):
+                        if valid_mask_flat[i]:
+                            last_valid = i
+                            idx_map[i] = i
+                        else:
+                            idx_map[i] = last_valid if last_valid is not None else first_valid
+                    self._last_rollout_index_map = idx_map
+                else:
+                    self._last_rollout_index_map = None
+            except Exception:
+                # If anything goes wrong, fall back to using all steps (no remap)
+                self._last_rollout_index_map = None
+
         if self.normalize_advantages:
             adv_flat = advantages_buf.reshape(-1)
             advantages_buf = (advantages_buf - adv_flat.mean()) / (adv_flat.std() + self.advantages_norm_eps)
 
         # Create final training tensors from persistent buffers
         trajectories = self._buffer.flatten_slice_env_major(start, end, advantages_buf, returns_buf)
+
+        # For MC path, we left dataset length unchanged and stored an index map
+        # to remap invalid indices at collate time.
 
         self.total_rollouts += 1
         rollout_elapsed = time.time() - rollout_start
@@ -657,6 +697,18 @@ class RolloutCollector():
         return trajectories
 
     def slice_trajectories(self, trajectories, idxs):
+        # If an index map is available for MC masking, remap indices to valid
+        # positions to keep batch sizes and sampler assumptions intact.
+        try:
+            if self._last_rollout_index_map is not None and not self.use_gae:
+                # idxs may be a list or tensor; convert to numpy indices
+                import numpy as _np
+                idxs_np = _np.asarray(idxs, dtype=_np.int64)
+                # Safe remap into valid positions
+                idxs_np = self._last_rollout_index_map[idxs_np]
+                idxs = idxs_np
+        except Exception:
+            pass
         return RolloutTrajectory(
             observations=trajectories.observations[idxs],
             actions=trajectories.actions[idxs],

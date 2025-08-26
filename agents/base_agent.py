@@ -72,57 +72,74 @@ class BaseAgent(pl.LightningModule):
             **self.rollout_collector_hyperparams(),
         )
 
-        # Create the validation environment, used to perform
-        # evaluation during training at certain intervals,
-        # measuring performance and recording videos (allows
-        # early stopping based on eval metrics)
-        self.validation_env = build_env(
-            config.env_id,
-            **{
-                **common_env_kwargs,
-                "seed": config.seed + 1000, # Use different seed to minimize correlation with training environment
-                "subproc": False,
-                "render_mode": "rgb_array",
-                "record_video": True,
-                "record_video_kwargs": {
-                    "video_length": 100, # Record only for N steps to avoid bottlenecking training
-                    "record_env_idx": 0  # Record only the first environment instance
+        # Validation/Test envs
+        # Retro (Gym Retro) cannot have multiple emulator instances per process.
+        # To respect this, we create evaluation envs lazily (just-in-time) and
+        # close them immediately after use during validation/test for Retro.
+        try:
+            from utils.environment import is_stable_retro_env_id as _is_retro_fn  # type: ignore
+        except Exception:
+            _is_retro_fn = lambda _eid: False
+        _is_retro = False
+        try:
+            _is_retro = bool(_is_retro_fn(config.env_id))
+        except Exception:
+            _is_retro = False
+
+        if not _is_retro:
+            # Standard path: keep persistent eval/test envs with video recorder wrapper
+            self.validation_env = build_env(
+                config.env_id,
+                **{
+                    **common_env_kwargs,
+                    "seed": config.seed + 1000,  # different seed to minimize correlation
+                    "subproc": False,
+                    "render_mode": "rgb_array",
+                    "record_video": True,
+                    "record_video_kwargs": {
+                        "video_length": 100,  # cap video length to avoid bottlenecks
+                        "record_env_idx": 0,
+                    },
                 },
-            },
-        )
+            )
+            self.validation_collector = RolloutCollector(
+                self.validation_env,
+                self.policy_model,
+                n_steps=self.config.n_steps,
+                **self.rollout_collector_hyperparams(),
+            )
 
-        # Create the rollout collector for the validation environment
-        self.validation_collector = RolloutCollector(
-            self.validation_env,
-            self.policy_model,
-            n_steps=self.config.n_steps,
-            **self.rollout_collector_hyperparams(),
-        )
+            self.test_env = build_env(
+                config.env_id,
+                **{
+                    **common_env_kwargs,
+                    "seed": config.seed + 2000,
+                    "subproc": False,
+                    "render_mode": "rgb_array",
+                    "record_video": True,
+                    "record_video_kwargs": {
+                        "video_length": None,  # full video
+                        "record_env_idx": 0,
+                    },
+                },
+            )
+            self.test_collector = RolloutCollector(
+                self.test_env,
+                self.policy_model,
+                n_steps=self.config.n_steps,
+                **self.rollout_collector_hyperparams(),
+            )
+        else:
+            # Retro path: do not create envs now; create/close them on demand.
+            # Provide a minimal stub for callbacks that query reward thresholds.
+            class _EvalEnvStub:
+                def get_reward_threshold(self):
+                    return None
 
-        # Create test environment, this will be used for the
-        # final post train evaluation and video recording
-        self.test_env = build_env(
-            config.env_id,
-            **{
-                **common_env_kwargs,
-                "seed": config.seed + 2000, # Use different seed to minimize correlation with training and validation environments
-                "subproc": False,
-                "render_mode": "rgb_array",
-                "record_video": True,
-                "record_video_kwargs": {
-                    "video_length": None, # Record full video
-                    "record_env_idx": 0   # Record only the first environment instance
-                }
-            },
-        )
-
-        # Create the rollout collector for the test environment
-        self.test_collector = RolloutCollector(
-            self.test_env,
-            self.policy_model,
-            n_steps=self.config.n_steps,
-            **self.rollout_collector_hyperparams(),
-        )
+            self.validation_env = _EvalEnvStub()
+            self.validation_collector = None  # created lazily if needed
+            self.test_env = _EvalEnvStub()
+            self.test_collector = None
 
     @must_implement
     def create_models(self):
@@ -265,14 +282,64 @@ class BaseAgent(pl.LightningModule):
         # Run evaluation with optional recording
         checkpoint_dir = self.run_manager.ensure_path("checkpoints/")
         video_path = str(checkpoint_dir / f"epoch={self.current_epoch:02d}.mp4")
-        with self.validation_env.recorder(video_path, record_video=record_video):
-            from utils.evaluation import evaluate_policy
-            eval_metrics = evaluate_policy(
-                self.validation_env,
-                self.policy_model,
-                n_episodes=int(self.config.eval_episodes),
-                deterministic=self.config.eval_deterministic,
+
+        # Detect Retro to use a temporary env
+        try:
+            from utils.environment import is_stable_retro_env_id as _is_retro_fn  # type: ignore
+        except Exception:
+            _is_retro_fn = lambda _eid: False
+        use_temp_env = False
+        try:
+            use_temp_env = bool(_is_retro_fn(self.config.env_id))
+        except Exception:
+            use_temp_env = False
+
+        if use_temp_env:
+            # Build a temporary single-env dummy vec with recording enabled, then close
+            from utils.environment import build_env
+            temp_env = build_env(
+                self.config.env_id,
+                seed=self.config.seed + 1000,
+                n_envs=1,
+                subproc=False,
+                render_mode="rgb_array",
+                record_video=True,
+                record_video_kwargs={
+                    "video_length": 100,
+                    "record_env_idx": 0,
+                },
+                env_wrappers=self.config.env_wrappers,
+                env_kwargs=self.config.env_kwargs,
+                obs_type=self.config.obs_type,
+                frame_stack=self.config.frame_stack,
+                grayscale_obs=self.config.grayscale_obs,
+                resize_obs=self.config.resize_obs,
+                norm_obs=self.config.normalize_obs,
             )
+            try:
+                with temp_env.recorder(video_path, record_video=record_video):
+                    from utils.evaluation import evaluate_policy
+                    eval_metrics = evaluate_policy(
+                        temp_env,
+                        self.policy_model,
+                        n_episodes=int(self.config.eval_episodes),
+                        deterministic=self.config.eval_deterministic,
+                        max_steps_per_episode=1000,
+                    )
+            finally:
+                try:
+                    temp_env.close()
+                except Exception:
+                    pass
+        else:
+            with self.validation_env.recorder(video_path, record_video=record_video):
+                from utils.evaluation import evaluate_policy
+                eval_metrics = evaluate_policy(
+                    self.validation_env,
+                    self.policy_model,
+                    n_episodes=int(self.config.eval_episodes),
+                    deterministic=self.config.eval_deterministic,
+                )
         
         total_timesteps = int(eval_metrics.get("total_timesteps", 0))
         epoch_fps = self.timing.fps_since("on_validation_epoch_start", steps_now=total_timesteps)
@@ -312,14 +379,63 @@ class BaseAgent(pl.LightningModule):
 
         # Record final evaluation video and save associated metrics JSON next to it
         video_path = self.run_manager.ensure_path("checkpoints/final.mp4")
-        with self.test_env.recorder(str(video_path), record_video=True):
-            from utils.evaluation import evaluate_policy
-            final_metrics = evaluate_policy(
-                self.test_env,
-                self.policy_model,
-                n_episodes=1,
-                deterministic=self.config.eval_deterministic,
+
+        # Detect Retro and evaluate with a temporary env to avoid multi-instance limit
+        try:
+            from utils.environment import is_stable_retro_env_id as _is_retro_fn  # type: ignore
+        except Exception:
+            _is_retro_fn = lambda _eid: False
+        use_temp_env = False
+        try:
+            use_temp_env = bool(_is_retro_fn(self.config.env_id))
+        except Exception:
+            use_temp_env = False
+
+        if use_temp_env:
+            from utils.environment import build_env
+            temp_env = build_env(
+                self.config.env_id,
+                seed=self.config.seed + 2000,
+                n_envs=1,
+                subproc=False,
+                render_mode="rgb_array",
+                record_video=True,
+                record_video_kwargs={
+                    "video_length": None,
+                    "record_env_idx": 0,
+                },
+                env_wrappers=self.config.env_wrappers,
+                env_kwargs=self.config.env_kwargs,
+                obs_type=self.config.obs_type,
+                frame_stack=self.config.frame_stack,
+                grayscale_obs=self.config.grayscale_obs,
+                resize_obs=self.config.resize_obs,
+                norm_obs=self.config.normalize_obs,
             )
+            try:
+                with temp_env.recorder(str(video_path), record_video=True):
+                    from utils.evaluation import evaluate_policy
+                    final_metrics = evaluate_policy(
+                        temp_env,
+                        self.policy_model,
+                        n_episodes=1,
+                        deterministic=self.config.eval_deterministic,
+                        max_steps_per_episode=2000,
+                    )
+            finally:
+                try:
+                    temp_env.close()
+                except Exception:
+                    pass
+        else:
+            with self.test_env.recorder(str(video_path), record_video=True):
+                from utils.evaluation import evaluate_policy
+                final_metrics = evaluate_policy(
+                    self.test_env,
+                    self.policy_model,
+                    n_episodes=1,
+                    deterministic=self.config.eval_deterministic,
+                )
             json_path = video_path.with_suffix(".json")
             try:
                 with open(json_path, "w", encoding="utf-8") as f:

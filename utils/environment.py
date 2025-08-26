@@ -207,8 +207,10 @@ def build_env(
 
             # Extract Retro-specific kwargs while keeping user overrides
             make_kwargs = dict(env_kwargs) if isinstance(env_kwargs, dict) else {}
-            # Default to filtered (restricted) action set for saner discrete action spaces
-            make_kwargs.setdefault("use_restricted_actions", getattr(retro, "Actions").FILTERED)
+            # Prefer a discrete action space so our categorical policies output
+            # integer actions compatible with Retro's internal encoding.
+            # Users can override via env_kwargs if they need MultiDiscrete/MultiBinary.
+            make_kwargs.setdefault("use_restricted_actions", getattr(retro, "Actions").DISCRETE)
             # Support 'state' override via env_kwargs; None → retro's default state
             state = make_kwargs.pop("state", None)
 
@@ -270,11 +272,27 @@ def build_env(
         return env
 
     # Vectorize the environment
+    # Retro emulators cannot have multiple instances in the same process.
+    # Use subprocess vectorization for multi-env Retro, or fall back to a single
+    # env when video recording is enabled (which requires subproc=False).
+    effective_n_envs = int(n_envs or 1)
+    if _is_stable_retro and record_video and effective_n_envs > 1:
+        # Keep user UX smooth: silently reduce to one env for recorded eval/test
+        # runs where subproc must be disabled.
+        effective_n_envs = 1
+
     vec_env_cls = DummyVecEnv
-    if subproc is not None: vec_env_cls = SubprocVecEnv if subproc else DummyVecEnv
-    elif _is_alepy: vec_env_cls = SubprocVecEnv if n_envs > 1 else DummyVecEnv
+    if subproc is not None:
+        vec_env_cls = SubprocVecEnv if subproc else DummyVecEnv
+    else:
+        # Prefer subprocesses when needed/beneficial
+        if (_is_alepy or _is_stable_retro) and effective_n_envs > 1:
+            vec_env_cls = SubprocVecEnv
+        else:
+            vec_env_cls = DummyVecEnv
+
     vec_env_kwargs = {"start_method": "spawn"} if vec_env_cls == SubprocVecEnv else {}
-    env = make_vec_env(env_fn, n_envs=n_envs, seed=seed, vec_env_cls=vec_env_cls, vec_env_kwargs=vec_env_kwargs)
+    env = make_vec_env(env_fn, n_envs=effective_n_envs, seed=seed, vec_env_cls=vec_env_cls, vec_env_kwargs=vec_env_kwargs)
 
     # Ensure the vectorized env exposes render_mode for downstream wrappers (e.g., video recorder)
     try:

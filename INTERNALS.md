@@ -7,6 +7,7 @@ High-signal reference for maintainers and agents. Read this before making change
 - **Agent lifecycle**: `agents/base_agent.BaseAgent` constructs envs, models, collectors, and the PyTorch Lightning Trainer; subclasses implement `create_models`, `losses_for_batch`, and optimizer.
 - **Training loop**: `BaseAgent.train_dataloader()` collects a rollout with `utils.rollouts.RolloutCollector`, builds an index-collate `DataLoader` (`utils.dataloaders`), and Lightning calls `training_step()` which delegates to `losses_for_batch()`; optim is manual (`automatic_optimization=False`).
 - **Eval**: Validation loop is procedural in hooks; `utils.evaluation.evaluate_policy` runs N episodes on a vectorized env; videos recorded via `VecVideoRecorder` wrapper and `trainer_callbacks.VideoLoggerCallback` watches media dir.
+  - For Retro environments (stable-retro), evaluation/test envs are created lazily with `n_envs=1` to avoid multi-emulator-per-process errors, and `evaluate_policy` uses a hard cap on per-episode steps (currently 1,000 for validation; 2,000 for final video) to prevent very long episodes.
 - **Runs**: `utils.run_manager.RunManager` creates `runs/<id>/`, symlinks `runs/latest-run`, and manages paths; `BaseAgent` dumps `config.json` and writes `run.log` via `utils.logging.stream_output_to_log`.
 - **Checkpoints**: `trainer_callbacks.ModelCheckpointCallback` writes `best.ckpt`/`last.ckpt`; resume controlled by `Config.resume`.
 

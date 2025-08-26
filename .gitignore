@@ -216,3 +216,4 @@ lightning_logs/
 logs/
 runs/
 stable-baselines3/
+roms/

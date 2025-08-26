@@ -157,6 +157,22 @@ def play_episodes(policy_model, env, num_episodes=5, deterministic=False):
             fps = None
     frame_interval = (1.0 / float(fps)) if isinstance(fps, int) and fps > 0 else None
 
+    # Detect render mode to decide whether to try showing frames ourselves
+    try:
+        current_render_mode = getattr(env, "render_mode", None)
+    except Exception:
+        current_render_mode = None
+
+    # Best-effort lightweight viewer for rgb_array mode
+    use_cv2 = False
+    if current_render_mode == "rgb_array":
+        try:
+            import cv2  # type: ignore
+            use_cv2 = True
+            cv2.namedWindow("gymnasium-solver", cv2.WINDOW_NORMAL)
+        except Exception:
+            use_cv2 = False
+
     for episode in range(num_episodes):
         # Handle both new and old gymnasium reset API
         reset_result = env.reset()
@@ -231,11 +247,25 @@ def play_episodes(policy_model, env, num_episodes=5, deterministic=False):
             episode_reward += reward
             step_count += 1
             
-            # Always attempt to render; some vectorized wrappers don't expose render_mode
-            try:
-                env.render()
-            except Exception:
-                pass
+            # Render if enabled; when in rgb_array, attempt to display the frame
+            frame = None
+            if current_render_mode is not None:
+                try:
+                    frame = env.render()
+                except Exception:
+                    frame = None
+            if frame is not None:
+                try:
+                    if use_cv2:
+                        import cv2  # type: ignore
+                        # Ensure RGB -> BGR for OpenCV
+                        if isinstance(frame, np.ndarray):
+                            if frame.ndim == 3 and frame.shape[2] in (1, 3, 4):
+                                bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+                                cv2.imshow("gymnasium-solver", bgr)
+                                cv2.waitKey(1)
+                except Exception:
+                    pass
 
             # Pace playback to match FPS if known
             if frame_interval is not None:
@@ -252,6 +282,14 @@ def play_episodes(policy_model, env, num_episodes=5, deterministic=False):
                 break
         
         print(f"Episode {episode + 1} finished after {step_count} steps with reward: {episode_reward:.2f}")
+
+    # Cleanup viewer if used
+    if use_cv2:
+        try:
+            import cv2  # type: ignore
+            cv2.destroyAllWindows()
+        except Exception:
+            pass
 
 
 def load_config_from_run(run_id: str):
@@ -448,7 +486,8 @@ def main():
         # Decide render mode (auto-detect headless/WSL)
         def _choose_render_mode():
             if args.render in {"human", "rgb_array", "none"}:
-                return None if args.render == "none" else args.render
+                # 'none' still needs a safe backend for envs that render on reset (e.g., Retro)
+                return "rgb_array" if args.render == "none" else args.render
             # auto
             is_wsl = ("microsoft" in platform.release().lower()) or ("WSL_INTEROP" in os.environ)
             has_display = bool(
@@ -475,22 +514,41 @@ def main():
                     os.environ.setdefault("SDL_RENDER_DRIVER", "software")
         except Exception:
             pass
-        env = build_env(
-            config.env_id,
-            seed=args.seed,
-            env_wrappers=config.env_wrappers,
-            norm_obs=config.normalize_obs,
-            n_envs=1,  # Force single environment for playing
-            frame_stack=config.frame_stack,
-            obs_type=config.obs_type,
-            render_mode=chosen_render_mode,
-            env_kwargs=config.env_kwargs,
-            subproc=False,  # Force DummyVecEnv for playing
-            # Match training-time preprocessing so model input shapes align
-            grayscale_obs=getattr(config, "grayscale_obs", False),
-            resize_obs=getattr(config, "resize_obs", False),
-        )
-        
+        def _build_env_with_mode(mode: str | None):
+            return build_env(
+                config.env_id,
+                seed=args.seed,
+                env_wrappers=config.env_wrappers,
+                norm_obs=config.normalize_obs,
+                n_envs=1,  # Force single environment for playing
+                frame_stack=config.frame_stack,
+                obs_type=config.obs_type,
+                render_mode=mode,
+                env_kwargs=config.env_kwargs,
+                subproc=False,  # Force DummyVecEnv for playing
+                # Match training-time preprocessing so model input shapes align
+                grayscale_obs=getattr(config, "grayscale_obs", False),
+                resize_obs=getattr(config, "resize_obs", False),
+            )
+
+        env = _build_env_with_mode(chosen_render_mode)
+        # If human rendering fails due to GL context issues, fall back to rgb_array
+        if chosen_render_mode == "human":
+            try:
+                _ = env.reset()
+                try:
+                    env.render()
+                except Exception:
+                    pass
+            except Exception as e:
+                try:
+                    env.close()
+                except Exception:
+                    pass
+                print("OpenGL/GLX rendering failed; falling back to render_mode='rgb_array'.")
+                chosen_render_mode = "rgb_array"
+                env = _build_env_with_mode(chosen_render_mode)
+
         # Verify we have a single environment with DummyVecEnv
         from stable_baselines3.common.vec_env import DummyVecEnv
         if not isinstance(env.venv, DummyVecEnv):

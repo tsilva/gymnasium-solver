@@ -8,7 +8,7 @@ num_envs).
 
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 import numpy as np
 import torch
@@ -35,6 +35,8 @@ def evaluate_policy(
     *,
     n_episodes: int,
     deterministic: bool = True,
+    max_steps_per_episode: Optional[int] = None,
+    timeout_seconds: Optional[float] = None,
 ) -> Dict[str, float]:
     """Evaluate a policy on a (vectorized) env for exactly n_episodes.
 
@@ -51,13 +53,18 @@ def evaluate_policy(
     device = _device_of(policy_model)
 
     # Reset env and set up counters
+    import time
     obs = env.reset()
     per_env_targets = _balanced_targets(n_envs, int(n_episodes))
     per_env_counts = [0] * n_envs
     per_env_rewards: List[List[float]] = [[] for _ in range(n_envs)]
     per_env_lengths: List[List[int]] = [[] for _ in range(n_envs)]
+    # Track ongoing episode stats per env to support hard step caps
+    cur_rewards = [0.0] * n_envs
+    cur_lengths = [0] * n_envs
 
     total_timesteps = 0  # counts transitions across all envs
+    start_time = time.time()
 
     with inference_ctx(policy_model):
         while True:
@@ -84,10 +91,55 @@ def evaluate_policy(
                     # Fallback: accumulate from arrays if monitor info missing
                     # Note: this branch should rarely trigger when using SB3 make_vec_env
                     # We conservatively skip in that case to avoid incorrect accounting.
-                    continue
-                per_env_rewards[idx].append(float(ep.get("r", 0.0)))
-                per_env_lengths[idx].append(int(ep.get("l", 0)))
+                    # Use our running counters as a last resort
+                    per_env_rewards[idx].append(float(cur_rewards[idx]))
+                    per_env_lengths[idx].append(int(cur_lengths[idx]))
+                else:
+                    per_env_rewards[idx].append(float(ep.get("r", 0.0)))
+                    per_env_lengths[idx].append(int(ep.get("l", 0)))
                 per_env_counts[idx] += 1
+                # Reset trackers for that env
+                cur_rewards[idx] = 0.0
+                cur_lengths[idx] = 0
+
+            # Update running counters
+            try:
+                # rewards/dones may be scalars for non-vector envs (n_envs==1)
+                for i in range(n_envs):
+                    r = float(rewards if np.isscalar(rewards) else rewards[i])
+                    cur_rewards[i] += r
+                    cur_lengths[i] += 1
+            except Exception:
+                pass
+
+            # Enforce hard cap per episode when requested
+            if max_steps_per_episode is not None and max_steps_per_episode > 0:
+                for i in range(n_envs):
+                    if (
+                        per_env_counts[i] < per_env_targets[i]
+                        and cur_lengths[i] >= int(max_steps_per_episode)
+                    ):
+                        # Finalize truncated episode with running counters
+                        per_env_rewards[i].append(float(cur_rewards[i]))
+                        per_env_lengths[i].append(int(cur_lengths[i]))
+                        per_env_counts[i] += 1
+                        cur_rewards[i] = 0.0
+                        cur_lengths[i] = 0
+                        # Reset only this env when possible and patch next_obs
+                        try:
+                            ob = env.env_method("reset", indices=[i])[0]
+                            if np.isscalar(next_obs):
+                                next_obs = ob
+                            else:
+                                next_obs[i] = ob
+                        except Exception:
+                            # Fall back to full reset (may disrupt other envs); avoid when n_envs>1
+                            if n_envs == 1:
+                                next_obs = env.reset()
+
+            # Enforce wall-clock timeout if set
+            if timeout_seconds is not None and (time.time() - start_time) >= float(timeout_seconds):
+                break
 
             obs = next_obs
 

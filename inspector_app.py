@@ -450,6 +450,42 @@ def run_episode(
 
     try:
         while t < max_steps:
+            # Capture current frame BEFORE stepping (VecEnv resets on done)
+            try:
+                frame = env.render()
+                if isinstance(frame, np.ndarray):
+                    if frame.dtype != np.uint8:
+                        frame = np.clip(frame, 0, 255).astype(np.uint8)
+                    frames.append(frame)
+            except Exception:
+                pass
+
+            # Build processed/stack views from current observation (pre-step)
+            try:
+                obs0 = _obs_first_env(obs)
+                processed_img = None
+                stack_img = None
+                if isinstance(obs0, np.ndarray) and obs0.ndim in (2, 3):
+                    hwc = _ensure_hwc(obs0)
+                    processed_img = _to_rgb(hwc)
+                    n_stack_hint = None
+                    try:
+                        n_stack_hint = int(getattr(config, "frame_stack", None) or 0)
+                    except Exception:
+                        n_stack_hint = None
+                    split = _split_stack(hwc, assume_rgb_groups=True, n_stack_hint=n_stack_hint)
+                    if isinstance(split, list) and len(split) >= 1:
+                        grid = _make_grid(split, cols=None)
+                        if grid is not None:
+                            stack_img = grid
+                if processed_img is not None:
+                    processed_frames.append(processed_img)
+                if stack_img is not None:
+                    stack_frames.append(stack_img)
+            except Exception:
+                pass
+
+            # Compute action from current obs
             with torch.no_grad():
                 obs_t = _to_batch_obs(obs)
                 dist, value = policy_model(obs_t)
@@ -469,6 +505,7 @@ def run_episode(
                     probs = probs.squeeze(0).cpu().numpy().tolist()
                 val = value.squeeze().item() if value is not None else None
 
+            # Step environment
             step_result = env.step(action)
 
             if len(step_result) == 5:
@@ -485,51 +522,10 @@ def run_episode(
                 truncated = bool(truncated[0])
 
             total_reward += float(reward)
-            # Record for MC/GAE
             rewards_buf.append(float(reward))
             values_buf.append(float(val) if val is not None else 0.0)
             dones_buf.append(bool(terminated or truncated))
             truncated_buf.append(bool(truncated))
-
-            frame = env.render()
-            if isinstance(frame, np.ndarray):
-                if frame.dtype != np.uint8:
-                    frame = np.clip(frame, 0, 255).astype(np.uint8)
-                frames.append(frame)
-
-            # Build processed single-frame view (if observation is image-like)
-            try:
-                obs0 = _obs_first_env(obs)
-                processed_img = None
-                stack_img = None
-                if isinstance(obs0, np.ndarray):
-                    # Heuristic: image-like if obs has 2D/3D spatial structure
-                    if obs0.ndim in (2, 3):
-                        # Single processed frame: choose first RGB triplet or first channel
-                        hwc = _ensure_hwc(obs0)
-                        # If stacked, first 3 channels correspond to most recent frame (CHW/HWC)
-                        processed_img = _to_rgb(hwc)
-
-                        # Frame stack visualization if multiple channels present
-                        n_stack_hint = None
-                        try:
-                            n_stack_hint = int(getattr(config, "frame_stack", None) or 0)
-                        except Exception:
-                            n_stack_hint = None
-                        # Assume RGB grouping when channels multiple of 3
-                        assume_rgb_groups = True
-                        split = _split_stack(hwc, assume_rgb_groups=assume_rgb_groups, n_stack_hint=n_stack_hint)
-                        # If more than one sub-frame, make a grid
-                        if isinstance(split, list) and len(split) >= 1:
-                            grid = _make_grid(split, cols=None)
-                            if grid is not None:
-                                stack_img = grid
-                if processed_img is not None:
-                    processed_frames.append(processed_img)
-                if stack_img is not None:
-                    stack_frames.append(stack_img)
-            except Exception:
-                pass
 
             steps.append({
                 "step": t,

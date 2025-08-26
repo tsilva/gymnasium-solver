@@ -638,11 +638,12 @@ def build_ui(default_run_id: str = "latest-run"):
                 frame_image = gr.Image(label="Frame (raw)", height=400, type="numpy", image_mode="RGB")
             with gr.Column(scale=5):
                 current_step_table = gr.Dataframe(
-                    headers=["stat", "value"],
+                    headers=["metric", "value"],
                     datatype=["str", "str"],
                     row_count=(0, "dynamic"),
                     col_count=(2, "fixed"),
-                    label="Current step stats",
+                    label="",
+                    show_label=False,
                     interactive=False,
                 )
 
@@ -767,6 +768,11 @@ def build_ui(default_run_id: str = "latest-run"):
         def _inspect(rid: str, ckpt_label: str | None, det: bool, nsteps: int):
             frames_raw, _frames_proc_unused, frames_stack, steps, info = run_episode(rid, ckpt_label, det, int(nsteps))
             rows = []
+            def _round3(x):
+                try:
+                    return round(float(x), 3)
+                except Exception:
+                    return x
             for s in steps:
                 # Format probabilities, optionally with labels
                 probs_fmt = None
@@ -784,9 +790,9 @@ def build_ui(default_run_id: str = "latest-run"):
                     probs_fmt,
                     s["reward"],
                     s["cum_reward"],
-                    s.get("mc_return", None),
-                    s.get("value", None),
-                    s.get("gae_adv", None),
+                    _round3(s.get("mc_return", None)),
+                    _round3(s.get("value", None)),
+                    _round3(s.get("gae_adv", None)),
                 ])
             # Initialize gallery selection, states, and play button label
             # Initialize the image (first frame) and slider range

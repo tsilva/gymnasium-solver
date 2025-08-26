@@ -105,7 +105,7 @@ class HyperparamSyncCallback(BaseCallback):
         if self.enable_manual_control:
             self.start_monitoring()
 
-        # Log initial hyperparameters to W&B under train/hyperparams
+        # Log initial hyperparameters to W&B under train namespace
         self._log_hyperparams(pl_module)
 
         if self.verbose:
@@ -218,10 +218,10 @@ class HyperparamSyncCallback(BaseCallback):
                 changes.append(f"vf_coef: {old_val:.3f} → {new_val:.3f}")
                 changed_for_log["vf_coef"] = new_val
 
-        # Emit W&B logs for changed hyperparameters under train/hyperparams
+        # Emit W&B logs for changed hyperparameters under train namespace
         if changed_for_log:
             try:
-                pl_module.log_metrics(changed_for_log, prefix="train/hyperparams")
+                pl_module.log_metrics(changed_for_log, prefix="train")
             except Exception:
                 pass
 
@@ -247,7 +247,7 @@ class HyperparamSyncCallback(BaseCallback):
             print(f"📈 Learning rate updated: {old_lr:.2e} → {new_lr:.2e} (epoch {trainer.current_epoch})")
 
     def _log_hyperparams(self, pl_module: LightningModuleType) -> None:
-        """Helper to log current hyperparameters under train/hyperparams."""
+        """Helper to log current hyperparameters under train namespace."""
         hp: Dict[str, float] = {}
         try:
             hp["learning_rate"] = float(pl_module.config.policy_lr)
@@ -260,7 +260,7 @@ class HyperparamSyncCallback(BaseCallback):
                 except Exception:
                     continue
         if hp:
-            pl_module.log_metrics(hp, prefix="train/hyperparams")
+            pl_module.log_metrics(hp, prefix="train")
     
     
     def on_fit_end(self, trainer: TrainerType, pl_module: LightningModuleType) -> None:

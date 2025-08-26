@@ -67,6 +67,8 @@ High-signal reference for maintainers and agents. Read this before making change
 ### Scripts and tools
 - `play.py`: loads best/last checkpoint from `runs/<id>/checkpoints` and steps env for rendering.
 - `inspect.py` / `inspector_app.py`: Gradio UI to browse episodes for a run.
+  - Visualizes raw rendered frames for all envs.
+  - When observations are image-like, also shows processed observations and frame stacks (if configured).
 - `publish.py`: push artifacts/videos to Hugging Face Hub.
 - `scripts/*`: smoke tests, benchmarks, helpers (rendering, dataset checks, etc.).
 
@@ -94,4 +96,3 @@ trainer_callbacks/# logging, early stopping, checkpointing, hyperparam sync, vid
 config/           # environment YAML configs
 runs/             # run outputs: config.json, checkpoints/, videos/, metrics.csv, run.log
 ```
-

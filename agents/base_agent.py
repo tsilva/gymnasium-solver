@@ -669,8 +669,8 @@ class BaseAgent(pl.LightningModule):
         progress = self._get_training_progress()
         new_learning_rate = max(self.config.learning_rate * (1.0 - progress), 0.0)
         self._change_optimizers_learning_rate(new_learning_rate)
-        # Log scheduled LR under hyperparams namespace
-        self.log_metrics({"learning_rate": new_learning_rate}, prefix="train/hyperparams")
+        # Log scheduled LR under train namespace
+        self.log_metrics({"learning_rate": new_learning_rate}, prefix="train")
 
     def _change_optimizers_learning_rate(self, learning_rate):
         optimizers = self.optimizers()

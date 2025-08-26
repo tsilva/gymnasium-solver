@@ -3,13 +3,11 @@
 - TASK: solve Pong-v5_objects, then propagate to other envs
 - BUG: run is being logged even when training is not started
 - test rlib
-- BUG: Pong-v5_objects not converging test fixes
 - BUG: total timesteps grwoth is not constant (print table)
 maxout pong objects / bold terminal
 - Add support for resuming training runs, this requires loading hyperparameters and schedulers to be timestep based; must also start from last timestep
 https://github.com/kenjyoung/MinAtar
 - Change config files so that they only say their mention algo_id in experiment name
-- Apply atari wrapper to atari envs
 - TODO: compare atari breakout fps vs rlzoosb3
 - BUG: last inspect frame for atari is first frame of next episode
 - WISHLIST: impelemnt SEEDRL with PPO to massively scale training
@@ -22,12 +20,13 @@ https://github.com/kenjyoung/MinAtar
 
 - inspect.py: add LLM debugging support
 - BUG: checkpoint jsons not storing correct metrics
-- BUG: CartPole-v1 PPO is not training as fast; 115f9c73faed6785a0bd58c37f55298324e90f43 was ok
+
 - add support for resuming training from a checkpoint
 - FEAT: Add support for specifyingpo extra reward metrics for each environment, then make the reward shaper assign value for each of those rewards
 - FEAT: add support for creating publishable video for youtube
 - Generalized scheduling for metrics, make those be logged
 - REFACTOR: rollout buffer can be much more efficient (review how sb3 does it) -- our fps is still 1000 below sb3
+- BUG: CartPole-v1 PPO is not training as fast; 115f9c73faed6785a0bd58c37f55298324e90f43 was ok
 - TODO: Figure out why CartPole-v1/PPO works better with Tahn activation than ReLU
 - BUG: PPO can solve FrozenLake-v1, but REINFORCE cannot. REINFORCE is likely not implemented correctly.
 - FEAT: train on cloud server (eg: lightning cloud)

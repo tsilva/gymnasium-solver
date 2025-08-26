@@ -4,10 +4,20 @@ __Pong-v5_rgb:
   project_id: "Pong-v5_rgb"
   env_id: ALE/Pong-v5
   obs_type: "rgb"
+  policy: 'cnn'
+  # CNN defaults suitable for 84x84 inputs
+  policy_kwargs:
+    activation: relu
+    channels: [32, 64, 64]
+    kernel_sizes: [8, 4, 3]
+    strides: [4, 2, 1]
   grayscale_obs: true
   resize_obs: true
-  frame_stack: 2  # RGB observations typically benefit from frame stacking
-  policy: 'cnn'      # CNN policy for RGB observations
+  frame_stack: 4
+  accelerator: 'gpu'
+  devices: 'auto'
+  eval_freq_epochs: 1
+  eval_episodes: 1
 
 Pong-v5_rgb_ppo:
   inherits: __Pong-v5_rgb
@@ -20,7 +30,7 @@ Pong-v5_rgb_ppo:
   learning_rate: 1e-4      # Slightly lower LR for stability on pixels
   frame_stack: 4           # Improve temporal information (typical Atari default)
   activation: relu         # Use ReLU for CNNs
-  eval_freq_epochs: 100    # Less frequent eval due to computational cost
+  eval_freq_epochs: 10    # Less frequent eval due to computational cost
   eval_episodes: 5
 
 Pong-v5_rgb_reinforce:

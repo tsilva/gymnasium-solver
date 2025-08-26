@@ -2,6 +2,12 @@ __VizDoom-Basic-v0:
   project_id: "VizDoom-Basic-v0"
   env_id: VizDoom-Basic-v0
   policy: 'cnn'
+  # CNN defaults suitable for 84x84 inputs
+  policy_kwargs:
+    activation: relu
+    channels: [32, 64, 64]
+    kernel_sizes: [8, 4, 3]
+    strides: [4, 2, 1]
   grayscale_obs: true
   resize_obs: true
   frame_stack: 4
@@ -19,12 +25,6 @@ VizDoom-Basic-v0_ppo:
   n_epochs: 4
   clip_range: 0.1
   learning_rate: 2.5e-4
-  # CNN defaults suitable for 84x84 inputs
-  policy_kwargs:
-    activation: relu
-    channels: [32, 64, 64]
-    kernel_sizes: [8, 4, 3]
-    strides: [4, 2, 1]
 
 
 

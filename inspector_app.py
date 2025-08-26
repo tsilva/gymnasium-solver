@@ -164,7 +164,7 @@ def run_episode(
     checkpoint_label: str | None,
     deterministic: bool = False,
     max_steps: int = 1000,
-) -> Tuple[List[np.ndarray], List[Dict[str, Any]], Dict[str, Any]]:
+) -> Tuple[List[np.ndarray], List[np.ndarray] | None, List[np.ndarray] | None, List[Dict[str, Any]], Dict[str, Any]]:
     config = _load_config_from_run(run_id)
 
     labels, mapping, default_label = list_checkpoints_for_run(run_id)
@@ -312,7 +312,122 @@ def run_episode(
     except Exception:
         pass
 
-    frames: List[np.ndarray] = []
+    frames: List[np.ndarray] = []  # raw rendered frames for human monitoring
+    processed_frames: List[np.ndarray] = []  # model-processed single-frame views (if applicable)
+    stack_frames: List[np.ndarray] = []  # tiled frame-stack views (if applicable)
+
+    # Heuristics and helpers to convert observations to displayable images
+    def _to_uint8_img(arr: np.ndarray) -> np.ndarray:
+        try:
+            a = np.asarray(arr)
+            if a.dtype != np.uint8:
+                # Normalize floats
+                a = a.astype(np.float32)
+                maxv = float(np.nanmax(a)) if np.isfinite(a).any() else 0.0
+                if maxv <= 1.0:
+                    a = a * 255.0
+                a = np.clip(a, 0, 255).astype(np.uint8)
+            return a
+        except Exception:
+            return np.asarray(arr).astype(np.uint8, copy=False)
+
+    def _obs_first_env(obs_any: Any) -> np.ndarray | None:
+        try:
+            arr = np.asarray(obs_any)
+            if arr.ndim == 0:
+                return None
+            if arr.ndim >= 4:
+                return arr[0]
+            return arr
+        except Exception:
+            return None
+
+    def _chw_to_hwc(img: np.ndarray) -> np.ndarray:
+        # Accepts (C,H,W) and returns (H,W,C)
+        if img.ndim == 3 and img.shape[0] <= 64 and img.shape[1] >= 8 and img.shape[2] >= 8:
+            return np.transpose(img, (1, 2, 0))
+        return img
+
+    def _ensure_hwc(img: np.ndarray) -> np.ndarray:
+        x = np.asarray(img)
+        if x.ndim == 2:
+            x = x[:, :, None]
+        if x.ndim == 3:
+            # Heuristic: if channels in first dim small, likely CHW
+            if x.shape[0] <= 8 and (x.shape[1] >= 16 and x.shape[2] >= 16):
+                x = _chw_to_hwc(x)
+            # else assume HWC already
+        return x
+
+    def _to_rgb(img: np.ndarray) -> np.ndarray:
+        x = _ensure_hwc(img)
+        if x.ndim != 3:
+            return None  # type: ignore[return-value]
+        c = x.shape[2]
+        if c == 1:
+            x = np.repeat(x, 3, axis=2)
+        elif c >= 3:
+            x = x[:, :, :3]
+        return _to_uint8_img(x)
+
+    def _split_stack(img: np.ndarray, assume_rgb_groups: bool, n_stack_hint: int | None) -> List[np.ndarray]:
+        """Split a stacked (C,H,W) or (H,W,C) image into a list of single-frame grayscale/RGB images.
+
+        - For CHW with C > 3: if assume_rgb_groups and C % 3 == 0, split into groups of 3 channels; else split per channel as grayscale.
+        - For HWC with C > 3: similar handling using last dimension.
+        - For 2D grayscale with frame stacking that ended up as (H, W): cannot split; return [img].
+        """
+        try:
+            x = np.asarray(img)
+            if x.ndim == 2:
+                return [x]
+            # Normalize to HWC for consistent slicing
+            if x.ndim == 3 and x.shape[0] <= 8 and x.shape[1] >= 16 and x.shape[2] >= 16:
+                x = _chw_to_hwc(x)
+            if x.ndim != 3:
+                return []
+            H, W, C = x.shape
+            frames: List[np.ndarray] = []
+            if assume_rgb_groups and C % 3 == 0:
+                n = C // 3
+                if n_stack_hint is not None and n_stack_hint > 0:
+                    n = min(n, int(n_stack_hint))
+                for i in range(n):
+                    frames.append(x[:, :, 3 * i: 3 * (i + 1)])
+            else:
+                # Treat as n grayscale channels
+                n = C
+                if n_stack_hint is not None and n_stack_hint > 0:
+                    n = min(n, int(n_stack_hint))
+                for i in range(n):
+                    frames.append(x[:, :, i:i + 1])
+            return frames
+        except Exception:
+            return []
+
+    def _make_grid(frames_hwc: List[np.ndarray], cols: int | None = None) -> np.ndarray | None:
+        try:
+            if not frames_hwc:
+                return None
+            imgs = [
+                (_to_uint8_img(np.repeat(f, 3, axis=2)) if (f.ndim == 3 and f.shape[2] == 1) else _to_uint8_img(f))
+                for f in frames_hwc
+            ]
+            H, W = imgs[0].shape[0], imgs[0].shape[1]
+            # Ensure same size
+            imgs = [img if (img.shape[0] == H and img.shape[1] == W) else np.resize(img, (H, W, 3)) for img in imgs]
+            n = len(imgs)
+            if cols is None:
+                cols = n if n <= 4 else 4
+            rows = int(np.ceil(n / float(cols)))
+            grid = np.zeros((rows * H, cols * W, 3), dtype=np.uint8)
+            for idx, img in enumerate(imgs):
+                r = idx // cols
+                c = idx % cols
+                grid[r * H:(r + 1) * H, c * W:(c + 1) * W, :] = img
+            return grid
+        except Exception:
+            return None
     steps: List[Dict[str, Any]] = []
 
     reset_result = env.reset()
@@ -382,6 +497,40 @@ def run_episode(
                     frame = np.clip(frame, 0, 255).astype(np.uint8)
                 frames.append(frame)
 
+            # Build processed single-frame view (if observation is image-like)
+            try:
+                obs0 = _obs_first_env(obs)
+                processed_img = None
+                stack_img = None
+                if isinstance(obs0, np.ndarray):
+                    # Heuristic: image-like if obs has 2D/3D spatial structure
+                    if obs0.ndim in (2, 3):
+                        # Single processed frame: choose first RGB triplet or first channel
+                        hwc = _ensure_hwc(obs0)
+                        # If stacked, first 3 channels correspond to most recent frame (CHW/HWC)
+                        processed_img = _to_rgb(hwc)
+
+                        # Frame stack visualization if multiple channels present
+                        n_stack_hint = None
+                        try:
+                            n_stack_hint = int(getattr(config, "frame_stack", None) or 0)
+                        except Exception:
+                            n_stack_hint = None
+                        # Assume RGB grouping when channels multiple of 3
+                        assume_rgb_groups = True
+                        split = _split_stack(hwc, assume_rgb_groups=assume_rgb_groups, n_stack_hint=n_stack_hint)
+                        # If more than one sub-frame, make a grid
+                        if isinstance(split, list) and len(split) > 1:
+                            grid = _make_grid(split, cols=None)
+                            if grid is not None:
+                                stack_img = grid
+                if processed_img is not None:
+                    processed_frames.append(processed_img)
+                if stack_img is not None:
+                    stack_frames.append(stack_img)
+            except Exception:
+                pass
+
             steps.append({
                 "step": t,
                 "action": int(action[0]) if isinstance(action, np.ndarray) else int(action),
@@ -435,7 +584,11 @@ def run_episode(
             steps[i]["mc_return"] = float(mc_returns[i])
             steps[i]["gae_adv"] = float(gae_adv[i])
 
-    return frames, steps, {
+    # Only return processed/stack frames if lists are non-empty (else None)
+    processed_out = processed_frames if processed_frames else None
+    stack_out = stack_frames if stack_frames else None
+
+    return frames, processed_out, stack_out, steps, {
         "total_reward": float(total_reward),
         "steps": t,
         "env_id": config.env_id,
@@ -480,7 +633,13 @@ def build_ui(default_run_id: str = "latest-run"):
         # Display the current frame with a per-step stats table on the right
         with gr.Row():
             with gr.Column(scale=7):
-                frame_image = gr.Image(label="Frame", height=400, type="numpy", image_mode="RGB")
+                display_mode = gr.Dropdown(
+                    label="Display",
+                    choices=["Rendered (raw)"],
+                    value="Rendered (raw)",
+                    interactive=True,
+                )
+                frame_image = gr.Image(label="Frame (raw)", height=400, type="numpy", image_mode="RGB")
             with gr.Column(scale=5):
                 current_step_table = gr.Dataframe(
                     headers=["stat", "value"],
@@ -505,7 +664,12 @@ def build_ui(default_run_id: str = "latest-run"):
             with gr.Column(scale=1, min_width=60):
                 play_pause_btn = gr.Button(value="▶", variant="secondary")
 
-        frames_state = gr.State([])  # type: ignore[var-annotated]
+        frames_state = gr.State([])  # active frames displayed
+        frames_raw_state = gr.State([])  # type: ignore[var-annotated]
+        frames_proc_state = gr.State([])  # type: ignore[var-annotated]
+        frames_stack_state = gr.State([])  # type: ignore[var-annotated]
+        has_processed_state = gr.State(False)
+        has_stack_state = gr.State(False)
         index_state = gr.State(0)
         playing_state = gr.State(False)
         rows_state = gr.State([])  # type: ignore[var-annotated]
@@ -607,7 +771,7 @@ def build_ui(default_run_id: str = "latest-run"):
             return pairs
 
         def _inspect(rid: str, ckpt_label: str | None, det: bool, nsteps: int):
-            frames, steps, info = run_episode(rid, ckpt_label, det, int(nsteps))
+            frames_raw, frames_proc, frames_stack, steps, info = run_episode(rid, ckpt_label, det, int(nsteps))
             rows = []
             for s in steps:
                 # Format probabilities, optionally with labels
@@ -632,7 +796,7 @@ def build_ui(default_run_id: str = "latest-run"):
                 ])
             # Initialize gallery selection, states, and play button label
             # Initialize the image (first frame) and slider range
-            first_frame = frames[0] if frames else None
+            first_frame = frames_raw[0] if frames_raw else None
             # Compute vertical from raw dict for highest fidelity
             def _vertical_from_step_dict(step_dict: Dict[str, Any]) -> List[List[str]]:
                 row_vals = [
@@ -648,25 +812,36 @@ def build_ui(default_run_id: str = "latest-run"):
                     step_dict.get("gae_adv"),
                 ]
                 return _verticalize_row(row_vals)
+            # Compute available display modes
+            has_proc = isinstance(frames_proc, list) and len(frames_proc) > 0
+            has_stack = isinstance(frames_stack, list) and len(frames_stack) > 0
+            choices = ["Rendered (raw)"] + (["Processed (obs)"] if has_proc else []) + (["Frame stack"] if has_stack else [])
+            # Set active frames to raw by default
             return (
-                gr.update(value=first_frame),  # frame_image
-                gr.update(minimum=0, maximum=(len(frames) - 1 if frames else 0), step=1, value=0),  # frame_slider
+                gr.update(value="Rendered (raw)", choices=choices),  # display_mode
+                gr.update(value=first_frame, label="Frame (raw)"),  # frame_image
+                gr.update(minimum=0, maximum=(len(frames_raw) - 1 if frames_raw else 0), step=1, value=0),  # frame_slider
                 (_vertical_from_step_dict(steps[0]) if steps else []), # current_step_table
                 rows,                                       # step_table
                 info.get("env_spec", {}),                   # env_spec_json
                 info.get("model_spec", {}),                 # model_spec_json
                 info.get("checkpoint_metrics", {}),         # ckpt_metrics_json
-                frames,                                     # frames_state
+                frames_raw,                                 # frames_state (active = raw by default)
                 0,                                          # index_state
                 False,                                      # playing_state
                 gr.update(value="▶"),                    # play_pause_btn label
                 rows,                                       # rows_state
                 steps,                                      # steps_state
+                frames_raw,                                 # frames_raw_state
+                (frames_proc or []),                        # frames_proc_state
+                (frames_stack or []),                       # frames_stack_state
+                has_proc,                                   # has_processed_state
+                has_stack,                                  # has_stack_state
             )
         run_btn.click(
             _inspect,
             inputs=[run_id, checkpoint, deterministic, max_steps],
-            outputs=[frame_image, frame_slider, current_step_table, step_table, env_spec_json, model_spec_json, ckpt_metrics_json, frames_state, index_state, playing_state, play_pause_btn, rows_state, steps_state],
+            outputs=[display_mode, frame_image, frame_slider, current_step_table, step_table, env_spec_json, model_spec_json, ckpt_metrics_json, frames_state, index_state, playing_state, play_pause_btn, rows_state, steps_state, frames_raw_state, frames_proc_state, frames_stack_state, has_processed_state, has_stack_state],
         )
 
         # Keep rows_state in sync if the user edits the table
@@ -840,6 +1015,53 @@ def build_ui(default_run_id: str = "latest-run"):
 
         if timer is not None:
             timer.tick(_on_tick, inputs=[frames_state, index_state, playing_state, steps_state], outputs=[frame_image, frame_slider, current_step_table, index_state, playing_state, play_pause_btn])
+
+        # Display mode switcher
+        def _on_display_mode(mode: str, raw: List[np.ndarray], proc: List[np.ndarray], stack: List[np.ndarray], steps: List[Dict[str, Any]] | None):
+            mode = str(mode or "Rendered (raw)")
+            if mode == "Processed (obs)" and isinstance(proc, list) and len(proc) > 0:
+                active = proc
+                label = "Frame (processed)"
+            elif mode == "Frame stack" and isinstance(stack, list) and len(stack) > 0:
+                active = stack
+                label = "Frame stack (processed)"
+            else:
+                active = raw if isinstance(raw, list) else []
+                label = "Frame (raw)"
+            first = active[0] if active else None
+            # Build current step stats for index 0
+            if steps and len(steps) > 0:
+                s0 = steps[0]
+                row_vals = [
+                    bool(s0.get("done")),
+                    int(s0.get("step", 0)),
+                    s0.get("action"),
+                    s0.get("action_label"),
+                    s0.get("probs"),
+                    s0.get("reward"),
+                    s0.get("cum_reward"),
+                    s0.get("mc_return"),
+                    s0.get("value"),
+                    s0.get("gae_adv"),
+                ]
+                vert = _verticalize_row(row_vals)
+            else:
+                vert = []
+            return (
+                gr.update(value=first, label=label),
+                gr.update(minimum=0, maximum=(len(active) - 1 if active else 0), step=1, value=0),
+                active,
+                0,
+                False,
+                gr.update(value="▶"),
+                gr.update(value=vert),
+            )
+
+        display_mode.change(
+            _on_display_mode,
+            inputs=[display_mode, frames_raw_state, frames_proc_state, frames_stack_state, steps_state],
+            outputs=[frame_image, frame_slider, frames_state, index_state, playing_state, play_pause_btn, current_step_table],
+        )
 
         # CSV export handler
         def _export_csv(rows: List[List[Any]] | None, rid: str, ckpt_label: str | None):

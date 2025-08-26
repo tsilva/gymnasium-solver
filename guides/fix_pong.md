@@ -23,7 +23,7 @@ Concrete fixes (apply 2–4 at once, then re-evaluate after ~1–2M steps)
 - Evaluation cadence
   - eval_freq_epochs: 100 to reduce eval overhead (not a big factor, but keeps focus on training).
 
-Minimal edit to config (Pong-v5_objects_ppo)
+Minimal edit to config (ALE-Pong-v5_objects_ppo)
 - n_steps: 512
 - n_epochs: 6
 - clip_range: 0.2

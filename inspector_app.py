@@ -97,6 +97,8 @@ def _load_env_info_yaml(env_id: str) -> Dict[str, Any] | None:
       2) Project default: <project_root>/config/environments
 
     Supports nested env IDs like 'ALE/Pong-v5' → 'ALE/Pong-v5.spec.yaml'.
+    Also supports flattened filenames where '/' is replaced by '-', e.g.,
+    'ALE-Pong-v5.spec.yaml'.
     """
     import yaml  # local import to avoid hard dependency when unused
     import os
@@ -115,7 +117,11 @@ def _load_env_info_yaml(env_id: str) -> Dict[str, Any] | None:
     for base in candidates:
         try:
             # Prefer new '.spec.yaml' suffix, then fall back to legacy '.yaml'
-            for name in (f"{env_id}.spec.yaml", f"{env_id}.yaml"):
+            names = [f"{env_id}.spec.yaml", f"{env_id}.yaml"]
+            # Flattened fallback: replace '/' with '-' in filenames
+            flat = env_id.replace("/", "-")
+            names.extend([f"{flat}.spec.yaml", f"{flat}.yaml"])
+            for name in names:
                 path = base / name
                 if path.is_file():
                     with open(path, "r", encoding="utf-8") as f:

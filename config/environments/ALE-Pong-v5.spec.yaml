@@ -33,3 +33,4 @@ versions:
   v5: Stickiness restored; no stochastic frame-skip; ALE namespace
   v4: Stickiness removed
   v0: Initial release
+

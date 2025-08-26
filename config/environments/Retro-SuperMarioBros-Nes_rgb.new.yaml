@@ -28,3 +28,4 @@ ppo:
   frame_stack: 4
   eval_freq_epochs: 20
   eval_episodes: 5
+

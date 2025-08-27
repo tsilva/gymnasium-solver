@@ -74,7 +74,7 @@ def create_actor_critic_policy(
     """
     # Accept direct module classes for extensibility
     if isinstance(policy_type, type) and issubclass(policy_type, nn.Module):
-        return policy_type(input_dim, action_dim, hidden_dims=hidden, activation=activation, **policy_kwargs)
+        return policy_type(input_dim, action_dim, hidden_dims=hidden, **policy_kwargs)
 
     if isinstance(policy_type, str) and policy_type.lower() in {"cnn", "cnnpolicy", "cnn_actor_critic", "cnnac"}:
         hwc = _infer_hwc_from_space(obs_space, input_dim)
@@ -82,11 +82,10 @@ def create_actor_critic_policy(
             obs_shape=hwc,
             action_dim=action_dim,
             hidden=hidden,
-            activation=activation,
             **policy_kwargs,
         )
     # Default: MLP-based actor-critic
-    return ActorCritic(input_dim, action_dim, hidden_dims=hidden, activation=activation,)
+    return ActorCritic(input_dim, action_dim, hidden_dims=hidden)
 
 
 def create_policy(
@@ -112,7 +111,6 @@ def create_policy(
             obs_shape=hwc,
             action_dim=action_dim,
             hidden_dims=hidden_dims,
-            activation=activation,
             **policy_kwargs,
         )
     return MLPPolicy(

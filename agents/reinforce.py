@@ -10,16 +10,14 @@ class REINFORCE(BaseAgent):
     def create_models(self):
         input_dim = self.train_env.get_input_dim()
         output_dim = self.train_env.get_output_dim()
-        policy_kwargs = getattr(self.config, 'policy_kwargs', None) or {}
-        activation = getattr(self.config, 'activation', 'tanh')
-
+        policy_kwargs = self.config.policy_kwargs
+        
         # TODO: what is observation space being used for
         self.policy_model = create_policy(
             self.config.policy,
             input_dim=input_dim,
             action_dim=output_dim,
             hidden_dims=self.config.hidden_dims,
-            activation=activation,
             obs_space=getattr(self.train_env, 'observation_space', None),
             **policy_kwargs,
         )

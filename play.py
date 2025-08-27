@@ -64,7 +64,6 @@ def load_model(model_path, config):
                 input_dim=int(input_dim),
                 action_dim=int(output_dim),
                 hidden=config.hidden_dims,
-                activation=activation,
                 obs_space=obs_space,
                 **policy_kwargs,
             )
@@ -74,7 +73,6 @@ def load_model(model_path, config):
                 input_dim=int(input_dim),
                 action_dim=int(output_dim),
                 hidden=config.hidden_dims,
-                activation=activation,
                 obs_space=obs_space,
                 **policy_kwargs,
             )

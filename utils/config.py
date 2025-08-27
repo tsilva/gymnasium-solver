@@ -70,14 +70,11 @@ class Config:
     # ===== Model architecture (optional) =====
     # Hidden layer dimensions for policy/value networks (tuple or single int)
     hidden_dims: Union[int, Tuple[int, ...]] = (64, 64)
-    # Activation function for MLP backbones: one of
-    # ['tanh','relu','leaky_relu','elu','selu','gelu','silu','swish','identity']
-    activation: str = "tanh"
     # Policy selection and kwargs
     # policy can be 'mlp' or 'cnn'
     policy: str = 'mlp'
     # Optional policy kwargs (dict). When using environment YAML, this can be a mapping.
-    policy_kwargs: Optional[Dict[str, Any]] = None
+    policy_kwargs: Optional[Dict[str, Any]] = field(default_factory=lambda: {"activation": "tanh"})
 
     # ===== Optimization (optional) =====
     # Base learning rate for optimizer (used unless 'learning_rate' override/schedule is provided)
@@ -488,22 +485,6 @@ class Config:
             raise ValueError("policy_lr must be a positive float.")
         if self.ent_coef < 0:
             raise ValueError("ent_coef must be a non-negative float.")
-        # Activation
-        allowed_activations = {
-            "tanh",
-            "relu",
-            "leaky_relu",
-            "elu",
-            "selu",
-            "gelu",
-            "silu",
-            "swish",
-            "identity",
-        }
-        if isinstance(self.activation, str) and self.activation.lower() not in allowed_activations:
-            raise ValueError(
-                f"activation must be one of {sorted(allowed_activations)}; got '{self.activation}'"
-            )
 
         # Training
         if self.n_epochs <= 0:

@@ -5,7 +5,6 @@ from utils.policy_factory import create_actor_critic_policy
 
 from .base_agent import BaseAgent
 
-
 class PPO(BaseAgent):
     
     def __init__(self, config):
@@ -15,10 +14,10 @@ class PPO(BaseAgent):
 
     # TODO: do this in init?
     def create_models(self):
-        policy_kwargs = dict(getattr(self.config, 'policy_kwargs', None) or {})
-        activation = policy_kwargs.pop('activation', getattr(self.config, 'activation', 'tanh'))
+        policy_kwargs = self.config.policy_kwargs
+        activation = policy_kwargs['activation']
         # Determine policy type and input/output dims even if BaseAgent.__init__ wasn't called
-        policy_type = getattr(self.config, 'policy', 'mlp')
+        policy_type = self.config.policy
         input_dim = self.train_env.get_input_dim()
         output_dim = self.train_env.get_output_dim()
         obs_space = getattr(self.train_env, 'observation_space', None)
@@ -27,7 +26,6 @@ class PPO(BaseAgent):
             input_dim=input_dim,
             action_dim=output_dim,
             hidden=self.config.hidden_dims,
-            activation=activation,
             # TODO: redundancy with input_dim/output_dim?
             obs_space=obs_space,
             **policy_kwargs,

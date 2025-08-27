@@ -26,4 +26,3 @@ reinforce:
   batch_size: 32
   learning_rate: 0.01
   hidden_dims: [128]
-  use_baseline: true

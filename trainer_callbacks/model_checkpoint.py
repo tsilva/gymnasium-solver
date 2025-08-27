@@ -356,9 +356,7 @@ class ModelCheckpointCallback(BaseCallback):
                 reward_threshold = pl_module.validation_env.get_reward_threshold()
             except Exception:
                 reward_threshold = None
-            if reward_threshold is not None:
-                print(f"Using environment spec reward_threshold: {reward_threshold}")
-            else:
+            if reward_threshold is None:
                 # Fallback to direct gym spec lookup
                 try:
                     import gymnasium as gym

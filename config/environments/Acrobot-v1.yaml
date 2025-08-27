@@ -22,5 +22,4 @@ reinforce:
   batch_size: 64
   learning_rate: 5e-4
   hidden_dims: [128, 128]
-  use_baseline: true
   max_epochs: 2000

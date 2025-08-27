@@ -1,4 +1,5 @@
 - Add config defaults based on algo
+- REFACTOR: move hidden_dims inside kwargs
 - FEAT: add normalization support 
 - FEAT: add discrete env support
 - TODO: Figure out why CartPole-v1/PPO works better with Tahn activation than ReLU

@@ -36,6 +36,5 @@ reinforce:
   n_steps: 512
   batch_size: 64
   learning_rate: 1e-4      # Lower learning rate for CNN
-  use_baseline: true
   max_epochs: 5000
 

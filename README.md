@@ -30,8 +30,15 @@ pip install -e .
 ```
 
 ### 🚀 Quickstart
-- **Train** 🏃 (uses YAML config IDs from `config/environments/*.yaml`):
+- **Train** 🏃 (env + optional variant from `config/environments/*.yaml`):
 ```bash
+# Default to the first variant in the env YAML
+python train.py CartPole-v1 -q
+
+# Or choose a specific variant (e.g., ppo, reinforce)
+python train.py CartPole-v1 ppo -q
+
+# Backwards compatible: full config id still works
 python train.py --config CartPole-v1_ppo -q
 ```
 - **Play a trained policy** 🎮 (auto-loads best/last checkpoint from a run):

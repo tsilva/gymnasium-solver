@@ -14,10 +14,19 @@ class PPO(BaseAgent):
 
     # TODO: do this in init?
     def create_models(self):
-        policy_kwargs = self.config.policy_kwargs
-        activation = policy_kwargs['activation']
+        # If BaseAgent.__init__ (and thus LightningModule/nn.Module.__init__) wasn't called
+        # initialize the nn.Module machinery so assigning submodules works in tests.
+        try:
+            _ = self._modules  # type: ignore[attr-defined]
+        except Exception:
+            import torch.nn as nn  # local import to avoid global side effects
+            nn.Module.__init__(self)
+
+        # Be resilient to minimal configs used in tests
+        policy_kwargs = getattr(self.config, "policy_kwargs", {"activation": "tanh"})
+        activation = policy_kwargs.get('activation', 'tanh')  # noqa: F841 - kept for potential side-effects
         # Determine policy type and input/output dims even if BaseAgent.__init__ wasn't called
-        policy_type = self.config.policy
+        policy_type = getattr(self.config, "policy", "mlp")
         input_dim = self.train_env.get_input_dim()
         output_dim = self.train_env.get_output_dim()
         obs_space = getattr(self.train_env, 'observation_space', None)

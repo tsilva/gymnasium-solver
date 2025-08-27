@@ -167,6 +167,8 @@ class Config:
 
         # Build an index of config_id -> raw mapping supporting BOTH formats
         all_configs: Dict[str, Dict[str, Any]] = {}
+        # Track variant order per project (YAML file) to allow default selection
+        project_variants: Dict[str, list] = {}
 
         def _is_new_style(doc: Dict[str, Any]) -> bool:
             # Heuristic: top-level contains env_id and other Config fields (not nested under a name)
@@ -192,12 +194,17 @@ class Config:
                 field_names = set(cls.__dataclass_fields__.keys())
                 base: Dict[str, Any] = {k: v for k, v in doc.items() if k in field_names}
                 project = base.get("project_id") or path.stem.replace(".new", "")
+                # Maintain insertion-ordered list of variants for default selection
+                if project not in project_variants:
+                    project_variants[project] = []
                 # Variant sections are top-level dict values whose key is not a dataclass field name
                 for k, v in doc.items():
                     if k in field_names:
                         continue
                     if not isinstance(v, dict):
                         continue
+                    # Record variant order for this project
+                    project_variants[project].append(str(k))
                     variant_cfg = dict(base)
                     variant_cfg.update(v)
                     # Default algo_id to the variant section name when not provided
@@ -220,6 +227,23 @@ class Config:
 
         if config_id in all_configs:
             return cls._load_from_environment_config(all_configs[config_id], all_configs)
+
+        # Allow selecting by project/file name only for new-style configs
+        # - If algo_id is provided, use <project>_<algo_id>
+        # - Otherwise, pick the first variant declared in the YAML file
+        if config_id in project_variants:
+            if algo_id is not None:
+                candidate = f"{config_id}_{algo_id}"
+                if candidate in all_configs:
+                    return cls._load_from_environment_config(all_configs[candidate], all_configs)
+                raise ValueError(
+                    f"Variant '{algo_id}' not found for project '{config_id}'. Available: {project_variants.get(config_id) or []}"
+                )
+            variants = project_variants.get(config_id) or []
+            if variants:
+                candidate = f"{config_id}_{variants[0]}"
+                if candidate in all_configs:
+                    return cls._load_from_environment_config(all_configs[candidate], all_configs)
         
         # Fall back to legacy format
         if algo_id is None:

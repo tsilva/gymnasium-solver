@@ -361,13 +361,20 @@ class RolloutBuffer:
 
 
 class RolloutCollector():
-    def __init__(self, env, policy_model, n_steps, stats_window_size=100,
-                 gamma: float = 0.99, gae_lambda: float = 0.95,
-                 normalize_advantage: bool = True, advantages_norm_eps: float = 1e-8,
-                 use_gae: bool = True,
-                 normalize_advantages: bool = False,
-                 buffer_maxsize: Optional[int] = None,
-                 **kwargs):
+    def __init__(
+        self, 
+        env, # Environment to collect rollouts from
+        policy_model, # Policy model to collect rollouts from
+        n_steps, # Number of steps to collect per rollout
+        stats_window_size=100, # Size of the rolling window for stats
+        gamma: float = 0.99, # Discount factor for future rewards
+        gae_lambda: float = 0.95, # GAE lambda parameter (advantage estimation smoothing)
+        normalize_advantages: bool = False, # Whether to normalize advantages
+        advantages_norm_eps: float = 1e-8, # Epsilon for advantages normalization
+        use_gae: bool = True, # Whether to use GAE (Generalized Advantage Estimation)
+        buffer_maxsize: Optional[int] = None, # Maximum size of the rollout buffer
+        **kwargs
+):
         self.env = env
         self.policy_model = policy_model
         self.n_steps = n_steps
@@ -376,8 +383,6 @@ class RolloutCollector():
         self.gae_lambda = gae_lambda
         self.advantages_norm_eps = advantages_norm_eps
         self.use_gae = use_gae
-        # Keep both flags for backward-compat; use normalize_advantages in logic
-        self.normalize_advantage = normalize_advantage
         self.normalize_advantages = normalize_advantages
         self.kwargs = kwargs
         self.buffer_maxsize = buffer_maxsize
@@ -392,6 +397,7 @@ class RolloutCollector():
         self.episode_length_deque = RollingWindow(stats_window_size)
         self.env_episode_reward_deques = [RollingWindow(stats_window_size) for _ in range(self.n_envs)]
         self.env_episode_length_deques = [RollingWindow(stats_window_size) for _ in range(self.n_envs)]
+
         # Immediate episode stats (most recent completed episode in any env)
         self._last_episode_reward = 0.0
         self._last_episode_length = 0
@@ -445,6 +451,7 @@ class RolloutCollector():
             self.device = current_device
             if self._buffer is not None:
                 self._buffer.device = self.device
+
         # Initialize environment if needed
         if self.obs is None:
             self.obs = self.env.reset()

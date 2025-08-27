@@ -55,15 +55,14 @@ def load_model(model_path, config):
 
         # Policy selection based on algo_id (policy-only for REINFORCE)
         policy_type = getattr(config, "policy", "mlp")
-        policy_kwargs = dict(getattr(config, "policy_kwargs", None) or {})
-        activation = policy_kwargs.pop("activation", getattr(config, "activation", "tanh"))
+        policy_kwargs = config.policy_kwargs
 
         if str(getattr(config, "algo_id", "")).lower() == "reinforce":
             model = create_policy(
                 policy_type,
                 input_dim=int(input_dim),
                 action_dim=int(output_dim),
-                hidden=config.hidden_dims,
+                hidden_dims=config.hidden_dims,
                 obs_space=obs_space,
                 **policy_kwargs,
             )

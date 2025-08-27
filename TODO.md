@@ -1,4 +1,4 @@
-- FEAT: Normalize returns for REINFORCE
+- Add config defaults based on algo
 - FEAT: add normalization support 
 - FEAT: add discrete env support
 - TODO: Figure out why CartPole-v1/PPO works better with Tahn activation than ReLU

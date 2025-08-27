@@ -5,11 +5,11 @@ from utils.config import load_config
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Train RL agent.")
-    parser.add_argument("--config", type=str, default="CartPole-v1_ppo", help="Config ID (default: CartPole-v1_ppo)")
+    parser.add_argument("--config", type=str, default="CartPole-v1_reinforce", help="Config ID (default: CartPole-v1_reinforce)")
     parser.add_argument("--algo", type=str, default=None, help="Agent type (optional, extracted from config if not provided)")
     parser.add_argument("--resume", action="store_true", help="Resume training from latest checkpoint")
     parser.add_argument("--log-dir", type=str, default="logs", help="Directory for log files (default: logs)")
-    parser.add_argument("--quiet", "-q", action="store_true", help="Run non-interactively: auto-accept prompts and defaults")
+    parser.add_argument("--quiet", "-q", action="store_true", default=True, help="Run non-interactively: auto-accept prompts and defaults")
     args = parser.parse_args()
 
     # Load configuration

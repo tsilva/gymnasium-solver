@@ -917,3 +917,10 @@ class BaseAgent(pl.LightningModule):
         if eval_freq_epochs is None:
             return {"limit_val_batches": 0, "check_val_every_n_epoch": 1}
         return {"limit_val_batches": 1.0, "check_val_every_n_epoch": int(eval_freq_epochs)}
+
+        
+    def configure_optimizers(self):
+        return torch.optim.Adam(
+            self.policy_model.parameters(), 
+            lr=self.config.policy_lr
+        )

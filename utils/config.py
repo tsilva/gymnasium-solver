@@ -99,10 +99,10 @@ class Config:
     clip_range: Optional[float] = 0.2
     # PPO clip range schedule strategy: None or 'linear'
     clip_range_schedule: Optional[str] = None
+    # Normalize the returns; 'off' means no normalization, 'baseline' means normalize by baseline, 'batch' means normalize by batch mean and std
+    normalize_returns: str = "batch"
     # Advantage normalization behavior: 'off', 'rollout', or 'batch'
     normalize_advantages: str = "batch"
-    # When True, REINFORCE uses a learned baseline (advantages) instead of raw returns
-    use_baseline: bool = False
 
     # ===== Evaluation (optional; disabled unless eval_freq_epochs is set) =====
     # Run evaluation every N training epochs; None disables evaluation entirely

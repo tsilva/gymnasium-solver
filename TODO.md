@@ -1,3 +1,4 @@
+- BUG: REINFORCE is busted...
 - REFACTOR: move hidden_dims inside policy_kwargs
 - FEAT: ensure we can see baseline advantages in inspect.py
 - BUG: PPO can solve FrozenLake-v1, but REINFORCE cannot. REINFORCE is likely not implemented correctly.

@@ -100,7 +100,7 @@ class Config:
     # PPO clip range schedule strategy: None or 'linear'
     clip_range_schedule: Optional[str] = None
     # Normalize the returns; 'off' means no normalization, 'baseline' means normalize by baseline, 'batch' means normalize by batch mean and std
-    normalize_returns: str = "batch"
+    normalize_returns: Optional[str] = None
     # Advantage normalization behavior: 'off', 'rollout', or 'batch'
     normalize_advantages: str = "batch"
 

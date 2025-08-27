@@ -32,14 +32,16 @@ class REINFORCE(BaseAgent):
         base_params['use_gae'] = False # TODO: what is this for?
         return base_params
     
+    # TODO: only does something with normalization off, but even that way it doesnt converge
     def losses_for_batch(self, batch, batch_idx):
         # Retrieve tensors from batch
         states = batch.observations
         actions = batch.actions
         returns = batch.returns
+        advantages = batch.advantages
 
         # Assert that the tensors are detached
-        assert_detached(states, actions, returns)
+        assert_detached(states, actions, returns, advantages)
         
         # Calculate the policy targets to scale the log probabilities by;
         # - returns: unscaled returns (vanilla REINFORCE)
@@ -51,9 +53,6 @@ class REINFORCE(BaseAgent):
             batch_normalized_returns = (returns - returns.mean()) / (returns.std() + 1e-8)
             policy_targets = batch_normalized_returns
         elif normalize_returns == "baseline":
-            metrics = self.train_collector.get_metrics()
-            baseline_mean = metrics["baseline_mean"]
-            advantages = returns - baseline_mean
             policy_targets = advantages
 
         # Get the log probabilities for each 

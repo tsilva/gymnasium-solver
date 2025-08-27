@@ -9,6 +9,50 @@ from utils.torch import _device_of, inference_ctx
 
 
 # -----------------------------
+# Internal small helpers (DRY)
+# -----------------------------
+def _canonicalize_timeouts(dones: np.ndarray, timeouts: Optional[np.ndarray]) -> np.ndarray:
+    """Return a boolean timeouts array with same shape as dones.
+
+    When ``timeouts`` is None, returns an all-False array. Ensures dtype bool.
+    """
+    if timeouts is None:
+        return np.zeros_like(dones, dtype=bool)
+    return np.asarray(timeouts, dtype=bool)
+
+
+def _real_terminal_mask(dones: np.ndarray, timeouts: Optional[np.ndarray]) -> np.ndarray:
+    """Real terminal if done and not a time-limit truncation."""
+    dones_b = np.asarray(dones, dtype=bool)
+    timeouts_b = _canonicalize_timeouts(dones_b, timeouts)
+    return np.logical_and(dones_b, ~timeouts_b)
+
+
+def _non_terminal_float_mask(dones: np.ndarray, timeouts: Optional[np.ndarray]) -> np.ndarray:
+    """Float32 mask of non-terminals given dones/timeouts."""
+    real_terminal = _real_terminal_mask(dones, timeouts)
+    return (~real_terminal).astype(np.float32)
+
+
+def _build_idx_map_from_valid_mask(valid_mask_flat: np.ndarray) -> Optional[np.ndarray]:
+    """Vectorized map from each position to the nearest previous valid index.
+
+    Any positions before the first valid entry map to the first valid index to
+    keep the dataset length stable. Returns None when there are no valid entries.
+    """
+    valid_mask_flat = np.asarray(valid_mask_flat, dtype=bool)
+    if not valid_mask_flat.any():
+        return None
+    N = int(valid_mask_flat.size)
+    idxs = np.arange(N, dtype=np.int64)
+    cur = np.where(valid_mask_flat, idxs, -1)
+    filled = np.maximum.accumulate(cur)
+    first_valid = int(np.argmax(valid_mask_flat))
+    filled[filled < 0] = first_valid
+    return filled
+
+
+# -----------------------------
 # Shared return/advantage utils
 # -----------------------------
 def compute_mc_returns(rewards: np.ndarray, gamma: float) -> np.ndarray:
@@ -89,17 +133,13 @@ def compute_batched_mc_returns(
     """
     rewards = np.asarray(rewards, dtype=np.float32)
     dones = np.asarray(dones, dtype=bool)
-    if timeouts is None:
-        timeouts = np.zeros_like(dones, dtype=bool)
-    else:
-        timeouts = np.asarray(timeouts, dtype=bool)
+    timeouts = _canonicalize_timeouts(dones, timeouts)
 
     T, n_envs = rewards.shape
     returns_buf = np.zeros_like(rewards, dtype=np.float32)
     returns_acc = np.zeros(n_envs, dtype=np.float32)
 
-    real_terminal = np.logical_and(dones, ~timeouts)
-    non_terminal = (~real_terminal).astype(np.float32)
+    non_terminal = _non_terminal_float_mask(dones, timeouts)
 
     for t in range(T - 1, -1, -1):
         returns_acc = rewards[t] + gamma * returns_acc * non_terminal[t]
@@ -129,10 +169,7 @@ def compute_batched_gae_advantages_and_returns(
     values = np.asarray(values, dtype=np.float32)
     rewards = np.asarray(rewards, dtype=np.float32)
     dones = np.asarray(dones, dtype=bool)
-    if timeouts is None:
-        timeouts = np.zeros_like(dones, dtype=bool)
-    else:
-        timeouts = np.asarray(timeouts, dtype=bool)
+    timeouts = _canonicalize_timeouts(dones, timeouts)
     last_values = np.asarray(last_values, dtype=np.float32)
 
     T, n_envs = rewards.shape
@@ -149,8 +186,7 @@ def compute_batched_gae_advantages_and_returns(
         next_values = np.where(timeouts, bootstrapped_next_values, next_values)
 
     # Real terminals are env terminations that are not timeouts
-    real_terminal = np.logical_and(dones, ~timeouts)
-    non_terminal = (~real_terminal).astype(np.float32)
+    non_terminal = _non_terminal_float_mask(dones, timeouts)
 
     advantages = np.zeros_like(rewards, dtype=np.float32)
     gae = np.zeros(n_envs, dtype=np.float32)
@@ -437,6 +473,26 @@ class RolloutCollector():
         # Optional index remapping for MC masking to keep dataset length stable
         self._last_rollout_index_map = None
 
+    # -------- Small private helpers --------
+    def _predict_values_np(self, obs_batch: np.ndarray) -> np.ndarray:
+        """Run critic on a numpy batch and return float32 numpy array (squeezed)."""
+        obs_t = torch.as_tensor(obs_batch, dtype=torch.float32, device=self.device)
+        vals = self.policy_model.predict_values(obs_t).detach().cpu().numpy().astype(np.float32)
+        return vals.squeeze()
+
+    def _bootstrap_timeouts_batch(self, start: int, terminal_obs_info: list[tuple[int, int, np.ndarray]]):
+        """Predict values for all truncated terminal observations and write to buffer.
+
+        terminal_obs_info contains tuples of (step_idx, env_idx, terminal_obs).
+        """
+        if not terminal_obs_info:
+            return
+        term_obs_batch = np.stack([info[2] for info in terminal_obs_info])
+        batch_values = self._predict_values_np(term_obs_batch)
+        batch_values = np.atleast_1d(batch_values)
+        for i, (step_idx_term, env_idx, _) in enumerate(terminal_obs_info):
+            self._buffer.bootstrapped_values_buf[start + step_idx_term, env_idx] = float(batch_values[i])
+
     @torch.inference_mode()
     def collect(self, *args, **kwargs):
         with inference_ctx(self.policy_model):
@@ -593,20 +649,7 @@ class RolloutCollector():
 
         # Batch process all terminal observations at once (major performance improvement)
         if terminal_obs_info:
-            terminal_observations = [info[2] for info in terminal_obs_info]
-            term_obs_batch = np.stack(terminal_observations)
-            term_obs_t = torch.as_tensor(term_obs_batch, dtype=torch.float32, device=self.device)
-
-            # Single batch prediction for all terminal observations
-            batch_values = self.policy_model.predict_values(term_obs_t).detach().cpu().numpy().squeeze().astype(np.float32)
-
-            # Handle single vs multiple predictions
-            if len(terminal_obs_info) == 1:
-                batch_values = [batch_values]
-
-            # Assign batch results back to correct buffer positions
-            for i, (step_idx_term, env_idx, _) in enumerate(terminal_obs_info):
-                self._buffer.bootstrapped_values_buf[start + step_idx_term, env_idx] = batch_values[i]
+            self._bootstrap_timeouts_batch(start, terminal_obs_info)
 
         # Build next_values by shifting critic values and estimating the last
         values_slice = self._buffer.values_buf[start:end]
@@ -615,8 +658,7 @@ class RolloutCollector():
         timeouts_slice = self._buffer.timeouts_buf[start:end]
 
         # Prepare last values for each environment for the final bootstrap
-        last_obs_t = torch.as_tensor(last_obs, dtype=torch.float32, device=self.device)
-        last_values_vec = self.policy_model.predict_values(last_obs_t).detach().cpu().numpy().squeeze().astype(np.float32)
+        last_values_vec = self._predict_values_np(last_obs)
 
         if self.use_gae:
             bootstrapped_slice = self._buffer.bootstrapped_values_buf[start:end]
@@ -656,7 +698,7 @@ class RolloutCollector():
             # episode has not terminated inside this rollout window. This ensures that the
             # return at each included step sums rewards up to a real terminal.
             try:
-                real_terminal = np.logical_and(dones_slice, ~timeouts_slice)
+                real_terminal = _real_terminal_mask(dones_slice, timeouts_slice)
                 T, n_envs = real_terminal.shape
                 valid_mask_2d = np.zeros((T, n_envs), dtype=bool)
                 for j in range(n_envs):
@@ -667,21 +709,7 @@ class RolloutCollector():
                         valid_mask_2d[: last_term + 1, j] = True
                 # Flatten mask in env-major order to align with flatten_slice_env_major
                 valid_mask_flat = valid_mask_2d.transpose(1, 0).reshape(-1)
-                # Build a stable index map from full range -> nearest previous valid index
-                N = int(valid_mask_flat.size)
-                if valid_mask_flat.any():
-                    idx_map = np.arange(N, dtype=np.int64)
-                    last_valid = None
-                    first_valid = int(np.argmax(valid_mask_flat))  # first True index
-                    for i in range(N):
-                        if valid_mask_flat[i]:
-                            last_valid = i
-                            idx_map[i] = i
-                        else:
-                            idx_map[i] = last_valid if last_valid is not None else first_valid
-                    self._last_rollout_index_map = idx_map
-                else:
-                    self._last_rollout_index_map = None
+                self._last_rollout_index_map = _build_idx_map_from_valid_mask(valid_mask_flat)
             except Exception:
                 # If anything goes wrong, fall back to using all steps (no remap)
                 self._last_rollout_index_map = None

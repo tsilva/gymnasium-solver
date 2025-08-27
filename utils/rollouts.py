@@ -61,6 +61,12 @@ def _flat_env_major(arr: np.ndarray, start: int, end: int) -> np.ndarray:
     return arr[start:end].transpose(1, 0).reshape(-1)
 
 
+def _normalize_advantages(advantages: np.ndarray, eps: float) -> np.ndarray:
+    """Return advantage array normalized across all elements with epsilon stability."""
+    adv_flat = advantages.reshape(-1)
+    return (advantages - adv_flat.mean()) / (adv_flat.std() + float(eps))
+
+
 # -----------------------------
 # Shared return/advantage utils
 # -----------------------------
@@ -532,6 +538,46 @@ class RolloutCollector():
         binc = np.bincount(actions_flat, minlength=self._action_counts.shape[0])
         self._action_counts[: len(binc)] += binc
 
+    def _process_done_infos(
+        self,
+        *,
+        done_indices: np.ndarray,
+        infos: list,
+        step_idx: int,
+        timeouts: np.ndarray,
+        terminal_obs_info: list[tuple[int, int, np.ndarray]],
+    ) -> None:
+        """Process episode-complete infos for all done envs at a step.
+
+        Updates deques, last-episode stats, and collects timeout terminal observations.
+        """
+        if len(done_indices) == 0:
+            return
+        for idx in done_indices:
+            info = infos[idx]
+            episode = info['episode']
+            r = episode['r']
+            l = episode['l']
+            self.episode_reward_deque.append(r)
+            self.episode_length_deque.append(l)
+            self.env_episode_reward_deques[idx].append(r)
+            self.env_episode_length_deques[idx].append(l)
+
+            # Track immediate last episode stats (latest wins if multiple end simultaneously)
+            try:
+                self._last_episode_reward = float(episode.get('r', 0.0))
+            except Exception:
+                self._last_episode_reward = 0.0
+            try:
+                self._last_episode_length = int(episode.get('l', 0))
+            except Exception:
+                self._last_episode_length = 0
+
+            # TimeLimit truncated bootstrap bookkeeping
+            if info.get("TimeLimit.truncated"):
+                timeouts[idx] = True
+                terminal_obs_info.append((step_idx, idx, info["terminal_observation"]))
+
     @torch.inference_mode()
     def collect(self, *args, **kwargs):
         with inference_ctx(self.policy_model):
@@ -606,29 +652,13 @@ class RolloutCollector():
             done_indices = np.where(dones)[0]
 
             if len(done_indices) > 0:
-                # Collect episode stats for all done environments
-                for idx in done_indices:
-                    info = infos[idx]
-                    episode = info['episode']
-                    self.episode_reward_deque.append(episode['r'])
-                    self.episode_length_deque.append(episode['l'])
-                    self.env_episode_reward_deques[idx].append(episode['r'])
-                    self.env_episode_length_deques[idx].append(episode['l'])
-
-                    # Track immediate last episode stats (latest wins if multiple end simultaneously)
-                    try:
-                        self._last_episode_reward = float(episode.get('r', 0.0))
-                    except Exception:
-                        self._last_episode_reward = 0.0
-                    try:
-                        self._last_episode_length = int(episode.get('l', 0))
-                    except Exception:
-                        self._last_episode_length = 0
-
-                    # Just mark timeouts and collect terminal obs for later processing
-                    if info.get("TimeLimit.truncated"):
-                        timeouts[idx] = True
-                        terminal_obs_info.append((step_idx, idx, info["terminal_observation"]))
+                self._process_done_infos(
+                    done_indices=done_indices,
+                    infos=infos,
+                    step_idx=step_idx,
+                    timeouts=timeouts,
+                    terminal_obs_info=terminal_obs_info,
+                )
 
             # Persist environment outputs for this step
             self._buffer.store_cpu_step(
@@ -738,8 +768,7 @@ class RolloutCollector():
                 self._last_rollout_index_map = None
 
         if self.normalize_advantages:
-            adv_flat = advantages_buf.reshape(-1)
-            advantages_buf = (advantages_buf - adv_flat.mean()) / (adv_flat.std() + self.advantages_norm_eps)
+            advantages_buf = _normalize_advantages(advantages_buf, self.advantages_norm_eps)
 
         # Create final training tensors from persistent buffers
         trajectories = self._buffer.flatten_slice_env_major(start, end, advantages_buf, returns_buf)

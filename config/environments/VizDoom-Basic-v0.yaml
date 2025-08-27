@@ -16,10 +16,10 @@ eval_episodes: 1
 
 ppo:
   algo_id: ppo
+  n_timesteps: 1e6
   n_envs: 8
   n_steps: 128
   batch_size: 256
   n_epochs: 4
   clip_range: 0.1
   learning_rate: 2.5e-4
-

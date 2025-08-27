@@ -463,6 +463,9 @@ class RolloutCollector():
         self.normalize_advantages = normalize_advantages
         self.kwargs = kwargs
         self.buffer_maxsize = buffer_maxsize
+        # For Monte Carlo returns (no GAE), whether to treat time-limit truncations
+        # as terminals (recommended when not bootstrapping). Default True.
+        self.mc_treat_timeouts_as_terminals: bool = bool(kwargs.get("mc_treat_timeouts_as_terminals", True))
 
         # State tracking
         self.device = _device_of(policy_model)
@@ -651,10 +654,16 @@ class RolloutCollector():
             )
         else:
             # Monte Carlo returns for REINFORCE (no bootstrap added here)
+            # Optionally treat time-limit truncations as terminals when not bootstrapping
+            # to avoid return leakage across episode boundaries.
+            timeouts_for_mc = (
+                np.zeros_like(timeouts_slice, dtype=bool)
+                if self.mc_treat_timeouts_as_terminals else timeouts_slice
+            )
             returns_buf = compute_batched_mc_returns(
                 rewards=rewards_slice,
                 dones=dones_slice,
-                timeouts=timeouts_slice,
+                timeouts=timeouts_for_mc,
                 gamma=self.gamma,
             )
 
@@ -668,7 +677,7 @@ class RolloutCollector():
 
             # Build a valid-mask index map to exclude trailing partial episodes
             try:
-                real_terminal = _real_terminal_mask(dones_slice, timeouts_slice)
+                real_terminal = _real_terminal_mask(dones_slice, timeouts_for_mc)
                 T, n_envs = real_terminal.shape
                 valid_mask_2d = np.zeros((T, n_envs), dtype=bool)
                 for j in range(n_envs):

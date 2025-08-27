@@ -6,6 +6,7 @@ normalize_obs: "static"
 
 ppo:
   algo_id: ppo
+  n_timesteps: 5e6
   n_envs: 8               # Reduced for better sample efficiency
   n_steps: 512             # Reduced for more frequent updates
   batch_size: 512          # Larger batches for stable gradients
@@ -16,10 +17,10 @@ ppo:
 
 reinforce:
   algo_id: reinforce
+  n_timesteps: 1e7
   n_envs: 8
   n_steps: 1024
   batch_size: 128
   learning_rate: 1e-3
   hidden_dims: [128, 128]
   max_epochs: 2000
-

@@ -19,6 +19,7 @@ ppo:
 
 reinforce:
   algo_id: reinforce
+  n_timesteps: 2e6
   n_envs: 8
   n_steps: 1024
   batch_size: 128

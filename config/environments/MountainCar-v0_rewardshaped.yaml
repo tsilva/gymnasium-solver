@@ -26,6 +26,7 @@ ppo:
 
 reinforce:
   algo_id: reinforce
+  n_timesteps: 1e6
   normalize_obs: true
   n_envs: 8
   n_steps: 1024

@@ -19,6 +19,7 @@ eval_episodes: 3
 
 ppo:
   algo_id: ppo
+  n_timesteps: 3e6
   n_envs: 8
   n_steps: 256
   batch_size: 1024
@@ -28,4 +29,3 @@ ppo:
   frame_stack: 4
   eval_freq_epochs: 20
   eval_episodes: 5
-

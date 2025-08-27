@@ -518,6 +518,20 @@ class RolloutCollector():
         for i, (step_idx_term, env_idx, _) in enumerate(terminal_obs_info):
             self._buffer.bootstrapped_values_buf[start + step_idx_term, env_idx] = float(batch_values[i])
 
+    def _update_action_histogram(self, actions_flat: np.ndarray) -> None:
+        """Update cumulative discrete action counts from a flat int array."""
+        if actions_flat.size == 0:
+            return
+        amax = int(actions_flat.max())
+        if self._action_counts is None:
+            self._action_counts = np.zeros(amax + 1, dtype=np.int64)
+        elif amax >= self._action_counts.shape[0]:
+            new_counts = np.zeros(amax + 1, dtype=np.int64)
+            new_counts[: self._action_counts.shape[0]] = self._action_counts
+            self._action_counts = new_counts
+        binc = np.bincount(actions_flat, minlength=self._action_counts.shape[0])
+        self._action_counts[: len(binc)] += binc
+
     @torch.inference_mode()
     def collect(self, *args, **kwargs):
         with inference_ctx(self.policy_model):
@@ -619,8 +633,8 @@ class RolloutCollector():
             # Persist environment outputs for this step
             self._buffer.store_cpu_step(
                 start + step_idx,
-                self.obs.copy(),
-                next_obs.copy(),
+                self.obs,
+                next_obs,
                 actions_np,
                 rewards,
                 dones,
@@ -653,17 +667,7 @@ class RolloutCollector():
 
         # Actions: maintain a histogram of encountered actions
         actions_flat = self._buffer.actions_buf[start:end].ravel()
-        if actions_flat.size:
-            amax = int(actions_flat.max())
-            if self._action_counts is None:
-                self._action_counts = np.zeros(amax + 1, dtype=np.int64)
-            elif amax >= self._action_counts.shape[0]:
-                # grow counts array
-                new_counts = np.zeros(amax + 1, dtype=np.int64)
-                new_counts[: self._action_counts.shape[0]] = self._action_counts
-                self._action_counts = new_counts
-            binc = np.bincount(actions_flat, minlength=self._action_counts.shape[0])
-            self._action_counts[: len(binc)] += binc
+        self._update_action_histogram(actions_flat)
 
         # Single batch transfer of GPU tensors to CPU after rollout collection for this slice
         self._buffer.copy_tensors_to_cpu(start, end)

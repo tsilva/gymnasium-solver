@@ -1,10 +1,10 @@
 env_id: CartPole-v1
 eval_episodes: 10
 eval_freq_epochs: 100
-n_timesteps: 1e5
 
 ppo:
   algo_id: ppo
+  n_timesteps: 1e5
   n_envs: 8
   n_steps: 32
   batch_size: 256
@@ -17,6 +17,7 @@ ppo:
 
 reinforce:
   algo_id: reinforce
+  n_timesteps: 2e5
   n_envs: 8
   n_steps: 512
   batch_size: 64

@@ -213,9 +213,8 @@ class RolloutTrajectory(NamedTuple):
     actions: torch.Tensor
     rewards: torch.Tensor
     dones: torch.Tensor
-    old_log_prob: torch.Tensor
-    log_prob: torch.Tensor  # alias for old_log_prob (transitional)
-    old_values: torch.Tensor
+    log_prob: torch.Tensor
+    values: torch.Tensor
     advantages: torch.Tensor
     returns: torch.Tensor
     next_observations: torch.Tensor
@@ -412,26 +411,17 @@ class RolloutBuffer:
         advantages = torch.as_tensor(_flat_env_major(advantages_buf, start, end), dtype=torch.float32, device=self.device)
         returns = torch.as_tensor(_flat_env_major(returns_buf, start, end), dtype=torch.float32, device=self.device)
 
-        # Next observations
-        if self.next_obs_buf.ndim == 2:
-            # Ensure shape matches observations: (n_envs*T, 1)
-            next_states = torch.as_tensor(
-                self.next_obs_buf[start:end].transpose(1, 0).reshape(-1, 1),
-                dtype=torch.float32,
-                device=self.device,
-            )
-        else:
-            next_obs_tensor = torch.as_tensor(self.next_obs_buf[start:end], dtype=torch.float32, device=self.device)
-            next_states = next_obs_tensor.transpose(0, 1).reshape(n_envs * T, -1)
+        # Next observations: same env-major flattening as observations
+        next_obs_tensor = torch.as_tensor(self.next_obs_buf[start:end], dtype=torch.float32, device=self.device)
+        next_states = next_obs_tensor.transpose(0, 1).reshape(n_envs * T, -1)
 
         return RolloutTrajectory(
             observations=states,
             actions=actions,
             rewards=rewards,
             dones=dones,
-            old_log_prob=logps,
             log_prob=logps,
-            old_values=values,
+            values=values,
             advantages=advantages,
             returns=returns,
             next_observations=next_states,
@@ -778,9 +768,8 @@ class RolloutCollector():
             actions=trajectories.actions[idxs],
             rewards=trajectories.rewards[idxs],
             dones=trajectories.dones[idxs],
-            old_log_prob=trajectories.old_log_prob[idxs],
-            log_prob=(trajectories.log_prob[idxs] if hasattr(trajectories, 'log_prob') else trajectories.old_log_prob[idxs]),
-            old_values=trajectories.old_values[idxs],
+            log_prob=trajectories.log_prob[idxs],
+            values=trajectories.values[idxs],
             advantages=trajectories.advantages[idxs],
             returns=trajectories.returns[idxs],
             next_observations=trajectories.next_observations[idxs]

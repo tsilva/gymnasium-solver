@@ -67,7 +67,7 @@ def test_ppo_policy_clipping_math():
     batch = SimpleNamespace(
         observations=states,
         actions=actions,
-        old_log_prob=old_logps,
+        log_prob=old_logps,
         advantages=advantages,
         returns=returns,
     )

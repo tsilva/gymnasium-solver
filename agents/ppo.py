@@ -44,7 +44,7 @@ class PPO(BaseAgent):
         # use type for this? check sb3
         states = batch.observations
         actions = batch.actions
-        old_logprobs = batch.old_log_prob
+        old_logprobs = batch.log_prob
         advantages = batch.advantages
         returns = batch.returns
 

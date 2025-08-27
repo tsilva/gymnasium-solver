@@ -359,9 +359,12 @@ class RolloutBuffer:
             self.obs_buf[idx] = obs_np.reshape(self.n_envs, *self.obs_shape)
 
         # Actions, logprobs, values
-        self.actions_buf[idx] = actions_t.detach().cpu().numpy().astype(np.int64)
-        self.logprobs_buf[idx] = logps_t.detach().cpu().numpy().astype(np.float32)
-        self.values_buf[idx] = values_t.detach().cpu().numpy().astype(np.float32)
+        def _to_np(t: torch.Tensor, dtype: np.dtype) -> np.ndarray:
+            return t.detach().cpu().numpy().astype(dtype, copy=False)
+
+        self.actions_buf[idx] = _to_np(actions_t, np.int64)
+        self.logprobs_buf[idx] = _to_np(logps_t, np.float32)
+        self.values_buf[idx] = _to_np(values_t, np.float32)
 
     def store_cpu_step(
         self,
@@ -412,10 +415,10 @@ class RolloutBuffer:
         logps = _flat_env_major_cpu_to_torch(self.logprobs_buf, torch.float32)
         values = _flat_env_major_cpu_to_torch(self.values_buf, torch.float32)
 
-        rewards = torch.as_tensor(_flat_env_major(self.rewards_buf, start, end), dtype=torch.float32, device=self.device)
-        dones = torch.as_tensor(_flat_env_major(self.dones_buf, start, end), dtype=torch.bool, device=self.device)
-        advantages = torch.as_tensor(_flat_env_major(advantages_buf, start, end), dtype=torch.float32, device=self.device)
-        returns = torch.as_tensor(_flat_env_major(returns_buf, start, end), dtype=torch.float32, device=self.device)
+        rewards = _flat_env_major_cpu_to_torch(self.rewards_buf, torch.float32)
+        dones = _flat_env_major_cpu_to_torch(self.dones_buf, torch.bool)
+        advantages = _flat_env_major_cpu_to_torch(advantages_buf, torch.float32)
+        returns = _flat_env_major_cpu_to_torch(returns_buf, torch.float32)
 
         # Next observations: same env-major flattening as observations
         next_obs_tensor = torch.as_tensor(self.next_obs_buf[start:end], dtype=torch.float32, device=self.device)
@@ -580,31 +583,29 @@ class RolloutCollector():
 
     @torch.inference_mode()
     def collect(self, *args, **kwargs):
+        """Collect one rollout slice using the current policy.
+
+        Wraps the internal implementation with an inference context to disable
+        autograd and keep parity with Lightning’s device moves.
+        """
         with inference_ctx(self.policy_model):
             return self._collect(*args, **kwargs)
 
-    def _collect(self, deterministic=False):
-        """Collect a single rollout and return trajectories and stats."""
-        # Sync collector/buffer device with the policy model's current device.
-        # Lightning may move the module after this collector is constructed.
+    # -------- Internal phases (clarity; no per-step calls) --------
+    def _sync_device_and_prepare_buffers(self) -> None:
+        """Sync device with model, ensure initial obs and persistent buffer exist."""
         current_device = _device_of(self.policy_model)
         if current_device != self.device:
             self.device = current_device
             if self._buffer is not None:
                 self._buffer.device = self.device
 
-        # Initialize environment if needed
         if self.obs is None:
             self.obs = self.env.reset()
 
-        # Lazy-init persistent buffer once we know obs shape/dtype
         if self._buffer is None:
-            # For discrete observations, VecEnv returns (n_envs,)
-            # Treat them as 1-feature vectors
-            if self.obs.ndim == 1:
-                obs_shape = (1,)
-            else:
-                obs_shape = self.obs.shape[1:]
+            # For discrete observations, VecEnv returns (n_envs,), treat as 1-feature
+            obs_shape = (1,) if self.obs.ndim == 1 else self.obs.shape[1:]
             maxsize = self.buffer_maxsize if self.buffer_maxsize is not None else self.n_steps
             self._buffer = RolloutBuffer(
                 n_envs=self.n_envs,
@@ -614,6 +615,82 @@ class RolloutCollector():
                 maxsize=maxsize,
             )
 
+    def _update_running_stats_after_rollout(self, start: int, end: int) -> None:
+        """Update obs/reward/action stats and perform any deferred CPU copies."""
+        # Observations: aggregate scalar stats across all dims
+        obs_block = self._buffer.obs_buf[start:end]
+        self._obs_stats.update(obs_block.astype(np.float32).ravel())
+        # Rewards
+        self._rew_stats.update(self._buffer.rewards_buf[start:end].ravel())
+        # Actions histogram
+        self._update_action_histogram(self._buffer.actions_buf[start:end].ravel())
+        # Compatibility no-op (kept for historical reasons)
+        self._buffer.copy_tensors_to_cpu(start, end)
+
+    def _compute_targets(self, start: int, end: int, last_obs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Compute advantages and returns for the slice [start, end)."""
+        values_slice = self._buffer.values_buf[start:end]
+        rewards_slice = self._buffer.rewards_buf[start:end]
+        dones_slice = self._buffer.dones_buf[start:end]
+        timeouts_slice = self._buffer.timeouts_buf[start:end]
+
+        # Prepare last values for each environment for the final bootstrap
+        last_values_vec = self._predict_values_np(last_obs)
+
+        if self.use_gae:
+            bootstrapped_slice = self._buffer.bootstrapped_values_buf[start:end]
+            advantages_buf, returns_buf = compute_batched_gae_advantages_and_returns(
+                values=values_slice,
+                rewards=rewards_slice,
+                dones=dones_slice,
+                timeouts=timeouts_slice,
+                last_values=last_values_vec,
+                bootstrapped_next_values=bootstrapped_slice,
+                gamma=self.gamma,
+                gae_lambda=self.gae_lambda,
+            )
+        else:
+            # Monte Carlo returns for REINFORCE (no bootstrap added here)
+            returns_buf = compute_batched_mc_returns(
+                rewards=rewards_slice,
+                dones=dones_slice,
+                timeouts=timeouts_slice,
+                gamma=self.gamma,
+            )
+
+            # Global baseline and advantages using running mean
+            self._base_stats.update(returns_buf.ravel())
+            if self._base_stats.count > 0:
+                baseline = self._base_stats.mean()
+                advantages_buf = returns_buf - baseline
+            else:
+                advantages_buf = returns_buf.copy()
+
+            # Build a valid-mask index map to exclude trailing partial episodes
+            try:
+                real_terminal = _real_terminal_mask(dones_slice, timeouts_slice)
+                T, n_envs = real_terminal.shape
+                valid_mask_2d = np.zeros((T, n_envs), dtype=bool)
+                for j in range(n_envs):
+                    term_idxs = np.where(real_terminal[:, j])[0]
+                    if term_idxs.size > 0:
+                        last_term = int(term_idxs[-1])
+                        valid_mask_2d[: last_term + 1, j] = True
+                valid_mask_flat = valid_mask_2d.transpose(1, 0).reshape(-1)
+                self._last_rollout_index_map = _build_idx_map_from_valid_mask(valid_mask_flat)
+            except Exception:
+                self._last_rollout_index_map = None
+
+        if self.normalize_advantages:
+            advantages_buf = _normalize_advantages(advantages_buf, self.advantages_norm_eps)
+
+        return advantages_buf, returns_buf
+
+    def _collect(self, deterministic=False):
+        """Collect a single rollout and return trajectories and stats."""
+        # Sync device, ensure obs and buffers are ready
+        self._sync_device_and_prepare_buffers()
+
         # Acquire a contiguous slice in the persistent buffer for this rollout
         start = self._buffer.begin_rollout(self.n_steps)
         end = start + self.n_steps
@@ -621,14 +698,12 @@ class RolloutCollector():
         # Collect terminal observations for later batch processing
         terminal_obs_info = []  # List of (step_idx, env_idx, terminal_obs)
 
-        env_step_calls = 0
         self.rollout_steps = 0
         self.rollout_episodes = 0
 
         # Collect one rollout
         rollout_start = time.time()
-        step_idx = 0
-        while env_step_calls < self.n_steps:
+        for step_idx in range(self.n_steps):
             # Current observations as torch tensor (model device)
             obs_t = torch.as_tensor(self.obs, dtype=torch.float32, device=self.device)
 
@@ -673,102 +748,22 @@ class RolloutCollector():
 
             # Advance
             self.obs = next_obs
-            env_step_calls += 1
             self.rollout_steps += self.n_envs
             self.rollout_episodes += int(dones.sum())
-            step_idx += 1
 
         last_obs = next_obs
         self.total_steps += self.rollout_steps
         self.total_episodes += self.rollout_episodes
 
-        # Use buffers directly from persistent storage for this slice
-        T = step_idx
-
-        # Collect observation, reward and action statistics with low overhead
-        # Observations: aggregate scalar stats across all dims
-        obs_block = self._buffer.obs_buf[start:end]
-        obs_vals = obs_block.astype(np.float32).ravel()
-        self._obs_stats.update(obs_vals)
-
-        # Rewards
-        rewards_flat = self._buffer.rewards_buf[start:end].ravel()
-        self._rew_stats.update(rewards_flat)
-
-        # Actions: maintain a histogram of encountered actions
-        actions_flat = self._buffer.actions_buf[start:end].ravel()
-        self._update_action_histogram(actions_flat)
-
-        # Single batch transfer of GPU tensors to CPU after rollout collection for this slice
-        self._buffer.copy_tensors_to_cpu(start, end)
+        # Update stats based on the collected slice
+        self._update_running_stats_after_rollout(start, end)
 
         # Batch process all terminal observations at once (major performance improvement)
         if terminal_obs_info:
             self._bootstrap_timeouts_batch(start, terminal_obs_info)
 
-        # Build next_values by shifting critic values and estimating the last
-        values_slice = self._buffer.values_buf[start:end]
-        rewards_slice = self._buffer.rewards_buf[start:end]
-        dones_slice = self._buffer.dones_buf[start:end]
-        timeouts_slice = self._buffer.timeouts_buf[start:end]
-
-        # Prepare last values for each environment for the final bootstrap
-        last_values_vec = self._predict_values_np(last_obs)
-
-        if self.use_gae:
-            bootstrapped_slice = self._buffer.bootstrapped_values_buf[start:end]
-            advantages_buf, returns_buf = compute_batched_gae_advantages_and_returns(
-                values=values_slice,
-                rewards=rewards_slice,
-                dones=dones_slice,
-                timeouts=timeouts_slice,
-                last_values=last_values_vec,
-                bootstrapped_next_values=bootstrapped_slice,
-                gamma=self.gamma,
-                gae_lambda=self.gae_lambda,
-            )
-        else:
-            # Monte Carlo returns for REINFORCE (no bootstrap added here)
-            returns_buf = compute_batched_mc_returns(
-                rewards=rewards_slice,
-                dones=dones_slice,
-                timeouts=timeouts_slice,
-                gamma=self.gamma,
-            )
-
-            # Always calculate baseline and advantages using global running mean
-            returns_flat = returns_buf.ravel()
-            self._base_stats.update(returns_flat)
-
-            if self._base_stats.count > 0:
-                baseline = self._base_stats.mean()
-                advantages_buf = returns_buf - baseline
-            else:
-                advantages_buf = returns_buf.copy()
-
-            # For pure Monte Carlo methods, train only on complete episode segments within
-            # the collected slice. Drop the trailing partial episode for each env where the
-            # episode has not terminated inside this rollout window. This ensures that the
-            # return at each included step sums rewards up to a real terminal.
-            try:
-                real_terminal = _real_terminal_mask(dones_slice, timeouts_slice)
-                T, n_envs = real_terminal.shape
-                valid_mask_2d = np.zeros((T, n_envs), dtype=bool)
-                for j in range(n_envs):
-                    term_idxs = np.where(real_terminal[:, j])[0]
-                    if term_idxs.size > 0:
-                        last_term = int(term_idxs[-1])
-                        # Keep all steps up to and including the last terminal
-                        valid_mask_2d[: last_term + 1, j] = True
-                # Flatten mask in env-major order to align with flatten_slice_env_major
-                valid_mask_flat = valid_mask_2d.transpose(1, 0).reshape(-1)
-                self._last_rollout_index_map = _build_idx_map_from_valid_mask(valid_mask_flat)
-            except Exception:
-                # If anything goes wrong, fall back to using all steps (no remap)
-                self._last_rollout_index_map = None
-
-        if self.normalize_advantages:
-            advantages_buf = _normalize_advantages(advantages_buf, self.advantages_norm_eps)
+        # Compute advantages and returns for this slice
+        advantages_buf, returns_buf = self._compute_targets(start, end, last_obs)
 
         # Create final training tensors from persistent buffers
         trajectories = self._buffer.flatten_slice_env_major(start, end, advantages_buf, returns_buf)
@@ -784,13 +779,18 @@ class RolloutCollector():
         return trajectories
 
     def slice_trajectories(self, trajectories, idxs):
+        """Return a view of the rollout trajectory at the given indices.
+
+        When using Monte Carlo returns (no GAE), incomplete trailing segments
+        are masked out by remapping indices to the nearest previous valid
+        position so batch shapes stay stable across samplings.
+        """
         # If an index map is available for MC masking, remap indices to valid
         # positions to keep batch sizes and sampler assumptions intact.
         try:
             if self._last_rollout_index_map is not None and not self.use_gae:
                 # idxs may be a list or tensor; convert to numpy indices
-                import numpy as _np
-                idxs_np = _np.asarray(idxs, dtype=_np.int64)
+                idxs_np = np.asarray(idxs, dtype=np.int64)
                 # Safe remap into valid positions
                 idxs_np = self._last_rollout_index_map[idxs_np]
                 idxs = idxs_np

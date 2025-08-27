@@ -52,6 +52,15 @@ def _build_idx_map_from_valid_mask(valid_mask_flat: np.ndarray) -> Optional[np.n
     return filled
 
 
+def _flat_env_major(arr: np.ndarray, start: int, end: int) -> np.ndarray:
+    """Flatten a (T, N, ...) slice [start:end) into env-major order 1D array.
+
+    Returns an array shaped (N*T,) for 2D inputs. Higher dims are flattened
+    by the caller as needed after converting to torch.
+    """
+    return arr[start:end].transpose(1, 0).reshape(-1)
+
+
 # -----------------------------
 # Shared return/advantage utils
 # -----------------------------
@@ -205,6 +214,7 @@ class RolloutTrajectory(NamedTuple):
     rewards: torch.Tensor
     dones: torch.Tensor
     old_log_prob: torch.Tensor
+    log_prob: torch.Tensor  # alias for old_log_prob (transitional)
     old_values: torch.Tensor
     advantages: torch.Tensor
     returns: torch.Tensor
@@ -245,6 +255,39 @@ class RollingWindow:
 
     def __bool__(self) -> bool:
         return len(self._dq) > 0
+
+
+class RunningStats:
+    """Constant-time mean/std aggregates for streaming updates (scalar over values).
+
+    Tracks count, sum, and sum of squares. Avoids per-sample Python overhead by
+    accepting array inputs and updating in vectorized form.
+    """
+
+    def __init__(self) -> None:
+        self.count = 0
+        self.sum = 0.0
+        self.sumsq = 0.0
+
+    def update(self, values: np.ndarray) -> None:
+        v = np.asarray(values, dtype=np.float32).ravel()
+        if v.size == 0:
+            return
+        self.count += int(v.size)
+        self.sum += float(v.sum())
+        self.sumsq += float((v * v).sum())
+
+    def mean(self) -> float:
+        if self.count == 0:
+            return 0.0
+        return self.sum / self.count
+
+    def std(self) -> float:
+        if self.count == 0:
+            return 0.0
+        m = self.mean()
+        var = max(0.0, self.sumsq / self.count - m * m)
+        return float(np.sqrt(var))
 
 class RolloutBuffer:
     """
@@ -358,18 +401,16 @@ class RolloutBuffer:
         states = obs_t.transpose(0, 1).reshape(n_envs * T, -1)
 
         def _flat_env_major_cpu_to_torch(arr: np.ndarray, dtype: torch.dtype) -> torch.Tensor:
-            return torch.as_tensor(arr[start:end].transpose(1, 0).reshape(-1), dtype=dtype, device=self.device)
+            return torch.as_tensor(_flat_env_major(arr, start, end), dtype=dtype, device=self.device)
 
         actions = _flat_env_major_cpu_to_torch(self.actions_buf, torch.int64)
         logps = _flat_env_major_cpu_to_torch(self.logprobs_buf, torch.float32)
         values = _flat_env_major_cpu_to_torch(self.values_buf, torch.float32)
 
-        def _flat_env_major_cpu_only(arr: np.ndarray) -> np.ndarray:
-            return arr[start:end].transpose(1, 0).reshape(-1)
-        rewards = torch.as_tensor(_flat_env_major_cpu_only(self.rewards_buf), dtype=torch.float32, device=self.device)
-        dones = torch.as_tensor(_flat_env_major_cpu_only(self.dones_buf), dtype=torch.bool, device=self.device)
-        advantages = torch.as_tensor(_flat_env_major_cpu_only(advantages_buf), dtype=torch.float32, device=self.device)
-        returns = torch.as_tensor(_flat_env_major_cpu_only(returns_buf), dtype=torch.float32, device=self.device)
+        rewards = torch.as_tensor(_flat_env_major(self.rewards_buf, start, end), dtype=torch.float32, device=self.device)
+        dones = torch.as_tensor(_flat_env_major(self.dones_buf, start, end), dtype=torch.bool, device=self.device)
+        advantages = torch.as_tensor(_flat_env_major(advantages_buf, start, end), dtype=torch.float32, device=self.device)
+        returns = torch.as_tensor(_flat_env_major(returns_buf, start, end), dtype=torch.float32, device=self.device)
 
         # Next observations
         if self.next_obs_buf.ndim == 2:
@@ -389,6 +430,7 @@ class RolloutBuffer:
             rewards=rewards,
             dones=dones,
             old_log_prob=logps,
+            log_prob=logps,
             old_values=values,
             advantages=advantages,
             returns=returns,
@@ -440,21 +482,14 @@ class RolloutCollector():
 
         # Lightweight running statistics (avoid per-sample Python overhead)
         # Obs/reward running stats over all seen samples (scalar over all dims)
-        self._obs_count = 0
-        self._obs_sum = 0.0
-        self._obs_sumsq = 0.0
-
-        self._rew_count = 0
-        self._rew_sum = 0.0
-        self._rew_sumsq = 0.0
+        self._obs_stats = RunningStats()
+        self._rew_stats = RunningStats()
 
         # Action histogram (discrete); grows dynamically as needed
         self._action_counts = None
 
         # Baseline stats for REINFORCE (global running mean/std over returns)
-        self._base_count = 0
-        self._base_sum = 0.0
-        self._base_sumsq = 0.0
+        self._base_stats = RunningStats()
 
         self.total_rollouts = 0
         self.total_steps = 0
@@ -620,15 +655,11 @@ class RolloutCollector():
         # Observations: aggregate scalar stats across all dims
         obs_block = self._buffer.obs_buf[start:end]
         obs_vals = obs_block.astype(np.float32).ravel()
-        self._obs_count += obs_vals.size
-        self._obs_sum += float(obs_vals.sum())
-        self._obs_sumsq += float((obs_vals * obs_vals).sum())
+        self._obs_stats.update(obs_vals)
 
         # Rewards
         rewards_flat = self._buffer.rewards_buf[start:end].ravel()
-        self._rew_count += rewards_flat.size
-        self._rew_sum += float(rewards_flat.sum())
-        self._rew_sumsq += float((rewards_flat * rewards_flat).sum())
+        self._rew_stats.update(rewards_flat)
 
         # Actions: maintain a histogram of encountered actions
         actions_flat = self._buffer.actions_buf[start:end].ravel()
@@ -683,12 +714,10 @@ class RolloutCollector():
 
             # Always calculate baseline and advantages using global running mean
             returns_flat = returns_buf.ravel()
-            self._base_count += returns_flat.size
-            self._base_sum += float(returns_flat.sum())
-            self._base_sumsq += float((returns_flat * returns_flat).sum())
+            self._base_stats.update(returns_flat)
 
-            if self._base_count > 0:
-                baseline = self._base_sum / self._base_count
+            if self._base_stats.count > 0:
+                baseline = self._base_stats.mean()
                 advantages_buf = returns_buf - baseline
             else:
                 advantages_buf = returns_buf.copy()
@@ -749,7 +778,8 @@ class RolloutCollector():
             actions=trajectories.actions[idxs],
             rewards=trajectories.rewards[idxs],
             dones=trajectories.dones[idxs],
-            old_log_prob=trajectories.old_log_prob[idxs],  # TODO: change names
+            old_log_prob=trajectories.old_log_prob[idxs],
+            log_prob=(trajectories.log_prob[idxs] if hasattr(trajectories, 'log_prob') else trajectories.old_log_prob[idxs]),
             old_values=trajectories.old_values[idxs],
             advantages=trajectories.advantages[idxs],
             returns=trajectories.returns[idxs],
@@ -762,22 +792,12 @@ class RolloutCollector():
         rollout_fps = float(self.rollout_fpss.mean()) if self.rollout_fpss else 0.0
 
         # Observation statistics from running aggregates
-        if self._obs_count > 0:
-            obs_mean = self._obs_sum / self._obs_count
-            obs_var = max(0.0, self._obs_sumsq / self._obs_count - obs_mean * obs_mean)
-            obs_std = float(np.sqrt(obs_var))
-        else:
-            obs_mean = 0.0
-            obs_std = 0.0
+        obs_mean = self._obs_stats.mean()
+        obs_std = self._obs_stats.std()
 
         # Reward statistics
-        if self._rew_count > 0:
-            reward_mean = self._rew_sum / self._rew_count
-            reward_var = max(0.0, self._rew_sumsq / self._rew_count - reward_mean * reward_mean)
-            reward_std = float(np.sqrt(reward_var))
-        else:
-            reward_mean = 0.0
-            reward_std = 0.0
+        reward_mean = self._rew_stats.mean()
+        reward_std = self._rew_stats.std()
 
         # Action statistics: derive mean/std from histogram if available
         if self._action_counts is not None and self._action_counts.sum() > 0:
@@ -792,12 +812,8 @@ class RolloutCollector():
             action_mean, action_std, action_dist = 0.0, 0.0, None
 
         # Baseline statistics from global aggregates
-        if self._base_count > 0:
-            baseline_mean = self._base_sum / self._base_count
-            base_var = max(0.0, self._base_sumsq / self._base_count - baseline_mean * baseline_mean)
-            baseline_std = float(np.sqrt(base_var))
-        else:
-            baseline_mean, baseline_std = 0.0, 0.0
+        baseline_mean = self._base_stats.mean()
+        baseline_std = self._base_stats.std()
 
         return {
             "total_timesteps": self.total_steps,  # TODO: steps vs timesteps

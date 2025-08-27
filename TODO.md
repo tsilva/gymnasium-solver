@@ -1,5 +1,8 @@
+- REFACTOR: move hidden_dims inside policy_kwargs
+- FEAT: ensure we can see baseline advantages in inspect.py
+- BUG: PPO can solve FrozenLake-v1, but REINFORCE cannot. REINFORCE is likely not implemented correctly.
+- EXP: Tune CartPole-v1:PPO to train as fast as REINFORCE
 - Add config defaults based on algo
-- REFACTOR: move hidden_dims inside kwargs
 - FEAT: add normalization support 
 - FEAT: add discrete env support
 - TODO: Figure out why CartPole-v1/PPO works better with Tahn activation than ReLU
@@ -9,7 +12,6 @@
 - Add support for resuming training runs, this requires loading hyperparameters and schedulers to be timestep based; must also start from last timestep
 - Change config files so that they only say their mention algo_id in experiment name
 - TODO: compare atari breakout fps vs rlzoosb3
-- BUG: last inspect frame for atari is first frame of next episode
 - WISHLIST: impelemnt SEEDRL with PPO to massively scale training
 - can I create an exploration model by just making loss higher the more the model can predict the future?
 - TODO: add config file beautifier that ensure attributes are set in the correct order
@@ -21,9 +23,6 @@
 - FEAT: Add support for specifyingpo extra reward metrics for each environment, then make the reward shaper assign value for each of those rewards
 - FEAT: add support for creating publishable video for youtube
 - Generalized scheduling for metrics, make those be logged
-- REFACTOR: rollout buffer can be much more efficient (review how sb3 does it) -- our fps is still 1000 below sb3
-- BUG: CartPole-v1 PPO is not training as fast; 115f9c73faed6785a0bd58c37f55298324e90f43 was ok
-- BUG: PPO can solve FrozenLake-v1, but REINFORCE cannot. REINFORCE is likely not implemented correctly.
 - FEAT: train on cloud server (eg: lightning cloud)?
 - Create benchmarking script to find optimal parallelization for env/machine combo
 - TEST: predict next state to learn faster

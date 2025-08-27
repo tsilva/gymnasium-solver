@@ -50,8 +50,10 @@ class REINFORCE(BaseAgent):
         if normalize_returns == "batch": 
             batch_normalized_returns = (returns - returns.mean()) / (returns.std() + 1e-8)
             policy_targets = batch_normalized_returns
-        elif normalize_returns == "baseline": # TODO: remove use_baseline
-            advantages = (returns - baseline).detach() # TODO: why detach?
+        elif normalize_returns == "baseline":
+            metrics = self.train_collector.get_metrics()
+            baseline_mean = metrics["baseline_mean"]
+            advantages = returns - baseline_mean
             policy_targets = advantages
 
         # Get the log probabilities for each 

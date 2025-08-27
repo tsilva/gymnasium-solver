@@ -8,12 +8,6 @@ eval_episodes: 10
 eval_freq_epochs: 10
 eval_recording_freq_epochs: 10
 
-qlearning:
-  algo_id: qlearning
-  n_steps: 512
-  batch_size: 64
-  learning_rate: 0.01
-
 ppo:
   algo_id: ppo
   n_steps: 128                 # 16*128 = 2048 samples/update
@@ -22,9 +16,6 @@ ppo:
   n_epochs: 10
   learning_rate: 0.0003
   hidden_dims: [64]            # Simple network for 16-state discrete environment
-
-  # Eval
-  eval_episodes: 10
 
 reinforce:
   algo_id: reinforce

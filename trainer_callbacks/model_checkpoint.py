@@ -444,13 +444,7 @@ class ModelCheckpointCallback(BaseCallback):
     
     def on_fit_end(self, trainer, pl_module):
         """Handle training completion summary and ensure symlinks are consistent."""
-        # Print completion summary
-        if self.best_checkpoint_path:
-            print(f"Best model saved at {self.best_checkpoint_path} with eval reward {pl_module.best_eval_reward:.2f}")
-        elif self.last_checkpoint_path:
-            print(f"Last model saved at {self.last_checkpoint_path}")
-        else:
-            print("No checkpoints were saved during training")
+        # Avoid redundant end-of-training prints; report is handled elsewhere
 
         # Ensure best/last symlinks are pointing to the latest epoch artifacts
         try:

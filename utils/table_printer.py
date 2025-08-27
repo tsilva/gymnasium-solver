@@ -158,7 +158,7 @@ class NamespaceTablePrinter:
                 val_str = self._format_value(v, full_key)
                 # Emphasize key episode reward metrics for readability
                 try:
-                    if sub in {"ep_rew_mean", "ep_rew_last"}:
+                    if sub in {"ep_rew_mean", "ep_rew_last", "ep_rew_best"}:
                         val_str = _ansi("bold", val_str, self.color)
                 except Exception:
                     pass
@@ -196,7 +196,7 @@ class NamespaceTablePrinter:
                 key_cell = f"{sub:<{key_width}}"
                 highlight = False
                 try:
-                    if sub in {"ep_rew_mean", "ep_rew_last"}:
+                    if sub in {"ep_rew_mean", "ep_rew_last", "ep_rew_best"}:
                         key_cell = _ansi("bold", key_cell, self.color)
                         highlight = True
                 except Exception:

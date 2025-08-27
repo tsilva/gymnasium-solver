@@ -9,9 +9,10 @@ _global:
   # Preferred display order for key metrics in the stdout table
   # Keys not listed here will follow alphabetically within their section
   key_priority:
+    - "train/ep_rew_best"
     - "train/ep_rew_mean"
-    - "train/ep_len_mean"
     - "train/ep_rew_last"
+    - "train/ep_len_mean"
     - "train/ep_len_last"
     - "train/epoch"
     - "train/total_timesteps"
@@ -26,6 +27,7 @@ _global:
     - "train/policy_loss"
     - "train/value_loss"
     - "train/entropy_loss"
+    - "eval/ep_rew_best"
     - "eval/ep_rew_mean"
     - "eval/ep_len_mean"
     - "eval/ep_rew_last"

@@ -73,6 +73,7 @@ class PrintMetricsCallback(BaseCallback):
             # Fallback to previous hardcoded defaults if config not present
             self.key_priority = cfg_key_priority or [
                 "train/ep_rew_mean",
+                "train/ep_rew_best",
                 "train/ep_len_mean",
                 "train/epoch",
                 "train/total_timesteps",
@@ -87,6 +88,7 @@ class PrintMetricsCallback(BaseCallback):
                 "train/value_loss",
                 "train/entropy_loss",
                 "eval/ep_rew_mean",
+                "eval/ep_rew_best",
                 "eval/ep_len_mean",
                 "eval/epoch",
                 "eval/total_timesteps",
@@ -160,9 +162,8 @@ class PrintMetricsCallback(BaseCallback):
         step = getattr(trainer, "global_step", None)
         epoch = getattr(trainer, "current_epoch", None)
         header = f"[{stage}] epoch={epoch} step={step}"
-        self._print_table(metrics, header)
 
-        # After printing the table, append the W&B run URL for epoch-end prints
+        # Print the W&B run URL above the table (epoch-end prints only)
         try:
             if isinstance(stage, str) and stage.endswith("epoch"):
                 url = self._get_wandb_run_url(trainer)
@@ -171,6 +172,8 @@ class PrintMetricsCallback(BaseCallback):
         except Exception:
             # Never break training output due to URL printing issues
             pass
+
+        self._print_table(metrics, header)
 
         # Update previous metrics for next comparison
         self.previous_metrics.update(metrics)
@@ -336,42 +339,52 @@ class PrintMetricsCallback(BaseCallback):
         self._printer.update(metrics)
 
     def _get_wandb_run_url(self, trainer: TrainerType) -> Optional[str]:
-        """Return the W&B run URL if available from the trainer's logger."""
+        """Return the W&B run URL from the trainer's logger.
+
+        Falls back to constructing the URL from run attributes if needed.
+        """
+        def _from_exp(exp) -> Optional[str]:
+            if exp is None:
+                return None
+            # Preferred: SDK-provided URL
+            url = getattr(exp, "url", None)
+            if url:
+                return str(url)
+            # Fallback: build from known attributes
+            try:
+                run_id = getattr(exp, "id", None) or getattr(exp, "name", None)
+                entity = getattr(exp, "entity", None)
+                project = getattr(exp, "project", None)
+                if run_id and entity and project:
+                    return f"https://wandb.ai/{entity}/{project}/runs/{run_id}"
+            except Exception:
+                pass
+            return None
+
         try:
             logger = getattr(trainer, "logger", None)
             if logger is None:
                 return None
 
             # Single logger case (WandbLogger)
-            exp = getattr(logger, "experiment", None)
-            if exp is not None:
-                url = getattr(exp, "url", None)
-                return str(url) if url else None
+            url = _from_exp(getattr(logger, "experiment", None))
+            if url:
+                return url
 
             # Logger collection case
             loggers = getattr(logger, "loggers", None)
             if isinstance(loggers, (list, tuple)):
                 for lg in loggers:
-                    exp = getattr(lg, "experiment", None)
-                    if exp is not None:
-                        url = getattr(exp, "url", None)
-                        if url:
-                            return str(url)
+                    url = _from_exp(getattr(lg, "experiment", None))
+                    if url:
+                        return url
         except Exception:
             return None
         return None
 
     def _format_wandb_url_line(self, url: str) -> str:
-        """Format a terminal-friendly hyperlinked line for the W&B run URL.
-
-        Uses OSC 8 hyperlinks when supported; also includes the raw URL.
-        """
-        try:
-            esc = "\x1b"
-            link = f"{esc}]8;;{url}{esc}\\Open W&B run{esc}]8;;{esc}\\"
-            return f"W&B: {link}  ({url})"
-        except Exception:
-            return f"W&B: {url}"
+        """Return just the plain W&B run URL (no prefixes/parentheses)."""
+        return url
 
     def _metrics_changed(self, metrics: Dict[str, Any]) -> bool:
         """Return True if any metric changed beyond tolerance or new keys appeared."""

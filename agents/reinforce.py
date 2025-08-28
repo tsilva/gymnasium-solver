@@ -9,7 +9,8 @@ def assert_detached(*tensors: torch.Tensor):
         assert not t.requires_grad, "Tensor still requires grad"
         assert t.grad_fn is None, "Tensor is still connected to a computation graph"
     return True
-    
+
+# TODO: add reward to go vs other
 class REINFORCE(BaseAgent):
     
     def create_models(self):

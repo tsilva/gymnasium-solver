@@ -17,10 +17,10 @@ ppo:
 
 reinforce:
   algo_id: reinforce
-  n_timesteps: 2e5
+  #n_timesteps: 2e5
   n_envs: 8
-  n_steps: 512
-  batch_size: 64
+  n_steps: 1024
+  batch_size: 2048
   learning_rate: 5e-4
   #normalize_returns: "baseline"  # TODO: this seems to be optimal, others yield much worse results... why?
   eval_freq_epochs: 10

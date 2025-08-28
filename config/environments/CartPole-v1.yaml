@@ -15,12 +15,44 @@ ppo:
   clip_range: lin_0.2
   eval_freq_epochs: 100
 
+# NOTE: 1638400
+#reinforce:
+#  algo_id: reinforce
+#  n_timesteps: 2e6
+#  n_envs: 8
+#  n_steps: 1024
+#  batch_size: 2048
+#  learning_rate: 5e-4
+#  eval_freq_epochs: 50
+
+# NOTE: 1228800
+#reinforce:
+#  algo_id: reinforce
+#  n_timesteps: 2e6
+#  n_envs: 8
+#  n_steps: 1024
+#  batch_size: 2048
+#  learning_rate: 5e-3
+#  eval_freq_epochs: 25
+
+
+# NOTE: 245760
+#reinforce:
+#  algo_id: reinforce
+#  n_timesteps: 5e5
+#  n_envs: 8
+#  n_steps: 1024
+#  batch_size: 2048
+#  learning_rate: 5e-3
+#  eval_freq_epochs: 10
+
+
 reinforce:
   algo_id: reinforce
-  #n_timesteps: 2e5
+  n_timesteps: 5e5
   n_envs: 8
   n_steps: 1024
   batch_size: 2048
-  learning_rate: 5e-4
-  #normalize_returns: "baseline"  # TODO: this seems to be optimal, others yield much worse results... why?
-  eval_freq_epochs: 10
+  learning_rate: 5e-3
+  eval_warmup_epochs: 20
+  eval_freq_epochs: 10 # TODO: ENSURE THIS RUNS AT EPOCH 20

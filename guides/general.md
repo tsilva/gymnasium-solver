@@ -18,6 +18,7 @@
 ⸻
 
 📌 Rules of thumb
+- To ensure reproducibility, perform two runs in a row and ensure all wandb graphs are identical.
 - ✅ Max out n_envs as far as CPU allows — cheap way to scale diversity and speed.
 - ✅ Set n_steps long enough to capture temporal structure, but short enough to avoid stalling updates.
 - ✅ For REINFORCE, aim for larger effective rollout sizes (n_envs × n_steps) to tame high-variance returns.

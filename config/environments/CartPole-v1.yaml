@@ -1,7 +1,8 @@
+
 env_id: CartPole-v1
 eval_episodes: 10
 gamma: 0.98
-ent_coef: 0.0
+ent_coef: 0.01
 
 ppo:
   algo_id: ppo
@@ -49,10 +50,12 @@ ppo:
 
 reinforce:
   algo_id: reinforce
-  n_timesteps: 5e5
-  n_envs: 8
+  #n_timesteps: 5e5
+  n_envs: 16
   n_steps: 1024
-  batch_size: 2048
-  learning_rate: 5e-3
-  eval_warmup_epochs: 20
-  eval_freq_epochs: 10 # TODO: ENSURE THIS RUNS AT EPOCH 20
+  batch_size: 4096
+  learning_rate: 3e-4
+  normalize_returns: "baseline"
+  normalize_advantages: true
+  #eval_warmup_epochs: 60 # TODO: not converging... why?
+  #eval_freq_epochs: 10 # TODO: ENSURE THIS RUNS AT EPOCH 20\

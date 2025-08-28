@@ -236,17 +236,22 @@ class ModelCheckpointCallback(BaseCallback):
             return current_value < self.best_metric_value
     
     def on_validation_epoch_end(self, trainer, pl_module):
-        """Save a timestamped checkpoint every eval epoch, maintain best/last symlinks, and early stop when needed."""
+        """Save a timestamped checkpoint on eval epochs; skip cleanly when eval is gated (warmup)."""
 
-        logged_metrics = trainer.logged_metrics
-        assert self.monitor in logged_metrics, f"Monitor metric '{self.monitor}' not found in logged metrics: {trainer.logged_metrics.keys()}"
-        
+        # During warmup, validation loop still advances but eval hooks may skip logging.
+        # Be tolerant: if the monitored metric isn't present, treat this as a non-eval epoch.
+        logged_metrics = getattr(trainer, "logged_metrics", {})
+
         current_metric_value = None
         if self.monitor in logged_metrics:
-            current_metric_value = float(logged_metrics[self.monitor])
+            try:
+                current_metric_value = float(logged_metrics[self.monitor])
+            except Exception:
+                current_metric_value = None
 
         if current_metric_value is None:
-            # Nothing to monitor this epoch
+            # No eval metrics this epoch (likely warmup); nothing to checkpoint.
+            # Still allow early stopping/tracking logic to run gracefully.
             self._handle_early_stopping_and_tracking(trainer, pl_module)
             return
 

@@ -41,6 +41,7 @@ High-signal reference for maintainers and agents. Read this before making change
   - Linear schedule for `clip_range` if `clip_range_schedule == 'linear'`.
 - `agents/reinforce.REINFORCE`:
   - Policy-only via `create_policy`; can use returns or advantages as baseline; disables GAE in collector.
+  - Logs policy diagnostics including `entropy`, and PPO-style KL indicators `kl_div` and `approx_kl` computed from rollout (old) vs current log-probs for the taken actions.
 - `agents/qlearning.QLearning`:
   - Tabular Q-table on discrete obs/action spaces; custom `QLearningPolicyModel` with epsilon decay; no optimizer.
 

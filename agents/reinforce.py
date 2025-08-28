@@ -38,6 +38,7 @@ class REINFORCE(BaseAgent):
         # Retrieve tensors from batch
         states = batch.observations
         actions = batch.actions
+        old_logprobs = batch.log_prob
         returns = batch.returns
         advantages = batch.advantages
 
@@ -80,6 +81,13 @@ class REINFORCE(BaseAgent):
         # of new actions, preventing further learning
         entropy = dist.entropy().mean()
         entropy_loss = -entropy
+
+        # KL diagnostics between rollout policy (old) and current policy (new)
+        # Matches PPO-style on-action KL estimates
+        with torch.no_grad():
+            ratio = torch.exp(log_probs - old_logprobs)
+            kl_div = (old_logprobs - log_probs).mean()
+            approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
         
         # The final loss is the sum of the policy loss and the entropy loss;
         # the higher the entropy coefficient the more priority we give to exploration
@@ -91,7 +99,8 @@ class REINFORCE(BaseAgent):
             'loss' : loss.detach(),
             'policy_loss': policy_loss.detach(),
             'entropy_loss': entropy_loss.detach(),
-            'entropy': entropy.detach()
+            'entropy': entropy.detach(),
+            'kl_div': kl_div.detach(),
+            'approx_kl': approx_kl.detach(),
         }, prefix="train")
         return loss
-

@@ -186,6 +186,53 @@ def get_key_priority(metrics_config: Optional[Dict[str, Any]] = None) -> Optiona
     return None
 
 
+def get_highlight_config(metrics_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Return highlight configuration for metrics table from metrics.yaml.
+
+    Structure in YAML under _global:
+      highlight:
+        row_metrics: [ep_rew_mean, ep_rew_last, ep_rew_best, total_timesteps]
+        value_bold_metrics: [ep_rew_mean, ep_rew_last, ep_rew_best, epoch]
+        row_bg_color: bg_blue
+        row_bold: true
+
+    Returns a dict with keys:
+      - row_metrics: set of bare metric names to highlight entire rows for
+      - value_bold_metrics: set of bare metric names to render values in bold
+      - row_bg_color: background color name (e.g., 'bg_blue')
+      - row_bold: bool indicating whether to render key cell in bold for highlighted rows
+    """
+    if metrics_config is None:
+        try:
+            metrics_config = load_metrics_config()
+        except Exception:
+            metrics_config = {}
+
+    global_cfg = metrics_config.get('_global', {}) if isinstance(metrics_config, dict) else {}
+    hl = global_cfg.get('highlight', {}) if isinstance(global_cfg, dict) else {}
+
+    # Defaults preserve previous behavior (episode rewards highlighted; total_timesteps row highlight)
+    default_row_metrics = {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "total_timesteps"}
+    default_value_bold_metrics = {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "epoch"}
+
+    def _as_set(x, default):
+        if isinstance(x, list):
+            return {str(v) for v in x}
+        return set(default)
+
+    row_metrics = _as_set(hl.get('row_metrics'), default_row_metrics)
+    value_bold_metrics = _as_set(hl.get('value_bold_metrics'), default_value_bold_metrics)
+    row_bg_color = str(hl.get('row_bg_color', 'bg_blue'))
+    row_bold = bool(hl.get('row_bold', True))
+
+    return {
+        'row_metrics': row_metrics,
+        'value_bold_metrics': value_bold_metrics,
+        'row_bg_color': row_bg_color,
+        'row_bold': row_bold,
+    }
+
+
 def get_metric_bounds(metrics_config: Optional[Dict[str, Any]] = None) -> Dict[str, Dict[str, float]]:
     """Return min/max bounds per metric if defined in metrics.yaml.
 

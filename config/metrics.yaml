@@ -40,6 +40,22 @@ _global:
     - "eval/rollout_episodes"
     - "eval/epoch_fps"
     - "eval/rollout_fps"
+  # Console highlight configuration
+  highlight:
+    # Rows to highlight across namespaces (blue background + bold key)
+    row_metrics:
+      - ep_rew_mean
+      - ep_rew_last
+      - ep_rew_best
+      - total_timesteps
+    # Metrics whose values are emphasized in bold (no row background required)
+    value_bold_metrics:
+      - ep_rew_mean
+      - ep_rew_last
+      - ep_rew_best
+      - epoch
+    row_bg_color: bg_blue
+    row_bold: true
 
 clip_range:
   precision: 4

@@ -1,6 +1,10 @@
+- FEAT: add sweeping support
+- FEAT: add fractional batch size support
+- TODO: x metric cant be total timesteps because that increases with parallelization.... must be n_updates? index by epoch? or add updates metric?
+- TODO: optimal single metric for best training
+- TODO: add kl divergence metric to reinforce
 - TODO: keep working on guide
 - TODO: create guide on how to monitor reinfroce training and adapt
-- TODO: add kl divergence metric to reinforce
 - REFACTOR: move hidden_dims inside policy_kwargs
 - FEAT: ensure we can see baseline advantages in inspect.py
 - BUG: PPO can solve FrozenLake-v1, but REINFORCE cannot. REINFORCE is likely not implemented correctly.

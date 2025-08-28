@@ -109,6 +109,11 @@ class NamespaceTablePrinter:
         metric_precision: Optional[Dict[str, int]] = None,
         min_val_width: int = 15,
         key_priority: Optional[List[str]] = None,
+        # Highlight configuration
+        highlight_value_bold_for: Optional[Iterable[str]] = None,
+        highlight_row_for: Optional[Iterable[str]] = None,
+        highlight_row_bg_color: str = "bg_blue",
+        highlight_row_bold: bool = True,
     ):
         self.float_fmt = float_fmt
         self.indent = indent
@@ -123,6 +128,11 @@ class NamespaceTablePrinter:
         self.metric_precision = dict(metric_precision or {})
         self.min_val_width = min_val_width
         self.key_priority = key_priority or []
+        # Highlight settings (bare metric subkeys)
+        self.highlight_value_bold_for = set(highlight_value_bold_for or {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "epoch"})
+        self.highlight_row_for = set(highlight_row_for or {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "total_timesteps"})
+        self.highlight_row_bg_color = highlight_row_bg_color or "bg_blue"
+        self.highlight_row_bold = bool(highlight_row_bold)
 
         self._prev: Optional[Dict[str, Any]] = None
         self._last_height: int = 0
@@ -156,9 +166,9 @@ class NamespaceTablePrinter:
                 key_candidates.append(sub)
                 full_key = f"{ns}/{sub}" if sub else ns
                 val_str = self._format_value(v, full_key)
-                # Emphasize key episode reward metrics for readability
+                # Emphasize select metrics for readability (bold value)
                 try:
-                    if sub in {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "epoch"}:
+                    if sub in self.highlight_value_bold_for:
                         val_str = _ansi("bold", val_str, self.color)
                 except Exception:
                     pass
@@ -196,15 +206,16 @@ class NamespaceTablePrinter:
                 key_cell = f"{sub:<{key_width}}"
                 highlight = False
                 try:
-                    if sub in {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "total_timesteps"}:
-                        key_cell = _ansi("bold", key_cell, self.color)
+                    if sub in self.highlight_row_for:
+                        if self.highlight_row_bold:
+                            key_cell = _ansi("bold", key_cell, self.color)
                         highlight = True
                 except Exception:
                     pass
                 row = f"| {' ' * indent}{key_cell} | {val_padded} |"
                 if highlight:
                     # Apply a subtle background to the entire row for visibility
-                    row = _apply_row_background(row, "bg_blue", self.color)
+                    row = _apply_row_background(row, self.highlight_row_bg_color, self.color)
                 lines.append(row)
         lines.append(border)
 
@@ -346,6 +357,10 @@ def print_namespaced_dict(
     metric_precision: Optional[Dict[str, int]] = None,
     min_val_width: int = 15,
     key_priority: Optional[List[str]] = None,
+    highlight_value_bold_for: Optional[Iterable[str]] = None,
+    highlight_row_for: Optional[Iterable[str]] = None,
+    highlight_row_bg_color: str = "bg_blue",
+    highlight_row_bold: bool = True,
 ):
     global _default_printer
     if (
@@ -356,6 +371,10 @@ def print_namespaced_dict(
         or _default_printer.metric_precision != (metric_precision or {})
         or _default_printer.min_val_width != min_val_width
         or _default_printer.key_priority != (key_priority or [])
+        or _default_printer.highlight_value_bold_for != set(highlight_value_bold_for or {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "epoch"})
+        or _default_printer.highlight_row_for != set(highlight_row_for or {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "total_timesteps"})
+        or _default_printer.highlight_row_bg_color != (highlight_row_bg_color or "bg_blue")
+        or _default_printer.highlight_row_bold != bool(highlight_row_bold)
     ):
         _default_printer = NamespaceTablePrinter(
             float_fmt=float_fmt,
@@ -365,5 +384,9 @@ def print_namespaced_dict(
             metric_precision=metric_precision,
             min_val_width=min_val_width,
             key_priority=key_priority,
+            highlight_value_bold_for=highlight_value_bold_for,
+            highlight_row_for=highlight_row_for,
+            highlight_row_bg_color=highlight_row_bg_color,
+            highlight_row_bold=highlight_row_bold,
         )
     _default_printer.update(data)

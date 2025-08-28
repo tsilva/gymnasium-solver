@@ -105,6 +105,20 @@ class PrintMetricsCallback(BaseCallback):
 
         # Dedicated table printer to preserve state across prints (avoids global resets)
         from utils.table_printer import NamespaceTablePrinter
+        # Load highlight configuration from metrics.yaml if available
+        try:
+            from utils.metrics import get_highlight_config
+            _hl_cfg = get_highlight_config()
+            _hl_value_bold_for = _hl_cfg.get('value_bold_metrics', set())
+            _hl_row_for = _hl_cfg.get('row_metrics', set())
+            _hl_row_bg_color = _hl_cfg.get('row_bg_color', 'bg_blue')
+            _hl_row_bold = bool(_hl_cfg.get('row_bold', True))
+        except Exception:
+            _hl_value_bold_for = {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "epoch"}
+            _hl_row_for = {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "total_timesteps"}
+            _hl_row_bg_color = 'bg_blue'
+            _hl_row_bold = True
+
         self._printer = NamespaceTablePrinter(
             # Keep numbers compact and colored like before
             compact_numbers=True,
@@ -115,6 +129,10 @@ class PrintMetricsCallback(BaseCallback):
             metric_precision=self.metric_precision,
             min_val_width=self.min_val_width,
             key_priority=self.key_priority,
+            highlight_value_bold_for=_hl_value_bold_for,
+            highlight_row_for=_hl_row_for,
+            highlight_row_bg_color=_hl_row_bg_color,
+            highlight_row_bold=_hl_row_bold,
         )
 
     # ---------- hooks ----------

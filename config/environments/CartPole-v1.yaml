@@ -6,6 +6,7 @@ eval_episodes: 100
 
 # TUNED: 13 epochs (122880 timesteps)
 # TODO: eval wramup
+# TODO: hidden_dims
 reinforce:
   algo_id: reinforce
   n_timesteps: 3e5

@@ -8,9 +8,9 @@ env_wrappers:
 
 reinforce:
   algo_id: reinforce
-  n_envs: 8
+  n_envs: 16
   n_steps: 1024
-  batch_size: 128
+  batch_size: 4096
   learning_rate: 1e-3
   hidden_dims: [128, 128]
   eval_freq_epochs: 20 

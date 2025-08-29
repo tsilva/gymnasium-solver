@@ -6,16 +6,19 @@ env_wrappers:
   - id: PongV5_FeatureExtractor
 env_kwargs:
   repeat_action_probability: 0.0  # Makes the environment deterministic
+gamma: 0.99
+hidden_dims: [128, 128]
+eval_episodes: 10
 
 reinforce:
   algo_id: reinforce
   n_envs: 16
   n_steps: 1024
   batch_size: 4096
-  learning_rate: 1e-3
-  hidden_dims: [128, 128]
+  learning_rate: 1e-4
+  normalize_returns: "baseline"
+  ent_coef: 0.05
   eval_freq_epochs: 20 
-  eval_episodes: 10  
 
 # SOLVED: 3M timesteps (~17m)
 ppo:
@@ -28,6 +31,4 @@ ppo:
   ent_coef: 0.003
   clip_range: 0.15
   learning_rate: 3e-4
-  hidden_dims: [128, 128]
   eval_freq_epochs: 50
-  eval_episodes: 10

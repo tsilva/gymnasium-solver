@@ -23,6 +23,7 @@ High-signal reference for maintainers and agents. Read this before making change
   - For ALE RGB, applies Gymnasium's `AtariPreprocessing` (grayscale+resize+frameskip). When this is active, manual `resize_obs`/`grayscale_obs` flags are ignored to avoid conflicts.
   - VizDoom Deadly Corridor via `gym_wrappers.vizdoom_deadly_corridor.VizDoomDeadlyCorridorEnv` when `env_id` matches.
   - Standard Gymnasium otherwise.
+  - Version compatibility: when `gym.make(env_id)` raises a version-not-found error (e.g., `*-v3` unavailable), `build_env` attempts to fall back to lower versions (`*-v2`, `*-v1`, ...) until one is found, emitting a single informational print. The original `env_id` is preserved on the vec env for metadata; the resolved id is attached to the base env as `resolved_env_id` when possible.
   - Applies registry wrappers from YAML: `EnvWrapperRegistry.apply` with `{ id: WrapperName, ... }` specs.
   - Optional `VecNormalize`, `VecFrameStack`, and `VecVideoRecorder`.
   - Always wraps with `VecInfoWrapper` for metadata and shape helpers.

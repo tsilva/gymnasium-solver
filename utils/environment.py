@@ -245,7 +245,68 @@ def build_env(
             env = PettingZooSingleAgentWrapper(pz_env, agent_id=None, render_mode=render_mode)
         # Otherwise, create a standard gym environment
         else: 
-            env = gym.make(env_id, render_mode=render_mode, **env_kwargs)
+            # Standard Gymnasium environments with version fallback handling
+            try:
+                env = gym.make(env_id, render_mode=render_mode, **env_kwargs)
+            except Exception as e:
+                # Gracefully handle version mismatches (e.g., 'LunarLander-v3' on
+                # installs that only provide 'v2'). We attempt to decrement the
+                # version until a working one is found.
+                try:
+                    from gymnasium import error as gym_error  # type: ignore
+                except Exception:
+                    gym_error = None  # best-effort fallback below
+
+                # Detect a version-not-found scenario
+                is_version_issue = False
+                if gym_error is not None and hasattr(gym_error, "VersionNotFound"):
+                    is_version_issue = isinstance(e, gym_error.VersionNotFound)  # type: ignore[attr-defined]
+                if not is_version_issue:
+                    # Heuristic fallback based on message text
+                    msg = str(e).lower()
+                    is_version_issue = ("version" in msg and ("doesn't exist" in msg or "not found" in msg))
+
+                if is_version_issue:
+                    import re
+                    env = None  # ensure defined for post-loop checks
+                    last_exc = e
+                    m = re.match(r"^(.*)-v(\d+)$", str(env_id))
+                    if m:
+                        base, ver_str = m.group(1), m.group(2)
+                        try:
+                            ver = int(ver_str)
+                        except Exception:
+                            ver = None
+                        if isinstance(ver, int):
+                            for new_ver in range(ver - 1, -1, -1):
+                                fallback_id = f"{base}-v{new_ver}"
+                                try:
+                                    env = gym.make(fallback_id, render_mode=render_mode, **env_kwargs)
+                                    try:
+                                        # Inform user once per process; safe to ignore failures here
+                                        print(f"[env] '{env_id}' not available; falling back to '{fallback_id}'.")
+                                    except Exception:
+                                        pass
+                                    # Expose resolved id for downstream introspection if needed
+                                    try:
+                                        setattr(env, "resolved_env_id", fallback_id)
+                                    except Exception:
+                                        pass
+                                    break
+                                except Exception as exc:
+                                    last_exc = exc
+                                    env = None  # continue searching lower versions
+                                    continue
+                        # If no fallback succeeded, re-raise original error
+                        if env is None:
+                            # Prefer the last exception (e.g., missing Box2D) for clarity
+                            raise last_exc
+                    else:
+                        # Not a versioned id (e.g., custom id), re-raise
+                        raise
+                else:
+                    # Different kind of failure; propagate
+                    raise
 
     # NOTE: Do not auto-wrap discrete observation spaces here to avoid
     # impacting tabular algorithms (e.g., Q-Learning) that rely on

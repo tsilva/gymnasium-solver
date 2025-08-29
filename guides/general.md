@@ -73,3 +73,150 @@ Here are the rules of thumb for batch sizes in policy gradient / actor–critic 
 ⸻
 
 👉 Do you want me to make a summary diagram showing how n_envs, n_steps, and batch_size interact (like a flow of rollout → minibatching → updates)? That could complement your guide nicely.
+
+
+0) Set the ground rules (once)
+
+Determinism & logging
+
+Fix seeds; turn off nondeterministic ops; log everything (returns, entropy, grad-norm, loss, FPS).
+
+Keep an evaluation protocol: every N updates, run 5–10 eval episodes with exploration off; track mean/median and IQR.
+
+Throughput check
+
+Profile sample collection vs. update time. Aim for ≥70% GPU/TPU utilization during updates and no long GPU idle gaps.
+
+1) Max out data pipeline
+
+n_envs (parallel envs)
+
+Increase until CPU is ~80–90% loaded or envs start thrashing RAM.
+
+If GPU idles while collecting, add envs before touching anything else.
+
+Rollout sizing (batch_size for REINFORCE)
+
+REINFORCE is high-variance → start with bigger updates.
+
+Starting points
+
+Discrete control: 2–8k timesteps/update.
+
+Continuous control: 5–20k timesteps/update.
+
+Ensure ≥16–64 episodes per batch (use many envs so you’re not dominated by a few long trajectories).
+
+If returns swing wildly across updates: double batch; if learning crawls: halve batch.
+
+Tip: If you’re also using n_steps, choose it to keep updates frequent (e.g., collect until batch_size is met across envs) rather than requiring full episodes.
+
+2) Core optimizer sweep
+
+Learning rate (policy)
+
+Log-sweep: {3e-5, 1e-4, 3e-4, 1e-3, 3e-3} (Adam).
+
+Pick by area under the learning curve (sample-efficiency + final return).
+
+If you increase batch size, either keep LR and resweep, or try ~linear-ish scaling up to ~4× before resweeping.
+
+Epochs per batch
+
+REINFORCE can overfit a batch quickly. Try {1, 2, 4}; prefer 1–2 if you see training loss collapse while eval return stalls.
+
+Gradient clipping
+
+Global-norm {0.5, 1.0, 2.0}.
+
+If you see sporadic loss spikes or NaNs: lower clip or LR.
+
+3) Variance reduction (must-have)
+
+Reward-to-Go
+
+Use it. It strictly reduces variance vs. full-episode returns. No sweep needed.
+
+Baseline (state-value) & advantage norm
+
+Add a learned V(s) baseline (a tiny MLP).
+
+Train with MSE; value-loss coeff ~0.5; value LR = policy LR (try {1×, 2×}).
+
+Normalize advantages per batch (zero mean, unit std). Always on—don’t sweep.
+
+Reward/return normalization
+
+If reward scales drift across tasks or time, normalize returns by a running std (or PopArt). Turn on if learning is twitchy.
+
+4) Horizon & exploration
+
+Discount factor γ
+
+Start 0.99.
+
+Use the horizon heuristic: target effective H ≈ 1/(1−γ). For task horizon T, try γ ≈ 1 − 1/(0.25T … 1.0T).
+
+Sweep small set: {0.95, 0.98, 0.99, 0.995, 0.999}.
+
+Symptoms: too myopic → improve with higher γ; credit assignment too fuzzy/slow → lower γ.
+
+Entropy bonus (exploration)
+
+Start 0.01 (discrete) / 0.001 (continuous). Sweep {×0.3, ×1, ×3}.
+
+Then anneal to 0 over the last 50–80% of training.
+
+If policy collapses early: raise entropy or slow the anneal.
+
+5) Finishing touches
+
+Optimizer betas / weight decay
+
+Adam β2 0.999 (default). If value loss lags, try β2 0.99.
+
+Tiny L2 (e.g., 1e-4) only if you see overfitting on short horizons.
+
+Observation normalization
+
+Running mean/var per state dim. Essential for continuous control or nonstationary rewards.
+
+Learning-rate schedule
+
+Cosine or linear decay to 0; warmup 0–2k updates if gradients are spiky at start.
+
+6) How to run the tuning (playbook)
+
+Phase A (throughput): tune n_envs → pick a stable batch_size (Section 1).
+
+Phase B (stability): sweep LR × epochs × clip (Sections 5–7).
+
+Phase C (variance): enable baseline + adv-norm; if still noisy, add return normalization (Sections 9–10).
+
+Phase D (horizon/exploration): sweep γ × entropy small grids (Sections 11–12).
+
+Phase E (polish): LR schedule, observation norm, tiny L2 (Section 13–15).
+
+Budgeting: use coarse sweeps first (1–2 seeds, 0.5–1h runs), then re-run top 2–3 configs with 3–5 seeds for your final pick.
+
+7) Quick starting configs
+
+Discrete (e.g., Atari-like):
+
+batch_size 4–8k, epochs 1–2, LR 3e-4, γ 0.99, entropy 0.01→0, clip 1.0.
+
+Continuous (e.g., MuJoCo):
+
+batch_size 10–20k, epochs 1–2, LR 1e-4–3e-4, γ 0.99–0.995, entropy 0.001→0, clip 1.0.
+
+8) Debug/triage cheatsheet
+
+Divergence/NaNs → lower LR, add/raise clip, bigger batch, check obs/reward norms.
+
+Wild update-to-update swings → bigger batch, advantage/return norm, stronger baseline.
+
+Stuck learning → raise LR a notch, add epochs (to 2), increase entropy (temporarily), or bump γ.
+
+Overfitting a batch (train loss ↓, eval flat) → fewer epochs (1), larger batch, stronger entropy.
+
+If you want, I can turn this into a one-page checklist you can drop into your repo’s README.

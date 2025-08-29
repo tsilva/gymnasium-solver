@@ -449,6 +449,40 @@ def run_episode(
             return grid
         except Exception:
             return None
+
+    def _vector_stack_to_frames(vec: np.ndarray, n_stack_hint: int | None, row_height: int = 8) -> List[np.ndarray]:
+        """Represent a stacked 1D observation as a list of grayscale bar images.
+
+        Splits the vector into ``n_stack_hint`` equal chunks (when possible) and
+        turns each chunk into an ``(row_height, chunk_len, 1)`` image with values
+        normalized per-chunk to [0, 1] for visibility. Falls back to a single
+        bar if splitting is not possible or the hint is invalid.
+        """
+        try:
+            v = np.asarray(vec).reshape(-1)
+            n = int(n_stack_hint) if (n_stack_hint is not None) else 1
+            if n <= 1:
+                n = 1
+            L = v.shape[0]
+            frames: List[np.ndarray] = []
+            if n > 1 and L % n == 0:
+                seg = L // n
+                chunks = [v[i * seg:(i + 1) * seg] for i in range(n)]
+            else:
+                chunks = [v]
+            for chunk in chunks:
+                c = np.asarray(chunk, dtype=np.float32)
+                c_min = float(np.nanmin(c)) if c.size > 0 else 0.0
+                c_max = float(np.nanmax(c)) if c.size > 0 else 1.0
+                # Normalize to [0,1] per-chunk; avoid div by zero
+                denom = (c_max - c_min) if (c_max - c_min) > 1e-9 else 1.0
+                c01 = (c - c_min) / denom
+                row = c01.reshape(1, -1, 1)  # (1, W, 1)
+                img = np.repeat(row, row_height, axis=0)  # (H, W, 1)
+                frames.append(img)
+            return frames
+        except Exception:
+            return []
     steps: List[Dict[str, Any]] = []
 
     reset_result = env.reset()
@@ -468,6 +502,8 @@ def run_episode(
 
     gamma: float = float(getattr(config, "gamma", 0.99))
     gae_lambda: float = float(getattr(config, "gae_lambda", 0.95))
+    # Used to decide how to visualize non-image observations
+    obs_type_cfg = str(getattr(config, "obs_type", "")).lower()
 
     try:
         while t < max_steps:
@@ -486,19 +522,41 @@ def run_episode(
                 obs0 = _obs_first_env(obs)
                 processed_img = None
                 stack_img = None
+                # Try to derive a stacking hint from config
+                n_stack_hint = None
+                try:
+                    n_stack_hint = int(getattr(config, "frame_stack", None) or 0)
+                except Exception:
+                    n_stack_hint = None
+
+                # Compute a processed single-frame image from the observation when it is image-like
                 if isinstance(obs0, np.ndarray) and obs0.ndim in (2, 3):
                     hwc = _ensure_hwc(obs0)
                     processed_img = _to_rgb(hwc)
-                    n_stack_hint = None
-                    try:
-                        n_stack_hint = int(getattr(config, "frame_stack", None) or 0)
-                    except Exception:
-                        n_stack_hint = None
-                    split = _split_stack(hwc, assume_rgb_groups=True, n_stack_hint=n_stack_hint)
-                    if isinstance(split, list) and len(split) >= 1:
-                        grid = _make_grid(split, cols=None)
-                        if grid is not None:
-                            stack_img = grid
+                    # Prefer building a stack grid from the processed observation channels when frame stacking is enabled
+                    if n_stack_hint is not None and int(n_stack_hint) > 1:
+                        split = _split_stack(hwc, assume_rgb_groups=True, n_stack_hint=n_stack_hint)
+                        if isinstance(split, list) and len(split) >= 2:
+                            grid = _make_grid(split, cols=None)
+                            if grid is not None:
+                                stack_img = grid
+                # Vector observation fallback (only if we still don't have a frame-based stack)
+                elif stack_img is None and isinstance(obs0, np.ndarray) and (obs0.ndim == 1 or (obs0.ndim == 2 and 1 in obs0.shape)) and obs_type_cfg not in {"ram", "objects"}:
+                    if n_stack_hint is not None and int(n_stack_hint) > 1:
+                        vec = obs0.reshape(-1)
+                        frames_vec = _vector_stack_to_frames(vec, n_stack_hint=n_stack_hint, row_height=8)
+                        if frames_vec:
+                            grid = _make_grid(frames_vec, cols=None)
+                            if grid is not None:
+                                stack_img = grid
+
+                # As a final fallback for non-image observations, build a grid from the last N rendered frames
+                if stack_img is None and n_stack_hint is not None and int(n_stack_hint) > 1 and isinstance(frames, list) and len(frames) >= 1:
+                    last = frames[-int(n_stack_hint):]
+                    grid_from_frames = _make_grid([_ensure_hwc(f) for f in last], cols=None)
+                    if grid_from_frames is not None:
+                        stack_img = grid_from_frames
+
                 if processed_img is not None:
                     processed_frames.append(processed_img)
                 if stack_img is not None:
@@ -840,17 +898,30 @@ def build_ui(default_run_id: str = "@latest-run"):
             # Compute available display modes
             has_stack = isinstance(frames_stack, list) and len(frames_stack) > 0
             choices = ["Rendered (raw)"] + (["Processed (stack)"] if has_stack else [])
-            # Set active frames to raw by default
+            # Default to processed stack when available; otherwise raw
+            if has_stack:
+                active_frames = frames_stack
+                first = active_frames[0] if active_frames else None
+                display_value = "Processed (stack)"
+                frame_label = "Frame (processed stack)"
+                max_idx = len(active_frames) - 1 if active_frames else 0
+            else:
+                active_frames = frames_raw
+                first = first_frame
+                display_value = "Rendered (raw)"
+                frame_label = "Frame (raw)"
+                max_idx = len(frames_raw) - 1 if frames_raw else 0
+
             return (
-                gr.update(value="Rendered (raw)", choices=choices),  # display_mode
-                gr.update(value=first_frame, label="Frame (raw)"),  # frame_image
-                gr.update(minimum=0, maximum=(len(frames_raw) - 1 if frames_raw else 0), step=1, value=0),  # frame_slider
-                (_vertical_from_step_dict(steps[0]) if steps else []), # current_step_table
+                gr.update(value=display_value, choices=choices),  # display_mode
+                gr.update(value=first, label=frame_label),        # frame_image
+                gr.update(minimum=0, maximum=max_idx, step=1, value=0),  # frame_slider
+                (_vertical_from_step_dict(steps[0]) if steps else []),   # current_step_table
                 rows,                                       # step_table
                 info.get("env_spec", {}),                   # env_spec_json
                 info.get("model_spec", {}),                 # model_spec_json
                 info.get("checkpoint_metrics", {}),         # ckpt_metrics_json
-                frames_raw,                                 # frames_state (active = raw by default)
+                active_frames,                               # frames_state (active list)
                 0,                                          # index_state
                 False,                                      # playing_state
                 gr.update(value="▶"),                    # play_pause_btn label

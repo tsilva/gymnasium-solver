@@ -71,7 +71,9 @@ High-signal reference for maintainers and agents. Read this before making change
 - `play.py`: loads best/last checkpoint from `runs/<id>/checkpoints` and steps env for rendering.
 - `inspect.py` / `inspector_app.py`: Gradio UI to browse episodes for a run.
   - Visualizes raw rendered frames for all envs.
-  - When observations are image-like, also shows processed observations and frame stacks (if configured).
+  - Shows processed observations and frame stacks when available:
+    - Image observations: processed single frame plus tiled frame-stack grid.
+    - Vector observations with `frame_stack > 1` (e.g., CartPole-v1 MLP): visualizes each stacked frame as a grayscale bar and tiles them into a grid.
 - `publish.py`: push artifacts/videos to Hugging Face Hub.
 - `scripts/*`: smoke tests, benchmarks, helpers (rendering, dataset checks, etc.).
 

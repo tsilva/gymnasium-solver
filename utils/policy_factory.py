@@ -105,7 +105,8 @@ def create_policy(
     if isinstance(policy_type, type) and issubclass(policy_type, nn.Module):
         return policy_type(input_dim, action_dim, hidden_dims=hidden_dims, activation=activation, **policy_kwargs)
 
-    if isinstance(policy_type, str) and policy_type.lower() == "cnnpolicy":
+    # Accept common CNN aliases for policy-only models
+    if isinstance(policy_type, str) and policy_type.lower() in {"cnn", "cnnpolicy", "cnn_policy", "cnnpolicyonly", "cnn-only"}:
         hwc = _infer_hwc_from_space(obs_space, input_dim)
         return CNNPolicyOnly(
             obs_shape=hwc,

@@ -4,7 +4,8 @@ gamma: 1.0
 ent_coef: 0.01
 eval_episodes: 100
 
-# NOTE: tuned, trains in 8 epochs (163840 steps)
+# NOTE: tuned, trains in 13 epochs (122880 steps)
+# TODO: eval wramup
 reinforce:
   algo_id: reinforce
   n_timesteps: 3e5
@@ -12,7 +13,8 @@ reinforce:
   n_steps: 1024
   batch_size: 2048
   learning_rate: 6e-3
-  eval_freq_epochs: 10
+  eval_freq_epochs: 5
+  frame_stack: 2 # Converges faster with frame stacking = 2, probably because it allows to estimate momentum better?
 
 ppo:
   algo_id: ppo

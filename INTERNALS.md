@@ -43,6 +43,8 @@ High-signal reference for maintainers and agents. Read this before making change
 - `agents/reinforce.REINFORCE`:
   - Policy-only via `create_policy`; can use returns or advantages as baseline; disables GAE in collector.
   - Logs policy diagnostics including `entropy`, and PPO-style KL indicators `kl_div` and `approx_kl` computed from rollout (old) vs current log-probs for the taken actions.
+  - Monte Carlo return mode configurable via `Config.reinforce_returns`:
+    `'reward_to_go'` (default) or `'episode'` (classic vanilla REINFORCE: scale all timesteps by the episode's total return).
 - `agents/qlearning.QLearning`:
   - Tabular Q-table on discrete obs/action spaces; custom `QLearningPolicyModel` with epsilon decay; no optimizer.
 

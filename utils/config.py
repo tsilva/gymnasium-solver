@@ -103,6 +103,10 @@ class Config:
     normalize_returns: Optional[str] = None
     # Advantage normalization behavior: 'off', 'rollout', or 'batch'
     normalize_advantages: str = "batch"
+    # REINFORCE-only: which Monte Carlo returns to use for scaling log-probs.
+    # 'reward_to_go' (default) scales each timestep by its own return-to-go.
+    # 'episode' scales all timesteps within an episode by the episode's total return.
+    reinforce_returns: str = "reward_to_go"
 
     # ===== Evaluation (optional; disabled unless eval_freq_epochs is set) =====
     # Run evaluation every N training epochs; None disables evaluation entirely
@@ -537,6 +541,13 @@ class Config:
             raise ValueError("eval_recording_freq_epochs must be a positive integer when set.")
         if self.reward_threshold is not None and self.reward_threshold <= 0:
             raise ValueError("reward_threshold must be a positive float.")
+
+        # Algo-specific simple validations
+        if isinstance(self.reinforce_returns, str):
+            valid_rr = {"reward_to_go", "episode"}
+            rr = self.reinforce_returns.strip().lower()
+            if rr not in valid_rr:
+                raise ValueError(f"reinforce_returns must be one of {sorted(valid_rr)}.")
 
         # Runtime / hardware
         allowed_accelerators = {"auto", "cpu", "gpu", "mps", "tpu", "ipu", "hpu"}

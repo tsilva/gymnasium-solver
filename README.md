@@ -75,6 +75,8 @@ You still select a config by ID, e.g. `CartPole-v1_ppo`. The loader also remains
 
 Key fields: `env_id`, `algo_id`, `n_envs`, `n_steps`, `batch_size`, `n_timesteps`, `policy` (`mlp|cnn`), `hidden_dims`, `obs_type` (`rgb|ram|objects` for ALE).
 
+REINFORCE options: set `reinforce_returns` to control how Monte Carlo returns scale log-probs: `reward_to_go` (default) or `episode` (true vanilla; multiply every timestep by the episode's total return).
+
 VizDoom support: set `env_id` to `VizDoom-DeadlyCorridor-v0`. Requires `pip install vizdoom` and access to `deadly_corridor.cfg`/`deadly_corridor.wad` (auto-discovered from the installed package, or set `VIZDOOM_SCENARIOS_DIR` or `env_kwargs.config_path`).
 
 ### 🧰 Environment wrappers

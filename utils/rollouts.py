@@ -466,6 +466,10 @@ class RolloutCollector():
         # For Monte Carlo returns (no GAE), whether to treat time-limit truncations
         # as terminals (recommended when not bootstrapping). Default True.
         self.mc_treat_timeouts_as_terminals: bool = bool(kwargs.get("mc_treat_timeouts_as_terminals", True))
+        # Monte Carlo return type: 'reward_to_go' (default) or 'episode' to scale
+        # all timesteps within the same episode segment by the episode's total
+        # discounted return (higher variance classic REINFORCE variant).
+        self.mc_return_type: str = str(kwargs.get("mc_return_type", "reward_to_go")).lower()
 
         # State tracking
         self.device = _device_of(policy_model)
@@ -666,6 +670,28 @@ class RolloutCollector():
                 timeouts=timeouts_for_mc,
                 gamma=self.gamma,
             )
+
+            # If requested, convert reward-to-go returns into full-episode returns
+            # by making all timesteps within the same episode segment share the
+            # segment's initial return (constant across the segment).
+            if self.mc_return_type == "episode":
+                try:
+                    real_terminal = _real_terminal_mask(dones_slice, timeouts_for_mc)
+                    T, n_envs = returns_buf.shape
+                    for j in range(n_envs):
+                        seg_start = 0
+                        seg_value = returns_buf[seg_start, j] if T > 0 else 0.0
+                        for t in range(T):
+                            # Set the return at step t to the segment's initial return
+                            returns_buf[t, j] = seg_value
+                            if real_terminal[t, j]:
+                                seg_start = t + 1
+                                if seg_start >= T:
+                                    break
+                                seg_value = returns_buf[seg_start, j]
+                except Exception:
+                    # Be defensive: if anything goes wrong, fall back to reward-to-go
+                    pass
 
             # Global baseline and advantages using running mean
             self._base_stats.update(returns_buf.ravel())

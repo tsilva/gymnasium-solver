@@ -31,6 +31,9 @@ class REINFORCE(BaseAgent):
         # Override to disable GAE for REINFORCE - use pure Monte Carlo returns
         base_params = self.config.rollout_collector_hyperparams()
         base_params['use_gae'] = False # TODO: what is this for?
+        # Allow switching between reward-to-go and full-episode returns
+        # for vanilla REINFORCE via config.reinforce_returns
+        base_params['mc_return_type'] = getattr(self.config, 'reinforce_returns', 'reward_to_go')
         return base_params
     
     # TODO: only does something with normalization off, but even that way it doesnt converge

@@ -81,3 +81,48 @@ def test_rollout_collector_collects_and_computes_metrics():
     m = collector.get_metrics()
     assert traj.observations.shape[0] == 12  # n_envs * n_steps
     assert "ep_rew_mean" in m and "rollout_fps" in m
+
+
+@pytest.mark.unit
+def test_mc_episode_returns_constant_within_episode():
+    class SingleEpisodeEnv:
+        def __init__(self, T=5, obs_dim=4):
+            self.num_envs = 1
+            self._T = int(T)
+            self._obs = np.zeros((1, obs_dim), dtype=np.float32)
+            self._step = 0
+
+        def reset(self):
+            self._step = 0
+            self._obs.fill(0.0)
+            return self._obs.copy()
+
+        def step(self, actions):
+            self._step += 1
+            next_obs = self._obs  # keep constant shape/values
+            reward = np.array([1.0], dtype=np.float32)
+            done = np.array([self._step >= self._T], dtype=bool)
+            infos = [
+                {"episode": {"r": float(self._T), "l": int(self._T)}} if done[0] else {}
+            ]
+            self._obs = next_obs
+            return next_obs.copy(), reward, done, infos
+
+    env = SingleEpisodeEnv(T=5)
+    policy = DummyPolicy()
+    # Collect exactly one episode and force MC episode returns
+    collector = RolloutCollector(
+        env,
+        policy,
+        n_steps=5,
+        use_gae=False,
+        normalize_advantages=False,
+        gamma=1.0,
+        mc_return_type="episode",
+    )
+    traj = collector.collect()
+    rets = traj.returns.cpu().numpy().reshape(-1)
+    # All timesteps within the episode should share the same return (== T)
+    assert rets.shape[0] == 5
+    np.testing.assert_allclose(rets, np.full_like(rets, rets[0]))
+    assert rets[0] == 5.0

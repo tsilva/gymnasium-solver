@@ -4,7 +4,7 @@
 - TODO: optimal single metric for best training
 - TODO: add kl divergence metric to reinforce
 - TODO: keep working on guide
-- REFACTOR: move hidden_dims inside policy_kwargs
+- REFACTOR: move hidden_dims inside policy_kwargsp
 - FEAT: ensure we can see baseline advantages in inspect.py
 - BUG: PPO can solve FrozenLake-v1, but REINFORCE cannot. REINFORCE is likely not implemented correctly.
 - EXP: Tune CartPole-v1:PPO to train as fast as REINFORCE

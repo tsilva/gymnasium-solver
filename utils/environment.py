@@ -46,12 +46,12 @@ def is_rgb_env(env):
         return False
 
     # If the observation space is not uint8 then it's not RGB
-    is_uint8 = env.observation_space.dtype == np.uint8
+    is_uint8 = getattr(env.observation_space, 'dtype', None) == np.uint8
     if not is_uint8:
         return False
     
     # If the observation space is not 3 channels then it's not RGB
-    n_channels = env.observation_space[-1]
+    n_channels = env.observation_space.shape[-1]
     if not n_channels == 3:
         return False
     

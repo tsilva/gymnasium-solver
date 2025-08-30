@@ -330,15 +330,7 @@ class Config:
     @classmethod
     def _load_from_legacy_config(cls, config_id: str, algo_id: str, config_path: Path) -> 'Config':
         """Load configuration from legacy hyperparams format."""
-        # Start with class defaults
-        final_config = {}
-        for field in cls.__dataclass_fields__.values():
-            if field.default is not MISSING:
-                final_config[field.name] = field.default
-            elif field.default_factory is not MISSING:  # type: ignore
-                final_config[field.name] = field.default_factory()      # type: ignore
-
-        # Start with class defaults
+        # Start with class defaults (once)
         final_config = {}
         for field in cls.__dataclass_fields__.values():
             if field.default is not MISSING:
@@ -452,19 +444,22 @@ class Config:
         if 'normalize' in config and config['normalize'] is not None:
             config['normalize_obs'] = config['normalize']
             config['normalize_reward'] = config['normalize']
-        
-        if 'vf_coef' in config and config['vf_coef'] is not None:
-            config['vf_coef'] = config['vf_coef']
+        # No-op fields are intentionally ignored
 
     @classmethod
     def _parse_schedules(cls, config: Dict[str, Any]) -> None:
-        for key, value in config.items():
-            value = config[key]
-            if not isinstance(value, str): continue
-            if not value.lower().startswith('lin_'): continue
-            key_schedule = f"{key}_schedule"
-            config[key_schedule] = 'linear'
-            config[key] = float(value.lower().split('lin_')[1])
+        for key, value in list(config.items()):
+            if not isinstance(value, str):
+                continue
+            val_lower = value.lower()
+            if not val_lower.startswith('lin_'):
+                continue
+            config[f"{key}_schedule"] = 'linear'
+            try:
+                config[key] = float(val_lower.split('lin_')[1])
+            except Exception:
+                # Leave value unchanged on parse failure
+                pass
 
     # Derived defaults and cross-field normalization
     def _post_init_defaults(self) -> None:

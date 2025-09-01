@@ -26,7 +26,61 @@ if platform.system() == "Darwin":
 
 from play import load_model as _load_model
 from play import load_config_from_run as _load_config_from_run
-from utils.rollouts import compute_mc_returns, compute_gae_advantages_and_returns
+from utils.rollouts import (
+    compute_batched_mc_returns,
+    compute_batched_gae_advantages_and_returns,
+)
+
+
+def compute_mc_returns(rewards: np.ndarray, gamma: float) -> np.ndarray:
+    """Compute discounted Monte Carlo returns for a single trajectory.
+
+    Delegates to the batched implementation with batch size 1 for consistency
+    with training-time logic.
+    """
+    rewards = np.asarray(rewards, dtype=np.float32)
+    rewards_b = rewards.reshape(-1, 1)
+    T = rewards_b.shape[0]
+    dones_b = np.zeros((T, 1), dtype=bool)
+    timeouts_b = np.zeros((T, 1), dtype=bool)
+    returns_b = compute_batched_mc_returns(rewards_b, dones_b, timeouts_b, float(gamma))
+    return returns_b.reshape(-1)
+
+
+def compute_gae_advantages_and_returns(
+    values: np.ndarray,
+    rewards: np.ndarray,
+    dones: np.ndarray,
+    timeouts: np.ndarray | None,
+    last_value: float,
+    gamma: float,
+    gae_lambda: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compute GAE(λ) advantages and returns for a single (T,) trajectory.
+
+    Uses the batched implementation with batch size 1 to mirror collector behavior.
+    """
+    values_b = np.asarray(values, dtype=np.float32).reshape(-1, 1)
+    rewards_b = np.asarray(rewards, dtype=np.float32).reshape(-1, 1)
+    dones_b = np.asarray(dones, dtype=bool).reshape(-1, 1)
+    if timeouts is None:
+        timeouts_b = np.zeros_like(dones_b, dtype=bool)
+    else:
+        timeouts_b = np.asarray(timeouts, dtype=bool).reshape(-1, 1)
+
+    last_values = np.asarray([float(last_value)], dtype=np.float32)
+
+    adv_b, ret_b = compute_batched_gae_advantages_and_returns(
+        values=values_b,
+        rewards=rewards_b,
+        dones=dones_b,
+        timeouts=timeouts_b,
+        last_values=last_values,
+        bootstrapped_next_values=None,
+        gamma=float(gamma),
+        gae_lambda=float(gae_lambda),
+    )
+    return adv_b.reshape(-1), ret_b.reshape(-1)
 
 
 RUNS_DIR = Path("runs")

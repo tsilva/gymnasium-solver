@@ -58,65 +58,8 @@ def _normalize_advantages(advantages: np.ndarray, eps: float) -> np.ndarray:
 
 
 # -----------------------------
-# Shared return/advantage utils
+# Shared return/advantage utils (batched only)
 # -----------------------------
-def compute_mc_returns(rewards: np.ndarray, gamma: float) -> np.ndarray:
-    """Compute simple discounted Monte Carlo returns for a single trajectory.
-
-    Parameters
-    - rewards: shape (T,), rewards collected along the trajectory
-    - gamma: discount factor
-
-    Returns
-    - returns: shape (T,), R_t = r_t + gamma * R_{t+1}
-
-    Implementation detail: delegates to the batched variant for consistency.
-    """
-    rewards = np.asarray(rewards, dtype=np.float32)
-    # Shape to (T, 1) and use no terminals/timeouts so accumulator never resets
-    rewards_b = rewards.reshape(-1, 1)
-    T = rewards_b.shape[0]
-    dones_b = np.zeros((T, 1), dtype=bool)
-    timeouts_b = np.zeros((T, 1), dtype=bool)
-    returns_b = compute_batched_mc_returns(rewards_b, dones_b, timeouts_b, gamma)
-    return returns_b.reshape(-1)
-
-
-def compute_gae_advantages_and_returns(
-    values: np.ndarray,
-    rewards: np.ndarray,
-    dones: np.ndarray,
-    timeouts: Optional[np.ndarray],
-    last_value: float,
-    gamma: float,
-    gae_lambda: float,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Compute GAE(λ) advantages and returns for a single-trajectory (T,) case.
-
-    Delegates to the batched implementation with batch size 1 to ensure
-    consistent behavior with the collector.
-    """
-    values = np.asarray(values, dtype=np.float32).reshape(-1, 1)
-    rewards = np.asarray(rewards, dtype=np.float32).reshape(-1, 1)
-    dones = np.asarray(dones, dtype=bool).reshape(-1, 1)
-    if timeouts is None:
-        timeouts = np.zeros_like(dones, dtype=bool)
-    else:
-        timeouts = np.asarray(timeouts, dtype=bool).reshape(-1, 1)
-
-    last_values = np.asarray([float(last_value)], dtype=np.float32)
-
-    adv_b, ret_b = compute_batched_gae_advantages_and_returns(
-        values=values,
-        rewards=rewards,
-        dones=dones,
-        timeouts=timeouts,
-        last_values=last_values,
-        bootstrapped_next_values=None,
-        gamma=gamma,
-        gae_lambda=gae_lambda,
-    )
-    return adv_b.reshape(-1), ret_b.reshape(-1)
 
 
 def compute_batched_mc_returns(

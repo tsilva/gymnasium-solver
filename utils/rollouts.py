@@ -11,23 +11,10 @@ def _to_np(t: torch.Tensor, dtype: np.dtype) -> np.ndarray:
     return t.detach().cpu().numpy().astype(dtype, copy=False)
 
 
-# -----------------------------
-# Internal small helpers (DRY)
-# -----------------------------
-def _canonicalize_timeouts(dones: np.ndarray, timeouts: Optional[np.ndarray]) -> np.ndarray:
-    """Return a boolean timeouts array with same shape as dones.
-
-    When ``timeouts`` is None, returns an all-False array. Ensures dtype bool.
-    """
-    if timeouts is None:
-        return np.zeros_like(dones, dtype=bool)
-    return np.asarray(timeouts, dtype=bool)
-
-
-def _real_terminal_mask(dones: np.ndarray, timeouts: Optional[np.ndarray]) -> np.ndarray:
+def _real_terminal_mask(dones: np.ndarray, timeouts: np.ndarray) -> np.ndarray:
     """Real terminal if done and not a time-limit truncation."""
     dones_b = np.asarray(dones, dtype=bool)
-    timeouts_b = _canonicalize_timeouts(dones_b, timeouts)
+    timeouts_b = np.asarray(timeouts, dtype=bool)
     return np.logical_and(dones_b, ~timeouts_b)
 
 
@@ -151,7 +138,7 @@ def compute_batched_mc_returns(
     """
     rewards = np.asarray(rewards, dtype=np.float32)
     dones = np.asarray(dones, dtype=bool)
-    timeouts = _canonicalize_timeouts(dones, timeouts)
+    timeouts = np.asarray(timeouts, dtype=bool)
 
     T, n_envs = rewards.shape
     returns_buf = np.zeros_like(rewards, dtype=np.float32)
@@ -184,10 +171,10 @@ def compute_batched_gae_advantages_and_returns(
       (i.e., where timeouts[t, env] is True).
     - Returns are computed as advantages + values (PPO target convention).
     """
-    values = np.asarray(values, dtype=np.float32)
+    values = np.asarray(values, dtype=np.float32) # TODO: why this?
     rewards = np.asarray(rewards, dtype=np.float32)
     dones = np.asarray(dones, dtype=bool)
-    timeouts = _canonicalize_timeouts(dones, timeouts)
+    timeouts = np.asarray(timeouts, dtype=bool)
     last_values = np.asarray(last_values, dtype=np.float32)
 
     T, n_envs = rewards.shape
@@ -532,8 +519,7 @@ class RolloutCollector():
 
     def _update_action_histogram(self, actions_flat: np.ndarray) -> None:
         """Update cumulative discrete action counts from a flat int array."""
-        if actions_flat.size == 0:
-            return
+        if actions_flat.size == 0: return
         amax = int(actions_flat.max())
         if self._action_counts is None:
             self._action_counts = np.zeros(amax + 1, dtype=np.int64)
@@ -793,8 +779,9 @@ class RolloutCollector():
         # Update stats based on the collected slice
         self._update_running_stats_after_rollout(start, end)
 
-        # Batch process all terminal observations at once (major performance improvement)
-        if self.terminal_obs_info: self._bootstrap_timeouts_batch(start)
+        # Batch process all terminal observations at once
+        if self.terminal_obs_info: 
+            self._bootstrap_timeouts_batch(start)
 
         # Compute advantages and returns for this slice
         advantages_buf, returns_buf = self._compute_targets(start, end, last_obs)

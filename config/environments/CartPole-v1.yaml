@@ -31,4 +31,4 @@ ppo:
   clip_range: lin_0.2
   ent_coef: 0.0 
   eval_freq_epochs: 100
-  frame_stack: 2 # TODO: not converging faster with frame stacking here, why?
+  #frame_stack: 2 # TODO: not converging faster with frame stacking here, why?

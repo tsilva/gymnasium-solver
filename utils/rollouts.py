@@ -307,14 +307,21 @@ class RolloutBuffer:
       for training.
     """
 
-    def __init__(self, n_envs: int, obs_shape: Tuple[int, ...], obs_dtype: np.dtype, device: torch.device, maxsize: int) -> None:
+    def __init__(
+        self, 
+        n_envs: int, 
+        obs_shape: Tuple[int, ...], 
+        obs_dtype: np.dtype, 
+        device: torch.device, 
+        maxsize: int
+    ) -> None:
         self.n_envs = n_envs
         self.obs_shape = obs_shape
         self.obs_dtype = obs_dtype
         self.device = device
         self.maxsize = int(maxsize)
 
-        # CPU buffers
+        # Initialize buffers
         self.obs_buf = np.zeros((self.maxsize, self.n_envs, *self.obs_shape), dtype=self.obs_dtype)
         self.next_obs_buf = np.zeros((self.maxsize, self.n_envs, *self.obs_shape), dtype=self.obs_dtype)
         self.actions_buf = np.zeros((self.maxsize, self.n_envs), dtype=np.int64)
@@ -325,6 +332,7 @@ class RolloutBuffer:
         self.timeouts_buf = np.zeros((self.maxsize, self.n_envs), dtype=bool)
         self.bootstrapped_values_buf = np.zeros((self.maxsize, self.n_envs), dtype=np.float32)
 
+        # TODO: review this
         # write position tracking
         self.pos = 0
         self.size = 0  # number of valid steps currently stored (for info)
@@ -334,17 +342,30 @@ class RolloutBuffer:
 
         Returns the starting index where the rollout should write.
         """
-        if T > self.maxsize:
-            raise ValueError(f"Rollout length T={T} exceeds buffer maxsize={self.maxsize}")
-        if self.pos + T > self.maxsize:
-            self.pos = 0
+        # In case the requested rollout size exceeds the buffer maxsize, raise an error
+        # (otherwise data from the requested rollout will be overwritten by the rollout itself)
+        if T > self.maxsize: raise ValueError(f"Rollout length T={T} exceeds buffer maxsize={self.maxsize}")
+
+        # TODO: is this correct?
+        # If the position plus the requested rollout size exceeds 
+        # the buffer maxsize, wrap around to the beginning
+        if self.pos + T > self.maxsize: self.pos = 0
+
+        # TODO: not sure I understand this
         start = self.pos
         self.pos += T
         self.size = max(self.size, self.pos)
         return start
 
     # -------- Per-step storage helpers --------
-    def store_tensors(self, idx: int, obs_t: torch.Tensor, actions_t: torch.Tensor, logps_t: torch.Tensor, values_t: torch.Tensor) -> None:
+    def store_tensors(
+        self, 
+        idx: int, 
+        obs_t: torch.Tensor, 
+        actions_t: torch.Tensor, 
+        logps_t: torch.Tensor, 
+        values_t: torch.Tensor
+    ) -> None:
         """Store per-step tensors by converting to NumPy and writing CPU buffers.
 
         This keeps collection in NumPy primitives; conversion back to torch
@@ -451,7 +472,7 @@ class RolloutCollector():
         use_gae: bool = True, # Whether to use GAE (Generalized Advantage Estimation)
         buffer_maxsize: Optional[int] = None, # Maximum size of the rollout buffer
         **kwargs
-):
+    ) -> None:
         self.env = env
         self.policy_model = policy_model
         self.n_steps = n_steps
@@ -463,9 +484,11 @@ class RolloutCollector():
         self.normalize_advantages = normalize_advantages
         self.kwargs = kwargs
         self.buffer_maxsize = buffer_maxsize
+
         # For Monte Carlo returns (no GAE), whether to treat time-limit truncations
         # as terminals (recommended when not bootstrapping). Default True.
         self.mc_treat_timeouts_as_terminals: bool = bool(kwargs.get("mc_treat_timeouts_as_terminals", True))
+
         # Monte Carlo return type: 'reward_to_go' (default) or 'episode' to scale
         # all timesteps within the same episode segment by the episode's total
         # discounted return (higher variance classic REINFORCE variant).
@@ -551,7 +574,7 @@ class RolloutCollector():
     def _process_done_infos(
         self,
         *,
-        done_indices: np.ndarray,
+        done_idxs: np.ndarray,
         infos: list,
         step_idx: int,
         timeouts: np.ndarray,
@@ -561,32 +584,37 @@ class RolloutCollector():
 
         Updates deques, last-episode stats, and collects timeout terminal observations.
         """
-        if len(done_indices) == 0:
-            return
-        for idx in done_indices:
+        assert len(done_idxs) > 0, "No done environments at a step"
+
+        for idx in done_idxs:
+            # Retrieve episode data from info
             info = infos[idx]
             episode = info['episode']
-            r = episode['r']
-            l = episode['l']
-            self.episode_reward_deque.append(r)
-            self.episode_length_deque.append(l)
-            self.env_episode_reward_deques[idx].append(r)
-            self.env_episode_length_deques[idx].append(l)
+            episode_reward = episode['r']
+            episode_length = episode['l']
 
-            # Track immediate last episode stats (latest wins if multiple end simultaneously)
-            try:
-                self._last_episode_reward = float(episode.get('r', 0.0))
-            except Exception:
-                self._last_episode_reward = 0.0
-            try:
-                self._last_episode_length = int(episode.get('l', 0))
-            except Exception:
-                self._last_episode_length = 0
+            # Add episode data to deques (for stats tracking)
+            self.episode_reward_deque.append(episode_reward)
+            self.episode_length_deque.append(episode_length)
+            self.env_episode_reward_deques[idx].append(episode_reward)
+            self.env_episode_length_deques[idx].append(episode_length)
 
-            # TimeLimit truncated bootstrap bookkeeping
+            # Track last episode stats
+            self._last_episode_reward = episode_reward
+            self._last_episode_length = episode_length
+
+            # In case the episode ended due to time limit then mark it as such and 
+            # retrieve the last observation (truncated episode observations are the 
+            # observation from the next episode, we'll need the actual last 
+            # observation to bootstrap the value function)
             if info.get("TimeLimit.truncated"):
+                # TODO: what is this?
+                # Mark episode as timed out
                 timeouts[idx] = True
-                terminal_obs_info.append((step_idx, idx, info["terminal_observation"]))
+
+                # Store last episode observation
+                terminal_observation = info["terminal_observation"]
+                terminal_obs_info.append((step_idx, idx, terminal_observation)) # TODO: what is step_idx?
 
     @torch.inference_mode()
     def collect(self, *args, **kwargs):
@@ -601,26 +629,29 @@ class RolloutCollector():
     # -------- Internal phases (clarity; no per-step calls) --------
     def _sync_device_and_prepare_buffers(self) -> None:
         """Sync device with model, ensure initial obs and persistent buffer exist."""
+
+        if self.obs is not None: return
+
         current_device = _device_of(self.policy_model)
-        if current_device != self.device:
-            self.device = current_device
-            if self._buffer is not None:
-                self._buffer.device = self.device
+        self.device = current_device
 
-        if self.obs is None:
-            self.obs = self.env.reset()
+        # If this is the first collection, reset the 
+        # environment to get the first observation
+        self.obs = self.env.reset()
 
-        if self._buffer is None:
-            # For discrete observations, VecEnv returns (n_envs,), treat as 1-feature
-            obs_shape = (1,) if self.obs.ndim == 1 else self.obs.shape[1:]
-            maxsize = self.buffer_maxsize if self.buffer_maxsize is not None else self.n_steps
-            self._buffer = RolloutBuffer(
-                n_envs=self.n_envs,
-                obs_shape=obs_shape,
-                obs_dtype=self.obs.dtype,
-                device=self.device,
-                maxsize=maxsize,
-            )
+        # For discrete observations, VecEnv returns (n_envs,), treat as 1-feature
+        obs_shape = (1,) if self.obs.ndim == 1 else self.obs.shape[1:]
+        
+        # TODO: review this
+        maxsize = self.buffer_maxsize if self.buffer_maxsize is not None else self.n_steps
+
+        self._buffer = RolloutBuffer(
+            n_envs=self.n_envs,
+            obs_shape=obs_shape,
+            obs_dtype=self.obs.dtype,
+            device=self.device,
+            maxsize=maxsize,
+        )
 
     def _update_running_stats_after_rollout(self, start: int, end: int) -> None:
         """Update obs/reward/action stats and perform any deferred CPU copies."""
@@ -739,31 +770,39 @@ class RolloutCollector():
         # Collect one rollout
         rollout_start = time.time()
         for step_idx in range(self.n_steps):
-            # Current observations as torch tensor (model device)
+            # Convert current observations to torch tensor (ship to device)
             obs_t = torch.as_tensor(self.obs, dtype=torch.float32, device=self.device)
 
-            # Policy step
+            # Perform policy step to determine actions, log probabilities, and value estimates
             actions_t, logps_t, values_t = self.policy_model.act(obs_t, deterministic=deterministic)
 
-            # Persist per-step tensors (converted to NumPy inside)
-            self._buffer.store_tensors(start + step_idx, obs_t, actions_t, logps_t, values_t)
+            # Add tensors to buffer
+            self._buffer.store_tensors( # TODO: difference between store_tensors and store_cpu_step?
+                start + step_idx, 
+                obs_t, 
+                actions_t, 
+                logps_t, 
+                values_t
+            ) # TODO: do I need to manage the indexes from the outside?
 
-            # Only transfer actions to CPU for environment step
+            # Perform environment step
             actions_np = actions_t.detach().cpu().numpy()
-
-            # Environment step
             next_obs, rewards, dones, infos = self.env.step(actions_np)
 
+            # TODO: what is this?
             # Fast episode info processing - reuse timeout array
             timeouts = self._step_timeouts
             timeouts.fill(False)
 
+            # TODO: why zero indexing?
             # Find all done environments at once
             done_indices = np.where(dones)[0]
-
+            
+            # In case there are any done environments, process the episode info
+            # (eg: add final reward to stats, store last observation for value bootstrapping, etc.)
             if len(done_indices) > 0:
                 self._process_done_infos(
-                    done_indices=done_indices,
+                    done_idxs=done_indices,
                     infos=infos,
                     step_idx=step_idx,
                     timeouts=timeouts,
@@ -781,8 +820,10 @@ class RolloutCollector():
                 timeouts,
             )
 
-            # Advance
+            # Next observation is now current observation
             self.obs = next_obs
+
+            # Advance rollout stats
             self.rollout_steps += self.n_envs
             self.rollout_episodes += int(dones.sum())
 

@@ -28,43 +28,54 @@ def test_begin_rollout_exceeds_maxsize_raises():
 
 
 @pytest.mark.unit
-def test_store_tensors_allows_flat_obs_and_reshapes_correctly():
-    # obs_shape is (2,2), but provide a flat (n_envs, 4) tensor to store_tensors
+def test_add_stores_observations_and_dtypes_correctly():
+    # Provide correctly-shaped obs for obs_shape (2,2)
     buf = RolloutBuffer(n_envs=2, obs_shape=(2, 2), obs_dtype=np.float32, device=torch.device("cpu"), maxsize=3)
     idx = buf.begin_rollout(1)
 
-    # Build distinct per-env values to verify reshape and assignment
-    obs_t = torch.tensor([[0, 1, 2, 3], [4, 5, 6, 7]], dtype=torch.float32)
-    a_t = torch.tensor([1, 2], dtype=torch.int64)
-    lp_t = torch.tensor([0.1, 0.2], dtype=torch.float64)  # will be cast to float32
-    v_t = torch.tensor([0.3, 0.4], dtype=torch.float64)   # will be cast to float32
+    # Build distinct per-env values to verify assignment
+    obs_np = np.array([
+        [[0, 1], [2, 3]],
+        [[4, 5], [6, 7]],
+    ], dtype=np.float32)
+    next_obs_np = obs_np + 1
+    actions_np = np.array([1, 2], dtype=np.int64)
+    logps_np = np.array([0.1, 0.2], dtype=np.float32)
+    values_np = np.array([0.3, 0.4], dtype=np.float32)
+    rewards_np = np.array([0.0, 0.0], dtype=np.float32)
+    dones_np = np.array([False, False], dtype=bool)
+    timeouts_np = np.array([False, False], dtype=bool)
 
-    buf.store_tensors(idx, obs_t, a_t, lp_t, v_t)
+    buf.add(idx, obs_np, next_obs_np, actions_np, logps_np, values_np, rewards_np, dones_np, timeouts_np)
 
-    # Observations should be reshaped to (n_envs, 2, 2)
-    np.testing.assert_array_equal(
-        buf.obs_buf[idx, 0],
-        np.array([[0, 1], [2, 3]], dtype=np.float32),
-    )
-    np.testing.assert_array_equal(
-        buf.obs_buf[idx, 1],
-        np.array([[4, 5], [6, 7]], dtype=np.float32),
-    )
+    # Observations should match exactly what we provided
+    np.testing.assert_array_equal(buf.obs_buf[idx, 0], np.array([[0, 1], [2, 3]], dtype=np.float32))
+    np.testing.assert_array_equal(buf.obs_buf[idx, 1], np.array([[4, 5], [6, 7]], dtype=np.float32))
 
-    # Dtypes should be coerced properly in CPU buffers
+    # Dtypes in CPU buffers
     assert buf.actions_buf.dtype == np.int64
     assert buf.logprobs_buf.dtype == np.float32
     assert buf.values_buf.dtype == np.float32
 
 
 @pytest.mark.unit
-def test_store_tensors_bad_obs_shape_raises():
+def test_add_bad_obs_shape_raises():
     buf = RolloutBuffer(n_envs=2, obs_shape=(3,), obs_dtype=np.float32, device=torch.device("cpu"), maxsize=2)
     idx = buf.begin_rollout(1)
-    # Provide obs that cannot be reshaped into (2,3)
-    bad_obs = torch.zeros((2, 2), dtype=torch.float32)
-    with pytest.raises(ValueError):
-        buf.store_tensors(idx, bad_obs, torch.zeros(2, dtype=torch.int64), torch.zeros(2), torch.zeros(2))
+    # Provide obs with wrong shape (expected (2,3))
+    bad_obs = np.zeros((2, 2), dtype=np.float32)
+    with pytest.raises(AssertionError):
+        buf.add(
+            idx,
+            bad_obs,
+            np.zeros((2, 2), dtype=np.float32),
+            np.zeros(2, dtype=np.int64),
+            np.zeros(2, dtype=np.float32),
+            np.zeros(2, dtype=np.float32),
+            np.zeros(2, dtype=np.float32),
+            np.zeros(2, dtype=bool),
+            np.zeros(2, dtype=bool),
+        )
 
 
 @pytest.mark.unit
@@ -83,8 +94,10 @@ def test_flatten_slice_env_major_order_and_shapes_vector_obs():
         dones = np.array([False] * n_envs, dtype=bool)
         timeouts = np.array([False] * n_envs, dtype=bool)
 
-        buf.store_tensors(start + t, torch.from_numpy(obs), torch.from_numpy(actions), torch.zeros(n_envs), torch.zeros(n_envs))
-        buf.store_cpu_step(start + t, obs, next_obs, actions, rewards, dones, timeouts)
+        logps = np.zeros(n_envs, dtype=np.float32)
+        values = np.zeros(n_envs, dtype=np.float32)
+
+        buf.add(start + t, obs, next_obs, actions, logps, values, rewards, dones, timeouts)
 
     adv = np.zeros((T, n_envs), dtype=np.float32)
     ret = np.zeros((T, n_envs), dtype=np.float32)
@@ -128,8 +141,10 @@ def test_flatten_slice_scalar_obs_shapes_and_dtypes():
         dones = np.array([False, True] if t == T - 1 else [False, False], dtype=bool)
         timeouts = np.array([False, False], dtype=bool)
 
-        buf.store_tensors(start + t, torch.from_numpy(obs), torch.from_numpy(actions), torch.zeros(n_envs), torch.zeros(n_envs))
-        buf.store_cpu_step(start + t, obs, next_obs, actions, rewards, dones, timeouts)
+        logps = np.zeros(n_envs, dtype=np.float32)
+        values = np.zeros(n_envs, dtype=np.float32)
+
+        buf.add(start + t, obs, next_obs, actions, logps, values, rewards, dones, timeouts)
 
     adv = np.zeros((T, n_envs), dtype=np.float32)
     ret = np.zeros((T, n_envs), dtype=np.float32)
@@ -154,24 +169,30 @@ def test_store_cpu_step_and_flatten_propagates_dones_and_rewards():
     start = buf.begin_rollout(T)
 
     # Step 0: no dones
-    buf.store_tensors(start + 0, torch.zeros((n_envs, 4)), torch.zeros(n_envs, dtype=torch.int64), torch.zeros(n_envs), torch.zeros(n_envs))
-    buf.store_cpu_step(start + 0,
-                       obs_np=np.zeros((n_envs, 4), dtype=np.float32),
-                       next_obs_np=np.ones((n_envs, 4), dtype=np.float32),
-                       actions_np=np.array([1, 2], dtype=np.int64),
-                       rewards_np=np.array([0.5, 1.5], dtype=np.float32),
-                       dones_np=np.array([False, False], dtype=bool),
-                       timeouts_np=np.array([False, False], dtype=bool))
+    buf.add(
+        start + 0,
+        obs_np=np.zeros((n_envs, 4), dtype=np.float32),
+        next_obs_np=np.ones((n_envs, 4), dtype=np.float32),
+        actions_np=np.array([1, 2], dtype=np.int64),
+        logps_np=np.zeros(n_envs, dtype=np.float32),
+        values_np=np.zeros(n_envs, dtype=np.float32),
+        rewards_np=np.array([0.5, 1.5], dtype=np.float32),
+        dones_np=np.array([False, False], dtype=bool),
+        timeouts_np=np.array([False, False], dtype=bool),
+    )
 
     # Step 1: env 1 done
-    buf.store_tensors(start + 1, torch.zeros((n_envs, 4)), torch.zeros(n_envs, dtype=torch.int64), torch.zeros(n_envs), torch.zeros(n_envs))
-    buf.store_cpu_step(start + 1,
-                       obs_np=np.ones((n_envs, 4), dtype=np.float32),
-                       next_obs_np=2 * np.ones((n_envs, 4), dtype=np.float32),
-                       actions_np=np.array([3, 4], dtype=np.int64),
-                       rewards_np=np.array([2.5, 3.5], dtype=np.float32),
-                       dones_np=np.array([False, True], dtype=bool),
-                       timeouts_np=np.array([False, False], dtype=bool))
+    buf.add(
+        start + 1,
+        obs_np=np.ones((n_envs, 4), dtype=np.float32),
+        next_obs_np=2 * np.ones((n_envs, 4), dtype=np.float32),
+        actions_np=np.array([3, 4], dtype=np.int64),
+        logps_np=np.zeros(n_envs, dtype=np.float32),
+        values_np=np.zeros(n_envs, dtype=np.float32),
+        rewards_np=np.array([2.5, 3.5], dtype=np.float32),
+        dones_np=np.array([False, True], dtype=bool),
+        timeouts_np=np.array([False, False], dtype=bool),
+    )
 
     adv = np.zeros((T, n_envs), dtype=np.float32)
     ret = np.zeros((T, n_envs), dtype=np.float32)

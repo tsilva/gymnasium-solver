@@ -58,13 +58,15 @@ def test_rollout_buffer_basic_flatten():
     buf = RolloutBuffer(n_envs=2, obs_shape=(4,), obs_dtype=np.float32, device=torch.device("cpu"), maxsize=8)
     start = buf.begin_rollout(4)
     for i in range(4):
-        obs_t = torch.zeros((2, 4)) + i
-        a_t = torch.zeros(2, dtype=torch.int64)
-        lp_t = torch.zeros(2)
-        v_t = torch.zeros(2)
-        buf.store_tensors(start + i, obs_t, a_t, lp_t, v_t)
-        buf.store_cpu_step(start + i, np.zeros((2,4), dtype=np.float32), np.zeros((2,4), dtype=np.float32), np.zeros(2, dtype=np.int64), np.zeros(2, dtype=np.float32), np.zeros(2, dtype=bool), np.zeros(2, dtype=bool))
-    buf.copy_tensors_to_cpu(start, start + 4)
+        obs_np = np.zeros((2, 4), dtype=np.float32) + i
+        next_obs_np = np.zeros((2, 4), dtype=np.float32)
+        actions_np = np.zeros(2, dtype=np.int64)
+        logps_np = np.zeros(2, dtype=np.float32)
+        values_np = np.zeros(2, dtype=np.float32)
+        rewards_np = np.zeros(2, dtype=np.float32)
+        dones_np = np.zeros(2, dtype=bool)
+        timeouts_np = np.zeros(2, dtype=bool)
+        buf.add(start + i, obs_np, next_obs_np, actions_np, logps_np, values_np, rewards_np, dones_np, timeouts_np)
     adv = np.zeros((4,2), dtype=np.float32)
     ret = np.zeros((4,2), dtype=np.float32)
     traj = buf.flatten_slice_env_major(start, start + 4, adv, ret)

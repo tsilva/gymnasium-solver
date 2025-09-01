@@ -29,7 +29,7 @@ def main():
         algo_id = args.algo
     else:
         # Fallback to legacy default
-        config_id = "CartPole-v1_reinforce"
+        config_id = "CartPole-v1_ppo"
         algo_id = None
 
     # Load configuration (supports env-only + optional variant, or full config id)

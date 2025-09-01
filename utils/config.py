@@ -469,6 +469,13 @@ class Config:
                 self.eval_episodes = 10  # safe default evaluation horizon
             if self.eval_recording_freq_epochs is None:
                 self.eval_recording_freq_epochs = self.eval_freq_epochs  # record when we evaluate
+        # Normalize advantage-normalization flag if provided as boolean in YAMLs
+        # True -> 'rollout' (SB3-style: normalize once per rollout), False -> 'off'
+        try:
+            if isinstance(self.normalize_advantages, bool):
+                self.normalize_advantages = "rollout" if self.normalize_advantages else "off"
+        except Exception:
+            pass
         # Map RL Zoo fields to internal ones if provided at construction-time
         if self.normalize is not None:
             self.normalize_obs = self.normalize

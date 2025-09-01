@@ -3,6 +3,7 @@ env_id: CartPole-v1
 gamma: 1.0
 ent_coef: 0.01
 eval_episodes: 100
+normalize_obs: False # Normalization doesn't seem to help
 
 # TUNED: 13 epochs (122880 timesteps)
 # TODO: eval wramup
@@ -15,23 +16,19 @@ reinforce:
   batch_size: 2048
   learning_rate: 6e-3
   eval_freq_epochs: 5
-  normalize_obs: False # Normalization doesn't seem to help
   frame_stack: 2 # Converges faster with frame stacking = 2, probably because it allows to estimate momentum better?
 
 ppo:
+  #seed: 100 # TODO: seed setting does not seem to be doing anything
   algo_id: ppo
-  #n_timesteps: 200000        # you’ll usually “solve” long before this
   n_envs: 8
-  n_steps: 128
+  n_steps: 32
   batch_size: 256
-  n_epochs: 10               # gradient passes per update
-  learning_rate: 5e-4        # higher than SB3 default; fine for CartPole
-  gamma: 0.99
-  gae_lambda: 0.95
-  clip_range: 0.2
-  #ent_coef: 0.0              # CartPole doesn’t need extra entropy
-  #vf_coef: 0.5
-  #max_grad_norm: 0.5
-  #target_kl: 0.03            # early stop per update if KL spikes
-  normalize_advantages: true
-  
+  n_epochs: 20
+  learning_rate: lin_0.001
+  gamma: 0.98
+  gae_lambda: 0.8
+  clip_range: lin_0.2
+  ent_coef: 0.0 
+  eval_freq_epochs: 100
+  frame_stack: 2 # TODO: not converging faster with frame stacking here, why?

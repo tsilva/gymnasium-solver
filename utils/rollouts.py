@@ -7,6 +7,9 @@ import torch
 
 from utils.torch import _device_of, inference_ctx
 
+def _to_np(t: torch.Tensor, dtype: np.dtype) -> np.ndarray:
+    return t.detach().cpu().numpy().astype(dtype, copy=False)
+
 
 # -----------------------------
 # Internal small helpers (DRY)
@@ -357,53 +360,26 @@ class RolloutBuffer:
         self.size = max(self.size, self.pos)
         return start
 
-    # -------- Per-step storage helpers --------
-    def store_tensors(
-        self, 
-        idx: int, 
-        obs_t: torch.Tensor, 
-        actions_t: torch.Tensor, 
-        logps_t: torch.Tensor, 
-        values_t: torch.Tensor
-    ) -> None:
-        """Store per-step tensors by converting to NumPy and writing CPU buffers.
-
-        This keeps collection in NumPy primitives; conversion back to torch
-        happens only when flattening for returned trajectories.
-        """
-        # Observations
-        obs_np = obs_t.detach().cpu().numpy()
-        if obs_np.shape == (self.n_envs, *self.obs_shape):
-            self.obs_buf[idx] = obs_np
-        else:
-            # Attempt to reshape if model returned flat observations
-            self.obs_buf[idx] = obs_np.reshape(self.n_envs, *self.obs_shape)
-
-        # Actions, logprobs, values
-        def _to_np(t: torch.Tensor, dtype: np.dtype) -> np.ndarray:
-            return t.detach().cpu().numpy().astype(dtype, copy=False)
-
-        self.actions_buf[idx] = _to_np(actions_t, np.int64)
-        self.logprobs_buf[idx] = _to_np(logps_t, np.float32)
-        self.values_buf[idx] = _to_np(values_t, np.float32)
-
-    def store_cpu_step(
+    def add(
         self,
         idx: int,
         obs_np: np.ndarray,
         next_obs_np: np.ndarray,
         actions_np: np.ndarray,
+        logps_np: np.ndarray,
+        values_np: np.ndarray,
         rewards_np: np.ndarray,
         dones_np: np.ndarray,
         timeouts_np: np.ndarray,
     ) -> None:
-        # Keep shapes consistent with buffers; do not force extra dims for scalar observations
-        if self.obs_shape == ():
-            obs_np = np.asarray(obs_np).reshape(self.n_envs)
-            next_obs_np = np.asarray(next_obs_np).reshape(self.n_envs)
+        assert obs_np.shape == (self.n_envs, *self.obs_shape), f"Expected shape {(self.n_envs, *self.obs_shape)}, got {obs_np.shape}"
+        self.obs_buf[idx] = obs_np
+
         self.obs_buf[idx] = obs_np
         self.next_obs_buf[idx] = next_obs_np
         self.actions_buf[idx] = actions_np
+        self.logprobs_buf[idx] = logps_np
+        self.values_buf[idx] = values_np
         self.rewards_buf[idx] = rewards_np
         self.dones_buf[idx] = dones_np
         self.timeouts_buf[idx] = timeouts_np
@@ -776,15 +752,6 @@ class RolloutCollector():
             # Perform policy step to determine actions, log probabilities, and value estimates
             actions_t, logps_t, values_t = self.policy_model.act(obs_t, deterministic=deterministic)
 
-            # Add tensors to buffer
-            self._buffer.store_tensors( # TODO: difference between store_tensors and store_cpu_step?
-                start + step_idx, 
-                obs_t, 
-                actions_t, 
-                logps_t, 
-                values_t
-            ) # TODO: do I need to manage the indexes from the outside?
-
             # Perform environment step
             actions_np = actions_t.detach().cpu().numpy()
             next_obs, rewards, dones, infos = self.env.step(actions_np)
@@ -810,11 +777,15 @@ class RolloutCollector():
                 )
 
             # Persist environment outputs for this step
-            self._buffer.store_cpu_step(
-                start + step_idx,
+            logps_np = _to_np(logps_t, np.float32)
+            values_np = _to_np(values_t, np.float32)
+            self._buffer.add(
+                start + step_idx, # TODO: move this inside
                 self.obs,
                 next_obs,
                 actions_np,
+                logps_np,
+                values_np,
                 rewards,
                 dones,
                 timeouts,

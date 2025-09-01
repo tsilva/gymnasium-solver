@@ -119,6 +119,40 @@ def compute_batched_mc_returns(
 
     return returns_buf
 
+def convert_returns_to_full_episode(
+    returns: np.ndarray,
+    dones: np.ndarray,
+    timeouts: np.ndarray,
+) -> np.ndarray:
+    """Convert reward-to-go returns into full-episode returns (in-place).
+
+    For each env column, makes all timesteps within the same episode segment
+    share the segment's initial return (i.e., a constant across the segment).
+
+    Args:
+        returns: Array of shape (T, N) containing reward-to-go returns.
+        dones: Boolean array (T, N) of done flags.
+        timeouts: Boolean array (T, N) of timeout flags used to determine real terminals.
+
+    Returns:
+        The modified `returns` array with per-episode constant returns.
+    """
+    real_terminal = _real_terminal_mask(dones, timeouts)
+    T, n_envs = returns.shape if returns.size > 0 else (0, 0)
+    for j in range(n_envs):
+        seg_start = 0
+        seg_value = returns[seg_start, j] if T > 0 else 0.0
+        for t in range(T):
+            # Set the return at step t to the segment's initial return
+            returns[t, j] = seg_value
+            if not real_terminal[t, j]:
+                continue
+            seg_start = t + 1
+            if seg_start >= T:
+                break
+            seg_value = returns[seg_start, j]
+    return returns
+
 def compute_batched_gae_advantages_and_returns(
     values: np.ndarray,
     rewards: np.ndarray,
@@ -624,18 +658,11 @@ class RolloutCollector():
             # by making all timesteps within the same episode segment share the
             # segment's initial return (constant across the segment).
             if self.returns_type == "episode":
-                real_terminal = _real_terminal_mask(dones_slice, _timeouts_slice)
-                T, n_envs = returns_buf.shape
-                for j in range(n_envs):
-                    seg_start = 0
-                    seg_value = returns_buf[seg_start, j] if T > 0 else 0.0
-                    for t in range(T):
-                        # Set the return at step t to the segment's initial return
-                        returns_buf[t, j] = seg_value
-                        if not real_terminal[t, j]: continue
-                        seg_start = t + 1
-                        if seg_start >= T: break
-                        seg_value = returns_buf[seg_start, j]
+                returns_buf = convert_returns_to_full_episode(
+                    returns=returns_buf,
+                    dones=dones_slice,
+                    timeouts=_timeouts_slice,
+                )
 
             # Build a valid-mask index map to exclude trailing partial episodes
             valid_mask_flat, idx_map = _build_valid_mask_and_index_map(dones_slice, _timeouts_slice)

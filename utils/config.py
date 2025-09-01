@@ -102,11 +102,14 @@ class Config:
     # Normalize the returns; 'off' means no normalization, 'baseline' means normalize by baseline, 'batch' means normalize by batch mean and std
     normalize_returns: Optional[str] = None
     # Advantage normalization behavior: 'off', 'rollout', or 'batch'
-    normalize_advantages: str = "batch"
-    # REINFORCE-only: which Monte Carlo returns to use for scaling log-probs.
+    normalize_advantages: Optional[str] = None
     # 'reward_to_go' (default) scales each timestep by its own return-to-go.
     # 'episode' scales all timesteps within an episode by the episode's total return.
-    reinforce_returns: str = "reward_to_go"
+    returns_type: str = "reward_to_go"
+    # REINFORCE-only: which policy targets to use for scaling log-probs.
+    # 'returns' means unscaled returns (vanilla REINFORCE)
+    # 'baseline_advantages' means advantages (REINFORCE with baseline)
+    reinforce_use_baseline: Optional[bool] = False
 
     # ===== Evaluation (optional; disabled unless eval_freq_epochs is set) =====
     # Run evaluation every N training epochs; None disables evaluation entirely
@@ -545,11 +548,11 @@ class Config:
             raise ValueError("reward_threshold must be a positive float.")
 
         # Algo-specific simple validations
-        if isinstance(self.reinforce_returns, str):
+        if isinstance(self.returns_type, str):
             valid_rr = {"reward_to_go", "episode"}
-            rr = self.reinforce_returns.strip().lower()
+            rr = self.returns_type.strip().lower()
             if rr not in valid_rr:
-                raise ValueError(f"reinforce_returns must be one of {sorted(valid_rr)}.")
+                raise ValueError(f"returns_type must be one of {sorted(valid_rr)}.")
 
         # Runtime / hardware
         allowed_accelerators = {"auto", "cpu", "gpu", "mps", "tpu", "ipu", "hpu"}

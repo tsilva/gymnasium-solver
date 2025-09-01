@@ -10,7 +10,6 @@ def assert_detached(*tensors: torch.Tensor):
         assert t.grad_fn is None, "Tensor is still connected to a computation graph"
     return True
 
-# TODO: add reward to go vs other
 class REINFORCE(BaseAgent):
     
     def create_models(self):
@@ -27,13 +26,11 @@ class REINFORCE(BaseAgent):
             **policy_kwargs,
         )
     
+    # TODO: simplify, unify these flags
     def rollout_collector_hyperparams(self):
-        # Override to disable GAE for REINFORCE - use pure Monte Carlo returns
         base_params = self.config.rollout_collector_hyperparams()
-        base_params['use_gae'] = False # TODO: what is this for?
-        # Allow switching between reward-to-go and full-episode returns
-        # for vanilla REINFORCE via config.reinforce_returns
-        base_params['mc_return_type'] = getattr(self.config, 'reinforce_returns', 'reward_to_go')
+        base_params['use_gae'] = False
+        base_params['returns_type'] = self.config.returns_type
         return base_params
     
     # TODO: only does something with normalization off, but even that way it doesnt converge
@@ -48,16 +45,8 @@ class REINFORCE(BaseAgent):
         # Assert that the tensors are detached
         assert_detached(states, actions, returns, advantages)
         
-        # Calculate the policy targets to scale the log probabilities by;
-        # - returns: unscaled returns (vanilla REINFORCE)
-        # - batch_normalized_returns: returns normalized by batch mean and std (reduces variance)
-        # - advantages: REINFORCE with baseline (reduces variance in a more informed way)
         policy_targets = returns
-        normalize_returns = self.config.normalize_returns
-        if normalize_returns == "batch": 
-            batch_normalized_returns = (returns - returns.mean()) / (returns.std() + 1e-8)
-            policy_targets = batch_normalized_returns
-        elif normalize_returns == "baseline":
+        if self.config.reinforce_use_baseline: 
             policy_targets = advantages
 
         # Get the log probabilities for each 

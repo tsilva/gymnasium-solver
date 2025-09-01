@@ -118,7 +118,7 @@ def test_mc_episode_returns_constant_within_episode():
         use_gae=False,
         normalize_advantages=False,
         gamma=1.0,
-        mc_return_type="episode",
+        returns_type="episode",
     )
     traj = collector.collect()
     rets = traj.returns.cpu().numpy().reshape(-1)

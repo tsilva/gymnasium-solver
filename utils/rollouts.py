@@ -42,6 +42,37 @@ def _build_idx_map_from_valid_mask(valid_mask_flat: np.ndarray) -> Optional[np.n
     return filled
 
 
+def _build_valid_mask_and_index_map(
+    dones: np.ndarray,
+    timeouts: np.ndarray,
+) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+    """Build env-major valid mask and index map up to last real terminal.
+
+    - A real terminal is `done and not timeout`.
+    - Marks, for each env, all timesteps up to and including its last real
+      terminal as valid. Steps after the last terminal are considered trailing
+      partial episodes and are masked out.
+    - Returns a tuple of (valid_mask_flat_env_major, idx_map). When there are
+      no valid positions (no real terminals in any env within the slice), both
+      entries are None.
+    """
+    real_terminal = _real_terminal_mask(dones, timeouts)
+    if real_terminal.size == 0:
+        return None, None
+    T, n_envs = real_terminal.shape
+    valid_mask_2d = np.zeros((T, n_envs), dtype=bool)
+    for j in range(n_envs):
+        term_idxs = np.where(real_terminal[:, j])[0]
+        if term_idxs.size > 0:
+            last_term = int(term_idxs[-1])
+            valid_mask_2d[: last_term + 1, j] = True
+    valid_mask_flat = valid_mask_2d.transpose(1, 0).reshape(-1)
+    if not valid_mask_flat.any():
+        return None, None
+    idx_map = _build_idx_map_from_valid_mask(valid_mask_flat)
+    return valid_mask_flat, idx_map
+
+
 def _flat_env_major(arr: np.ndarray, start: int, end: int) -> np.ndarray:
     """Flatten a (T, N, ...) slice [start:end) into env-major order 1D array.
 
@@ -360,6 +391,8 @@ class RolloutCollector():
         advantages_norm_eps: float = 1e-8, # Epsilon for advantages normalization
         use_gae: bool = True, # Whether to use GAE (Generalized Advantage Estimation)
         buffer_maxsize: Optional[int] = None, # Maximum size of the rollout buffer
+        returns_type: str = "reward_to_go",
+        mc_treat_timeouts_as_terminals: bool = True,
         **kwargs
     ) -> None:
         self.env = env
@@ -371,17 +404,10 @@ class RolloutCollector():
         self.advantages_norm_eps = advantages_norm_eps
         self.use_gae = use_gae
         self.normalize_advantages = normalize_advantages
+        self.returns_type = returns_type
+        self.mc_treat_timeouts_as_terminals = mc_treat_timeouts_as_terminals # TODO: review this
         self.kwargs = kwargs
         self.buffer_maxsize = buffer_maxsize
-
-        # For Monte Carlo returns (no GAE), whether to treat time-limit truncations
-        # as terminals (recommended when not bootstrapping). Default True.
-        self.mc_treat_timeouts_as_terminals: bool = bool(kwargs.get("mc_treat_timeouts_as_terminals", True))
-
-        # Monte Carlo return type: 'reward_to_go' (default) or 'episode' to scale
-        # all timesteps within the same episode segment by the episode's total
-        # discounted return (higher variance classic REINFORCE variant).
-        self.mc_return_type: str = str(kwargs.get("mc_return_type", "reward_to_go")).lower()
 
         # State tracking
         self.device = _device_of(policy_model)
@@ -402,12 +428,10 @@ class RolloutCollector():
         # Obs/reward running stats over all seen samples (scalar over all dims)
         self._obs_stats = RunningStats()
         self._rew_stats = RunningStats()
+        self._base_stats = RunningStats()
 
         # Action histogram (discrete); grows dynamically as needed
         self._action_counts = None
-
-        # Baseline stats for REINFORCE (global running mean/std over returns)
-        self._base_stats = RunningStats()
 
         self.total_rollouts = 0
         self.total_steps = 0
@@ -567,7 +591,6 @@ class RolloutCollector():
         dones_slice = self._buffer.dones_buf[start:end]
         timeouts_slice = self._buffer.timeouts_buf[start:end]
 
-
         if self.use_gae:
             last_values_vec = self._predict_values_np(last_obs)
             bootstrapped_slice = self._buffer.bootstrapped_values_buf[start:end]
@@ -600,7 +623,7 @@ class RolloutCollector():
             # If requested, convert reward-to-go returns into full-episode returns
             # by making all timesteps within the same episode segment share the
             # segment's initial return (constant across the segment).
-            if self.mc_return_type == "episode":
+            if self.returns_type == "episode":
                 real_terminal = _real_terminal_mask(dones_slice, _timeouts_slice)
                 T, n_envs = returns_buf.shape
                 for j in range(n_envs):
@@ -614,28 +637,18 @@ class RolloutCollector():
                         if seg_start >= T: break
                         seg_value = returns_buf[seg_start, j]
 
-            # Global baseline and advantages using running mean
-            returns_flat = returns_buf.ravel()
-            self._base_stats.update(returns_flat)
+            # Build a valid-mask index map to exclude trailing partial episodes
+            valid_mask_flat, idx_map = _build_valid_mask_and_index_map(dones_slice, _timeouts_slice)
+            self._last_rollout_index_map = idx_map
+
+            # Update global baseline using only valid (non-trailing) returns
+            if valid_mask_flat is not None:
+                returns_flat_env_major = returns_buf.transpose(1, 0).reshape(-1)
+                self._base_stats.update(returns_flat_env_major[valid_mask_flat])
 
             # Calculate advantages by subtracting baseline from returns
             baseline = self._base_stats.mean()
             advantages_buf = returns_buf - baseline
-
-            # Build a valid-mask index map to exclude trailing partial episodes
-            try:
-                real_terminal = _real_terminal_mask(dones_slice, _timeouts_slice)
-                T, n_envs = real_terminal.shape
-                valid_mask_2d = np.zeros((T, n_envs), dtype=bool)
-                for j in range(n_envs):
-                    term_idxs = np.where(real_terminal[:, j])[0]
-                    if term_idxs.size > 0:
-                        last_term = int(term_idxs[-1])
-                        valid_mask_2d[: last_term + 1, j] = True
-                valid_mask_flat = valid_mask_2d.transpose(1, 0).reshape(-1)
-                self._last_rollout_index_map = _build_idx_map_from_valid_mask(valid_mask_flat)
-            except Exception:
-                self._last_rollout_index_map = None
 
         if self.normalize_advantages:
             advantages_buf = _normalize_advantages(advantages_buf, self.advantages_norm_eps)
@@ -731,18 +744,13 @@ class RolloutCollector():
         are masked out by remapping indices to the nearest previous valid
         position so batch shapes stay stable across samplings.
         """
-        # If an index map is available for MC masking, remap indices to valid
-        # positions to keep batch sizes and sampler assumptions intact.
-        try:
-            if self._last_rollout_index_map is not None and not self.use_gae:
-                # idxs may be a list or tensor; convert to numpy indices
-                idxs_np = np.asarray(idxs, dtype=np.int64)
-                # Safe remap into valid positions
-                idxs_np = self._last_rollout_index_map[idxs_np]
-                idxs = idxs_np
-        except Exception:
-            pass
-
+        if self._last_rollout_index_map is not None and not self.use_gae:
+            # idxs may be a list or tensor; convert to numpy indices
+            idxs_np = np.asarray(idxs, dtype=np.int64)
+            # Safe remap into valid positions
+            idxs_np = self._last_rollout_index_map[idxs_np]
+            idxs = idxs_np
+       
         return RolloutTrajectory(
             observations=trajectories.observations[idxs],
             actions=trajectories.actions[idxs],

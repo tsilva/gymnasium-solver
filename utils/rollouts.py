@@ -65,41 +65,34 @@ def _normalize_advantages(advantages: np.ndarray, eps: float) -> np.ndarray:
 def compute_batched_mc_returns(
     rewards: np.ndarray,
     dones: np.ndarray,
-    timeouts: Optional[np.ndarray],
+    timeouts: np.ndarray,
     gamma: float,
 ) -> np.ndarray:
-    """Compute discounted Monte Carlo-style returns for batched trajectories.
-
-    Shapes
-    - rewards: (T, N)
-    - dones: (T, N) [bool]
-    - timeouts: (T, N) [bool] or None
-
-    Behavior matches the collector logic:
-    - Resets the return accumulator only on real terminals (done and not timeout)
-    - Timeouts are treated as non-terminals (no bootstrap is added here)
-    """
-    rewards = np.asarray(rewards, dtype=np.float32)
-    dones = np.asarray(dones, dtype=bool)
-    timeouts = np.asarray(timeouts, dtype=bool)
+    """Compute discounted Monte Carlo-style returns for batched trajectories."""
 
     T, n_envs = rewards.shape
     returns_buf = np.zeros_like(rewards, dtype=np.float32)
     returns_acc = np.zeros(n_envs, dtype=np.float32)
-
+    
+    # Create a mask of non-terminals state 
+    # (all states that are not done and not timeout)
     non_terminal = _non_terminal_float_mask(dones, timeouts)
 
     for t in range(T - 1, -1, -1):
-        returns_acc = rewards[t] + gamma * returns_acc * non_terminal[t]
+        _rewards_t = rewards[t]
+        _non_terminal_t = non_terminal[t]
+        _future_returns = returns_acc * _non_terminal_t
+        _discounted_future_returns = gamma * _future_returns
+        returns_acc = _rewards_t + _discounted_future_returns
         returns_buf[t] = returns_acc
-    return returns_buf
 
+    return returns_buf
 
 def compute_batched_gae_advantages_and_returns(
     values: np.ndarray,
     rewards: np.ndarray,
     dones: np.ndarray,
-    timeouts: Optional[np.ndarray],
+    timeouts: np.ndarray,
     last_values: np.ndarray,
     bootstrapped_next_values: Optional[np.ndarray],
     gamma: float,
@@ -124,8 +117,7 @@ def compute_batched_gae_advantages_and_returns(
 
     # next_values: shift values by one step in time dimension; last row uses last_values
     next_values = np.zeros_like(values, dtype=np.float32)
-    if T > 1:
-        next_values[:-1] = values[1:]
+    if T > 1: next_values[:-1] = values[1:]
     next_values[-1] = last_values
 
     # If bootstrapped_next_values provided, override next_values at timeout steps
@@ -299,8 +291,6 @@ class RolloutBuffer:
         timeouts_np: np.ndarray,
     ) -> None:
         assert obs_np.shape == (self.n_envs, *self.obs_shape), f"Expected shape {(self.n_envs, *self.obs_shape)}, got {obs_np.shape}"
-        self.obs_buf[idx] = obs_np
-
         self.obs_buf[idx] = obs_np
         self.next_obs_buf[idx] = next_obs_np
         self.actions_buf[idx] = actions_np
@@ -577,10 +567,9 @@ class RolloutCollector():
         dones_slice = self._buffer.dones_buf[start:end]
         timeouts_slice = self._buffer.timeouts_buf[start:end]
 
-        # Prepare last values for each environment for the final bootstrap
-        last_values_vec = self._predict_values_np(last_obs)
 
         if self.use_gae:
+            last_values_vec = self._predict_values_np(last_obs)
             bootstrapped_slice = self._buffer.bootstrapped_values_buf[start:end]
             advantages_buf, returns_buf = compute_batched_gae_advantages_and_returns(
                 values=values_slice,
@@ -596,14 +585,15 @@ class RolloutCollector():
             # Monte Carlo returns for REINFORCE (no bootstrap added here)
             # Optionally treat time-limit truncations as terminals when not bootstrapping
             # to avoid return leakage across episode boundaries.
-            timeouts_for_mc = (
-                np.zeros_like(timeouts_slice, dtype=bool)
-                if self.mc_treat_timeouts_as_terminals else timeouts_slice
-            )
+            # A real terminal state is one that is "done" but not a "timeout". However
+            # for methods that don't bootstrap, we treat timeouts as terminals to avoid
+            # return leakage across episode boundaries.
+            _timeouts_slice = timeouts_slice
+            if self.mc_treat_timeouts_as_terminals: _timeouts_slice = np.zeros_like(timeouts_slice, dtype=bool)
             returns_buf = compute_batched_mc_returns(
                 rewards=rewards_slice,
                 dones=dones_slice,
-                timeouts=timeouts_for_mc,
+                timeouts=_timeouts_slice,
                 gamma=self.gamma,
             )
 
@@ -611,23 +601,18 @@ class RolloutCollector():
             # by making all timesteps within the same episode segment share the
             # segment's initial return (constant across the segment).
             if self.mc_return_type == "episode":
-                try:
-                    real_terminal = _real_terminal_mask(dones_slice, timeouts_for_mc)
-                    T, n_envs = returns_buf.shape
-                    for j in range(n_envs):
-                        seg_start = 0
-                        seg_value = returns_buf[seg_start, j] if T > 0 else 0.0
-                        for t in range(T):
-                            # Set the return at step t to the segment's initial return
-                            returns_buf[t, j] = seg_value
-                            if real_terminal[t, j]:
-                                seg_start = t + 1
-                                if seg_start >= T:
-                                    break
-                                seg_value = returns_buf[seg_start, j]
-                except Exception:
-                    # Be defensive: if anything goes wrong, fall back to reward-to-go
-                    pass
+                real_terminal = _real_terminal_mask(dones_slice, _timeouts_slice)
+                T, n_envs = returns_buf.shape
+                for j in range(n_envs):
+                    seg_start = 0
+                    seg_value = returns_buf[seg_start, j] if T > 0 else 0.0
+                    for t in range(T):
+                        # Set the return at step t to the segment's initial return
+                        returns_buf[t, j] = seg_value
+                        if not real_terminal[t, j]: continue
+                        seg_start = t + 1
+                        if seg_start >= T: break
+                        seg_value = returns_buf[seg_start, j]
 
             # Global baseline and advantages using running mean
             returns_flat = returns_buf.ravel()
@@ -639,7 +624,7 @@ class RolloutCollector():
 
             # Build a valid-mask index map to exclude trailing partial episodes
             try:
-                real_terminal = _real_terminal_mask(dones_slice, timeouts_for_mc)
+                real_terminal = _real_terminal_mask(dones_slice, _timeouts_slice)
                 T, n_envs = real_terminal.shape
                 valid_mask_2d = np.zeros((T, n_envs), dtype=bool)
                 for j in range(n_envs):

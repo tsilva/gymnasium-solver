@@ -17,6 +17,7 @@ reinforce:
   learning_rate: 6e-3
   eval_freq_epochs: 5
   frame_stack: 2 # Converges faster with frame stacking = 2, probably because it allows to estimate momentum better?
+  reinforce_returns: "episode"
 
 ppo:
   #seed: 100 # TODO: seed setting does not seem to be doing anything

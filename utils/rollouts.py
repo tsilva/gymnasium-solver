@@ -239,8 +239,7 @@ class RollingWindow:
     """
 
     def __init__(self, maxlen: int):
-        if maxlen <= 0:
-            raise ValueError("RollingWindow maxlen must be > 0")
+        if maxlen <= 0: raise ValueError("RollingWindow maxlen must be > 0")
         self._maxlen = int(maxlen)
         self._dq = deque()
         self._sum = 0.0
@@ -254,8 +253,7 @@ class RollingWindow:
 
     def mean(self) -> float:
         n = len(self._dq)
-        if n == 0:
-            return 0.0
+        if n == 0: return 0.0
         return self._sum / n
 
     def __len__(self) -> int:
@@ -275,26 +273,24 @@ class RunningStats:
     def __init__(self) -> None:
         self.count = 0
         self.sum = 0.0
-        self.sumsq = 0.0
+        self.sum_squared = 0.0
 
     def update(self, values: np.ndarray) -> None:
-        v = np.asarray(values, dtype=np.float32).ravel()
-        if v.size == 0:
-            return
-        self.count += int(v.size)
-        self.sum += float(v.sum())
-        self.sumsq += float((v * v).sum())
+        value_flat = np.asarray(values, dtype=np.float32).ravel()
+        if value_flat.size == 0: return
+
+        self.count += int(value_flat.size)
+        self.sum += float(value_flat.sum())
+        self.sum_squared += float((value_flat * value_flat).sum())
 
     def mean(self) -> float:
-        if self.count == 0:
-            return 0.0
+        if self.count == 0: return 0.0
         return self.sum / self.count
 
     def std(self) -> float:
-        if self.count == 0:
-            return 0.0
-        m = self.mean()
-        var = max(0.0, self.sumsq / self.count - m * m)
+        if self.count == 0: return 0.0
+        mean = self.mean()
+        var = max(0.0, self.sum_squared / self.count - mean * mean)
         return float(np.sqrt(var))
 
 class RolloutBuffer:
@@ -384,10 +380,6 @@ class RolloutBuffer:
         self.dones_buf[idx] = dones_np
         self.timeouts_buf[idx] = timeouts_np
 
-    def copy_tensors_to_cpu(self, start: int, end: int) -> None:
-        """Compatibility no-op (historical: tensors already live on CPU)."""
-        return
-
     # -------- Flatten helpers --------
     def flatten_slice_env_major(
         self,
@@ -408,6 +400,7 @@ class RolloutBuffer:
         def _flat_env_major_cpu_to_torch(arr: np.ndarray, dtype: torch.dtype) -> torch.Tensor:
             return torch.as_tensor(_flat_env_major(arr, start, end), dtype=dtype, device=self.device)
 
+        # TODO: why env major, and can we do env major by default if necessary?
         actions = _flat_env_major_cpu_to_torch(self.actions_buf, torch.int64)
         logps = _flat_env_major_cpu_to_torch(self.logprobs_buf, torch.float32)
         values = _flat_env_major_cpu_to_torch(self.values_buf, torch.float32)
@@ -510,8 +503,13 @@ class RolloutCollector():
 
         # Reusable arrays to avoid per-step allocations
         self._step_timeouts = np.zeros(self.n_envs, dtype=bool)
+
         # Optional index remapping for MC masking to keep dataset length stable
+        # TODO: why this?
         self._last_rollout_index_map = None
+
+        # Collect terminal observations for later batch processing
+        self.terminal_obs_info = []  # List of (step_idx, env_idx, terminal_obs)
 
     # -------- Small private helpers --------
     def _predict_values_np(self, obs_batch: np.ndarray) -> np.ndarray:
@@ -520,17 +518,16 @@ class RolloutCollector():
         vals = self.policy_model.predict_values(obs_t).detach().cpu().numpy().astype(np.float32)
         return vals.squeeze()
 
-    def _bootstrap_timeouts_batch(self, start: int, terminal_obs_info: list[tuple[int, int, np.ndarray]]):
+    def _bootstrap_timeouts_batch(self, start: int):
         """Predict values for all truncated terminal observations and write to buffer.
 
-        terminal_obs_info contains tuples of (step_idx, env_idx, terminal_obs).
+        self.terminal_obs_info contains tuples of (step_idx, env_idx, terminal_obs).
         """
-        if not terminal_obs_info:
-            return
-        term_obs_batch = np.stack([info[2] for info in terminal_obs_info])
+        if not self.terminal_obs_info: return
+        term_obs_batch = np.stack([info[2] for info in self.terminal_obs_info])
         batch_values = self._predict_values_np(term_obs_batch)
         batch_values = np.atleast_1d(batch_values)
-        for i, (step_idx_term, env_idx, _) in enumerate(terminal_obs_info):
+        for i, (step_idx_term, env_idx, _) in enumerate(self.terminal_obs_info):
             self._buffer.bootstrapped_values_buf[start + step_idx_term, env_idx] = float(batch_values[i])
 
     def _update_action_histogram(self, actions_flat: np.ndarray) -> None:
@@ -552,9 +549,7 @@ class RolloutCollector():
         *,
         done_idxs: np.ndarray,
         infos: list,
-        step_idx: int,
-        timeouts: np.ndarray,
-        terminal_obs_info: list[tuple[int, int, np.ndarray]],
+        step_idx: int
     ) -> None:
         """Process episode-complete infos for all done envs at a step.
 
@@ -562,9 +557,10 @@ class RolloutCollector():
         """
         assert len(done_idxs) > 0, "No done environments at a step"
 
-        for idx in done_idxs:
+        # Process episode-complete infos for all done envs at a step
+        for env_idx in done_idxs:
             # Retrieve episode data from info
-            info = infos[idx]
+            info = infos[env_idx]
             episode = info['episode']
             episode_reward = episode['r']
             episode_length = episode['l']
@@ -572,8 +568,8 @@ class RolloutCollector():
             # Add episode data to deques (for stats tracking)
             self.episode_reward_deque.append(episode_reward)
             self.episode_length_deque.append(episode_length)
-            self.env_episode_reward_deques[idx].append(episode_reward)
-            self.env_episode_length_deques[idx].append(episode_length)
+            self.env_episode_reward_deques[env_idx].append(episode_reward)
+            self.env_episode_length_deques[env_idx].append(episode_length)
 
             # Track last episode stats
             self._last_episode_reward = episode_reward
@@ -584,13 +580,12 @@ class RolloutCollector():
             # observation from the next episode, we'll need the actual last 
             # observation to bootstrap the value function)
             if info.get("TimeLimit.truncated"):
-                # TODO: what is this?
                 # Mark episode as timed out
-                timeouts[idx] = True
+                self._step_timeouts[env_idx] = True  # TODO: don't think I need this, seems like I can merge this with terminal_obs_info
 
                 # Store last episode observation
                 terminal_observation = info["terminal_observation"]
-                terminal_obs_info.append((step_idx, idx, terminal_observation)) # TODO: what is step_idx?
+                self.terminal_obs_info.append((step_idx, env_idx, terminal_observation))
 
     @torch.inference_mode()
     def collect(self, *args, **kwargs):
@@ -631,15 +626,20 @@ class RolloutCollector():
 
     def _update_running_stats_after_rollout(self, start: int, end: int) -> None:
         """Update obs/reward/action stats and perform any deferred CPU copies."""
-        # Observations: aggregate scalar stats across all dims
+        # Add observations to observation stats
         obs_block = self._buffer.obs_buf[start:end]
-        self._obs_stats.update(obs_block.astype(np.float32).ravel())
-        # Rewards
-        self._rew_stats.update(self._buffer.rewards_buf[start:end].ravel())
-        # Actions histogram
-        self._update_action_histogram(self._buffer.actions_buf[start:end].ravel())
-        # Compatibility no-op (kept for historical reasons)
-        self._buffer.copy_tensors_to_cpu(start, end)
+        obs_block_flat = obs_block.astype(np.float32).ravel()
+        self._obs_stats.update(obs_block_flat)
+
+        # Add rewards to reward stats 
+        rewards_block = self._buffer.rewards_buf[start:end]
+        rewards_block_flat = rewards_block.ravel()
+        self._rew_stats.update(rewards_block_flat)
+
+        # Add actions to action histogram
+        actions_block = self._buffer.actions_buf[start:end]
+        actions_block_flat = actions_block.astype(np.int64).ravel()
+        self._update_action_histogram(actions_block_flat)
 
     def _compute_targets(self, start: int, end: int, last_obs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Compute advantages and returns for the slice [start, end)."""
@@ -701,12 +701,12 @@ class RolloutCollector():
                     pass
 
             # Global baseline and advantages using running mean
-            self._base_stats.update(returns_buf.ravel())
-            if self._base_stats.count > 0:
-                baseline = self._base_stats.mean()
-                advantages_buf = returns_buf - baseline
-            else:
-                advantages_buf = returns_buf.copy()
+            returns_flat = returns_buf.ravel()
+            self._base_stats.update(returns_flat)
+
+            # Calculate advantages by subtracting baseline from returns
+            baseline = self._base_stats.mean()
+            advantages_buf = returns_buf - baseline
 
             # Build a valid-mask index map to exclude trailing partial episodes
             try:
@@ -737,9 +737,6 @@ class RolloutCollector():
         start = self._buffer.begin_rollout(self.n_steps)
         end = start + self.n_steps
 
-        # Collect terminal observations for later batch processing
-        terminal_obs_info = []  # List of (step_idx, env_idx, terminal_obs)
-
         self.rollout_steps = 0
         self.rollout_episodes = 0
 
@@ -756,24 +753,15 @@ class RolloutCollector():
             actions_np = actions_t.detach().cpu().numpy()
             next_obs, rewards, dones, infos = self.env.step(actions_np)
 
-            # TODO: what is this?
-            # Fast episode info processing - reuse timeout array
-            timeouts = self._step_timeouts
-            timeouts.fill(False)
-
-            # TODO: why zero indexing?
-            # Find all done environments at once
-            done_indices = np.where(dones)[0]
-            
             # In case there are any done environments, process the episode info
             # (eg: add final reward to stats, store last observation for value bootstrapping, etc.)
+            self._step_timeouts.fill(False) 
+            done_indices = np.where(dones)[0]  # TODO: why zero indexing?
             if len(done_indices) > 0:
                 self._process_done_infos(
                     done_idxs=done_indices,
                     infos=infos,
-                    step_idx=step_idx,
-                    timeouts=timeouts,
-                    terminal_obs_info=terminal_obs_info,
+                    step_idx=step_idx
                 )
 
             # Persist environment outputs for this step
@@ -788,7 +776,7 @@ class RolloutCollector():
                 values_np,
                 rewards,
                 dones,
-                timeouts,
+                self._step_timeouts,
             )
 
             # Next observation is now current observation
@@ -806,8 +794,7 @@ class RolloutCollector():
         self._update_running_stats_after_rollout(start, end)
 
         # Batch process all terminal observations at once (major performance improvement)
-        if terminal_obs_info:
-            self._bootstrap_timeouts_batch(start, terminal_obs_info)
+        if self.terminal_obs_info: self._bootstrap_timeouts_batch(start)
 
         # Compute advantages and returns for this slice
         advantages_buf, returns_buf = self._compute_targets(start, end, last_obs)
@@ -815,12 +802,9 @@ class RolloutCollector():
         # Create final training tensors from persistent buffers
         trajectories = self._buffer.flatten_slice_env_major(start, end, advantages_buf, returns_buf)
 
-        # For MC path, we left dataset length unchanged and stored an index map
-        # to remap invalid indices at collate time.
-
         self.total_rollouts += 1
         rollout_elapsed = time.time() - rollout_start
-        fps = len(trajectories.observations) / rollout_elapsed  # steps per second
+        fps = len(trajectories.observations) / rollout_elapsed
         self.rollout_fpss.append(fps)
 
         return trajectories
@@ -843,6 +827,7 @@ class RolloutCollector():
                 idxs = idxs_np
         except Exception:
             pass
+
         return RolloutTrajectory(
             observations=trajectories.observations[idxs],
             actions=trajectories.actions[idxs],
@@ -889,9 +874,8 @@ class RolloutCollector():
             "total_episodes": self.total_episodes,
             "total_rollouts": self.total_rollouts,
             "rollout_timesteps": self.rollout_steps,
-            "rollout_episodes": self.rollout_episodes,  # Renamed to avoid conflict with video logging
+            "rollout_episodes": self.rollout_episodes,
             "rollout_fps": rollout_fps,  # TODO: this is a mean, it shouln't be
-            # Immediate last episode stats
             "ep_rew_last": float(self._last_episode_reward),
             "ep_len_last": int(self._last_episode_length),
             "ep_rew_mean": ep_rew_mean,

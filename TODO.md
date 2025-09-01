@@ -1,3 +1,4 @@
+- TODO: add support for non-reward to go support + baseline subtraction
 - FEAT: add sweeping support
 - FEAT: add fractional batch size support
 - TODO: x metric cant be total timesteps because that increases with parallelization.... must be n_updates? index by epoch? or add updates metric?

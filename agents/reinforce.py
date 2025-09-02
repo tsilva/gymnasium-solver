@@ -25,12 +25,6 @@ class REINFORCE(BaseAgent):
             obs_space=getattr(self.train_env, 'observation_space', None),  # TODO: what is observation space being used for
             **policy_kwargs,
         )
-    
-    # TODO: simplify, unify these flags
-    def rollout_collector_hyperparams(self):
-        base_params = super().rollout_collector_hyperparams()
-        #base_params['advantages_type'] = self.config.reinforce_advantages_type
-        return base_params
 
     # TODO: only does something with normalization off, but even that way it doesnt converge
     def losses_for_batch(self, batch, batch_idx):

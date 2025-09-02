@@ -1,5 +1,6 @@
 """Configuration loading for environment YAML and legacy hyperparams."""
 
+import json
 from dataclasses import MISSING, asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -85,6 +86,10 @@ class Config:
 
     # How many parallel environments are used to collect rollouts
     n_envs: int = 1
+
+    # TODO: pass in env_kwargs instead
+    # Overrides the environment reward threshold for early stopping
+    reward_threshold: Optional[float] = None # TODO: rename to env_reward_threshold
 
     # List of environment wrappers to apply to the environment
     # (eg: reward shapers, frame stacking, etc)
@@ -189,10 +194,6 @@ class Config:
     # (when set, the selected actions will always be the most likely instead of sampling from policy)
     eval_deterministic: bool = False
 
-    # TODO: pass in env_kwargs instead
-    # Overrides the environment reward threshold for early stopping
-    reward_threshold: Optional[float] = None # TODO: rename to env_reward_threshold
-
     # Whether to stop training when the training reward threshold is reached
     early_stop_on_train_threshold: bool = False
 
@@ -292,64 +293,35 @@ class Config:
         return {
             'gamma': self.gamma,
             'gae_lambda': self.gae_lambda,
-            'normalize_advantages': self.normalize_advantages == "rollout"
+            'normalize_returns': self.normalize_returns == "rollout",
+            'returns_type': self.returns_type,
+            'advantages_type': self.advantages_type,
+            'normalize_advantages': self.normalize_advantages == "rollout",
         }
     
-    def validate(self) -> None:
-        """Validate that all configuration values are valid."""
-        # Environment
-        if not self.env_id:
-            raise ValueError("env_id must be a non-empty string.")
-        if not self.algo_id:
-            raise ValueError("algo_id must be a non-empty string.")
-        if self.seed < 0:
-            raise ValueError("seed must be a non-negative integer.")
-
-        # Networks
-        if isinstance(self.hidden_dims, tuple) and not all(isinstance(x, int) for x in self.hidden_dims):
-            raise ValueError("All elements of hidden_dims tuple must be ints.")
-        if self.policy_lr is None or self.policy_lr <= 0:
-            raise ValueError("policy_lr must be a positive float.")
-        if self.ent_coef < 0:
-            raise ValueError("ent_coef must be a non-negative float.")
-
-        # Training
-        if self.n_epochs <= 0:
-            raise ValueError("n_epochs must be a positive integer.")
-        if self.n_steps <= 0:
-            raise ValueError("n_steps must be a positive integer.")
-        if self.batch_size <= 0:
-            raise ValueError("batch_size must be a positive integer.")
-        if self.max_timesteps is not None and self.max_timesteps <= 0:
-            raise ValueError("max_timesteps must be a positive number when set.")
-        if not (0 < self.gamma <= 1):
-            raise ValueError("gamma must be in (0, 1].")
-        if not (0 <= self.gae_lambda <= 1):
-            raise ValueError("gae_lambda must be in [0, 1].")
-        if self.clip_range is not None and not (0 < self.clip_range < 1):
-            raise ValueError("clip_range must be in (0, 1).")
-
-        # Evaluation
-        if self.eval_freq_epochs is not None and self.eval_freq_epochs <= 0:
-            raise ValueError("eval_freq_epochs must be a positive integer when set.")
-        if self.eval_warmup_epochs < 0:
-            raise ValueError("eval_warmup_epochs must be a non-negative integer.")
-        if self.eval_episodes is not None and self.eval_episodes <= 0:
-            raise ValueError("eval_episodes must be a positive integer when set.")
-        if self.eval_recording_freq_epochs is not None and self.eval_recording_freq_epochs <= 0:
-            raise ValueError("eval_recording_freq_epochs must be a positive integer when set.")
-        if self.reward_threshold is not None and self.reward_threshold <= 0:
-            raise ValueError("reward_threshold must be a positive float.")
-
-        # Runtime / hardware
-        if isinstance(self.devices, str) and self.devices != "auto":
-            raise ValueError("devices may be an int, 'auto', or None")
-
     def save_to_json(self, path: str) -> None:
         """Save configuration to a JSON file."""
-        import json
-        with open(path, "w") as f:
-            json.dump(asdict(self), f, indent=2, default=str)
+        with open(path, "w") as f: json.dump(asdict(self), f, indent=2, default=str)
+
+    def validate(self):
+        assert self.seed > 0, "seed must be a positive integer."
+        assert self.policy_lr > 0, "policy_lr must be a positive float."
+        assert self.ent_coef >= 0, "ent_coef must be a non-negative float."
+        assert self.n_epochs > 0, "n_epochs must be a positive integer."
+        assert self.n_steps > 0, "n_steps must be a positive integer."
+        assert self.batch_size > 0, "batch_size must be a positive integer."
+        assert self.max_timesteps is None or self.max_timesteps > 0, "max_timesteps must be a positive number when set."
+        assert 0 < self.gamma <= 1, "gamma must be in (0, 1]."
+        assert 0 <= self.gae_lambda <= 1, "gae_lambda must be in [0, 1]."
+        assert self.clip_range is None or (0 < self.clip_range < 1), "clip_range must be in (0, 1) when set."
+        assert self.eval_freq_epochs is None or self.eval_freq_epochs > 0, "eval_freq_epochs must be a positive integer when set."
+        assert self.eval_warmup_epochs >= 0, "eval_warmup_epochs must be a non-negative integer."
+        assert self.eval_episodes is None or self.eval_episodes > 0, "eval_episodes must be a positive integer when set."
+        assert self.eval_recording_freq_epochs is None or self.eval_recording_freq_epochs > 0, "eval_recording_freq_epochs must be a positive integer when set."
+        assert self.reward_threshold is None or self.reward_threshold > 0, "reward_threshold must be a positive float when set."
+        assert self.early_stop_on_train_threshold or self.early_stop_on_eval_threshold, "At least one of early_stop_on_train_threshold or early_stop_on_eval_threshold must be True."
+        assert self.devices is None or isinstance(self.devices, int) or self.devices == "auto", "devices may be an int, 'auto', or None."
+        assert self.batch_size <= self.n_steps, "batch_size should not exceed n_steps."
 
 def load_config(config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> Config:
     """Convenience function to load configuration."""

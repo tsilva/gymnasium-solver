@@ -185,10 +185,6 @@ class Config:
     # (how many training epochs between recordings)
     eval_recording_freq_epochs: Optional[int] = None # TODO: pivot off N_evals instead
 
-    # Whether to run evaluation in the background
-    # (without this, evaluation will block training)
-    eval_async: bool = False
-
     # Whether to run evaluation deterministically
     # (when set, the selected actions will always be the most likely instead of sampling from policy)
     eval_deterministic: bool = False
@@ -202,16 +198,6 @@ class Config:
 
     # Whether to stop training when the evaluation reward threshold is reached
     early_stop_on_eval_threshold: bool = True
-
-    # TODO: get rid of this
-    # Whether to log per-environment evaluation metrics
-    log_per_env_eval_metrics: bool = False
-
-    # TODO: get rid of this
-    checkpoint_dir: str = "checkpoints"
-
-    # TODO: get rid of this
-    resume: bool = False
 
     # The accelerator to use for training (eg: simple environments are faster on CPU, image environments are faster on GPU)
     accelerator: "Config.AcceleratorType" = AcceleratorType.cpu  # type: ignore[assignment]

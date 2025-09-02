@@ -353,8 +353,8 @@ class BaseAgent(pl.LightningModule):
         epoch_fps = self.timing.fps_since("on_validation_epoch_start", steps_now=total_timesteps)
 
         # Log metrics
-        if not self.config.log_per_env_eval_metrics:
-            eval_metrics = {k: v for k, v in eval_metrics.items() if not k.startswith("per_env/")}
+        #if not self.config.log_per_env_eval_metrics:
+        eval_metrics = {k: v for k, v in eval_metrics.items() if not k.startswith("per_env/")}
 
         # If evaluation produced zero episodes (edge cases), avoid logging
         # ep_*_mean to external sinks to prevent an initial zero spike.
@@ -744,7 +744,7 @@ class BaseAgent(pl.LightningModule):
             mode="max",
             save_last=True, 
             save_threshold_reached=True,
-            resume=self.config.resume,
+            resume=False
         )
         callbacks.append(checkpoint_cb)
 

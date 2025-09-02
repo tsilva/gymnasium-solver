@@ -7,20 +7,29 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 import yaml
 
-def _convert_numeric_strings(config_dict: Dict[str, Any]) -> Dict[str, Any]:
+def convert_dict_numeric_strings(config_dict: Dict[str, Any]) -> Dict[str, Any]:
     """Convert scientific-notation strings back to numeric types (idempotent)."""
+
+    # Iterate over the dictionary items (as list) to avoid 
+    # modifying the dictionary size during iteration
     for key, value in list(config_dict.items()):
-        if isinstance(value, str):
-            try:
-                if 'e' in value.lower():
-                    config_dict[key] = float(value)
-            except Exception:
-                # Leave value unchanged on parse failure
-                pass
+        # Skip non-string values
+        if not isinstance(value, str): continue
+
+        # Parse and coerce to numeric type
+        try:
+            parsed_value = float(value)
+            if parsed_value.is_integer(): parsed_value = int(parsed_value)
+            config_dict[key] = parsed_value
+        except:
+            # Leave value unchanged on parse failure
+            pass
+
+    # Return the modified dictionary
     return config_dict
 
-
 def _dataclass_defaults_dict(cls: type) -> Dict[str, Any]:
+
     """Collect dataclass default values without instantiation."""
     defaults: Dict[str, Any] = {}
     for f in cls.__dataclass_fields__.values():  # type: ignore[attr-defined]
@@ -34,7 +43,7 @@ def _dataclass_defaults_dict(cls: type) -> Dict[str, Any]:
 def _finalize_config_dict(raw_config: Dict[str, Any]) -> Dict[str, Any]:
     """Finalize a raw config dict prior to dataclass init (mutates and returns)."""
     # Numeric string conversions first
-    _convert_numeric_strings(raw_config)
+    convert_dict_numeric_strings(raw_config)
     # Parse schedule specifiers like lin_0.001
     Config._parse_schedules(raw_config)
     # RL Zoo compatibility mapping

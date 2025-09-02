@@ -6,27 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
 
 import yaml
-
-def convert_dict_numeric_strings(config_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """Convert scientific-notation strings back to numeric types (idempotent)."""
-
-    # Iterate over the dictionary items (as list) to avoid 
-    # modifying the dictionary size during iteration
-    for key, value in list(config_dict.items()):
-        # Skip non-string values
-        if not isinstance(value, str): continue
-
-        # Parse and coerce to numeric type
-        try:
-            parsed_value = float(value)
-            if parsed_value.is_integer(): parsed_value = int(parsed_value)
-            config_dict[key] = parsed_value
-        except:
-            # Leave value unchanged on parse failure
-            pass
-
-    # Return the modified dictionary
-    return config_dict
+from .dict_utils import convert_dict_numeric_strings
 
 def _dataclass_defaults_dict(cls: type) -> Dict[str, Any]:
 
@@ -44,20 +24,58 @@ def _finalize_config_dict(raw_config: Dict[str, Any]) -> Dict[str, Any]:
     """Finalize a raw config dict prior to dataclass init (mutates and returns)."""
     # Numeric string conversions first
     convert_dict_numeric_strings(raw_config)
+
     # Parse schedule specifiers like lin_0.001
     Config._parse_schedules(raw_config)
-    # RL Zoo compatibility mapping
-    Config._handle_legacy_compatibility(raw_config)
+    
     # Normalize hidden_dims to tuple when provided as list
     if isinstance(raw_config.get('hidden_dims'), list):
         raw_config['hidden_dims'] = tuple(raw_config['hidden_dims'])
+    
     # Coerce and validate enum-like fields early
     Config._coerce_enums(raw_config)
+    
     return raw_config
 
 
 @dataclass
 class Config:
+    class PolicyType(str, Enum):
+        mlp = "mlp"
+        cnn = "cnn"
+
+    class AcceleratorType(str, Enum):
+        auto = "auto"
+        cpu = "cpu"
+        gpu = "gpu"
+        mps = "mps"
+        tpu = "tpu"
+        ipu = "ipu"
+        hpu = "hpu"
+
+    class ReturnsType(str, Enum):
+        mc_episode = "montecarlo:episode"
+        mc_rtg = "montecarlo:reward_to_go"
+        gae_rtg = "gae:reward_to_go"
+
+    class AdvantagesType(str, Enum):
+        gae = "gae"
+        baseline_subtraction = "baseline_subtraction"
+
+    class AdvantageNormType(str, Enum):
+        rollout = "rollout"
+        batch = "batch"
+        off = "off"
+
+    class ReinforceTargetsType(str, Enum):
+        returns = "returns"
+        advantages = "advantages"
+
+    class ObsType(str, Enum):
+        rgb = "rgb"
+        ram = "ram"
+        objects = "objects"
+
     env_id: str
     algo_id: str
 
@@ -87,8 +105,8 @@ class Config:
     policy_kwargs: Optional[Dict[str, Any]] = field(default_factory=lambda: {"activation": "tanh"})
 
     policy_lr: float = 3e-4
-    learning_rate: Optional[float] = None
-    learning_rate_schedule: Optional[str] = None
+    policy_lr_schedule: Optional[str] = None
+
     max_grad_norm: float = 0.5
 
     gamma: float = 0.99
@@ -126,97 +144,38 @@ class Config:
 
     quiet: bool = False
 
-    normalize: Optional[bool] = None
-
-    # ---- Enum helpers ----
-    class PolicyType(str, Enum):
-        mlp = "mlp"
-        cnn = "cnn"
-
-    class AcceleratorType(str, Enum):
-        auto = "auto"
-        cpu = "cpu"
-        gpu = "gpu"
-        mps = "mps"
-        tpu = "tpu"
-        ipu = "ipu"
-        hpu = "hpu"
-
-    class ReturnsType(str, Enum):
-        mc_episode = "montecarlo:episode"
-        mc_rtg = "montecarlo:reward_to_go"
-        gae_rtg = "gae:reward_to_go"
-
-    class AdvantagesType(str, Enum):
-        gae = "gae"
-        baseline_subtraction = "baseline_subtraction"
-
-    class AdvantageNormType(str, Enum):
-        rollout = "rollout"
-        batch = "batch"
-        off = "off"
-
-    class ReinforceTargetsType(str, Enum):
-        returns = "returns"
-        advantages = "advantages"
-
-    class ObsType(str, Enum):
-        rgb = "rgb"
-        ram = "ram"
-        objects = "objects"
-
     @classmethod
     def load_from_yaml(cls, config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> 'Config':
         """Load config from environment YAMLs or legacy hyperparams."""
-        # Normalize CLI-provided empty-string variant to None
-        if isinstance(variant_id, str) and variant_id.strip() == "":
-            variant_id = None
-
         # Get the project root directory
         project_root = Path(__file__).parent.parent
-        
-        # Try new environment-centric format first
         env_config_path = project_root / config_dir
 
         # Build an index of config_id -> raw mapping supporting BOTH formats
         all_configs: Dict[str, Dict[str, Any]] = {}
+
         # Track variant order per project (YAML file) to allow default selection
         project_variants: Dict[str, list] = {}
 
-        def _is_new_style(doc: Dict[str, Any]) -> bool:
-            return isinstance(doc, dict) and ("env_id" in doc)
-
         def _collect_from_file(path: Path) -> None:
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    doc = yaml.safe_load(f) or {}
-                if not isinstance(doc, dict):
-                    return
-            except Exception:
-                return
+            with open(path, "r", encoding="utf-8") as f:
+                doc = yaml.safe_load(f) or {}
 
-            if _is_new_style(doc):
-                field_names = set(cls.__dataclass_fields__.keys())
-                base: Dict[str, Any] = {k: v for k, v in doc.items() if k in field_names}
-                project = base.get("project_id") or path.stem.replace(".new", "")
-                if project not in project_variants:
-                    project_variants[project] = []
-                for k, v in doc.items():
-                    if k in field_names:
-                        continue
-                    if not isinstance(v, dict):
-                        continue
-                    project_variants[project].append(str(k))
-                    variant_cfg = dict(base)
-                    variant_cfg.update(v)
-                    variant_cfg.setdefault("algo_id", str(k))
-                    variant_cfg.setdefault("project_id", project)
-                    cid = f"{project}_{k}"
-                    all_configs[cid] = variant_cfg
-            else:
-                for k, v in doc.items():
-                    if isinstance(v, dict):
-                        all_configs[str(k)] = v
+            field_names = set(cls.__dataclass_fields__.keys())
+            base: Dict[str, Any] = {k: v for k, v in doc.items() if k in field_names}
+            project = base.get("project_id") or path.stem.replace(".new", "")
+            if project not in project_variants:
+                project_variants[project] = []
+            for k, v in doc.items():
+                if k in field_names: continue
+                if not isinstance(v, dict): continue
+                project_variants[project].append(str(k))
+                variant_cfg = dict(base)
+                variant_cfg.update(v)
+                variant_cfg.setdefault("algo_id", str(k))
+                variant_cfg.setdefault("project_id", project)
+                cid = f"{project}_{k}"
+                all_configs[cid] = variant_cfg
 
         for yf in sorted(env_config_path.glob("*.yaml")):
             _collect_from_file(yf)
@@ -228,25 +187,13 @@ class Config:
         # - If algo_id is provided, use <project>_<algo_id>
         # - Otherwise, pick the first variant declared in the YAML file
         if config_id in project_variants:
-            if variant_id is not None:
-                candidate = f"{config_id}_{variant_id}"
-                if candidate in all_configs:
-                    return cls._load_from_environment_config(all_configs[candidate], all_configs)
-                raise ValueError(
-                    f"Variant '{variant_id}' not found for project '{config_id}'. Available: {project_variants.get(config_id) or []}"
-                )
-            variants = project_variants.get(config_id) or []
-            if variants:
-                candidate = f"{config_id}_{variants[0]}"
-                if candidate in all_configs:
-                    return cls._load_from_environment_config(all_configs[candidate], all_configs)
-        
-        # Fall back to legacy format
-        if variant_id is None:
+            candidate = f"{config_id}_{variant_id}"
+            if candidate in all_configs:
+                return cls._load_from_environment_config(all_configs[candidate], all_configs)
             raise ValueError(
-                f"Config '{config_id}' not found in environment configs and no variant_id provided for legacy format"
+                f"Variant '{variant_id}' not found for project '{config_id}'. Available: {project_variants.get(config_id) or []}"
             )
-        
+
         config_path = project_root / "config/hyperparams"
         return cls._load_from_legacy_config(config_id, variant_id, config_path)
 
@@ -299,97 +246,6 @@ class Config:
         
         return resolved_config
 
-    # (Dead code path removed)
-
-    @classmethod
-    def _load_from_legacy_config(cls, config_id: str, algo_id: str, config_path: Path) -> 'Config':
-        """Load configuration from legacy hyperparams format."""
-        # Start with class defaults (once)
-        final_config: Dict[str, Any] = _dataclass_defaults_dict(cls)
-
-        # Load algorithm-specific configuration file
-        algo_config_path = config_path / f"{algo_id.lower()}.yaml"
-        if not algo_config_path.exists():
-            raise FileNotFoundError(f"Algorithm config file not found: {algo_config_path}")
-        
-        with open(algo_config_path, 'r') as f:
-            algo_config = yaml.safe_load(f)
-
-        # Set algo_id
-        final_config['algo_id'] = algo_id
-
-        # Helper function to resolve inheritance
-        def resolve_config_with_inheritance(config_name: str, visited: set = None) -> Dict[str, Any]:
-            if visited is None:
-                visited = set()
-            
-            if config_name in visited:
-                raise ValueError(f"Circular inheritance detected: {' -> '.join(visited)} -> {config_name}")
-            
-            if config_name not in algo_config:
-                raise ValueError(f"Config '{config_name}' not found for inheritance in {algo_config_path}")
-            
-            config_data = algo_config[config_name].copy()
-            
-            # Handle inheritance
-            if 'inherit_from' in config_data:
-                parent_config_name = config_data.pop('inherit_from')
-                visited.add(config_name)
-                parent_config = resolve_config_with_inheritance(parent_config_name, visited)
-                visited.remove(config_name)
-                
-                # Merge parent config with child config (child overrides parent)
-                merged_config = parent_config.copy()
-                merged_config.update(config_data)
-                return merged_config
-            
-            return config_data
-
-        # Try new format first (config_id with env_id field)
-        if config_id in algo_config:
-            config_data = resolve_config_with_inheritance(config_id)
-            final_config.update(config_data)
-            
-            # In new format, env_id should be in the config data
-            if 'env_id' not in config_data:
-                raise ValueError(f"Config '{config_id}' missing required 'env_id' field in {algo_config_path}")
-                
-        else:
-            # Try legacy format (config_id is actually env_id)
-            # Check if any config has this env_id
-            matching_configs = []
-            for conf_id, conf_data in algo_config.items():
-                if isinstance(conf_data, dict) and conf_data.get('env_id') == config_id:
-                    matching_configs.append(conf_id)
-            
-            if len(matching_configs) == 1:
-                # Found exactly one config for this env_id in new format
-                config_data = resolve_config_with_inheritance(matching_configs[0])
-                final_config.update(config_data)
-            elif len(matching_configs) > 1:
-                # Multiple configs for same env_id - user needs to be specific
-                raise ValueError(f"Multiple configs found for environment '{config_id}': {matching_configs}. "
-                               f"Please specify one of these config IDs instead of the environment ID.")
-            else:
-                # Check if it's a legacy format (env_id as top-level key without env_id field)
-                legacy_configs = {}
-                for conf_id, conf_data in algo_config.items():
-                    if isinstance(conf_data, dict) and 'env_id' not in conf_data:
-                        legacy_configs[conf_id] = conf_data
-                
-                if config_id in legacy_configs:
-                    # Legacy format: config_id is env_id, no env_id field in config
-                    config_data = resolve_config_with_inheritance(config_id)
-                    final_config.update(config_data)
-                    final_config['env_id'] = config_id
-                else:
-                    available_configs = list(algo_config.keys())
-                    raise ValueError(f"Config/Environment '{config_id}' not found in {algo_config_path}. "
-                                   f"Available configs: {available_configs}")
-
-        _finalize_config_dict(final_config)
-        return cls._instantiate(final_config)
-
     @classmethod
     def _instantiate(cls, final_config: Dict[str, Any]) -> 'Config':
         """Create Config instance and apply final normalization and validation."""
@@ -399,32 +255,20 @@ class Config:
         return instance
 
     @classmethod
-    def _handle_legacy_compatibility(cls, config: Dict[str, Any]) -> None:
-        """Handle RLZOO format compatibility."""
-        # Use learning_rate if set, otherwise use policy_lr
-        if 'learning_rate' in config and config['learning_rate'] is not None:
-            config['policy_lr'] = config['learning_rate']
-        
-        # Handle normalize flag (RLZOO format) -> normalize_obs
-        if 'normalize' in config and config['normalize'] is not None:
-            config['normalize_obs'] = config['normalize']
-            config['normalize_reward'] = config['normalize']
-        # No-op fields are intentionally ignored
-
-    @classmethod
     def _parse_schedules(cls, config: Dict[str, Any]) -> None:
+        # Iterate over the dictionary items (as list) to avoid 
+        # modifying the dictionary size during iteration
         for key, value in list(config.items()):
-            if not isinstance(value, str):
-                continue
+            # Skip non-string values    
+            if not isinstance(value, str): continue
+
+            # Skip non-linear schedule values
             val_lower = value.lower()
-            if not val_lower.startswith('lin_'):
-                continue
+            if not val_lower.startswith('lin_'): continue
+            
+            # Set the schedule and value
             config[f"{key}_schedule"] = 'linear'
-            try:
-                config[key] = float(val_lower.split('lin_')[1])
-            except Exception:
-                # Leave value unchanged on parse failure
-                pass
+            config[key] = float(val_lower.split('lin_')[1])
 
     @classmethod
     def _coerce_enums(cls, config: Dict[str, Any]) -> None:
@@ -532,20 +376,6 @@ class Config:
             if self.eval_recording_freq_epochs is None:
                 self.eval_recording_freq_epochs = self.eval_freq_epochs  # record when we evaluate
 
-        # Map RL Zoo fields to internal ones if provided at construction-time
-        if self.normalize is not None:
-            self.normalize_obs = self.normalize
-            self.normalize_reward = self.normalize
-
-        # If a scheduled learning_rate is provided, prefer it for scheduling base
-        # while keeping policy_lr as the optimizer's initial value
-        if self.learning_rate is not None and self.policy_lr is None:
-            self.policy_lr = self.learning_rate
-
-        # Normalize policy name capitalization
-        if isinstance(self.policy, str):
-            self.policy = self.policy.strip()
-            
         # Ensure policy_kwargs is a dict
         if self.policy_kwargs is None:
             self.policy_kwargs = {}

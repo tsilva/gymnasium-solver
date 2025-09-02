@@ -25,7 +25,7 @@ ppo:
   batch_size: 1024
   n_epochs: 3
   clip_range: 0.1
-  learning_rate: 1e-4
+  policy_lr: 1e-4
   frame_stack: 4
   eval_freq_epochs: 20
   eval_episodes: 5

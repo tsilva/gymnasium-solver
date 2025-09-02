@@ -15,7 +15,7 @@ reinforce:
   n_envs: 16
   n_steps: 1024
   batch_size: 4096
-  learning_rate: 1e-4
+  policy_lr: 1e-4
   normalize_returns: "baseline"
   ent_coef: 0.05
   eval_freq_epochs: 20 
@@ -30,5 +30,5 @@ ppo:
   n_epochs: 10
   ent_coef: 0.003
   clip_range: 0.15
-  learning_rate: 3e-4
+  policy_lr: 3e-4
   eval_freq_epochs: 50

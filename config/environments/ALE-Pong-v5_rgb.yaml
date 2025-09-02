@@ -23,7 +23,7 @@ reinforce:
   n_envs: 4
   n_steps: 512
   batch_size: 64
-  learning_rate: 1e-4
+  policy_lr: 1e-4
 
 ppo:
   algo_id: ppo
@@ -33,7 +33,7 @@ ppo:
   batch_size: 1024         # 2k rollout → 2 minibatches of 1024
   n_epochs: 3
   clip_range: 0.1
-  learning_rate: 1e-4      # Slightly lower LR for stability on pixels
+  policy_lr: 1e-4      # Slightly lower LR for stability on pixels
   frame_stack: 4           # Improve temporal information (typical Atari default)
   activation: relu         # Use ReLU for CNNs
   eval_freq_epochs: 10    # Less frequent eval due to computational cost

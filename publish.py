@@ -450,7 +450,7 @@ def build_model_card(meta: dict, run_dir: Path) -> str:
         # Show a compact excerpt
         keys = [
             "env_id","algo_id","n_steps","batch_size","n_epochs","n_timesteps","seed",
-            "n_envs","obs_type","policy","learning_rate","gamma","gae_lambda",
+            "n_envs","obs_type","policy","policy_lr","gamma","gae_lambda",
             "ent_coef","vf_coef","clip_range","normalize_advantages"
         ]
         excerpt = {k: cfg.get(k) for k in keys if k in cfg}

@@ -13,12 +13,12 @@ def test_config_parse_schedules_and_legacy_normalize():
         "algo_id": "ppo",
         "n_steps": 32,
         "batch_size": 16,
-        "learning_rate": "lin_3e-4",
+        "policy_lr": "lin_3e-4",
         "normalize": True,
         "hidden_dims": [64, 64],
     })
     assert cfg.policy_lr == pytest.approx(3e-4)
-    assert cfg.learning_rate_schedule == "linear"
+    assert cfg.policy_lr_schedule == "linear"
     assert cfg.normalize_obs is True and cfg.normalize_reward is True
     assert isinstance(cfg.hidden_dims, tuple)
 

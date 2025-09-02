@@ -14,7 +14,7 @@ ppo_small9:
   gamma: 0.99
   ent_coef: 0.01
   n_epochs: 4
-  learning_rate: lin_0.0003
+  policy_lr: lin_0.0003
   clip_range: lin_0.2
   policy: mlp
   hidden_dims: [256, 256]

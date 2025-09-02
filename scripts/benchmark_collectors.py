@@ -238,7 +238,7 @@ def run_sb3_collector(cfg, *, subproc_override: Optional[bool], rollouts: Option
         gamma=cfg.gamma,
         gae_lambda=cfg.gae_lambda,
         ent_coef=cfg.ent_coef,
-        learning_rate=cfg.policy_lr,
+        policy_lr=cfg.policy_lr,
         clip_range=cfg.clip_range,
         n_epochs=cfg.n_epochs,
         device="cpu",

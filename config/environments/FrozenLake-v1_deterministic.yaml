@@ -15,7 +15,7 @@ ppo:
   batch_size: 256              # 8 minibatches
 
   n_epochs: 10
-  learning_rate: 0.0003
+  policy_lr: 0.0003
   hidden_dims: [64]            # Simple network for 16-state discrete environment
 
 reinforce:
@@ -23,5 +23,5 @@ reinforce:
   n_timesteps: 2e5
   n_steps: 512
   batch_size: 64
-  learning_rate: 0.005
+  policy_lr: 0.005
   hidden_dims: [64]

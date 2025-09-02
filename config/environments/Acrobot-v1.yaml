@@ -20,6 +20,6 @@ reinforce:
   n_envs: 16
   n_steps: 512
   batch_size: 64
-  learning_rate: 5e-4
+  policy_lr: 5e-4
   hidden_dims: [128, 128]
   max_epochs: 2000

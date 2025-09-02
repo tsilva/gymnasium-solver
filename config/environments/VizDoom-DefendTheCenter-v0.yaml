@@ -19,7 +19,7 @@ ppo:
   # Exploration and stability
   ent_coef: 0.01
   clip_range: lin_0.2
-  learning_rate: lin_0.0003
+  policy_lr: lin_0.0003
   gamma: 0.99
   gae_lambda: 0.95
   # Visual preprocessing

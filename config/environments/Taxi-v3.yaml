@@ -14,7 +14,7 @@ ppo:
 
   n_epochs: 10
   clip_range: 0.1
-  learning_rate: 0.0003
+  policy_lr: 0.0003
   hidden_dims: [128]        # or [64, 64] if using 19-d one-hot / embedding
 
   # Eval
@@ -25,5 +25,5 @@ reinforce:
   n_timesteps: 5e5
   n_steps: 256
   batch_size: 32
-  learning_rate: 0.01
+  policy_lr: 0.01
   hidden_dims: [128]

@@ -16,7 +16,7 @@ ppo:
   batch_size: 256
   n_epochs: 4
   clip_range: 0.1
-  learning_rate: 2.5e-4
+  policy_lr: 2.5e-4
   # CNN defaults suitable for 84x84 inputs
   policy_kwargs:
     activation: relu

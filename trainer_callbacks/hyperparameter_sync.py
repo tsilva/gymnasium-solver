@@ -94,7 +94,7 @@ class HyperparamSyncCallback(BaseCallback):
 
         # Store original hyperparameters
         self.original_hyperparams = {
-            'learning_rate': pl_module.config.policy_lr,
+            'policy_lr': pl_module.config.policy_lr,
             'ent_coef': pl_module.config.ent_coef,
             'clip_range': getattr(pl_module.config, 'clip_range', None),
             'vf_coef': getattr(pl_module.config, 'vf_coef', None),
@@ -173,15 +173,15 @@ class HyperparamSyncCallback(BaseCallback):
         changes = []
         changed_for_log: Dict[str, float] = {}
         
-        # Learning rate (support either 'policy_lr' or 'learning_rate' key from config.json)
-        if "policy_lr" in data or "learning_rate" in data:
-            lr_key = "policy_lr" if "policy_lr" in data else "learning_rate"
+        # Learning rate (support either 'policy_lr' or 'policy_lr' key from config.json)
+        if "policy_lr" in data or "policy_lr" in data:
+            lr_key = "policy_lr" if "policy_lr" in data else "policy_lr"
             new_lr = float(data[lr_key])
             old_lr = pl_module.config.policy_lr
             if abs(new_lr - old_lr) > 1e-8:
-                self._update_learning_rate(trainer, pl_module, new_lr)
+                self._update_policy_lr(trainer, pl_module, new_lr)
                 changes.append(f"policy_lr: {old_lr:.2e} → {new_lr:.2e}")
-                changed_for_log["learning_rate"] = new_lr
+                changed_for_log["policy_lr"] = new_lr
         
         # Entropy coefficient
         if "ent_coef" in data:
@@ -228,7 +228,7 @@ class HyperparamSyncCallback(BaseCallback):
         if changes and self.verbose:
             print(f"🎛️  Hyperparameters updated (epoch {trainer.current_epoch}): {', '.join(changes)}")
     
-    def _update_learning_rate(self, trainer: TrainerType, pl_module: LightningModuleType, new_lr: float) -> None:
+    def _update_policy_lr(self, trainer: TrainerType, pl_module: LightningModuleType, new_lr: float) -> None:
         """Update the learning rate of all optimizers."""
         optimizers = trainer.optimizers
         if not isinstance(optimizers, list):
@@ -250,7 +250,7 @@ class HyperparamSyncCallback(BaseCallback):
         """Helper to log current hyperparameters under train namespace."""
         hp: Dict[str, float] = {}
         try:
-            hp["learning_rate"] = float(pl_module.config.policy_lr)
+            hp["policy_lr"] = float(pl_module.config.policy_lr)
         except Exception:
             pass
         for key in ("ent_coef", "vf_coef", "clip_range", "max_grad_norm"):
@@ -273,10 +273,10 @@ class HyperparamSyncCallback(BaseCallback):
             print("🔄 Resetting hyperparameters to original values...")
         
         # Reset learning rate
-        if 'learning_rate' in self.original_hyperparams:
-            self._update_learning_rate(trainer, pl_module, self.original_hyperparams['learning_rate'])
+        if 'policy_lr' in self.original_hyperparams:
+            self._update_policy_lr(trainer, pl_module, self.original_hyperparams['policy_lr'])
         
         # Reset other hyperparameters
         for key, value in self.original_hyperparams.items():
-            if value is not None and hasattr(pl_module.config, key.replace('learning_rate', 'policy_lr')):
-                setattr(pl_module.config, key.replace('learning_rate', 'policy_lr'), value)
+            if value is not None and hasattr(pl_module.config, key.replace('policy_lr', 'policy_lr')):
+                setattr(pl_module.config, key.replace('policy_lr', 'policy_lr'), value)

@@ -262,7 +262,7 @@ value_lr:
   description: "Current learning rate for value network optimizer"
   min: 0.0
 
-learning_rate:
+policy_lr:
   precision: 6
   description: "General learning rate for optimizer"
   min: 0.0

@@ -13,7 +13,7 @@ ppo:
   n_steps: 512             # Reduced for more frequent updates
   batch_size: 512          # Larger batches for stable gradients
   n_epochs: 10             # More epochs to better utilize data
-  learning_rate: 0.0003    # Higher learning rate for faster learning
+  policy_lr: 0.0003    # Higher learning rate for faster learning
   eval_freq_epochs: 50     # Less frequent eval to focus on training
   eval_episodes: 10        # More episodes for reliable evaluation
 
@@ -23,5 +23,5 @@ reinforce:
   n_envs: 8
   n_steps: 1024
   batch_size: 128
-  learning_rate: 1e-3
+  policy_lr: 1e-3
   hidden_dims: [128, 128]

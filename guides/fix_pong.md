@@ -7,7 +7,7 @@ Quick diagnosis
 Concrete fixes (apply 2–4 at once, then re-evaluate after ~1–2M steps)
 - Exploration and update size
   - ent_coef: increase slightly to 0.005–0.008. Start 0.006.
-  - learning_rate: add linear decay: learning_rate: lin_3e-4 to keep early speed but reduce late staleness.
+  - policy_lr: add linear decay: policy_lr: lin_3e-4 to keep early speed but reduce late staleness.
   - clip_range: widen to 0.2 with linear decay (clip_range: 0.2, clip_range_schedule: linear). This raises clip_fraction toward ~0.1–0.2.
 - Advantage signal and batch quality
   - n_steps: 512 (rollout size 8192) to improve advantage SNR on long rallies.
@@ -29,7 +29,7 @@ Minimal edit to config (ALE-Pong-v5_objects_ppo)
 - clip_range: 0.2
 - clip_range_schedule: linear
 - ent_coef: 0.006
-- learning_rate: lin_3e-4
+- policy_lr: lin_3e-4
 - vf_coef: 0.7
 - hidden_dims: [256, 256]
 - Optionally add to env_wrappers list: { id: PongV5_FeatureExtractor, clip: false } to override default clipping.

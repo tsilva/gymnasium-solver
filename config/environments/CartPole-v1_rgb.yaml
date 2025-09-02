@@ -27,5 +27,5 @@ ppo:
   gamma: 0.99
   ent_coef: 0.001
   n_epochs: 4
-  learning_rate: lin_2.5e-4
+  policy_lr: lin_2.5e-4
   clip_range: lin_0.2

@@ -849,22 +849,22 @@ class BaseAgent(pl.LightningModule):
         return max(0.0, min(total_steps / total, 1.0))
 
     def _update_schedules(self):
-        self._update_schedules__learning_rate()
+        self._update_schedules__policy_lr()
 
     # TODO: generalize scheduling support
-    def _update_schedules__learning_rate(self):
-        if self.config.learning_rate_schedule != "linear": return
+    def _update_schedules__policy_lr(self):
+        if self.config.policy_lr_schedule != "linear": return
         progress = self._get_training_progress()
-        new_learning_rate = max(self.config.learning_rate * (1.0 - progress), 0.0)
-        self._change_optimizers_learning_rate(new_learning_rate)
+        new_policy_lr = max(self.config.policy_lr * (1.0 - progress), 0.0)
+        self._change_optimizers_policy_lr(new_policy_lr)
         # Log scheduled LR under train namespace
-        self.log_metrics({"learning_rate": new_learning_rate}, prefix="train")
+        self.log_metrics({"policy_lr": new_policy_lr}, prefix="train")
 
-    def _change_optimizers_learning_rate(self, learning_rate):
+    def _change_optimizers_policy_lr(self, policy_lr):
         optimizers = self.optimizers()
         if not isinstance(optimizers, (list, tuple)): optimizers = [optimizers]
         for opt in optimizers:
-            for pg in opt.param_groups: pg["lr"] = learning_rate
+            for pg in opt.param_groups: pg["lr"] = policy_lr
 
     def log_metrics(self, metrics, *, prefix=None):
         """

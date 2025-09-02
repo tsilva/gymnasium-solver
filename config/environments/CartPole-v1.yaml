@@ -11,7 +11,7 @@ reinforce_vanilla:
   n_envs: 8
   n_steps: 1024
   batch_size: 2048
-  learning_rate: 6e-3
+  policy_lr: 6e-3
   eval_freq_epochs: 5
   returns_type: "montecarlo:episode"
   reinforce_policy_targets: "returns"
@@ -22,7 +22,7 @@ reinforce_baseline:
   n_envs: 8
   n_steps: 1024
   batch_size: 2048
-  learning_rate: 6e-3
+  policy_lr: 6e-3
   eval_freq_epochs: 5
   returns_type: "montecarlo:episode"
   reinforce_policy_targets: "advantages"
@@ -34,7 +34,7 @@ reinforce_baseline_rewardtogo:
   n_envs: 8
   n_steps: 1024
   batch_size: 2048
-  learning_rate: 6e-3
+  policy_lr: 6e-3
   eval_freq_epochs: 5
   returns_type: "montecarlo:reward_to_go"
   reinforce_policy_targets: "returns"
@@ -48,7 +48,7 @@ reinforce:
   n_envs: 8
   n_steps: 1024
   batch_size: 2048
-  learning_rate: 6e-3
+  policy_lr: 6e-3
   eval_freq_epochs: 5
   frame_stack: 2 # Converges faster with frame stacking = 2, probably because it allows to estimate momentum better?
   returns_type: "episode"
@@ -62,7 +62,7 @@ ppo:
   n_steps: 32
   batch_size: 256
   n_epochs: 20
-  learning_rate: lin_0.001
+  policy_lr: lin_0.001
   gamma: 0.98
   gae_lambda: 0.8
   clip_range: lin_0.2

@@ -65,7 +65,7 @@ ppo:
   n_timesteps: 1e5
   n_steps: 32
   batch_size: 256
-  learning_rate: lin_0.001   # linear schedule from 0.001 → 0
+  policy_lr: lin_0.001   # linear schedule from 0.001 → 0
   clip_range:   lin_0.2
   env_wrappers:
     - { id: CartPoleV1_RewardShaper, angle_reward_scale: 1.0 }

@@ -11,7 +11,7 @@ reinforce:
   n_envs: 16
   n_steps: 1024
   batch_size: 4096
-  learning_rate: 1e-3
+  policy_lr: 1e-3
   hidden_dims: [128, 128]
   eval_freq_epochs: 20 
   eval_episodes: 10  
@@ -25,7 +25,7 @@ ppo:
   n_epochs: 6
   ent_coef: 0.006
   clip_range: lin_0.2 
-  learning_rate: lin_3e-4 
+  policy_lr: lin_3e-4 
   hidden_dims: [256, 256] 
   eval_freq_epochs: 50 
   eval_episodes: 10  

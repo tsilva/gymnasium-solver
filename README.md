@@ -51,7 +51,7 @@ python inspect.py --run-id @latest-run --port 7860 --host 127.0.0.1
 ```
 
 ### ⚙️ Configs (YAML)
-Configs live in `config/environments/*.yaml`. New style puts base fields at the top and per-algorithm variants under their own key. Linear schedules like `lin_0.001` are parsed automatically.
+Configs live in `config/environments/*.yaml`. New style puts base fields at the top and per-algorithm variants under their own key. Linear schedules like `lin_0.001` are parsed automatically. The loader selects an algo-specific config subclass based on `algo_id` (e.g., `PPOConfig`, `REINFORCEConfig`, `QLearningConfig`).
 
 ```yaml
 # New per-file style

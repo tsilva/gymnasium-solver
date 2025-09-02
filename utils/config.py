@@ -246,8 +246,16 @@ class Config:
         config_variant_id = f"{config_id}_{variant_id}"
         config_variant_cfg = all_configs[config_variant_id]
 
-        # Create dict with dataclass defaults
-        final_config: Dict[str, Any] = dataclass_defaults_dict(cls)
+        # Select algorithm-specific config class based on algo_id
+        algo_id = str(config_variant_cfg.get("algo_id", "")).lower()
+        ConfigClass = {
+            "qlearning": QLearningConfig,
+            "reinforce": REINFORCEConfig,
+            "ppo": PPOConfig,
+        }.get(str(algo_id).lower(), Config)
+
+        # Create dict with dataclass defaults from the selected class
+        final_config: Dict[str, Any] = dataclass_defaults_dict(ConfigClass)
 
         # Apply config variant over dataclass defaults
         final_config.update(config_variant_cfg)
@@ -259,7 +267,7 @@ class Config:
         Config._parse_schedules(final_config)
 
         # Create config instance and validate
-        instance = cls(**final_config)
+        instance = ConfigClass(**final_config)
         instance.validate()
 
         # Return the validated config
@@ -314,6 +322,29 @@ class Config:
         assert self.early_stop_on_train_threshold or self.early_stop_on_eval_threshold, "At least one of early_stop_on_train_threshold or early_stop_on_eval_threshold must be True."
         assert self.devices is None or isinstance(self.devices, int) or self.devices == "auto", "devices may be an int, 'auto', or None."
         assert self.batch_size <= self.n_envs * self.n_steps, f"batch_size ({self.batch_size}) should not exceed n_envs ({self.n_envs}) * n_steps ({self.n_steps})."
+
+@dataclass
+class QLearningConfig(Config):
+    def validate(self):
+        super().validate()
+        # Ensure at least one env (tabular updates assume synchronous steps)
+        assert self.n_envs >= 1, "n_envs must be >= 1 for Q-Learning."
+
+
+@dataclass
+class REINFORCEConfig(Config):
+    def validate(self):
+        super().validate()
+        # Targets must be one of the known modes
+        valid_targets = {Config.ReinforceTargetsType.returns, Config.ReinforceTargetsType.advantages}
+        assert self.reinforce_policy_targets in valid_targets, "reinforce_policy_targets must be 'returns' or 'advantages'."
+
+@dataclass
+class PPOConfig(Config):
+    def validate(self):
+        super().validate()
+        # PPO requires a positive clip_range
+        assert self.clip_range is not None and self.clip_range > 0, "PPO requires clip_range to be set (> 0)."
 
 def load_config(config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> Config:
     """Convenience function to load configuration."""

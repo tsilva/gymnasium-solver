@@ -12,10 +12,15 @@ High-signal reference for maintainers and agents. Read this before making change
 - **Checkpoints**: `trainer_callbacks.ModelCheckpointCallback` writes `best.ckpt`/`last.ckpt`; resume controlled by `Config.resume`.
 
 ### Configuration model (`utils/config.py`)
-- `Config` dataclass aggregates env, algo, rollout, model, optimization, eval, logging, and runtime settings.
+- `Config` dataclass aggregates env, algo, rollout, model, optimization, eval, logging, and runtime settings. The loader instantiates an algo-specific subclass based on `algo_id`.
 - `load_from_yaml(config_id, variant_id=None)`: loads from `config/environments/*.yaml`, supporting both the legacy multi-block format with `inherits` and the new per-file format (base at root + per-variant sections like `ppo:`). Parses schedules like `lin_0.001` into `*_schedule = 'linear'` and numeric base. For new-style environment files, when `project_id` is not specified, it defaults to the YAML filename (stem). In addition to full IDs like `CartPole-v1_ppo`, `config_id` can be just the project/env name (e.g., `CartPole-v1`); when used this way, `variant_id` selects a variant (e.g., `ppo`), and if omitted, the first variant defined in the YAML file is used by default.
 - Legacy loader `_load_from_legacy_config` remains for `config/hyperparams/<algo>.yaml`.
 - Key derived behaviors: evaluation defaults when `eval_freq_epochs` set; RLZoo-style `normalize` mapped to `normalize_obs/reward`; `policy` in {'mlp','cnn'}; validation via `_compute_validation_controls` helpers.
+
+Algo-specific config subclasses:
+- `PPOConfig`: enforces `clip_range > 0`.
+- `REINFORCEConfig`: validates `reinforce_policy_targets` in {'returns','advantages'}.
+- `QLearningConfig`: retains base validations; ensures `n_envs >= 1`.
 
 ### Environments (`utils/environment.py`, `gym_wrappers/*`)
 - `build_env(env_id, n_envs, seed, subproc, obs_type, frame_stack, norm_obs, env_wrappers, env_kwargs, render_mode, record_video, record_video_kwargs)` builds a vectorized env:

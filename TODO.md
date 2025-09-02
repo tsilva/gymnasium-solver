@@ -5,7 +5,7 @@
 - FEAT: add sweeping support
 - FEAT: add fractional batch size supportWW
 - TODO: x metric cant be total timesteps because that increases with parallelization.... must be n_updates? index by epoch? or add updates metric?
-- TODO: optimal single metric for best training
+- TODO: optimal single metric for best training (samples/reward)
 - TODO: add kl divergence metric to reinforce
 - TODO: keep working on guide
 - REFACTOR: move hidden_dims inside policy_kwargsp

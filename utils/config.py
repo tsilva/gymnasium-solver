@@ -162,7 +162,7 @@ class Config:
     normalize: Optional[bool] = None
 
     @classmethod
-    def load_from_yaml(cls, config_id: str, algo_id: str = None, config_dir: str = "config/environments") -> 'Config':
+    def load_from_yaml(cls, config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> 'Config':
         """
         Load configuration from YAML files supporting both formats:
         1. Environment-centric format: config_id is loaded from environment challenge files
@@ -243,12 +243,12 @@ class Config:
         # - If algo_id is provided, use <project>_<algo_id>
         # - Otherwise, pick the first variant declared in the YAML file
         if config_id in project_variants:
-            if algo_id is not None:
-                candidate = f"{config_id}_{algo_id}"
+            if variant_id is not None:
+                candidate = f"{config_id}_{variant_id}"
                 if candidate in all_configs:
                     return cls._load_from_environment_config(all_configs[candidate], all_configs)
                 raise ValueError(
-                    f"Variant '{algo_id}' not found for project '{config_id}'. Available: {project_variants.get(config_id) or []}"
+                    f"Variant '{variant_id}' not found for project '{config_id}'. Available: {project_variants.get(config_id) or []}"
                 )
             variants = project_variants.get(config_id) or []
             if variants:
@@ -257,11 +257,11 @@ class Config:
                     return cls._load_from_environment_config(all_configs[candidate], all_configs)
         
         # Fall back to legacy format
-        if algo_id is None:
+        if variant_id is None:
             raise ValueError(f"Config '{config_id}' not found in environment configs and no algo_id provided for legacy format")
         
         config_path = project_root / "config/hyperparams"
-        return cls._load_from_legacy_config(config_id, algo_id, config_path)
+        return cls._load_from_legacy_config(config_id, variant_id, config_path)
 
     @classmethod
     def _load_from_environment_config(cls, config_data: Dict[str, Any], all_configs: Dict[str, Any] = None) -> 'Config':
@@ -577,6 +577,6 @@ class Config:
         with open(path, "w") as f:
             json.dump(asdict(self), f, indent=2, default=str)
 
-def load_config(config_id: str, algo_id: str = None, config_dir: str = "config/environments") -> Config:
+def load_config(config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> Config:
     """Convenience function to load configuration."""
-    return Config.load_from_yaml(config_id, algo_id, config_dir)
+    return Config.load_from_yaml(config_id, variant_id, config_dir)

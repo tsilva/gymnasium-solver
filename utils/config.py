@@ -1,22 +1,51 @@
-"""Configuration management utilities."""
+"""Configuration management utilities (environment YAML + legacy hyperparams).
 
-from dataclasses import MISSING, dataclass, field
+This module intentionally centralizes common config assembly and validation so
+both the environment-centric and legacy paths share one implementation.
+"""
+
+from dataclasses import MISSING, asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
 
 import yaml
 
 def _convert_numeric_strings(config_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """Convert string representations of numbers back to numeric types."""
-    for key, value in config_dict.items():
+    """Convert scientific-notation strings back to numeric types (idempotent)."""
+    for key, value in list(config_dict.items()):
         if isinstance(value, str):
-            # Try to convert scientific notation strings to float
             try:
-                if 'e' in value.lower() or 'E' in value:
+                if 'e' in value.lower():
                     config_dict[key] = float(value)
             except Exception:
+                # Leave value unchanged on parse failure
                 pass
     return config_dict
+
+
+def _dataclass_defaults_dict(cls: type) -> Dict[str, Any]:
+    """Build a dict of dataclass default values without instantiating the class."""
+    defaults: Dict[str, Any] = {}
+    for f in cls.__dataclass_fields__.values():  # type: ignore[attr-defined]
+        if f.default is not MISSING:
+            defaults[f.name] = f.default
+        elif f.default_factory is not MISSING:  # type: ignore
+            defaults[f.name] = f.default_factory()  # type: ignore
+    return defaults
+
+
+def _finalize_config_dict(raw_config: Dict[str, Any]) -> Dict[str, Any]:
+    """Mutate and return a finalized raw config dict ready for dataclass init."""
+    # Numeric string conversions first
+    _convert_numeric_strings(raw_config)
+    # Parse schedule specifiers like lin_0.001
+    Config._parse_schedules(raw_config)
+    # RL Zoo compatibility mapping
+    Config._handle_legacy_compatibility(raw_config)
+    # Normalize hidden_dims to tuple when provided as list
+    if isinstance(raw_config.get('hidden_dims'), list):
+        raw_config['hidden_dims'] = tuple(raw_config['hidden_dims'])
+    return raw_config
 
 
 @dataclass
@@ -277,12 +306,7 @@ class Config:
     def _load_from_environment_config(cls, config_data: Dict[str, Any], all_configs: Dict[str, Any] = None) -> 'Config':
         """Load configuration from new environment-centric format with inheritance support."""
         # Start with class defaults
-        final_config = {}
-        for field in cls.__dataclass_fields__.values():
-            if field.default is not MISSING:
-                final_config[field.name] = field.default
-            elif field.default_factory is not MISSING:  # type: ignore
-                final_config[field.name] = field.default_factory()      # type: ignore
+        final_config: Dict[str, Any] = _dataclass_defaults_dict(cls)
 
         # Handle inheritance
         if all_configs and 'inherits' in config_data:
@@ -302,23 +326,8 @@ class Config:
         config_data_copy.pop('inherits', None)  # Remove inherits key from final config
         final_config.update(config_data_copy)
 
-        # Convert any numeric strings (like scientific notation)
-        final_config = _convert_numeric_strings(final_config)
-
-        # Parse potential schedule specs before legacy compatibility so that override logic keeps initial
-        cls._parse_schedules(final_config)
-
-        # Handle RLZOO format compatibility
-        cls._handle_legacy_compatibility(final_config)
-
-        # Convert list values to tuples for hidden_dims
-        if 'hidden_dims' in final_config and isinstance(final_config['hidden_dims'], list):
-            final_config['hidden_dims'] = tuple(final_config['hidden_dims'])
-
-        instance = cls(**final_config)
-        instance._post_init_defaults()
-        instance.validate()
-        return instance
+        _finalize_config_dict(final_config)
+        return cls._instantiate(final_config)
 
     @classmethod
     def _resolve_inheritance(cls, config_data: Dict[str, Any], all_configs: Dict[str, Any]) -> Dict[str, Any]:
@@ -348,12 +357,7 @@ class Config:
     def _load_from_legacy_config(cls, config_id: str, algo_id: str, config_path: Path) -> 'Config':
         """Load configuration from legacy hyperparams format."""
         # Start with class defaults (once)
-        final_config = {}
-        for field in cls.__dataclass_fields__.values():
-            if field.default is not MISSING:
-                final_config[field.name] = field.default
-            elif field.default_factory is not MISSING:  # type: ignore
-                final_config[field.name] = field.default_factory()      # type: ignore
+        final_config: Dict[str, Any] = _dataclass_defaults_dict(cls)
 
         # Load algorithm-specific configuration file
         algo_config_path = config_path / f"{algo_id.lower()}.yaml"
@@ -435,16 +439,12 @@ class Config:
                     raise ValueError(f"Config/Environment '{config_id}' not found in {algo_config_path}. "
                                    f"Available configs: {available_configs}")
 
-        # Convert any numeric strings (like scientific notation)
-        final_config = _convert_numeric_strings(final_config)
+        _finalize_config_dict(final_config)
+        return cls._instantiate(final_config)
 
-        # Handle RLZOO format compatibility
-        cls._handle_legacy_compatibility(final_config)
-
-        # Convert list values to tuples for hidden_dims
-        if 'hidden_dims' in final_config and isinstance(final_config['hidden_dims'], list):
-            final_config['hidden_dims'] = tuple(final_config['hidden_dims'])
-
+    @classmethod
+    def _instantiate(cls, final_config: Dict[str, Any]) -> 'Config':
+        """Create Config instance and apply final normalization and validation."""
         instance = cls(**final_config)
         instance._post_init_defaults()
         instance.validate()
@@ -507,6 +507,16 @@ class Config:
         # Ensure policy_kwargs is a dict
         if self.policy_kwargs is None:
             self.policy_kwargs = {}
+        # Normalize returns_type to canonical forms used by collectors
+        if isinstance(self.returns_type, str):
+            rt = self.returns_type.strip().lower()
+            if rt in {"episode", "reward_to_go"}:
+                self.returns_type = f"montecarlo:{rt}"
+            elif rt in {"gae", "gae:reward_to_go"}:
+                # Keep explicit GAE variant; ensure advantages_type consistent when user requested GAE
+                self.returns_type = "gae:reward_to_go"
+                if not self.advantages_type:
+                    self.advantages_type = "gae"
         
     def rollout_collector_hyperparams(self) -> Dict[str, Any]:
         return {
@@ -583,7 +593,6 @@ class Config:
     def save_to_json(self, path: str) -> None:
         """Save configuration to a JSON file."""
         import json
-        from dataclasses import asdict
         with open(path, "w") as f:
             json.dump(asdict(self), f, indent=2, default=str)
 

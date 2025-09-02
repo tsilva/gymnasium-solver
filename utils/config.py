@@ -104,13 +104,13 @@ class Config:
     returns_type: str = "episode"
 
     # Can be "batch" or "rollout"
-    normalize_returns: Optional[str] = "batch"
+    normalize_returns: Optional[str] = None
 
     # Can be "baseline_subtraction" or "gae"
-    advantages_type: Optional[str] = "baseline_subtraction"
+    advantages_type: Optional[str] = None
 
     # Advantage normalization behavior: 'off', 'rollout', or 'batch'
-    normalize_advantages: Optional[str] = "batch"
+    normalize_advantages: Optional[str] = None
     
     # Can be "returns" or "advantages"
     reinforce_policy_targets: Optional[str] = "returns"
@@ -165,11 +165,19 @@ class Config:
     def load_from_yaml(cls, config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> 'Config':
         """
         Load configuration from YAML files supporting both formats:
-        1. Environment-centric format: config_id is loaded from environment challenge files
-        2. Legacy format: config_id is env_id, for backward compatibility with hyperparams folder
-        
-        If algo_id is None, it will be extracted from config_id (assuming format like "env_challenge_algo")
+        1) New environment-centric format (config/environments/*.yaml):
+           - config_id selects the YAML file (project name; typically the env id, e.g. 'CartPole-v1').
+           - variant_id selects the variant block inside that file (e.g. 'ppo' or 'reinforce').
+             If variant_id is omitted, the first variant defined in the file is used.
+           - Also accepts full IDs like 'CartPole-v1_ppo' directly.
+        2) Legacy format (config/hyperparams/<algo>.yaml):
+           - Falls back when no matching environment file is found; requires variant_id to
+             indicate the algorithm file to load from (e.g., 'ppo').
         """
+        # Normalize CLI-provided empty-string variant to None
+        if isinstance(variant_id, str) and variant_id.strip() == "":
+            variant_id = None
+
         # Get the project root directory
         project_root = Path(__file__).parent.parent
         
@@ -258,7 +266,9 @@ class Config:
         
         # Fall back to legacy format
         if variant_id is None:
-            raise ValueError(f"Config '{config_id}' not found in environment configs and no algo_id provided for legacy format")
+            raise ValueError(
+                f"Config '{config_id}' not found in environment configs and no variant_id provided for legacy format"
+            )
         
         config_path = project_root / "config/hyperparams"
         return cls._load_from_legacy_config(config_id, variant_id, config_path)

@@ -682,6 +682,8 @@ class RolloutCollector():
             # Calculate advantages by subtracting baseline from returns
             baseline = self._base_stats.mean()
             advantages_buf = returns_buf - baseline
+        else:
+            advantages_buf = returns_buf
 
         # Normalize returns if requested
         if self.normalize_returns:

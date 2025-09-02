@@ -7,7 +7,7 @@ def main():
     parser = argparse.ArgumentParser(description="Train RL agent.")
     parser.add_argument("--config_id", type=str, default="CartPole-v1", help="Config ID (e.g., CartPole-v1_ppo)")
     parser.add_argument("--variant_id", type=str, default="reinforce_vanilla", help="Algorithm/variant (optional; used with env-only configs)")
-    parser.add_argument("--quiet", "-q", action="store_true", default=True, help="Run non-interactively: auto-accept prompts and defaults")
+    parser.add_argument("--quiet", "-q", action="store_true", default=False, help="Run non-interactively: auto-accept prompts and defaults")
     args = parser.parse_args()
 
     # Load configuration

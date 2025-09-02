@@ -11,7 +11,7 @@ reinforce_baseline:
   returns_type: "mc:episode"
   advantages_type: "baseline"
   policy_targets: "advantages"
-  normalize_advantages: "batch"
+  #normalize_advantages: "batch"
 
 ppo:
   algo_id: ppo

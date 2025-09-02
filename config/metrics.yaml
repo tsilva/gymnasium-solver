@@ -48,6 +48,7 @@ _global:
       - ep_rew_last
       - ep_rew_best
       - total_timesteps
+      - loss
     # Metrics whose values are emphasized in bold (no row background required)
     value_bold_metrics:
       - ep_rew_mean

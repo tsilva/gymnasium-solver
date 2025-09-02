@@ -102,5 +102,7 @@ class REINFORCE(BaseAgent):
             'entropy': entropy.detach(),
             'kl_div': kl_div.detach(),
             'approx_kl': approx_kl.detach(),
+            'policy_targets_mean': policy_targets.mean().detach(),
+            'policy_targets_std': policy_targets.std().detach()
         }, prefix="train")
         return loss

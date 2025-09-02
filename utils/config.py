@@ -1,6 +1,7 @@
 """Configuration loading for environment YAML and legacy hyperparams."""
 
 from dataclasses import MISSING, asdict, dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
 
@@ -41,6 +42,8 @@ def _finalize_config_dict(raw_config: Dict[str, Any]) -> Dict[str, Any]:
     # Normalize hidden_dims to tuple when provided as list
     if isinstance(raw_config.get('hidden_dims'), list):
         raw_config['hidden_dims'] = tuple(raw_config['hidden_dims'])
+    # Coerce and validate enum-like fields early
+    Config._coerce_enums(raw_config)
     return raw_config
 
 
@@ -53,6 +56,7 @@ class Config:
     batch_size: int
 
     n_epochs: int = 1
+    project_id: Optional[str] = None
     max_epochs: Optional[int] = None
     n_timesteps: Optional[float] = None
 
@@ -67,10 +71,10 @@ class Config:
     grayscale_obs: bool = False
     resize_obs: bool = False
     frame_stack: int = 1
-    obs_type: str = "rgb"
+    obs_type: "Config.ObsType" = "rgb"  # type: ignore[assignment]
 
     hidden_dims: Union[int, Tuple[int, ...]] = (64, 64)
-    policy: str = 'mlp'
+    policy: "Config.PolicyType" = "mlp"  # type: ignore[assignment]
     policy_kwargs: Optional[Dict[str, Any]] = field(default_factory=lambda: {"activation": "tanh"})
 
     policy_lr: float = 3e-4
@@ -85,15 +89,14 @@ class Config:
     clip_range: Optional[float] = 0.2
     clip_range_schedule: Optional[str] = None
 
-    returns_type: str = "episode"
-
+    returns_type: "Config.ReturnsType" = "montecarlo:episode"  # type: ignore[assignment]
     normalize_returns: Optional[str] = None
 
-    advantages_type: Optional[str] = None
+    advantages_type: Optional["Config.AdvantagesType"] = None
 
-    normalize_advantages: Optional[str] = None
+    normalize_advantages: Optional["Config.AdvantageNormType"] = None
 
-    reinforce_policy_targets: Optional[str] = "returns"
+    reinforce_policy_targets: Optional["Config.ReinforceTargetsType"] = "returns"  # type: ignore[assignment]
 
     eval_freq_epochs: Optional[int] = None
     eval_warmup_epochs: int = 0
@@ -106,16 +109,52 @@ class Config:
     early_stop_on_train_threshold: bool = False
     log_per_env_eval_metrics: bool = False
 
-    project_id: Optional[str] = None
     checkpoint_dir: str = "checkpoints"
     resume: bool = False
 
-    accelerator: str = "cpu"
+    accelerator: "Config.AcceleratorType" = "cpu"  # type: ignore[assignment]
     devices: Optional[Union[int, str]] = None
 
     quiet: bool = False
 
     normalize: Optional[bool] = None
+
+    # ---- Enum helpers ----
+    class PolicyType(str, Enum):
+        mlp = "mlp"
+        cnn = "cnn"
+
+    class AcceleratorType(str, Enum):
+        auto = "auto"
+        cpu = "cpu"
+        gpu = "gpu"
+        mps = "mps"
+        tpu = "tpu"
+        ipu = "ipu"
+        hpu = "hpu"
+
+    class ReturnsType(str, Enum):
+        mc_episode = "montecarlo:episode"
+        mc_rtg = "montecarlo:reward_to_go"
+        gae_rtg = "gae:reward_to_go"
+
+    class AdvantagesType(str, Enum):
+        gae = "gae"
+        baseline_subtraction = "baseline_subtraction"
+
+    class AdvantageNormType(str, Enum):
+        rollout = "rollout"
+        batch = "batch"
+        off = "off"
+
+    class ReinforceTargetsType(str, Enum):
+        returns = "returns"
+        advantages = "advantages"
+
+    class ObsType(str, Enum):
+        rgb = "rgb"
+        ram = "ram"
+        objects = "objects"
 
     @classmethod
     def load_from_yaml(cls, config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> 'Config':
@@ -139,9 +178,6 @@ class Config:
             return isinstance(doc, dict) and ("env_id" in doc)
 
         def _collect_from_file(path: Path) -> None:
-            # Ignore helper/example files with *.new.yaml extension
-            if path.name.endswith(".new.yaml"):
-                return
             try:
                 with open(path, "r", encoding="utf-8") as f:
                     doc = yaml.safe_load(f) or {}
@@ -381,6 +417,103 @@ class Config:
                 # Leave value unchanged on parse failure
                 pass
 
+    @classmethod
+    def _coerce_enums(cls, config: Dict[str, Any]) -> None:
+        """Normalize and validate fixed-choice fields using Enum definitions.
+        Leaves values as canonical strings to avoid breaking existing code.
+        """
+        # policy -> Enum
+        policy = config.get('policy')
+        if isinstance(policy, str):
+            pl = policy.strip().lower()
+            if pl in (cls.PolicyType.mlp.value, cls.PolicyType.cnn.value):
+                config['policy'] = cls.PolicyType(pl)
+            else:
+                raise ValueError("policy must be 'mlp' or 'cnn'")
+
+        # accelerator -> Enum
+        acc = config.get('accelerator')
+        if isinstance(acc, str):
+            al = acc.strip().lower()
+            if al in set(a.value for a in cls.AcceleratorType):
+                config['accelerator'] = cls.AcceleratorType(al)
+            else:
+                raise ValueError(f"accelerator must be one of {sorted([a.value for a in cls.AcceleratorType])}")
+
+        # obs_type (for ALE/others) -> Enum
+        obs = config.get('obs_type')
+        if isinstance(obs, str):
+            ol = obs.strip().lower()
+            if ol in set(o.value for o in cls.ObsType):
+                config['obs_type'] = cls.ObsType(ol)
+            else:
+                raise ValueError(f"obs_type must be one of {sorted([o.value for o in cls.ObsType])}")
+
+        # normalize_advantages: allow bool or str aliases -> Enum
+        na = config.get('normalize_advantages')
+        if isinstance(na, bool):
+            config['normalize_advantages'] = cls.AdvantageNormType.rollout if na else cls.AdvantageNormType.off
+        elif isinstance(na, str):
+            nal = na.strip().lower()
+            if nal in set(n.value for n in cls.AdvantageNormType):
+                config['normalize_advantages'] = cls.AdvantageNormType(nal)
+            else:
+                raise ValueError(f"normalize_advantages must be one of {sorted([n.value for n in cls.AdvantageNormType])} or a boolean")
+
+        # normalize_returns: support 'rollout' (truthy) or 'off'/None -> keep as string flag for now
+        nr = config.get('normalize_returns')
+        if isinstance(nr, str):
+            nrl = nr.strip().lower()
+            if nrl in {cls.AdvantageNormType.rollout.value, cls.AdvantageNormType.off.value}:
+                config['normalize_returns'] = nrl
+            else:
+                raise ValueError("normalize_returns must be 'rollout', 'off', or omitted")
+
+        # returns_type with aliases; also set advantages_type when GAE requested -> Enum
+        rt = config.get('returns_type')
+        if isinstance(rt, str):
+            rtl = rt.strip().lower()
+            alias_map = {
+                'episode': cls.ReturnsType.mc_episode,
+                'reward_to_go': cls.ReturnsType.mc_rtg,
+                'montecarlo:episode': cls.ReturnsType.mc_episode,
+                'montecarlo:reward_to_go': cls.ReturnsType.mc_rtg,
+                'gae': cls.ReturnsType.gae_rtg,
+                'gae:reward_to_go': cls.ReturnsType.gae_rtg,
+            }
+            if rtl in alias_map:
+                canonical_enum = alias_map[rtl]
+                config['returns_type'] = canonical_enum
+                if canonical_enum == cls.ReturnsType.gae_rtg:
+                    # Ensure complementary advantages_type is set to GAE
+                    adt = config.get('advantages_type')
+                    if adt is None:
+                        config['advantages_type'] = cls.AdvantagesType.gae
+                    elif isinstance(adt, str) and adt.strip().lower() != cls.AdvantagesType.gae.value:
+                        raise ValueError("advantages_type must be 'gae' when returns_type is 'gae:reward_to_go'")
+            else:
+                allowed = sorted(set(v.value for v in alias_map.values()))
+                raise ValueError(f"returns_type must be one of {allowed} (aliases: 'episode', 'reward_to_go', 'gae')")
+
+        # advantages_type when provided -> Enum
+        adt = config.get('advantages_type')
+        if isinstance(adt, str):
+            adtl = adt.strip().lower()
+            if adtl in set(a.value for a in cls.AdvantagesType):
+                config['advantages_type'] = cls.AdvantagesType(adtl)
+            else:
+                raise ValueError(f"advantages_type must be one of {sorted([a.value for a in cls.AdvantagesType])}")
+
+        # reinforce_policy_targets -> Enum
+        rpt = config.get('reinforce_policy_targets')
+        if isinstance(rpt, str):
+            rpl = rpt.strip().lower()
+            if rpl in set(r.value for r in cls.ReinforceTargetsType):
+                config['reinforce_policy_targets'] = cls.ReinforceTargetsType(rpl)
+            else:
+                raise ValueError("reinforce_policy_targets must be 'returns' or 'advantages'")
+
+
     # Derived defaults and cross-field normalization
     def _post_init_defaults(self) -> None:
         # If evaluation is enabled, ensure sensible episode/recording defaults
@@ -389,37 +522,24 @@ class Config:
                 self.eval_episodes = 10  # safe default evaluation horizon
             if self.eval_recording_freq_epochs is None:
                 self.eval_recording_freq_epochs = self.eval_freq_epochs  # record when we evaluate
-        # Normalize advantage-normalization flag if provided as boolean in YAMLs
-        # True -> 'rollout' (SB3-style: normalize once per rollout), False -> 'off'
-        try:
-            if isinstance(self.normalize_advantages, bool):
-                self.normalize_advantages = "rollout" if self.normalize_advantages else "off"
-        except Exception:
-            pass
+
         # Map RL Zoo fields to internal ones if provided at construction-time
         if self.normalize is not None:
             self.normalize_obs = self.normalize
             self.normalize_reward = self.normalize
+
         # If a scheduled learning_rate is provided, prefer it for scheduling base
         # while keeping policy_lr as the optimizer's initial value
         if self.learning_rate is not None and self.policy_lr is None:
             self.policy_lr = self.learning_rate
+
         # Normalize policy name capitalization
         if isinstance(self.policy, str):
             self.policy = self.policy.strip()
+            
         # Ensure policy_kwargs is a dict
         if self.policy_kwargs is None:
             self.policy_kwargs = {}
-        # Normalize returns_type to canonical forms used by collectors
-        if isinstance(self.returns_type, str):
-            rt = self.returns_type.strip().lower()
-            if rt in {"episode", "reward_to_go"}:
-                self.returns_type = f"montecarlo:{rt}"
-            elif rt in {"gae", "gae:reward_to_go"}:
-                # Keep explicit GAE variant; ensure advantages_type consistent when user requested GAE
-                self.returns_type = "gae:reward_to_go"
-                if not self.advantages_type:
-                    self.advantages_type = "gae"
         
     def rollout_collector_hyperparams(self) -> Dict[str, Any]:
         return {
@@ -474,24 +594,9 @@ class Config:
         if self.reward_threshold is not None and self.reward_threshold <= 0:
             raise ValueError("reward_threshold must be a positive float.")
 
-        # Algo-specific simple validations
-        if isinstance(self.returns_type, str):
-            valid_rr = {"montecarlo:reward_to_go", "montecarlo:episode"}
-            rr = self.returns_type.strip().lower()
-            if rr not in valid_rr:
-                raise ValueError(f"returns_type must be one of {sorted(valid_rr)}.")
-
         # Runtime / hardware
-        allowed_accelerators = {"auto", "cpu", "gpu", "mps", "tpu", "ipu", "hpu"}
-        if self.accelerator not in allowed_accelerators:
-            raise ValueError(
-                f"accelerator must be one of {sorted(allowed_accelerators)}; got '{self.accelerator}'"
-            )
         if isinstance(self.devices, str) and self.devices != "auto":
             raise ValueError("devices may be an int, 'auto', or None")
-        # Policy
-        if isinstance(self.policy, str) and self.policy.lower() not in {"mlp", "cnn"}:
-            raise ValueError("policy must be 'MLP' or 'CNN'")
 
     def save_to_json(self, path: str) -> None:
         """Save configuration to a JSON file."""

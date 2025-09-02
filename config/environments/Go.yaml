@@ -7,7 +7,7 @@ env_kwargs:
 ppo_small9:
   algo_id: ppo
   n_envs: 8
-  n_timesteps: 2e5
+  max_timesteps: 2e5
   n_steps: 64
   batch_size: 512
   gae_lambda: 0.95

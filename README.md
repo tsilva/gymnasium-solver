@@ -62,7 +62,7 @@ eval_episodes: 10
 ppo:
   algo_id: ppo
   n_envs: 8
-  n_timesteps: 1e5
+  max_timesteps: 1e5
   n_steps: 32
   batch_size: 256
   policy_lr: lin_0.001   # linear schedule from 0.001 → 0
@@ -73,7 +73,7 @@ ppo:
 
 You still select a config by ID, e.g. `CartPole-v1_ppo`. The loader also remains compatible with the legacy multi-block format for a transitional period. When `project_id` is omitted in environment YAMLs, it is inferred from the file name.
 
-Key fields: `env_id`, `algo_id`, `n_envs`, `n_steps`, `batch_size`, `n_timesteps`, `policy` (`mlp|cnn`), `hidden_dims`, `obs_type` (`rgb|ram|objects` for ALE).
+Key fields: `env_id`, `algo_id`, `n_envs`, `n_steps`, `batch_size`, `max_timesteps`, `policy` (`mlp|cnn`), `hidden_dims`, `obs_type` (`rgb|ram|objects` for ALE).
 
 - Advantage normalization: set `normalize_advantages` to `rollout` (normalize once per rollout, SB3-style), `batch` (normalize per mini-batch), or `off`. Boolean `true/false` are accepted as aliases for `rollout/off`.
 

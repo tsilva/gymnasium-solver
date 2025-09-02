@@ -8,7 +8,7 @@ env_kwargs:
 
 ppo:
   algo_id: ppo
-  n_timesteps: 3e6
+  max_timesteps: 3e6
   n_envs: 8               # Reduced for better sample efficiency
   n_steps: 512             # Reduced for more frequent updates
   batch_size: 512          # Larger batches for stable gradients
@@ -19,7 +19,7 @@ ppo:
 
 reinforce:
   algo_id: reinforce
-  n_timesteps: 1e7
+  max_timesteps: 1e7
   n_envs: 8
   n_steps: 1024
   batch_size: 128

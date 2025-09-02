@@ -10,7 +10,7 @@ eval_recording_freq_epochs: 10
 
 ppo:
   algo_id: ppo
-  n_timesteps: 1e5
+  max_timesteps: 1e5
   n_steps: 128                 # 16*128 = 2048 samples/update
   batch_size: 256              # 8 minibatches
 
@@ -20,7 +20,7 @@ ppo:
 
 reinforce:
   algo_id: reinforce
-  n_timesteps: 2e5
+  max_timesteps: 2e5
   n_steps: 512
   batch_size: 64
   policy_lr: 0.005

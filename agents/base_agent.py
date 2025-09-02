@@ -760,10 +760,10 @@ class BaseAgent(pl.LightningModule):
         # Early stop after reaching a certain number of timesteps
         earlystop_timesteps_cb = EarlyStoppingCallback(
             "train/total_timesteps",
-            self.config.n_timesteps,
+            self.config.max_timesteps,
             mode="max",
             verbose=True,
-        ) if self.config.n_timesteps else None
+        ) if self.config.max_timesteps else None
         if earlystop_timesteps_cb: callbacks.append(earlystop_timesteps_cb)
 
         try:
@@ -838,9 +838,9 @@ class BaseAgent(pl.LightningModule):
             optimizer.step()
 
     def _get_training_progress(self):
-        # Compute progress only when n_timesteps is configured; otherwise treat as 0.
+        # Compute progress only when max_timesteps is configured; otherwise treat as 0.
         try:
-            total = float(self.config.n_timesteps) if self.config.n_timesteps is not None else None
+            total = float(self.config.max_timesteps) if self.config.max_timesteps is not None else None
         except Exception:
             total = None
         if total is None or total <= 0.0:

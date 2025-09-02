@@ -8,7 +8,7 @@ eval_episodes: 10
 
 ppo:
   algo_id: ppo
-  n_timesteps: 3e5
+  max_timesteps: 3e5
   n_steps: 64                  # 16*64 = 1024 samples/update
   batch_size: 256              # 4 minibatches
 
@@ -22,7 +22,7 @@ ppo:
 
 reinforce:
   algo_id: reinforce
-  n_timesteps: 5e5
+  max_timesteps: 5e5
   n_steps: 256
   batch_size: 32
   policy_lr: 0.01

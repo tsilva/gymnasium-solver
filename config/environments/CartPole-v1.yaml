@@ -7,7 +7,7 @@ normalize_obs: False # Normalization doesn't seem to help
 
 reinforce_vanilla:
   algo_id: reinforce
-  n_timesteps: 3e5
+  max_timesteps: 3e5
   n_envs: 8
   n_steps: 1024
   batch_size: 2048
@@ -18,7 +18,7 @@ reinforce_vanilla:
 
 reinforce_baseline:
   algo_id: reinforce
-  n_timesteps: 3e5
+  max_timesteps: 3e5
   n_envs: 8
   n_steps: 1024
   batch_size: 2048
@@ -30,7 +30,7 @@ reinforce_baseline:
 
 reinforce_baseline_rewardtogo:
   algo_id: reinforce
-  n_timesteps: 3e5
+  max_timesteps: 3e5
   n_envs: 8
   n_steps: 1024
   batch_size: 2048
@@ -44,7 +44,7 @@ reinforce_baseline_rewardtogo:
 # TODO: hidden_dims
 reinforce:
   algo_id: reinforce
-  n_timesteps: 3e5
+  max_timesteps: 3e5
   n_envs: 8
   n_steps: 1024
   batch_size: 2048

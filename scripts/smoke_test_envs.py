@@ -101,7 +101,7 @@ def _resolve_inheritance(config_id: str, all_configs: Dict[str, Any]) -> Dict[st
     return _resolve(config_id)
 
 
-def run_random_steps_for_config(config_id: str, n_timesteps: int, n_envs: int) -> Tuple[bool, str]:
+def run_random_steps_for_config(config_id: str, max_timesteps: int, n_envs: int) -> Tuple[bool, str]:
     """Build the environment for a given config and run random actions.
 
     Returns (ok, message).
@@ -138,7 +138,7 @@ def run_random_steps_for_config(config_id: str, n_timesteps: int, n_envs: int) -
             env.reset()
 
             total_steps = 0
-            while total_steps < n_timesteps:
+            while total_steps < max_timesteps:
                 # For VecEnv, pass a list/array of actions of length env.num_envs
                 try:
                     num_envs = int(getattr(env, "num_envs", 1))

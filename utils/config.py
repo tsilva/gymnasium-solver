@@ -55,72 +55,171 @@ class Config:
         ram = "ram"
         objects = "objects"
 
+    # The id of this configuration
+    project_id: str
+
+    # The id of the environment to train on
     env_id: str
+
+    # The id of the algorithm to train with
     algo_id: str
 
+    # The number of steps to collect per rollout environment
     n_steps: int
+
+    # Size of each batch of data to use for each gradient update
     batch_size: int
 
+    # The number of epochs to train on the same rollout data
+    # (number of times all batches are presented)
     n_epochs: int = 1
-    project_id: Optional[str] = None
-    max_epochs: Optional[int] = None
-    n_timesteps: Optional[float] = None
 
+    # Max epochs to train for (optional)
+    max_epochs: Optional[int] = None
+
+    # Max timesteps to train for (optional)
+    max_timesteps: Optional[int] = None
+    
+    # Experiment seed (for reproducibility)
     seed: int = 42
+
+    # How many parallel environments are used to collect rollouts
     n_envs: int = 1
+
+    # List of environment wrappers to apply to the environment
+    # (eg: reward shapers, frame stacking, etc)
+    env_wrappers: list = field(default_factory=list)
+
+    # Additional kwargs to pass to the environment factory
+    env_kwargs: dict = field(default_factory=dict)
+
+    # Whether to use subprocesses to run the parallel environments
+    # (may slowdown or speedup depending on the environment)
     subproc: Optional[bool] = None
 
-    env_wrappers: list = field(default_factory=list)
-    env_kwargs: dict = field(default_factory=dict)
-    normalize_obs: bool = False
-    normalize_reward: bool = False
-    grayscale_obs: bool = False
-    resize_obs: bool = False
+    # How many N last observations to stack (N=1 means no stacking, only current observation)
     frame_stack: int = 1
+
+    # Whether to normalize observations using running mean and variance
+    normalize_obs: bool = False
+
+    # Whether to normalize rewards using running mean and variance
+    normalize_reward: bool = False
+
+    # Whether to convert observations to grayscale (if representing images)
+    grayscale_obs: bool = False
+
+    # Whether to resize observations to a fixed size (if representing images)
+    resize_obs: bool = False
+
+    # Whether the observations are RGB, RAM, or objects
     obs_type: "Config.ObsType" = ObsType.rgb  # type: ignore[assignment]
 
-    hidden_dims: Union[int, Tuple[int, ...]] = (64, 64)
+    # Whether to use a MLP or CNN policy
     policy: "Config.PolicyType" = PolicyType.mlp  # type: ignore[assignment]
-    policy_kwargs: Optional[Dict[str, Any]] = field(default_factory=lambda: {"activation": "tanh"})
 
+    # The dimensions of the hidden layers in the MLP
+    hidden_dims: Union[int, Tuple[int, ...]] = (64, 64)
+
+    # Additional kwargs to pass to the policy factory
+    policy_kwargs: Optional[Dict[str, Any]] = field(default_factory=lambda: {"activation": "relu"})
+
+    # The learning rate for the policy
     policy_lr: float = 3e-4
+
+    # The schedule for the policy learning rate
     policy_lr_schedule: Optional[str] = None
 
+    # The maximum gradient norm for the policy
     max_grad_norm: float = 0.5
-
+    
+    # The discount factor for the rewards (how much future rewards are taken into account)
     gamma: float = 0.99
+
+    # The lambda parameter for the GAE (Generalized Advantage Estimation)
     gae_lambda: float = 0.95
+
+    # The entropy coefficient for the policy (how much to encourage exploration)
     ent_coef: float = 0.01
+
+    # The value function coefficient for the policy (how much to prioritize the value function)
     vf_coef: float = 0.5
+
+    # The clip range for the policy (how much to clip the policy updates)
     clip_range: Optional[float] = 0.2
+
+    # The schedule for the clip range
     clip_range_schedule: Optional[str] = None
 
+    # How to calculate rollout returns (eg: Monte Carlo, Reward-to-Go, GAE)
     returns_type: "Config.ReturnsType" = ReturnsType.mc_episode
-    normalize_returns: Optional[str] = None
 
+    # Whether to normalize the returns
+    # (none, baseline, or rollout)
+    normalize_returns: Optional["Config.NormalizeReturnsType"] = None
+
+    # How to calculate rollout advantages (eg: GAE, Baseline Subtraction)
+    # (none, gae, or baseline_subtraction)
     advantages_type: Optional["Config.AdvantagesType"] = None
 
+    # Whether to normalize the advantages
+    # (none, rollout, or batch)
     normalize_advantages: Optional["Config.AdvantageNormType"] = None
 
+    # How to calculate the policy targets for the REINFORCE algorithm
+    # (using returns, or using advantages)
     reinforce_policy_targets: Optional["Config.ReinforceTargetsType"] = ReinforceTargetsType.returns  # type: ignore[assignment]
 
-    eval_freq_epochs: Optional[int] = None
+    # How many epochs to wait before starting to evaluate 
+    # (eval_freq_epochs doesn't apply until these many epochs have passed)
     eval_warmup_epochs: int = 0
+
+    # How often to evaluate the policy (how many training epochs between evaluations)
+    eval_freq_epochs: Optional[int] = None
+
+    # How many episodes to evaluate the policy for each evaluation
+    # (stats will be averaged over all episodes; the more episodes, the more reliable the stats)
     eval_episodes: Optional[int] = None
-    eval_recording_freq_epochs: Optional[int] = None
+
+    # How often to record videos of the policy during evaluation
+    # (how many training epochs between recordings)
+    eval_recording_freq_epochs: Optional[int] = None # TODO: pivot off N_evals instead
+
+    # Whether to run evaluation in the background
+    # (without this, evaluation will block training)
     eval_async: bool = False
+
+    # Whether to run evaluation deterministically
+    # (when set, the selected actions will always be the most likely instead of sampling from policy)
     eval_deterministic: bool = False
-    reward_threshold: Optional[float] = None
-    early_stop_on_eval_threshold: bool = True
+
+    # TODO: pass in env_kwargs instead
+    # Overrides the environment reward threshold for early stopping
+    reward_threshold: Optional[float] = None # TODO: rename to env_reward_threshold
+
+    # Whether to stop training when the training reward threshold is reached
     early_stop_on_train_threshold: bool = False
+
+    # Whether to stop training when the evaluation reward threshold is reached
+    early_stop_on_eval_threshold: bool = True
+
+    # TODO: get rid of this
+    # Whether to log per-environment evaluation metrics
     log_per_env_eval_metrics: bool = False
 
+    # TODO: get rid of this
     checkpoint_dir: str = "checkpoints"
+
+    # TODO: get rid of this
     resume: bool = False
 
+    # The accelerator to use for training (eg: simple environments are faster on CPU, image environments are faster on GPU)
     accelerator: "Config.AcceleratorType" = AcceleratorType.cpu  # type: ignore[assignment]
+
+    # The number of devices to use for training (eg: GPU, CPU)
     devices: Optional[Union[int, str]] = None
 
+    # Whether to prompt the user before training starts
     quiet: bool = False
 
     @classmethod
@@ -235,8 +334,8 @@ class Config:
             raise ValueError("n_steps must be a positive integer.")
         if self.batch_size <= 0:
             raise ValueError("batch_size must be a positive integer.")
-        if self.n_timesteps is not None and self.n_timesteps <= 0:
-            raise ValueError("n_timesteps must be a positive number when set.")
+        if self.max_timesteps is not None and self.max_timesteps <= 0:
+            raise ValueError("max_timesteps must be a positive number when set.")
         if not (0 < self.gamma <= 1):
             raise ValueError("gamma must be in (0, 1].")
         if not (0 <= self.gae_lambda <= 1):

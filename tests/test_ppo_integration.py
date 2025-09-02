@@ -83,8 +83,8 @@ def _install_trainer_factory_stub(monkeypatch):
                 # Early stop if enough timesteps gathered (mirrors BaseAgent behavior)
                 try:
                     metrics = lightning_module.train_collector.get_metrics()
-                    n_timesteps = getattr(lightning_module.config, "n_timesteps", None)
-                    if n_timesteps is not None and metrics.get("total_timesteps", 0) >= n_timesteps:
+                    max_timesteps = getattr(lightning_module.config, "max_timesteps", None)
+                    if max_timesteps is not None and metrics.get("total_timesteps", 0) >= max_timesteps:
                         break
                 except Exception:
                     pass
@@ -175,7 +175,7 @@ def test_full_ppo_train_tiny_loop_progress(monkeypatch):
     cfg.batch_size = 8
     cfg.n_epochs = 1
     cfg.max_epochs = 1
-    cfg.n_timesteps = 8  # single rollout worth of timesteps
+    cfg.max_timesteps = 8  # single rollout worth of timesteps
     # Disable eval to avoid validation hooks entirely
     cfg.eval_freq_epochs = None
     cfg.eval_episodes = None

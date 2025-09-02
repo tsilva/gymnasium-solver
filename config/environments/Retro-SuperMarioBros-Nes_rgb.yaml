@@ -19,7 +19,7 @@ eval_episodes: 3
 
 ppo:
   algo_id: ppo
-  n_timesteps: 3e6
+  max_timesteps: 3e6
   n_envs: 8
   n_steps: 256
   batch_size: 1024

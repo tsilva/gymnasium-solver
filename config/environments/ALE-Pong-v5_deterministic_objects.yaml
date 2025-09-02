@@ -23,7 +23,7 @@ reinforce:
 # SOLVED: 3M timesteps (~17m)
 ppo:
   algo_id: ppo
-  n_timesteps: 3.3e6
+  max_timesteps: 3.3e6
   n_envs: 16
   n_steps: 256 
   batch_size: 1024

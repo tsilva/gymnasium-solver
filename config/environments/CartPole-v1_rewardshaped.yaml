@@ -10,7 +10,7 @@ env_wrappers:
 ppo:
   algo_id: ppo
   n_envs: 8
-  n_timesteps: 1e5
+  max_timesteps: 1e5
   n_steps: 32
   batch_size: 256
   gae_lambda: 0.8

@@ -35,7 +35,7 @@ High-signal reference for maintainers and agents. Read this before making change
   - Manual optimization in `training_step`; metrics buffered via `utils.metrics_buffer.MetricsBuffer` and printed with `trainer_callbacks.PrintMetricsCallback` using `utils.metrics` rules.
   - Tracks best episode rewards: exposes `train/ep_rew_best` and `eval/ep_rew_best` computed from the running best of `*/ep_rew_mean` across epochs. These appear in `metrics.csv` and the console table, highlighted in blue (highlight rules configurable via `config/metrics.yaml` under `_global.highlight`).
   - Evaluation cadence controlled by `Config.eval_freq_epochs` and `eval_warmup_epochs`; `on_validation_epoch_start/validation_step` drive `evaluate_policy` and video recording.
-  - Schedules: learning rate and PPO clip range with linear decay based on progress `total_steps / n_timesteps`.
+  - Schedules: learning rate and PPO clip range with linear decay based on progress `total_steps / max_timesteps`.
   - Logging: W&B via `WandbLogger` with project derived from `env_id`; defines step metric `train/total_timesteps`.
 - `agents/ppo.PPO`:
   - Policy via `utils.policy_factory.create_actor_critic_policy` using MLP or CNN heads; computes PPO losses, metrics, and uses Adam(eps=1e-5).
@@ -93,7 +93,7 @@ High-signal reference for maintainers and agents. Read this before making change
 - Observations are flattened before reaching models; CNNs must reshape using inferred HWC.
 - Q-Learning assumes discrete obs/action spaces; do not auto-wrap discrete obs into vectors in `build_env` to avoid breaking tabular methods.
 - When `eval_freq_epochs` is None, validation is disabled; otherwise cadence is enforced via PL controls and warmup gates.
-- Use `config.n_timesteps` for progress-based schedules; ensure it’s set for linear decays to have effect.
+- Use `config.max_timesteps` for progress-based schedules; ensure it’s set for linear decays to have effect.
 
 ### Directory layout
 ```

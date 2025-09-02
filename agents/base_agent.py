@@ -284,7 +284,7 @@ class BaseAgent(pl.LightningModule):
         # Decide if we record a video this eval epoch
         record_video = (
             self.current_epoch == 0
-            or (self.current_epoch + 1) % self.config.eval_recording_freq_epochs == 0
+            or self.config.eval_recording_freq_epochs is not None and (self.current_epoch + 1) % self.config.eval_recording_freq_epochs == 0
         )
 
         # Run evaluation with optional recording

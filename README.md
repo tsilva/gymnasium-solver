@@ -75,6 +75,8 @@ You still select a config by ID, e.g. `CartPole-v1_ppo`. The loader also remains
 
 Key fields: `env_id`, `algo_id`, `n_envs`, `n_steps`, `batch_size`, `max_timesteps`, `policy` (`mlp|cnn`), `hidden_dims`, `obs_type` (`rgb|ram|objects` for ALE).
 
+Batch size can be either an absolute integer or a fraction in (0, 1]. If fractional, it is resolved as `batch_size = floor(n_envs * n_steps * fraction)`, with a minimum of 1.
+
 - Advantage normalization: set `normalize_advantages` to `rollout` (normalize once per rollout, SB3-style), `batch` (normalize per mini-batch), or `off`. Boolean `true/false` are accepted as aliases for `rollout/off`.
 
 REINFORCE options: set `reinforce_returns` to control how Monte Carlo returns scale log-probs: `reward_to_go` (default) or `episode` (true vanilla; multiply every timestep by the episode's total return).

@@ -17,9 +17,11 @@ High-signal reference for maintainers and agents. Read this before making change
 - Legacy loader `_load_from_legacy_config` remains for `config/hyperparams/<algo>.yaml`.
 - Key derived behaviors: evaluation defaults when `eval_freq_epochs` set; RLZoo-style `normalize` mapped to `normalize_obs/reward`; `policy` in {'mlp','cnn'}; validation via `_compute_validation_controls` helpers.
 
+- Fractional batch size: if `batch_size` in the YAML is a float in (0, 1], it is interpreted as a fraction of the rollout size and resolved at load time to `int(n_envs * n_steps * batch_size)` with a minimum of 1. This happens before validation so assertions see the final integer value.
+
 Algo-specific config subclasses:
 - `PPOConfig`: enforces `clip_range > 0`.
-- `REINFORCEConfig`: validates `reinforce_policy_targets` in {'returns','advantages'}.
+- `REINFORCEConfig`: validates `policy_targets` in {'returns','advantages'}.
 - `QLearningConfig`: retains base validations; ensures `n_envs >= 1`.
 
 ### Environments (`utils/environment.py`, `gym_wrappers/*`)

@@ -63,7 +63,8 @@ class Config:
 
     # Size of each batch of data to use for each gradient update
     # (algorithm-specific defaults live in algo config classes)
-    batch_size: Optional[int] = None
+    # When set to a float in (0, 1], it is interpreted as a fraction of the rollout size
+    batch_size: [Union[int, float]] = 0.25
 
     # The number of epochs to train on the same rollout data
     # (algorithm-specific defaults live in algo config classes)
@@ -167,7 +168,7 @@ class Config:
 
     # How to calculate the policy targets for the REINFORCE algorithm
     # (algo defaults in subclass)
-    reinforce_policy_targets: Optional["Config.PolicyTargetsType"] = None  # type: ignore[assignment]
+    policy_targets: Optional["Config.PolicyTargetsType"] = None  # type: ignore[assignment]
 
     # How many epochs to wait before starting to evaluate 
     # (eval_freq_epochs doesn't apply until these many epochs have passed)
@@ -267,6 +268,20 @@ class Config:
 
         # Parse schedule specifiers like lin_0.001
         Config._parse_schedules(final_config)
+
+        # Support fractional batch_size: interpret 0 < batch_size <= 1 as a
+        # fraction of the rollout size (n_envs * n_steps). This allows configs
+        # to specify, e.g., 0.25 to mean 25% of the collected rollout per
+        # gradient update.
+        batch_size = final_config["batch_size"]
+        if batch_size < 1:
+            n_envs = final_config["n_envs"]
+            n_steps = final_config["n_steps"]
+            rollout_size = n_envs * n_steps
+            assert rollout_size % (1 / batch_size) == 0, f"fractional batch_size must be a fraction of the rollout size: {rollout_size} % {1/batch_size} != 0"
+            new_batch_size = int(rollout_size * batch_size)
+            assert rollout_size % new_batch_size == 0, f"fractional batch_size must be a fraction of the rollout size: {rollout_size} % {new_batch_size} != 0"
+            final_config["batch_size"] = new_batch_size
 
         # Create config instance and validate
         instance = ConfigClass(**final_config)

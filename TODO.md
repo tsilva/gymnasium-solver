@@ -1,6 +1,7 @@
-- TODO: add support for non-reward to go support + baseline subtraction
+- REFACTOR: consider changing eval_freq to timesteps so it doesnt depend on n_updates
+- FEAT: log target metrics to tensorboard
+- FEAT: figure out if I should log variance instead of std
 - FEAT: add sweeping support
-- FEAT: add fractional batch size supportWW
 - TODO: x metric cant be total timesteps because that increases with parallelization.... must be n_updates? index by epoch? or add updates metric?
 - TODO: optimal single metric for best training (samples/reward)
 - TODO: add kl divergence metric to reinforce

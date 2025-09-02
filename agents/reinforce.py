@@ -4,6 +4,7 @@ from .base_agent import BaseAgent
 
 import torch
 
+# TODO: move to util
 def assert_detached(*tensors: torch.Tensor):
     for t in tensors:
         assert not t.requires_grad, "Tensor still requires grad"
@@ -40,19 +41,21 @@ class REINFORCE(BaseAgent):
         
         # Normalize returns if requested
         if self.config.normalize_returns == "batch": 
+            # TODO: use util
             returns = (returns - returns.mean()) / (returns.std() + 1e-8)
 
         # Normalize advantages if requested
         if self.config.normalize_advantages == "batch": 
+            # TODO: use util
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
         # Pick the configured policy targets
-        if self.config.reinforce_policy_targets == "returns": 
+        if self.config.policy_targets == "returns": 
             policy_targets = returns
-        elif self.config.reinforce_policy_targets == "advantages": 
+        elif self.config.policy_targets == "advantages": 
             policy_targets = advantages
         else: 
-            raise ValueError(f"Invalid policy targets: {self.config.reinforce_policy_targets}")
+            raise ValueError(f"Invalid policy targets: {self.config.policy_targets}")
 
         # Get the log probabilities for each 
         # action given the current state

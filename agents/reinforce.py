@@ -28,11 +28,10 @@ class REINFORCE(BaseAgent):
     
     # TODO: simplify, unify these flags
     def rollout_collector_hyperparams(self):
-        base_params = self.config.rollout_collector_hyperparams()
-        base_params['use_gae'] = False
-        base_params['returns_type'] = self.config.returns_type
+        base_params = super().rollout_collector_hyperparams()
+        #base_params['advantages_type'] = self.config.reinforce_advantages_type
         return base_params
-    
+
     # TODO: only does something with normalization off, but even that way it doesnt converge
     def losses_for_batch(self, batch, batch_idx):
         # Retrieve tensors from batch
@@ -45,9 +44,21 @@ class REINFORCE(BaseAgent):
         # Assert that the tensors are detached
         assert_detached(states, actions, returns, advantages)
         
-        policy_targets = returns
-        if self.config.reinforce_use_baseline: 
+        # Normalize returns if requested
+        if self.config.normalize_returns == "batch": 
+            returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+
+        # Normalize advantages if requested
+        if self.config.normalize_advantages == "batch": 
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+
+        # Pick the configured policy targets
+        if self.config.reinforce_policy_targets == "returns": 
+            policy_targets = returns
+        elif self.config.reinforce_policy_targets == "advantages": 
             policy_targets = advantages
+        else: 
+            raise ValueError(f"Invalid policy targets: {self.config.reinforce_policy_targets}")
 
         # Get the log probabilities for each 
         # action given the current state

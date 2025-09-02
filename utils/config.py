@@ -99,17 +99,21 @@ class Config:
     clip_range: Optional[float] = 0.2
     # PPO clip range schedule strategy: None or 'linear'
     clip_range_schedule: Optional[str] = None
-    # Normalize the returns; 'off' means no normalization, 'baseline' means normalize by baseline, 'batch' means normalize by batch mean and std
-    normalize_returns: Optional[str] = None
+
+    # Can be "reward_to_go" or "episode"
+    returns_type: str = "episode"
+
+    # Can be "batch" or "rollout"
+    normalize_returns: Optional[str] = "batch"
+
+    # Can be "baseline_subtraction" or "gae"
+    advantages_type: Optional[str] = "baseline_subtraction"
+
     # Advantage normalization behavior: 'off', 'rollout', or 'batch'
-    normalize_advantages: Optional[str] = None
-    # 'reward_to_go' (default) scales each timestep by its own return-to-go.
-    # 'episode' scales all timesteps within an episode by the episode's total return.
-    returns_type: str = "reward_to_go"
-    # REINFORCE-only: which policy targets to use for scaling log-probs.
-    # 'returns' means unscaled returns (vanilla REINFORCE)
-    # 'baseline_advantages' means advantages (REINFORCE with baseline)
-    reinforce_use_baseline: Optional[bool] = False
+    normalize_advantages: Optional[str] = "batch"
+    
+    # Can be "returns" or "advantages"
+    reinforce_policy_targets: Optional[str] = "returns"
 
     # ===== Evaluation (optional; disabled unless eval_freq_epochs is set) =====
     # Run evaluation every N training epochs; None disables evaluation entirely

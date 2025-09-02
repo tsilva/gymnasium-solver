@@ -160,6 +160,10 @@ class BaseAgent(pl.LightningModule):
             **self.config.rollout_collector_hyperparams(),
             "gamma": self.config.gamma, # TODO: shouldn't this be in the config?
             "gae_lambda": self.config.gae_lambda,
+            "returns_type": self.config.returns_type,
+            "normalize_returns": self.config.normalize_returns == "rollout",
+            "advantages_type": self.config.advantages_type,
+            "normalize_advantages": self.config.normalize_advantages == "rollout",
         }
 
     def on_fit_start(self):

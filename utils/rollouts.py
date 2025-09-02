@@ -81,8 +81,13 @@ def _flat_env_major(arr: np.ndarray, start: int, end: int) -> np.ndarray:
     """
     return arr[start:end].transpose(1, 0).reshape(-1)
 
+def _normalize_returns(returns: np.ndarray, eps: float = 1e-8) -> np.ndarray:
+    """Return return array normalized across all elements with epsilon stability."""
+    ret_flat = returns.reshape(-1)
+    return (returns - ret_flat.mean()) / (ret_flat.std() + float(eps))
 
-def _normalize_advantages(advantages: np.ndarray, eps: float) -> np.ndarray:
+
+def _normalize_advantages(advantages: np.ndarray, eps: float = 1e-8) -> np.ndarray:
     """Return advantage array normalized across all elements with epsilon stability."""
     adv_flat = advantages.reshape(-1)
     return (advantages - adv_flat.mean()) / (adv_flat.std() + float(eps))
@@ -418,14 +423,15 @@ class RolloutCollector():
         env, # Environment to collect rollouts from
         policy_model, # Policy model to collect rollouts from
         n_steps, # Number of steps to collect per rollout
+        *,
         stats_window_size=100, # Size of the rolling window for stats
         gamma: float = 0.99, # Discount factor for future rewards
         gae_lambda: float = 0.95, # GAE lambda parameter (advantage estimation smoothing)
+        returns_type: str, # Which returns type to use (eg: "episode" or "reward_to_go") # TODO: not optional
+        normalize_returns: bool = False, # Whether to normalize returns
+        advantages_type: str, # Which advantages type to use (eg: "baseline_subtraction" or "gae") # TODO: not optional
         normalize_advantages: bool = False, # Whether to normalize advantages
-        advantages_norm_eps: float = 1e-8, # Epsilon for advantages normalization
-        use_gae: bool = True, # Whether to use GAE (Generalized Advantage Estimation)
         buffer_maxsize: Optional[int] = None, # Maximum size of the rollout buffer
-        returns_type: str = "reward_to_go",
         mc_treat_timeouts_as_terminals: bool = True,
         **kwargs
     ) -> None:
@@ -435,10 +441,10 @@ class RolloutCollector():
         self.stats_window_size = stats_window_size
         self.gamma = gamma
         self.gae_lambda = gae_lambda
-        self.advantages_norm_eps = advantages_norm_eps
-        self.use_gae = use_gae
-        self.normalize_advantages = normalize_advantages
         self.returns_type = returns_type
+        self.normalize_returns = normalize_returns
+        self.advantages_type = advantages_type
+        self.normalize_advantages = normalize_advantages
         self.mc_treat_timeouts_as_terminals = mc_treat_timeouts_as_terminals # TODO: review this
         self.kwargs = kwargs
         self.buffer_maxsize = buffer_maxsize
@@ -625,7 +631,7 @@ class RolloutCollector():
         dones_slice = self._buffer.dones_buf[start:end]
         timeouts_slice = self._buffer.timeouts_buf[start:end]
 
-        if self.use_gae:
+        if self.advantages_type == "gae":
             last_values_vec = self._predict_values_np(last_obs)
             bootstrapped_slice = self._buffer.bootstrapped_values_buf[start:end]
             advantages_buf, returns_buf = compute_batched_gae_advantages_and_returns(
@@ -638,7 +644,7 @@ class RolloutCollector():
                 gamma=self.gamma,
                 gae_lambda=self.gae_lambda,
             )
-        else:
+        elif self.advantages_type == "baseline_subtraction":
             # Monte Carlo returns for REINFORCE (no bootstrap added here)
             # Optionally treat time-limit truncations as terminals when not bootstrapping
             # to avoid return leakage across episode boundaries.
@@ -677,8 +683,13 @@ class RolloutCollector():
             baseline = self._base_stats.mean()
             advantages_buf = returns_buf - baseline
 
+        # Normalize returns if requested
+        if self.normalize_returns:
+            returns_buf = _normalize_returns(returns_buf) # TODO: take into account unfinished episodes?
+
+        # Normalize advantages if requested
         if self.normalize_advantages:
-            advantages_buf = _normalize_advantages(advantages_buf, self.advantages_norm_eps)
+            advantages_buf = _normalize_advantages(advantages_buf)
 
         return advantages_buf, returns_buf
 
@@ -771,13 +782,14 @@ class RolloutCollector():
         are masked out by remapping indices to the nearest previous valid
         position so batch shapes stay stable across samplings.
         """
-        if self._last_rollout_index_map is not None and not self.use_gae:
+        if self._last_rollout_index_map is not None and not self.advantages_type == "gae":
             # idxs may be a list or tensor; convert to numpy indices
             idxs_np = np.asarray(idxs, dtype=np.int64)
             # Safe remap into valid positions
             idxs_np = self._last_rollout_index_map[idxs_np]
             idxs = idxs_np
-       
+
+        # TODO: should I call this Trajectory or Trajectories?
         return RolloutTrajectory(
             observations=trajectories.observations[idxs],
             actions=trajectories.actions[idxs],

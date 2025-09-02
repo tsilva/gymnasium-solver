@@ -5,6 +5,40 @@ ent_coef: 0.01
 eval_episodes: 100
 normalize_obs: False # Normalization doesn't seem to help
 
+reinforce_vanilla:
+  algo_id: reinforce
+  n_timesteps: 3e5
+  n_envs: 8
+  n_steps: 1024
+  batch_size: 2048
+  learning_rate: 6e-3
+  eval_freq_epochs: 5
+  returns_type: "episode"
+  reinforce_policy_targets: "returns"
+
+reinforce_baseline:
+  algo_id: reinforce
+  n_timesteps: 3e5
+  n_envs: 8
+  n_steps: 1024
+  batch_size: 2048
+  learning_rate: 6e-3
+  eval_freq_epochs: 5
+  returns_type: "episode"
+  reinforce_policy_targets: "advantages"
+  advantages_type: "baseline_subtraction"
+
+reinforce_baseline_rewardtogo:
+  algo_id: reinforce
+  n_timesteps: 3e5
+  n_envs: 8
+  n_steps: 1024
+  batch_size: 2048
+  learning_rate: 6e-3
+  eval_freq_epochs: 5
+  returns_type: "reward_to_go"
+  reinforce_policy_targets: "returns"
+
 # TUNED: 13 epochs (122880 timesteps)
 # TODO: eval wramup
 # TODO: hidden_dims
@@ -18,8 +52,8 @@ reinforce:
   eval_freq_epochs: 5
   frame_stack: 2 # Converges faster with frame stacking = 2, probably because it allows to estimate momentum better?
   returns_type: "episode"
-  reinforce_use_baseline: True  
-  normalize_advantages: "rollout"
+  reinforce_policy_targets: "returns"
+  #normalize_advantages: "batch"
 
 ppo:
   #seed: 100 # TODO: seed setting does not seem to be doing anything

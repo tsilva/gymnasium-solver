@@ -1,6 +1,9 @@
+- TODO: config.py, add enums
+- TODO: config.py add support for algo defaults
+
 - TODO: add support for non-reward to go support + baseline subtraction
 - FEAT: add sweeping support
-- FEAT: add fractional batch size support
+- FEAT: add fractional batch size supportWW
 - TODO: x metric cant be total timesteps because that increases with parallelization.... must be n_updates? index by epoch? or add updates metric?
 - TODO: optimal single metric for best training
 - TODO: add kl divergence metric to reinforce

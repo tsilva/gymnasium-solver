@@ -13,9 +13,21 @@ reinforce_baseline:
   policy_targets: "advantages"
   #normalize_advantages: "batch"
 
+reinforce_baseline2:
+  algo_id: reinforce
+  returns_type: "mc:rtg"          # was "mc:episode"
+  advantages_type: "baseline"
+  policy_targets: "advantages"
+  normalize_advantages: "rollout" # or "batch"
+  ent_coef: 0.01                  # was 0.25
+  n_epochs: 2                     # reuse data once (optional)
+  # Optionally shrink the batch per update:
+  # n_steps: 512   # was 1024
+
 ppo:
   algo_id: ppo
   n_epochs: 4
   gae_lambda: 0.98
   gamma: 0.999
   eval_freq_epochs: 10
+  policy_targets: "advantages"

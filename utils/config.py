@@ -1,21 +1,13 @@
 """Configuration loading for environment YAML and legacy hyperparams."""
 
 import json
-from dataclasses import MISSING, asdict, dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
 
 import yaml
-from .dict_utils import convert_dict_numeric_strings
-
-def _dataclass_defaults_dict(cls: type) -> Dict[str, Any]:
-    """Collect dataclass default values without instantiation."""
-    defaults: Dict[str, Any] = {}
-    for f in cls.__dataclass_fields__.values():
-        if f.default is not MISSING: defaults[f.name] = f.default
-        elif f.default_factory is not MISSING: defaults[f.name] = f.default_factory()  # type: ignore
-    return defaults
+from .dict_utils import convert_dict_numeric_strings, dataclass_defaults_dict
 
 
 @dataclass
@@ -255,7 +247,7 @@ class Config:
         config_variant_cfg = all_configs[config_variant_id]
 
         # Create dict with dataclass defaults
-        final_config: Dict[str, Any] = _dataclass_defaults_dict(cls)
+        final_config: Dict[str, Any] = dataclass_defaults_dict(cls)
 
         # Apply config variant over dataclass defaults
         final_config.update(config_variant_cfg)
@@ -321,7 +313,7 @@ class Config:
         assert self.reward_threshold is None or self.reward_threshold > 0, "reward_threshold must be a positive float when set."
         assert self.early_stop_on_train_threshold or self.early_stop_on_eval_threshold, "At least one of early_stop_on_train_threshold or early_stop_on_eval_threshold must be True."
         assert self.devices is None or isinstance(self.devices, int) or self.devices == "auto", "devices may be an int, 'auto', or None."
-        assert self.batch_size <= self.n_steps, "batch_size should not exceed n_steps."
+        assert self.batch_size <= self.n_envs * self.n_steps, f"batch_size ({self.batch_size}) should not exceed n_envs ({self.n_envs}) * n_steps ({self.n_steps})."
 
 def load_config(config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> Config:
     """Convenience function to load configuration."""

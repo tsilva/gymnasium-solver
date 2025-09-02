@@ -13,7 +13,7 @@ reinforce_vanilla:
   batch_size: 2048
   learning_rate: 6e-3
   eval_freq_epochs: 5
-  returns_type: "episode"
+  returns_type: "montecarlo:episode"
   reinforce_policy_targets: "returns"
 
 reinforce_baseline:
@@ -24,7 +24,7 @@ reinforce_baseline:
   batch_size: 2048
   learning_rate: 6e-3
   eval_freq_epochs: 5
-  returns_type: "episode"
+  returns_type: "montecarlo:episode"
   reinforce_policy_targets: "advantages"
   advantages_type: "baseline_subtraction"
 
@@ -36,7 +36,7 @@ reinforce_baseline_rewardtogo:
   batch_size: 2048
   learning_rate: 6e-3
   eval_freq_epochs: 5
-  returns_type: "reward_to_go"
+  returns_type: "montecarlo:reward_to_go"
   reinforce_policy_targets: "returns"
 
 # TUNED: 13 epochs (122880 timesteps)

@@ -631,7 +631,7 @@ class RolloutCollector():
         dones_slice = self._buffer.dones_buf[start:end]
         timeouts_slice = self._buffer.timeouts_buf[start:end]
 
-        if self.advantages_type == "gae":
+        if self.returns_type == "gae:reward_to_go" and self.advantages_type == "gae":
             last_values_vec = self._predict_values_np(last_obs)
             bootstrapped_slice = self._buffer.bootstrapped_values_buf[start:end]
             advantages_buf, returns_buf = compute_batched_gae_advantages_and_returns(
@@ -644,7 +644,7 @@ class RolloutCollector():
                 gamma=self.gamma,
                 gae_lambda=self.gae_lambda,
             )
-        elif self.advantages_type == "baseline_subtraction":
+        elif self.returns_type in ["montecarlo:episode", "montecarlo:reward_to_go"]:
             # Monte Carlo returns for REINFORCE (no bootstrap added here)
             # Optionally treat time-limit truncations as terminals when not bootstrapping
             # to avoid return leakage across episode boundaries.
@@ -663,7 +663,7 @@ class RolloutCollector():
             # If requested, convert reward-to-go returns into full-episode returns
             # by making all timesteps within the same episode segment share the
             # segment's initial return (constant across the segment).
-            if self.returns_type == "episode":
+            if self.returns_type == "montecarlo:episode":
                 returns_buf = convert_returns_to_full_episode(
                     returns=returns_buf,
                     dones=dones_slice,
@@ -679,11 +679,12 @@ class RolloutCollector():
                 returns_flat_env_major = returns_buf.transpose(1, 0).reshape(-1)
                 self._base_stats.update(returns_flat_env_major[valid_mask_flat])
 
-            # Calculate advantages by subtracting baseline from returns
-            baseline = self._base_stats.mean()
-            advantages_buf = returns_buf - baseline
-        else:
             advantages_buf = returns_buf
+            if self.advantages_type == "baseline_subtraction":
+                baseline = self._base_stats.mean()
+                advantages_buf = returns_buf - baseline
+        else:
+            raise ValueError(f"Invalid returns_type: {self.returns_type} and advantages_type: {self.advantages_type}")
 
         # Normalize returns if requested
         if self.normalize_returns:

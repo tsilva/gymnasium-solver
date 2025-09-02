@@ -563,7 +563,7 @@ class Config:
 
         # Algo-specific simple validations
         if isinstance(self.returns_type, str):
-            valid_rr = {"reward_to_go", "episode"}
+            valid_rr = {"montecarlo:reward_to_go", "montecarlo:episode"}
             rr = self.returns_type.strip().lower()
             if rr not in valid_rr:
                 raise ValueError(f"returns_type must be one of {sorted(valid_rr)}.")

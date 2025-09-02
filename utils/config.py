@@ -1,8 +1,4 @@
-"""Configuration management utilities (environment YAML + legacy hyperparams).
-
-This module intentionally centralizes common config assembly and validation so
-both the environment-centric and legacy paths share one implementation.
-"""
+"""Configuration loading for environment YAML and legacy hyperparams."""
 
 from dataclasses import MISSING, asdict, dataclass, field
 from pathlib import Path
@@ -24,7 +20,7 @@ def _convert_numeric_strings(config_dict: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _dataclass_defaults_dict(cls: type) -> Dict[str, Any]:
-    """Build a dict of dataclass default values without instantiating the class."""
+    """Collect dataclass default values without instantiation."""
     defaults: Dict[str, Any] = {}
     for f in cls.__dataclass_fields__.values():  # type: ignore[attr-defined]
         if f.default is not MISSING:
@@ -35,7 +31,7 @@ def _dataclass_defaults_dict(cls: type) -> Dict[str, Any]:
 
 
 def _finalize_config_dict(raw_config: Dict[str, Any]) -> Dict[str, Any]:
-    """Mutate and return a finalized raw config dict ready for dataclass init."""
+    """Finalize a raw config dict prior to dataclass init (mutates and returns)."""
     # Numeric string conversions first
     _convert_numeric_strings(raw_config)
     # Parse schedule specifiers like lin_0.001
@@ -50,159 +46,80 @@ def _finalize_config_dict(raw_config: Dict[str, Any]) -> Dict[str, Any]:
 
 @dataclass
 class Config:
-    # ===== Core identifiers (mandatory) =====
-    # Gymnasium environment ID (e.g., 'CartPole-v1', 'ALE/Pong-v5')
     env_id: str
-    # Algorithm identifier used to select the agent implementation (e.g., 'ppo', 'reinforce', 'qlearning')
     algo_id: str
 
-    # ===== Training data collection (mandatory) =====
-    # Number of environment steps to collect per rollout before an update
     n_steps: int
-    # Batch size used when sampling from the collected rollout data
     batch_size: int
 
-    # ===== Training loop (optional) =====
-    # Number of passes (epochs) over the rollout buffer per training epoch
     n_epochs: int = 1
-    # Maximum number of trainer epochs (-1 or None means unlimited; training may stop earlier via n_timesteps)
     max_epochs: Optional[int] = None
-    # Optional cap on total environment timesteps processed; when reached, training stops
     n_timesteps: Optional[float] = None
 
-    # ===== Reproducibility & vectorization (optional) =====
-    # Random seed for envs, torch, numpy, etc.
     seed: int = 42
-    # Number of parallel vectorized environments
     n_envs: int = 1
-    # Force a specific vectorization backend: True=SubprocVecEnv, False=DummyVecEnv, None=auto
     subproc: Optional[bool] = None
 
-    # ===== Environment preprocessing (optional) =====
-    # List of custom wrapper names registered in EnvWrapperRegistry to apply to each env instance
     env_wrappers: list = field(default_factory=list)
-    # Environment-specific keyword args forwarded to gym.make()/OCAtari
     env_kwargs: dict = field(default_factory=dict)
-    # Enable observation normalization: False=off, True=running norm, 'static'=fixed statistics
     normalize_obs: bool = False
-    # Enable reward normalization (currently for completeness; may be unused in some algorithms)
     normalize_reward: bool = False
-    # Convert observations to grayscale
     grayscale_obs: bool = False
-    # Resize observations to a specific shape
     resize_obs: bool = False
-    # Stack the last N frames along the channel dimension (useful for pixel/ram-based envs)
     frame_stack: int = 1
-    # Observation type for ALE environments: 'rgb' (default), 'ram', 'grayscale', or 'objects'
     obs_type: str = "rgb"
 
-    # ===== Model architecture (optional) =====
-    # Hidden layer dimensions for policy/value networks (tuple or single int)
     hidden_dims: Union[int, Tuple[int, ...]] = (64, 64)
-    # Policy selection and kwargs
-    # policy can be 'mlp' or 'cnn'
     policy: str = 'mlp'
-    # Optional policy kwargs (dict). When using environment YAML, this can be a mapping.
     policy_kwargs: Optional[Dict[str, Any]] = field(default_factory=lambda: {"activation": "tanh"})
 
-    # ===== Optimization (optional) =====
-    # Base learning rate for optimizer (used unless 'learning_rate' override/schedule is provided)
     policy_lr: float = 3e-4
-    # Optional learning rate value that can be scheduled (e.g., set via 'lin_3e-4')
     learning_rate: Optional[float] = None
-    # Learning rate schedule strategy: None or 'linear' (when using 'learning_rate')
     learning_rate_schedule: Optional[str] = None
-    # Gradient clipping max norm (applied per optimizer step)
     max_grad_norm: float = 0.5
 
-    # ===== Algorithm hyperparameters (optional; sensible defaults) =====
-    # Discount factor for future rewards
     gamma: float = 0.99
-    # GAE lambda parameter (advantage estimation smoothing); ignored by some algos
     gae_lambda: float = 0.95
-    # Entropy coefficient encouraging exploration
     ent_coef: float = 0.01
-    # Value function loss coefficient (used by PPO/actor-critic methods)
     vf_coef: float = 0.5
-    # PPO clip range base value (used by PPO); also supports scheduling
     clip_range: Optional[float] = 0.2
-    # PPO clip range schedule strategy: None or 'linear'
     clip_range_schedule: Optional[str] = None
 
-    # Can be "reward_to_go" or "episode"
     returns_type: str = "episode"
 
-    # Can be "batch" or "rollout"
     normalize_returns: Optional[str] = None
 
-    # Can be "baseline_subtraction" or "gae"
     advantages_type: Optional[str] = None
 
-    # Advantage normalization behavior: 'off', 'rollout', or 'batch'
     normalize_advantages: Optional[str] = None
-    
-    # Can be "returns" or "advantages"
+
     reinforce_policy_targets: Optional[str] = "returns"
 
-    # ===== Evaluation (optional; disabled unless eval_freq_epochs is set) =====
-    # Run evaluation every N training epochs; None disables evaluation entirely
     eval_freq_epochs: Optional[int] = None
-    # Minimum number of epochs to wait before starting evaluations
-    # Example: eval_warmup_epochs=5 -> first eval at end of epoch 5, then every eval_freq_epochs
     eval_warmup_epochs: int = 0
-    # Number of episodes to run during each evaluation window
     eval_episodes: Optional[int] = None
-    # Record evaluation videos every N evaluation epochs; defaults to eval_freq_epochs when not set
     eval_recording_freq_epochs: Optional[int] = None
-    # Whether to decouple evaluation from training using async workers (not yet implemented)
     eval_async: bool = False
-    # Use deterministic actions during evaluation (greedy for stochastic policies)
     eval_deterministic: bool = False
-    # Optional target reward threshold to drive early-stopping or checkpointing heuristics
     reward_threshold: Optional[float] = None
-    # Enable early stopping when eval mean reward reaches threshold
     early_stop_on_eval_threshold: bool = True
-    # Enable early stopping when training mean episode reward reaches threshold
     early_stop_on_train_threshold: bool = False
-    # Control verbosity of evaluation metric logging: when False, suppress per_env/* metrics in logs
-    # (evaluate_policy still computes/returns them; this only affects logging)
     log_per_env_eval_metrics: bool = False
 
-    # ===== Experiment tracking (optional) =====
-    # Project identifier for logging (e.g., W&B project); defaults to a name derived from env_id
     project_id: Optional[str] = None
-    # Directory for saving/loading checkpoints (used by custom checkpoint callback)
     checkpoint_dir: str = "checkpoints"
-    # If True, attempt to resume from the latest checkpoint for this algo/env
     resume: bool = False
 
-    # ===== Runtime / hardware (optional) =====
-    # Device accelerator for PyTorch Lightning: 'cpu' or 'auto' (auto-detect GPU/MPS if available)
     accelerator: str = "cpu"
-    # Number of devices to use or 'auto' (forwarded to Lightning as-is); None lets Lightning decide
     devices: Optional[Union[int, str]] = None
 
-    # ===== CLI/UX (optional) =====
-    # When True, run non-interactively (auto-accept prompts, suppress confirmations)
     quiet: bool = False
 
-    # ===== Legacy compatibility (do not rely on these directly) =====
-    # RL Zoo compatibility flag mapped to normalize_obs/reward
     normalize: Optional[bool] = None
 
     @classmethod
     def load_from_yaml(cls, config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> 'Config':
-        """
-        Load configuration from YAML files supporting both formats:
-        1) New environment-centric format (config/environments/*.yaml):
-           - config_id selects the YAML file (project name; typically the env id, e.g. 'CartPole-v1').
-           - variant_id selects the variant block inside that file (e.g. 'ppo' or 'reinforce').
-             If variant_id is omitted, the first variant defined in the file is used.
-           - Also accepts full IDs like 'CartPole-v1_ppo' directly.
-        2) Legacy format (config/hyperparams/<algo>.yaml):
-           - Falls back when no matching environment file is found; requires variant_id to
-             indicate the algorithm file to load from (e.g., 'ppo').
-        """
+        """Load config from environment YAMLs or legacy hyperparams."""
         # Normalize CLI-provided empty-string variant to None
         if isinstance(variant_id, str) and variant_id.strip() == "":
             variant_id = None
@@ -219,11 +136,7 @@ class Config:
         project_variants: Dict[str, list] = {}
 
         def _is_new_style(doc: Dict[str, Any]) -> bool:
-            # Heuristic: top-level contains env_id and other Config fields (not nested under a name)
-            if not isinstance(doc, dict):
-                return False
-            fields = set(cls.__dataclass_fields__.keys())
-            return "env_id" in doc and any(k in fields for k in doc.keys())
+            return isinstance(doc, dict) and ("env_id" in doc)
 
         def _collect_from_file(path: Path) -> None:
             # Ignore helper/example files with *.new.yaml extension
@@ -238,34 +151,24 @@ class Config:
                 return
 
             if _is_new_style(doc):
-                # New style: base fields at root + per-variant sections (e.g., ppo: {...})
                 field_names = set(cls.__dataclass_fields__.keys())
                 base: Dict[str, Any] = {k: v for k, v in doc.items() if k in field_names}
                 project = base.get("project_id") or path.stem.replace(".new", "")
-                # Maintain insertion-ordered list of variants for default selection
                 if project not in project_variants:
                     project_variants[project] = []
-                # Variant sections are top-level dict values whose key is not a dataclass field name
                 for k, v in doc.items():
                     if k in field_names:
                         continue
                     if not isinstance(v, dict):
                         continue
-                    # Record variant order for this project
                     project_variants[project].append(str(k))
                     variant_cfg = dict(base)
                     variant_cfg.update(v)
-                    # Default algo_id to the variant section name when not provided
                     variant_cfg.setdefault("algo_id", str(k))
-                    # Ensure a stable default project_id derived from the file name
-                    # when it isn't explicitly provided in the YAML. This lets us
-                    # omit redundant project_id entries that match the file's stem
-                    # while preserving the same behavior.
                     variant_cfg.setdefault("project_id", project)
                     cid = f"{project}_{k}"
                     all_configs[cid] = variant_cfg
             else:
-                # Old style: mapping of config_id -> mapping (may include inherits)
                 for k, v in doc.items():
                     if isinstance(v, dict):
                         all_configs[str(k)] = v

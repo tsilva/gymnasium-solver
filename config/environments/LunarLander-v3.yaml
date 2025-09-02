@@ -1,33 +1,21 @@
 env_id: LunarLander-v3
 eval_episodes: 10
 hidden_dims: [128, 128]
-policy_kwargs:
-  activation: relu
+n_envs: 16
+n_steps: 1024
+ent_coef: 0.25
+#max_timesteps: 1e6
+
+reinforce_baseline:
+  algo_id: reinforce
+  returns_type: "mc:episode"
+  advantages_type: "baseline"
+  policy_targets: "advantages"
+  normalize_advantages: "batch"
 
 ppo:
   algo_id: ppo
-  n_envs: 16
-  #max_timesteps: 1e6
   n_epochs: 4
-  batch_size: 512
-  n_steps: 1024
   gae_lambda: 0.98
   gamma: 0.999
   eval_freq_epochs: 10
-
-# TODO: add relu
-# TODO: try lr 3e-4
-# TODO: add learning decay min
-reinforce:
-  algo_id: reinforce
-  #max_timesteps: 2e6
-  n_envs: 16
-  n_steps: 512
-  batch_size: 2048
-  gamma: 0.99
-  policy_lr: 2e-4
-  ent_coef: 0.005
-  frame_stack: 2
-  normalize_returns: "baseline"
-  normalize_advantages: "rollout"
-  eval_freq_epochs: 100

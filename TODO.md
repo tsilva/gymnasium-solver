@@ -1,6 +1,3 @@
-- TODO: config.py, add enums
-- TODO: config.py add support for algo defaults
-
 - TODO: add support for non-reward to go support + baseline subtraction
 - FEAT: add sweeping support
 - FEAT: add fractional batch size supportWW

@@ -26,20 +26,20 @@ class Config:
         hpu = "hpu"
 
     class ReturnsType(str, Enum):
-        mc_episode = "montecarlo:episode"
-        mc_rtg = "montecarlo:reward_to_go"
-        gae_rtg = "gae:reward_to_go"
+        mc_episode = "mc:episode"
+        mc_rtg = "mc:rtg"
+        gae_rtg = "gae:rtg"
 
     class AdvantagesType(str, Enum):
         gae = "gae"
-        baseline_subtraction = "baseline_subtraction"
+        baseline = "baseline"
 
     class AdvantageNormType(str, Enum):
         rollout = "rollout"
         batch = "batch"
         off = "off"
 
-    class ReinforceTargetsType(str, Enum):
+    class PolicyTargetsType(str, Enum):
         returns = "returns"
         advantages = "advantages"
 
@@ -58,14 +58,16 @@ class Config:
     algo_id: str
 
     # The number of steps to collect per rollout environment
-    n_steps: int
+    # (algorithm-specific defaults live in algo config classes)
+    n_steps: Optional[int] = None
 
     # Size of each batch of data to use for each gradient update
-    batch_size: int
+    # (algorithm-specific defaults live in algo config classes)
+    batch_size: Optional[int] = None
 
     # The number of epochs to train on the same rollout data
-    # (number of times all batches are presented)
-    n_epochs: int = 1
+    # (algorithm-specific defaults live in algo config classes)
+    n_epochs: Optional[int] = None
 
     # Max epochs to train for (optional)
     max_epochs: Optional[int] = None
@@ -121,42 +123,42 @@ class Config:
     # Additional kwargs to pass to the policy factory
     policy_kwargs: Optional[Dict[str, Any]] = field(default_factory=lambda: {"activation": "relu"})
 
-    # The learning rate for the policy
-    policy_lr: float = 3e-4
+    # The learning rate for the policy (algo defaults in subclasses)
+    policy_lr: Optional[float] = None
 
     # The schedule for the policy learning rate
     policy_lr_schedule: Optional[str] = None
 
     # The maximum gradient norm for the policy
-    max_grad_norm: float = 0.5
+    max_grad_norm: Optional[float] = None
     
-    # The discount factor for the rewards (how much future rewards are taken into account)
-    gamma: float = 0.99
+    # The discount factor for the rewards (algo defaults in subclasses)
+    gamma: Optional[float] = None
 
-    # The lambda parameter for the GAE (Generalized Advantage Estimation)
-    gae_lambda: float = 0.95
+    # The lambda parameter for the GAE (algo defaults in subclasses)
+    gae_lambda: Optional[float] = None
 
-    # The entropy coefficient for the policy (how much to encourage exploration)
-    ent_coef: float = 0.01
+    # The entropy coefficient for the policy (algo defaults in subclasses)
+    ent_coef: Optional[float] = None
 
-    # The value function coefficient for the policy (how much to prioritize the value function)
-    vf_coef: float = 0.5
+    # The value function coefficient for the policy (algo defaults in subclasses)
+    vf_coef: Optional[float] = None
 
-    # The clip range for the policy (how much to clip the policy updates)
-    clip_range: Optional[float] = 0.2
+    # The clip range for the policy (algo defaults in subclasses)
+    clip_range: Optional[float] = None
 
     # The schedule for the clip range
     clip_range_schedule: Optional[str] = None
 
-    # How to calculate rollout returns (eg: Monte Carlo, Reward-to-Go, GAE)
-    returns_type: "Config.ReturnsType" = ReturnsType.mc_episode
+    # How to calculate rollout returns (algo defaults in subclasses)
+    returns_type: Optional["Config.ReturnsType"] = None  # type: ignore[assignment]
 
     # Whether to normalize the returns
     # (none, baseline, or rollout)
     normalize_returns: Optional["Config.NormalizeReturnsType"] = None
 
     # How to calculate rollout advantages (eg: GAE, Baseline Subtraction)
-    # (none, gae, or baseline_subtraction)
+    # (none, gae, or baseline)
     advantages_type: Optional["Config.AdvantagesType"] = None
 
     # Whether to normalize the advantages
@@ -164,8 +166,8 @@ class Config:
     normalize_advantages: Optional["Config.AdvantageNormType"] = None
 
     # How to calculate the policy targets for the REINFORCE algorithm
-    # (using returns, or using advantages)
-    reinforce_policy_targets: Optional["Config.ReinforceTargetsType"] = ReinforceTargetsType.returns  # type: ignore[assignment]
+    # (algo defaults in subclass)
+    reinforce_policy_targets: Optional["Config.PolicyTargetsType"] = None  # type: ignore[assignment]
 
     # How many epochs to wait before starting to evaluate 
     # (eval_freq_epochs doesn't apply until these many epochs have passed)
@@ -305,14 +307,14 @@ class Config:
 
     def validate(self):
         assert self.seed > 0, "seed must be a positive integer."
-        assert self.policy_lr > 0, "policy_lr must be a positive float."
-        assert self.ent_coef >= 0, "ent_coef must be a non-negative float."
-        assert self.n_epochs > 0, "n_epochs must be a positive integer."
-        assert self.n_steps > 0, "n_steps must be a positive integer."
-        assert self.batch_size > 0, "batch_size must be a positive integer."
+        assert self.policy_lr is None or self.policy_lr > 0, "policy_lr must be a positive float when set."
+        assert self.ent_coef is None or self.ent_coef >= 0, "ent_coef must be a non-negative float when set."
+        assert self.n_epochs is None or self.n_epochs > 0, "n_epochs must be a positive integer when set."
+        assert self.n_steps is None or self.n_steps > 0, "n_steps must be a positive integer when set."
+        assert self.batch_size is None or self.batch_size > 0, "batch_size must be a positive integer when set."
         assert self.max_timesteps is None or self.max_timesteps > 0, "max_timesteps must be a positive number when set."
-        assert 0 < self.gamma <= 1, "gamma must be in (0, 1]."
-        assert 0 <= self.gae_lambda <= 1, "gae_lambda must be in [0, 1]."
+        assert self.gamma is None or (0 < self.gamma <= 1), "gamma must be in (0, 1] when set."
+        assert self.gae_lambda is None or (0 <= self.gae_lambda <= 1), "gae_lambda must be in [0, 1] when set."
         assert self.clip_range is None or (0 < self.clip_range < 1), "clip_range must be in (0, 1) when set."
         assert self.eval_freq_epochs is None or self.eval_freq_epochs > 0, "eval_freq_epochs must be a positive integer when set."
         assert self.eval_warmup_epochs >= 0, "eval_warmup_epochs must be a non-negative integer."
@@ -322,29 +324,46 @@ class Config:
         assert self.early_stop_on_train_threshold or self.early_stop_on_eval_threshold, "At least one of early_stop_on_train_threshold or early_stop_on_eval_threshold must be True."
         assert self.devices is None or isinstance(self.devices, int) or self.devices == "auto", "devices may be an int, 'auto', or None."
         assert self.batch_size <= self.n_envs * self.n_steps, f"batch_size ({self.batch_size}) should not exceed n_envs ({self.n_envs}) * n_steps ({self.n_steps})."
+        assert self.policy_targets in {Config.PolicyTargetsType.returns, Config.PolicyTargetsType.advantages}, "policy_targets must be 'returns' or 'advantages'."
 
 @dataclass
 class QLearningConfig(Config):
-    def validate(self):
-        super().validate()
-        # Ensure at least one env (tabular updates assume synchronous steps)
-        assert self.n_envs >= 1, "n_envs must be >= 1 for Q-Learning."
-
+    # Basic defaults for tabular Q-learning style collection
+    n_steps: int = 256
+    batch_size: int = 64
+    n_epochs: int = 1
+    gamma: float = 0.99
 
 @dataclass
 class REINFORCEConfig(Config):
-    def validate(self):
-        super().validate()
-        # Targets must be one of the known modes
-        valid_targets = {Config.ReinforceTargetsType.returns, Config.ReinforceTargetsType.advantages}
-        assert self.reinforce_policy_targets in valid_targets, "reinforce_policy_targets must be 'returns' or 'advantages'."
+    # Literature-style defaults for REINFORCE
+    n_steps: int = 2048
+    batch_size: int = 2048
+    n_epochs: int = 1
+    policy_lr: float = 1e-2
+    gamma: float = 0.99
+    ent_coef: float = 0.01
+    max_grad_norm: float = 0.5
+    returns_type: "Config.ReturnsType" = Config.ReturnsType.mc_rtg  # reward-to-go variant
+    policy_targets: "Config.PolicyTargetsType" = Config.PolicyTargetsType.returns  # type: ignore[assignment]
+
 
 @dataclass
 class PPOConfig(Config):
-    def validate(self):
-        super().validate()
-        # PPO requires a positive clip_range
-        assert self.clip_range is not None and self.clip_range > 0, "PPO requires clip_range to be set (> 0)."
+    # Literature/SB3-style defaults for PPO
+    n_steps: int = 2048
+    batch_size: int = 64
+    n_epochs: int = 10
+    policy_lr: float = 3e-4
+    gamma: float = 0.99
+    gae_lambda: float = 0.95
+    clip_range: float = 0.2
+    ent_coef: float = 0.0
+    vf_coef: float = 0.5
+    max_grad_norm: float = 0.5
+    returns_type: "Config.ReturnsType" = Config.ReturnsType.gae_rtg
+    advantages_type: "Config.AdvantagesType" = Config.AdvantagesType.gae
+
 
 def load_config(config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> Config:
     """Convenience function to load configuration."""

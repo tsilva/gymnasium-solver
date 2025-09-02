@@ -429,7 +429,7 @@ class RolloutCollector():
         gae_lambda: float = 0.95, # GAE lambda parameter (advantage estimation smoothing)
         returns_type: str, # Which returns type to use (eg: "episode" or "reward_to_go") # TODO: not optional
         normalize_returns: bool = False, # Whether to normalize returns
-        advantages_type: str, # Which advantages type to use (eg: "baseline_subtraction" or "gae") # TODO: not optional
+        advantages_type: str, # Which advantages type to use (eg: "baseline" or "gae") # TODO: not optional
         normalize_advantages: bool = False, # Whether to normalize advantages
         buffer_maxsize: Optional[int] = None, # Maximum size of the rollout buffer
         mc_treat_timeouts_as_terminals: bool = True,
@@ -631,7 +631,7 @@ class RolloutCollector():
         dones_slice = self._buffer.dones_buf[start:end]
         timeouts_slice = self._buffer.timeouts_buf[start:end]
 
-        if self.returns_type == "gae:reward_to_go" and self.advantages_type == "gae":
+        if self.returns_type == "gae:rtg" and self.advantages_type == "gae":
             last_values_vec = self._predict_values_np(last_obs)
             bootstrapped_slice = self._buffer.bootstrapped_values_buf[start:end]
             advantages_buf, returns_buf = compute_batched_gae_advantages_and_returns(
@@ -644,7 +644,7 @@ class RolloutCollector():
                 gamma=self.gamma,
                 gae_lambda=self.gae_lambda,
             )
-        elif self.returns_type in ["montecarlo:episode", "montecarlo:reward_to_go"]:
+        elif self.returns_type in ["mc:episode", "mc:rtg"]:
             # Monte Carlo returns for REINFORCE (no bootstrap added here)
             # Optionally treat time-limit truncations as terminals when not bootstrapping
             # to avoid return leakage across episode boundaries.
@@ -663,7 +663,7 @@ class RolloutCollector():
             # If requested, convert reward-to-go returns into full-episode returns
             # by making all timesteps within the same episode segment share the
             # segment's initial return (constant across the segment).
-            if self.returns_type == "montecarlo:episode":
+            if self.returns_type == "mc:episode":
                 returns_buf = convert_returns_to_full_episode(
                     returns=returns_buf,
                     dones=dones_slice,
@@ -680,7 +680,7 @@ class RolloutCollector():
                 self._base_stats.update(returns_flat_env_major[valid_mask_flat])
 
             advantages_buf = returns_buf
-            if self.advantages_type == "baseline_subtraction":
+            if self.advantages_type == "baseline":
                 baseline = self._base_stats.mean()
                 advantages_buf = returns_buf - baseline
         else:

@@ -1,3 +1,4 @@
+- TODO: ensure default activation is ReLU
 - REFACTOR: consider changing eval_freq to timesteps so it doesnt depend on n_updates
 - FEAT: log target metrics to tensorboard
 - FEAT: figure out if I should log variance instead of std
@@ -13,7 +14,6 @@
 - Add config defaults based on algo
 - FEAT: add normalization support 
 - FEAT: add discrete env support
-- TODO: Figure out why CartPole-v1/PPO works better with Tahn activation than ReLU
 - TASK: solve Pong-v5_objects, then propagate to other envs
 - BUG: run is being logged even when training is not started, bold terminal
 - https://github.com/kenjyoung/MinAtar

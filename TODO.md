@@ -1,3 +1,8 @@
+- BUG: fix cnn policy training
+- FEAT: overridable rollout collector factory methods instead of extra parameter method
+- TEST: check model init logits are unbiased
+- FEAT: log checkpoint times to wandb
+- BUG: reset optimizer on learning rate changes
 - TODO: make sure max timelimit is logged at training start
 - TODO: beat lunarlander with ppo and only then with reinforce (truncate episode lengths for faster training)
 - TODO: ensure default activation is ReLU

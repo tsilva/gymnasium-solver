@@ -1,3 +1,4 @@
+- FEAT: create alternate play.py that just reads the policy with one function and then plays games using rollout collector with human rendering on
 - FEAT: add ETA metric (based on max_timesteps and FPS)
 - BUG: restore grayscaling / resizing logic; think how to unify with atari preprocessing (probably just inspect internals and extract)
 - BUG: fix cnn policy training, in separate file create env and inspect traversing layers

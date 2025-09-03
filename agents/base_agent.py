@@ -44,6 +44,7 @@ class BaseAgent(pl.LightningModule):
         common_env_kwargs = dict(
             seed=config.seed,
             n_envs=config.n_envs,
+            max_episode_steps=config.max_episode_steps,
             subproc=config.subproc,
             obs_type=config.obs_type,
             frame_stack=config.frame_stack,
@@ -834,13 +835,9 @@ class BaseAgent(pl.LightningModule):
             loss = losses[idx]
             optimizer.zero_grad()
             self.manual_backward(loss) # TODO: this or loss.backward()?
-            # Log gradient norms per component before clipping/step
-            try:
-                pass#self._log_policy_grad_norms()
-            except Exception:
-                # Never break training due to logging issues
-                pass
             
+            self._log_policy_grad_norms()
+
             if self.config.max_grad_norm is not None:
                 torch.nn.utils.clip_grad_norm_(self.policy_model.parameters(), self.config.max_grad_norm)
             optimizer.step()

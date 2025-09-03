@@ -1,3 +1,4 @@
+- TODO: make sure max timelimit is logged at training start
 - TODO: beat lunarlander with ppo and only then with reinforce (truncate episode lengths for faster training)
 - TODO: ensure default activation is ReLU
 - REFACTOR: consider changing eval_freq to timesteps so it doesnt depend on n_updates

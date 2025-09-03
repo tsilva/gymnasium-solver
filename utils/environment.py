@@ -62,6 +62,7 @@ def build_env(
     env_id, 
     n_envs=1, 
     seed=None, 
+    max_episode_steps=None,
     env_wrappers=[], 
     grayscale_obs=False,
     resize_obs=False,
@@ -328,6 +329,10 @@ def build_env(
         # Apply configured env wrappers
         for wrapper in env_wrappers:
             env = EnvWrapperRegistry.apply(env, wrapper) # type: ignore
+
+        if max_episode_steps is not None:
+            from gymnasium.wrappers import TimeLimit
+            env = TimeLimit(env, max_episode_steps=max_episode_steps)
 
         # Return the environment
         return env

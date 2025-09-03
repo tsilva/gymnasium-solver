@@ -75,6 +75,9 @@ class Config:
 
     # Max timesteps to train for (optional)
     max_timesteps: Optional[int] = None
+
+    # Max steps each episode can have (truncate episode lengths)
+    max_episode_steps: Optional[int] = None
     
     # Experiment seed (for reproducibility)
     seed: int = 42

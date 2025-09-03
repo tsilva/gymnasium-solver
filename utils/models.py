@@ -127,12 +127,29 @@ class _ReshapeFlatToImage(nn.Module):
         assert len(obs_shape) >= 2, "obs_shape must be (H, W, C) or similar"
         if len(obs_shape) == 2:
             # No channels dimension; treat as single-channel
-            H, W = obs_shape
+            H, W = int(obs_shape[0]), int(obs_shape[1])
             C = 1
             self.hwc = (H, W, C)
-        else:
-            H, W, C = obs_shape[-3:]
+        elif len(obs_shape) >= 3:
+            # Robustly resolve HWC from either HWC or CHW inputs.
+            # Heuristics mirror utils.policy_factory._infer_hwc_from_space.
+            a, b, c = int(obs_shape[-3]), int(obs_shape[-2]), int(obs_shape[-1])
+            # If the last dim looks like channels (small count), assume HWC
+            if c <= 8 and a >= 8 and b >= 8:
+                H, W, C = a, b, c
+            # If the first dim looks like channels (small or multiple of 3), assume CHW
+            elif int(obs_shape[0]) <= 8 or (int(obs_shape[0]) % 3 == 0 and b >= 8 and c >= 8):
+                H, W, C = int(obs_shape[1]), int(obs_shape[2]), int(obs_shape[0])
+            # Fallbacks: pick the interpretation where spatial dims are larger
+            elif c <= 64:
+                H, W, C = a, b, c
+            else:
+                H, W, C = int(obs_shape[1]), int(obs_shape[2]), int(obs_shape[0])
             self.hwc = (H, W, C)
+        else:
+            # Extremely rare fallback; assume square single-channel
+            side = int(max(int(obs_shape[0]), 1))
+            self.hwc = (side, side, 1)
 
     def forward(self, x: torch.Tensor):
         N = x.shape[0]
@@ -292,6 +309,8 @@ class CNNPolicy(nn.Module):
         except Exception:
             pass
         x = self.convs(x)
+        # Flatten CNN features before feeding MLP head
+        x = torch.flatten(x, 1)
         x = self.backbone(x)
         return x
 

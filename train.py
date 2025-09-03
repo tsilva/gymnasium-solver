@@ -11,6 +11,7 @@ def main():
 
     # Load configuration
     config_id = args.config_id
+    #config_id = "ALE-Pong-v5_ram:ppo"
     config_id, variant_id = config_id.split(":")
     config = load_config(config_id, variant_id)
     

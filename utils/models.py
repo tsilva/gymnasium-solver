@@ -176,40 +176,56 @@ class _ReshapeFlatToImage(nn.Module):
 class CNNActorCritic(nn.Module):
     """CNN-based Actor-Critic for discrete action spaces.
 
-    Parameters are intentionally flexible; pass via config.policy_kwargs.
+    Mirrors CNNPolicy initialization: accepts keyword args
+    (input_shape, hidden_dims, output_shape, activation, channels, kernel_sizes, strides)
+    and uses a simple Conv2d stack followed by an optional MLP head.
     """
 
     def __init__(
         self,
-        obs_shape,  # expected HWC shape from env observation
-        action_dim: int,
+        *,
+        input_shape: tuple[int, int, int],
         hidden_dims: Iterable[int],
+        output_shape: tuple[int, ...],
         activation: str,
-        # CNN kwargs
-        in_channels: int,
-        channels=(32, 64, 64),
-        kernel_sizes=(8, 4, 3),
-        strides=(4, 2, 1),
+        channels: Iterable[int] = (32, 64, 64),
+        kernel_sizes: Iterable[int] = (8, 4, 3),
+        strides: Iterable[int] = (4, 2, 1),
     ):
         super().__init__()
-        self.reshape = _ReshapeFlatToImage(obs_shape)
+
+        # Reshape flat inputs to images (N, C, H, W)
+        self.reshape = _ReshapeFlatToImage(input_shape)
         H, W, C = self.reshape.hwc
-        C_in = in_channels if in_channels is not None else C
+
+        # Build a simple Conv2d stack (same style as CNNPolicy)
+        assert len(tuple(channels)) == len(tuple(kernel_sizes)) == len(tuple(strides)), "Conv spec lengths must match"
         act_cls = resolve_activation(activation)
 
-        # CNN feature extractor
-        self.cnn = NatureCNN(C_in, channels=channels, kernel_sizes=kernel_sizes, strides=strides, activation=activation)
+        conv_layers = []
+        in_c = C
+        for out_c, k, s in zip(channels, kernel_sizes, strides):
+            conv_layers += [nn.Conv2d(in_c, out_c, kernel_size=int(k), stride=int(s)), act_cls()]
+            in_c = out_c
+        self.convs = nn.Sequential(*conv_layers)
 
-        # To build the MLP head dimensions, run a dummy forward with zeros
+        # Determine feature size with a dummy forward
         with torch.no_grad():
             dummy = torch.zeros(1, H, W, C)
-            feat = self.cnn(self.reshape(dummy))
-            feat_dim = feat.shape[1]
+            feat = self.convs(self.reshape(dummy))
+            feat_dim = int(torch.flatten(feat, 1).shape[1])
 
-        # MLP head shared by policy and value
-        self.backbone = build_mlp(feat_dim, hidden_dims, activation=activation) if hidden_dims and len(hidden_dims) > 0 else nn.Identity()
-        last_dim = hidden_dims[-1] if hidden_dims and len(hidden_dims) > 0 else feat_dim
-        self.policy_head = nn.Linear(last_dim, action_dim)
+        # Optional MLP head after CNN
+        hidden_dims_tuple = tuple(hidden_dims) if hidden_dims is not None else ()
+        if len(hidden_dims_tuple) > 0:
+            self.backbone = build_mlp((feat_dim,), hidden_dims_tuple, activation)
+            last_dim = hidden_dims_tuple[-1]
+        else:
+            self.backbone = nn.Identity()
+            last_dim = feat_dim
+
+        # Heads
+        self.policy_head = nn.Linear(last_dim, int(output_shape[0]))
         self.value_head = nn.Linear(last_dim, 1)
 
         init_model_weights(
@@ -221,20 +237,18 @@ class CNNActorCritic(nn.Module):
 
     def _forward_features(self, obs_flat: torch.Tensor):
         x = self.reshape(obs_flat)
-        # Normalize image inputs to [0,1] if they appear to be in 0..255 range
-        # Avoid double-normalizing if inputs are already in [0,1].
+        # Normalize image inputs to [0,1] if likely uint8 scale
         try:
             if x.dtype == torch.uint8:
                 x = x.float().div_(255.0)
             else:
-                # Convert to scalar to avoid tracing data-dependent control flow
                 max_val = float(x.detach().amax().item())
                 if max_val > 1.0:
                     x = x.div(255.0)
         except Exception:
-            # Best-effort: fall through without normalization on errors
             pass
-        x = self.cnn(x)
+        x = self.convs(x)
+        x = torch.flatten(x, 1)
         x = self.backbone(x)
         return x
 

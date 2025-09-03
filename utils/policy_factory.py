@@ -66,18 +66,18 @@ def create_actor_critic_policy(
 ):
     if policy_type == 'mlp':
         return MLPActorCritic(
-            input_shape, 
-            hidden_dims, 
-            output_shape, 
+            input_shape,
+            hidden_dims,
+            output_shape,
             activation,
             **policy_kwargs,
         )
     elif policy_type == 'cnn':
         return CNNActorCritic(
-            input_shape, 
-            hidden_dims, 
-            output_shape, 
-            activation,
+            input_shape=input_shape,
+            hidden_dims=hidden_dims,
+            output_shape=output_shape,
+            activation=activation,
             **policy_kwargs,
         )
     else:

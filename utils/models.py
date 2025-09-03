@@ -42,45 +42,6 @@ def build_mlp(input_shape: tuple[int, ...], hidden_dims: tuple[int, ...], activa
     return nn.Sequential(*layers)
 
 
-class NatureCNN(nn.Module):
-    """A lightweight, configurable CNN feature extractor.
-
-    Expects input tensors as (N, C, H, W). If observations arrive flattened
-    (N, H*W*C), callers should reshape prior to calling forward or pass through
-    a wrapper model that reshapes.
-
-    Default mirrors common RL baselines for 84x84 inputs, but parameters are
-    configurable via kwargs.
-    """
-
-    def __init__(
-        self,
-        *,
-        in_channels: int,
-        channels=(32, 64, 64),
-        kernel_sizes=(8, 4, 3),
-        strides=(4, 2, 1),
-        activation: str,
-        flatten: bool = True,
-    ):
-        super().__init__()
-        assert len(channels) == len(kernel_sizes) == len(strides), "Conv spec lengths must match"
-        act_cls = resolve_activation(activation)
-
-        convs = []
-        last_c = in_channels
-        for c, k, s in zip(channels, kernel_sizes, strides):
-            convs += [nn.Conv2d(last_c, c, kernel_size=k, stride=s), act_cls()]
-            last_c = c
-        self.convs = nn.Sequential(*convs)
-        self.flatten = flatten
-
-    def forward(self, x):
-        x = self.convs(x)
-        if self.flatten:
-            x = torch.flatten(x, 1)
-        return x
-
 class MLPPolicy(nn.Module):
     def __init__(
         self, 
@@ -184,45 +145,6 @@ class MLPActorCritic(nn.Module):
         return value
 
 
-class _ReshapeFlatToImage(nn.Module):
-    """Utility module to reshape flat (N, prod(HWC)) to (N, C, H, W).
-
-    Assumes original observation shape is HWC. Will transpose to CHW for CNNs.
-    """
-
-    def __init__(self, obs_shape):
-        super().__init__()
-        assert len(obs_shape) >= 2, "obs_shape must be (H, W, C) or similar"
-        if len(obs_shape) == 2:
-            # No channels dimension; treat as single-channel
-            H, W = obs_shape
-            C = 1
-            self.hwc = (H, W, C)
-        else:
-            H, W, C = obs_shape[-3:]
-            self.hwc = (H, W, C)
-
-    def forward(self, x: torch.Tensor):
-        N = x.shape[0]
-        H, W, C_expected = self.hwc
-        # Flat inputs: (N, H*W*C)
-        if x.ndim == 2:
-            x = x.view(N, H, W, C_expected)
-            return x.permute(0, 3, 1, 2).contiguous()
-        # 4D inputs: allow HWC or CHW with arbitrary channel count (e.g., frame stack)
-        if x.ndim == 4:
-            # If channel-last (N, H, W, Cx), permute to channel-first
-            if x.shape[1] == H and x.shape[2] == W:
-                return x.permute(0, 3, 1, 2).contiguous()
-            # If channel-first and spatial dims match, pass through
-            if x.shape[2] == H and x.shape[3] == W:
-                return x.contiguous()
-        # Fallback: best-effort permute assuming input is HWC
-        try:
-            return x.permute(0, 3, 1, 2).contiguous()
-        except Exception:
-            return x
-
 
 class CNNActorCritic(nn.Module):
     """CNN-based Actor-Critic for discrete action spaces.
@@ -316,27 +238,48 @@ class CNNPolicy(nn.Module):
 
     def __init__(
         self,
-        input_shape: tuple[int, ...], 
-        hidden_dims: tuple[int, ...], 
-        output_shape: tuple[int, ...], 
-        activation: str,
         *,
-        channels=(32, 64, 64),
-        kernel_sizes=(8, 4, 3),
-        strides=(4, 2, 1),
+        input_shape: tuple[int, int, int],
+        hidden_dims: tuple[int, ...],
+        output_shape: tuple[int, ...],
+        activation: str,
+        channels: tuple[int, ...] = (32, 64, 64),
+        kernel_sizes: tuple[int, ...] = (8, 4, 3),
+        strides: tuple[int, ...] = (4, 2, 1),
     ):
         super().__init__()
-        self.reshape = _ReshapeFlatToImage(obs_shape)
-        H, W, C = self.reshape.hwc
-        C_in = in_channels if in_channels is not None else C
 
-        self.cnn = NatureCNN(C_in, channels=channels, kernel_sizes=kernel_sizes, strides=strides, activation=activation)
+        # Reshape flat inputs to images (N, C, H, W)
+        self.reshape = _ReshapeFlatToImage(input_shape)
+        H, W, C = self.reshape.hwc
+
+        # Build a simple Conv2d stack directly from passed args (no NatureCNN)
+        assert len(channels) == len(kernel_sizes) == len(strides), "Conv spec lengths must match"
+        act_cls = resolve_activation(activation)
+
+        conv_layers = []
+        in_c = C
+        for out_c, k, s in zip(channels, kernel_sizes, strides):
+            conv_layers += [nn.Conv2d(in_c, out_c, kernel_size=k, stride=s), act_cls()]
+            in_c = out_c
+        self.convs = nn.Sequential(*conv_layers)
+
+        # Determine feature size with a dummy forward
         with torch.no_grad():
-            feat = self.cnn(self.reshape(torch.zeros(1, H, W, C)))
-            feat_dim = feat.shape[1]
-        self.backbone = build_mlp(feat_dim, hidden_dims, activation=activation) if hidden_dims and len(hidden_dims) > 0 else nn.Identity()
-        last_dim = hidden_dims[-1] if hidden_dims and len(hidden_dims) > 0 else feat_dim
-        self.policy_head = nn.Linear(last_dim, action_dim)
+            dummy = torch.zeros(1, H, W, C)
+            feat = self.convs(self.reshape(dummy))
+            feat_dim = int(torch.flatten(feat, 1).shape[1])
+
+        # Optional MLP head after CNN
+        if hidden_dims and len(tuple(hidden_dims)) > 0:
+            self.backbone = build_mlp((feat_dim,), tuple(hidden_dims), activation)
+            last_dim = tuple(hidden_dims)[-1]
+        else:
+            self.backbone = nn.Identity()
+            last_dim = feat_dim
+
+        # Policy head
+        self.policy_head = nn.Linear(last_dim, output_shape[0])
 
         init_model_weights(self, default_activation=activation, policy_heads=[self.policy_head])
 
@@ -352,7 +295,7 @@ class CNNPolicy(nn.Module):
                     x = x.div(255.0)
         except Exception:
             pass
-        x = self.cnn(x)
+        x = self.convs(x)
         x = self.backbone(x)
         return x
 

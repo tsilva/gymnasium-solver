@@ -62,7 +62,6 @@ def create_actor_critic_policy(
     output_shape: tuple[int, ...],
     hidden_dims: Iterable[int],
     activation: str,
-    obs_space=None,
     **policy_kwargs,
 ):
     if policy_type == 'mlp':
@@ -74,7 +73,6 @@ def create_actor_critic_policy(
             **policy_kwargs,
         )
     elif policy_type == 'cnn':
-        hwc = _infer_hwc_from_space(obs_space, input_dim)
         return CNNActorCritic(
             input_shape, 
             hidden_dims, 
@@ -89,26 +87,22 @@ def create_actor_critic_policy(
 def create_policy(
     policy_type: str | type[nn.Module],
     *,
-    input_dim: int,
-    action_dim: int,
-    hidden_dims: Iterable[int],
+    input_shape: tuple[int, ...],
+    hidden_dims: tuple[int, ...],
+    output_shape: tuple[int, ...],
     activation: str,
-    obs_space=None,
     **policy_kwargs,
 ):
-    if policy_type == 'mlp':  
-        return MLPPolicy(
-            input_dim, 
-            action_dim, 
-            hidden_dims=hidden_dims, 
-            activation=activation,
-            **policy_kwargs
-        )
-    elif policy_type == 'cnn':
-        hwc = _infer_hwc_from_space(obs_space, input_dim)
-        return CNNPolicy(
-            obs_shape=hwc,
-            action_dim=action_dim,
-            hidden_dims=hidden_dims,
-            **policy_kwargs,
-        )
+    policy_cls = {
+        "mlp": MLPPolicy,
+        "cnn": CNNPolicy,
+    }[policy_type]
+    
+    policy = policy_cls(
+        input_shape=input_shape,
+        hidden_dims=hidden_dims,
+        output_shape=output_shape,
+        activation=activation,
+        **policy_kwargs,
+    )
+    return policy

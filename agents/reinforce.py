@@ -14,17 +14,16 @@ def assert_detached(*tensors: torch.Tensor):
 class REINFORCE(BaseAgent):
     
     def create_models(self):
-        input_dim = self.train_env.get_input_dim()
-        output_dim = self.train_env.get_output_dim()
-        policy_kwargs = self.config.policy_kwargs
-
+        input_shape = self.train_env.observation_space.shape
+        output_shape = self.train_env.action_space.shape
+        if not output_shape: output_shape = (self.train_env.action_space.n,)
         self.policy_model = create_policy(
             self.config.policy,
-            input_dim=input_dim,
-            action_dim=output_dim,
+            input_shape=input_shape,
             hidden_dims=self.config.hidden_dims,
-            obs_space=getattr(self.train_env, 'observation_space', None),  # TODO: what is observation space being used for
-            **policy_kwargs,
+            output_shape=output_shape,
+            activation=self.config.activation,
+            **self.config.policy_kwargs,
         )
 
     # TODO: only does something with normalization off, but even that way it doesnt converge

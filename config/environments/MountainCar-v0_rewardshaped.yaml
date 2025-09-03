@@ -13,7 +13,6 @@ env_wrappers:
 
 ppo:
   algo_id: ppo
-  normalize: true
   n_envs: 16
   max_timesteps: 1e6
   n_epochs: 10

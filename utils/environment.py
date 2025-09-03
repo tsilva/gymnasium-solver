@@ -85,30 +85,28 @@ def _build_env_vizdoom(env_id, obs_type, render_mode, **env_kwargs):
     return env
 
 def _build_env_stable_retro(env_id, obs_type, render_mode, **env_kwargs):
-    try:
-        import retro  # type: ignore
-    except Exception as e:
-        raise ImportError(
-            "stable-retro is required for Retro environments. Install with `pip install stable-retro`"
-        ) from e
-
-    # Allow both 'Retro/<Game>' and bare game id (e.g., 'SuperMarioBros-Nes')
-    if str(env_id).lower().startswith("retro/"):
-        game = str(env_id).split("/", 1)[1]
-    else:
-        game = str(env_id)
+    import retro  # type: ignore
+    
+    game = env_id.replace("Retro/", "")
 
     # Extract Retro-specific kwargs while keeping user overrides
     make_kwargs = dict(env_kwargs) if isinstance(env_kwargs, dict) else {}
+
     # Prefer a discrete action space so our categorical policies output
     # integer actions compatible with Retro's internal encoding.
     # Users can override via env_kwargs if they need MultiDiscrete/MultiBinary.
     make_kwargs.setdefault("use_restricted_actions", getattr(retro, "Actions").DISCRETE)
+
     # Support 'state' override via env_kwargs; None → retro's default state
     state = make_kwargs.pop("state", None)
 
     # stable-retro supports Gymnasium-style render_mode
-    env = retro.make(game=game, state=state, render_mode=render_mode, **make_kwargs)
+    env = retro.make(
+        game=game, 
+        state=state, 
+        render_mode=render_mode, 
+        **make_kwargs
+    )
 
     return env
 
@@ -174,22 +172,12 @@ def build_env(
         # Return the environment
         return env
 
-    # Vectorize the environment
-    # Retro emulators cannot have multiple instances in the same process.
-    # Use subprocess vectorization for multi-env Retro, or fall back to a single
-    # env when video recording is enabled (which requires subproc=False).
-    effective_n_envs = int(n_envs or 1)
-    if _is_stable_retro_env and record_video and effective_n_envs > 1:
-        # Keep user UX smooth: silently reduce to one env for recorded eval/test
-        # runs where subproc must be disabled.
-        effective_n_envs = 1
-    
     # Create the vectorized environment
     vec_env_cls = SubprocVecEnv if subproc else DummyVecEnv
     vec_env_kwargs = {"start_method": "spawn"} if vec_env_cls == SubprocVecEnv else {}
     env = make_vec_env(
         env_fn, 
-        n_envs=effective_n_envs, 
+        n_envs=n_envs, 
         seed=seed, 
         vec_env_cls=vec_env_cls, 
         vec_env_kwargs=vec_env_kwargs

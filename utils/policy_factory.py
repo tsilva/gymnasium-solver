@@ -12,10 +12,10 @@ from typing import Iterable, Tuple
 import torch.nn as nn
 
 from .models import (
-    ActorCritic,
+    MLPActorCritic,
     CNNActorCritic,
     MLPPolicy,
-    CNNPolicyOnly,
+    CNNPolicy,
 )
 
 
@@ -60,32 +60,23 @@ def create_actor_critic_policy(
     *,
     input_dim: int,
     action_dim: int,
-    hidden: Iterable[int] | int,
-    activation: "str | type[nn.Module] | nn.Module" = "tanh",
+    hidden_dims: Iterable[int],
+    activation: str,
     obs_space=None,
     **policy_kwargs,
 ):
-    """Create an Actor-Critic policy model based on policy_type.
-
-    policy_type: 'mlp' or 'cnn' (case-insensitive) or a Module class.
-    activation: string or nn.Module class/instance; forwarded to underlying model.
-    obs_space: Gymnasium observation space (required for CNN policies to infer shape).
-    policy_kwargs: forwarded to the underlying model constructor.
-    """
-    # Accept direct module classes for extensibility
-    if isinstance(policy_type, type) and issubclass(policy_type, nn.Module):
-        return policy_type(input_dim, action_dim, hidden_dims=hidden, **policy_kwargs)
-
-    if isinstance(policy_type, str) and policy_type.lower() in {"cnn", "cnnpolicy", "cnn_actor_critic", "cnnac"}:
+    if policy_type == 'cnn':
         hwc = _infer_hwc_from_space(obs_space, input_dim)
         return CNNActorCritic(
             obs_shape=hwc,
             action_dim=action_dim,
-            hidden=hidden,
+            hidden_dims=hidden_dims,
             **policy_kwargs,
         )
-    # Default: MLP-based actor-critic
-    return ActorCritic(input_dim, action_dim, hidden_dims=hidden)
+    elif policy_type == 'mlp':
+        return MLPActorCritic(input_dim, action_dim, hidden_dims=hidden_dims, activation=activation)
+    else:
+        raise ValueError(f"Invalid policy type: {policy_type}")
 
 
 def create_policy(
@@ -93,30 +84,24 @@ def create_policy(
     *,
     input_dim: int,
     action_dim: int,
-    hidden_dims: Iterable[int] | int,
-    activation: "str | type[nn.Module] | nn.Module" = "tanh",
+    hidden_dims: Iterable[int],
+    activation: str,
     obs_space=None,
     **policy_kwargs,
 ):
-    """Create a policy-only (no value head) model based on policy_type.
-
-    Used by REINFORCE and other algorithms without a learned baseline.
-    """
-    if isinstance(policy_type, type) and issubclass(policy_type, nn.Module):
-        return policy_type(input_dim, action_dim, hidden_dims=hidden_dims, activation=activation, **policy_kwargs)
-
-    # Accept common CNN aliases for policy-only models
-    if isinstance(policy_type, str) and policy_type.lower() in {"cnn", "cnnpolicy", "cnn_policy", "cnnpolicyonly", "cnn-only"}:
+    if policy_type == 'mlp':  
+        return MLPPolicy(
+            input_dim, 
+            action_dim, 
+            hidden_dims=hidden_dims, 
+            activation=activation,
+            **policy_kwargs
+        )
+    elif policy_type == 'cnn':
         hwc = _infer_hwc_from_space(obs_space, input_dim)
-        return CNNPolicyOnly(
+        return CNNPolicy(
             obs_shape=hwc,
             action_dim=action_dim,
             hidden_dims=hidden_dims,
             **policy_kwargs,
         )
-    return MLPPolicy(
-        input_dim, 
-        action_dim, 
-        hidden_dims=hidden_dims, 
-        activation=activation
-    )

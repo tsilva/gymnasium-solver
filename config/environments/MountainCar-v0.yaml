@@ -10,7 +10,6 @@ ppo:
   max_timesteps: 1e6
   n_epochs: 10
   batch_size: 128
-  normalize: false
   n_steps: 128
   gamma: 0.999
   policy_lr: 3e-4

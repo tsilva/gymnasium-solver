@@ -40,7 +40,7 @@ from utils.config import load_config
 from utils.environment import build_env
 
 # Custom collector imports
-from utils.models import ActorCritic
+from utils.models import MLPActorCritic
 from utils.rollouts import RolloutCollector
 
 # SB3 imports (optional)
@@ -93,13 +93,13 @@ def _effective_subproc(cfg, override: Optional[bool]) -> Optional[bool]:
     return override if override is not None else getattr(cfg, "subproc", None)
 
 
-def _build_policy_model(env, hidden_dims) -> ActorCritic:
+def _build_policy_model(env, hidden_dims) -> MLPActorCritic:
     input_dim = env.get_input_dim()
     output_dim = env.get_output_dim()
     if input_dim is None or output_dim is None:
         raise RuntimeError("Could not infer model input/output dims from environment")
     hd = hidden_dims if isinstance(hidden_dims, (list, tuple)) else (hidden_dims,)
-    return ActorCritic(input_dim, output_dim, hidden_dims=hd)
+    return MLPActorCritic(input_dim, output_dim, hidden_dims=hd)
 
 
 def _run_benchmark_loop(

@@ -10,7 +10,6 @@ ppo:
   n_envs: 8
   n_epochs: 4
   batch_size: 64
-  normalize: true
   n_steps: 256
   gae_lambda: 0.94
   ent_coef: 0.0

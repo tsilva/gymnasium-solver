@@ -5,12 +5,14 @@ from utils.config import load_config
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Train RL agent.")
-    parser.add_argument("--config_id", type=str, default="VizDoom-DeadlyCorridor-v0:ppo", help="Config ID (e.g., CartPole-v1_ppo)")
+    parser.add_argument("--config_id", type=str, default="CartPole-v1:ppo", help="Config ID (e.g., CartPole-v1_ppo)")
     parser.add_argument("--quiet", "-q", action="store_true", default=False, help="Run non-interactively: auto-accept prompts and defaults")
     args = parser.parse_args()
 
     # Load configuration
-    config_id, variant_id = args.config_id.split(":")
+    config_id = args.config_id
+    #config_id = "ALE-Pong-v5_ram:ppo"
+    config_id, variant_id = config_id.split(":")
     config = load_config(config_id, variant_id)
     
     # Apply args to config

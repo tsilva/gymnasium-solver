@@ -7,7 +7,6 @@ models internally reshape flat inputs back to (N, C, H, W) using a provided
 returns flattened observations.
 """
 
-import math
 from typing import Iterable
 
 import torch
@@ -15,43 +14,30 @@ from torch.distributions import Categorical
 import torch.nn as nn
 from .torch import init_model_weights
 
-
-def resolve_activation(act: "str | type[nn.Module] | nn.Module" = nn.Tanh) -> type[nn.Module]:
-    """Map a string or nn.Module class/instance to an activation module class.
-
-    Supported strings: 'tanh','relu','leaky_relu','elu','selu','gelu','silu','swish','identity'.
-    Defaults to nn.Tanh.
-    """
-    if isinstance(act, type) and issubclass(act, nn.Module):
-        return act
-    if isinstance(act, nn.Module):
-        return act.__class__
-    if isinstance(act, str):
-        key = act.lower()
-        mapping = {
-            "tanh": nn.Tanh,
-            "relu": nn.ReLU,
-            "leaky_relu": nn.LeakyReLU,
-            "elu": nn.ELU,
-            "selu": nn.SELU,
-            "gelu": nn.GELU,
-            "silu": nn.SiLU,
-            "swish": nn.SiLU,  # alias
-            "identity": nn.Identity,
-        }
-        return mapping.get(key, nn.Tanh)
-    return nn.Tanh
+def resolve_activation(activation_id: str) -> type[nn.Module]:
+    key = activation_id.lower()
+    mapping = {
+        "tanh": nn.Tanh,
+        "relu": nn.ReLU,
+        "leaky_relu": nn.LeakyReLU,
+        "elu": nn.ELU,
+        "selu": nn.SELU,
+        "gelu": nn.GELU,
+        "silu": nn.SiLU,
+        "swish": nn.SiLU,  # alias
+        "identity": nn.Identity,
+    }
+    return mapping[key]
 
 
-def mlp(in_dim, hidden, act: "str | type[nn.Module] | nn.Module" = nn.Tanh):
-    # Allow an int or an iterable of ints
-    if isinstance(hidden, int):
-        hidden = (hidden,)
-    act_cls = resolve_activation(act)
-    layers, last = [], in_dim
-    for h in hidden:
-        layers += [nn.Linear(last, h), act_cls()]
-        last = h
+def build_mlp(input_dims, hidden_dims, activation:str):
+    """ Create a stack of sequential linear layers with the given activation function. """
+    activation_cls = resolve_activation(activation)
+    layers = []
+    last_dim = input_dims
+    for hidden_dim in hidden_dims:
+        layers += [nn.Linear(last_dim, hidden_dim), activation_cls()]
+        last_dim = hidden_dim
     return nn.Sequential(*layers)
 
 
@@ -105,7 +91,7 @@ class MLPPolicy(nn.Module):
         # Normalize hidden dims and create MLP backbone
         if isinstance(hidden_dims, int):
             hidden_dims = (hidden_dims,)
-        self.backbone = mlp(input_dim, hidden_dims, activation)
+        self.backbone = build_mlp(input_dim, hidden_dims, activation)
 
         # Create the policy head
         self.policy_head = nn.Linear(hidden_dims[-1], output_dim)
@@ -133,14 +119,17 @@ class MLPPolicy(nn.Module):
         # Return zeros for compatibility - REINFORCE doesn't use value function
         return torch.zeros(obs.shape[0], device=obs.device)
 
-class ActorCritic(nn.Module):
-    def __init__(self, input_dim: int, output_dim: int, hidden_dims: Iterable[int] | int = (64, 64), activation: "str | type[nn.Module] | nn.Module" = nn.Tanh):
+class MLPActorCritic(nn.Module):
+    def __init__(
+        self, 
+        input_dim: int, 
+        output_dim: int, 
+        hidden_dims: Iterable[int],
+        activation: str
+    ):
         super().__init__()
 
-        # Normalize hidden dims and create MLP backbone
-        if isinstance(hidden_dims, int):
-            hidden_dims = (hidden_dims,)
-        self.backbone = mlp(input_dim, hidden_dims, activation)
+        self.backbone = build_mlp(input_dim, hidden_dims, activation)
 
         # Create the policy head
         self.policy_head = nn.Linear(hidden_dims[-1], output_dim)
@@ -148,6 +137,7 @@ class ActorCritic(nn.Module):
         # Create the value head
         self.value_head = nn.Linear(hidden_dims[-1], 1)
 
+        # TODO: review this
         # Reusable initialization
         init_model_weights(
             self,
@@ -164,17 +154,19 @@ class ActorCritic(nn.Module):
         logits = self.policy_head(x)
 
         # Create categorical distribution from logits
-        dist = Categorical(logits=logits)
+        policy_dist = Categorical(logits=logits)
 
-        # Forward through value head and get value
-        value = self.value_head(x).squeeze(-1)
-        return dist, value
+        # Forward through value head and get value prediction
+        value_pred = self.value_head(x).squeeze(-1)
+
+        # Return policy distribution and value prediction
+        return policy_dist, value_pred
 
     @torch.inference_mode()
     def act(self, obs: torch.Tensor, deterministic=False):
-        dist, v = self.forward(obs)
-        a = dist.sample() if not deterministic else dist.mode
-        return a, dist.log_prob(a), v
+        policy_dist, v = self.forward(obs)
+        a = policy_dist.sample() if not deterministic else policy_dist.mode
+        return a, policy_dist.log_prob(a), v
 
     def evaluate_actions(self, obs: torch.Tensor, actions: torch.Tensor):
         dist, v = self.forward(obs)
@@ -236,10 +228,10 @@ class CNNActorCritic(nn.Module):
         self,
         obs_shape,  # expected HWC shape from env observation
         action_dim: int,
-        hidden=(256,),
-        activation: "str | type[nn.Module] | nn.Module" = nn.ReLU,
+        hidden_dims: Iterable[int],
+        activation: str,
         # CNN kwargs
-        in_channels: int | None = None,
+        in_channels: int,
         channels=(32, 64, 64),
         kernel_sizes=(8, 4, 3),
         strides=(4, 2, 1),
@@ -260,8 +252,8 @@ class CNNActorCritic(nn.Module):
             feat_dim = feat.shape[1]
 
         # MLP head shared by policy and value
-        self.backbone = mlp(feat_dim, hidden, act=activation) if hidden and len(hidden) > 0 else nn.Identity()
-        last_dim = hidden[-1] if hidden and len(hidden) > 0 else feat_dim
+        self.backbone = build_mlp(feat_dim, hidden_dims, activation=activation) if hidden_dims and len(hidden_dims) > 0 else nn.Identity()
+        last_dim = hidden_dims[-1] if hidden_dims and len(hidden_dims) > 0 else feat_dim
         self.policy_head = nn.Linear(last_dim, action_dim)
         self.value_head = nn.Linear(last_dim, 1)
 
@@ -313,7 +305,7 @@ class CNNActorCritic(nn.Module):
         return self.value_head(x).squeeze(-1)
 
 
-class CNNPolicyOnly(nn.Module):
+class CNNPolicy(nn.Module):
     """CNN-based policy-only network (no value head) for REINFORCE."""
 
     def __init__(
@@ -336,7 +328,7 @@ class CNNPolicyOnly(nn.Module):
         with torch.no_grad():
             feat = self.cnn(self.reshape(torch.zeros(1, H, W, C)))
             feat_dim = feat.shape[1]
-        self.backbone = mlp(feat_dim, hidden_dims, act=activation) if hidden_dims and len(hidden_dims) > 0 else nn.Identity()
+        self.backbone = build_mlp(feat_dim, hidden_dims, activation=activation) if hidden_dims and len(hidden_dims) > 0 else nn.Identity()
         last_dim = hidden_dims[-1] if hidden_dims and len(hidden_dims) > 0 else feat_dim
         self.policy_head = nn.Linear(last_dim, action_dim)
 

@@ -14,30 +14,16 @@ class PPO(BaseAgent):
 
     # TODO: do this in init?
     def create_models(self):
-        # If BaseAgent.__init__ (and thus LightningModule/nn.Module.__init__) wasn't called
-        # initialize the nn.Module machinery so assigning submodules works in tests.
-        try:
-            _ = self._modules  # type: ignore[attr-defined]
-        except Exception:
-            import torch.nn as nn  # local import to avoid global side effects
-            nn.Module.__init__(self)
-
-        # Be resilient to minimal configs used in tests
-        policy_kwargs = getattr(self.config, "policy_kwargs", {"activation": "tanh"})
-        activation = policy_kwargs.get('activation', 'tanh')  # noqa: F841 - kept for potential side-effects
-        # Determine policy type and input/output dims even if BaseAgent.__init__ wasn't called
-        policy_type = getattr(self.config, "policy", "mlp")
         input_dim = self.train_env.get_input_dim()
         output_dim = self.train_env.get_output_dim()
-        obs_space = getattr(self.train_env, 'observation_space', None)
         self.policy_model = create_actor_critic_policy(
-            policy_type,
+            self.config.policy,
             input_dim=input_dim,
             action_dim=output_dim,
-            hidden=self.config.hidden_dims,
+            hidden_dims=self.config.hidden_dims,
             # TODO: redundancy with input_dim/output_dim?
-            obs_space=obs_space,
-            **policy_kwargs,
+            obs_space=self.train_env.observation_space,
+            **self.config.policy_kwargs,
         )
 
     def losses_for_batch(self, batch, batch_idx):

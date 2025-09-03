@@ -1606,6 +1606,7 @@ dependencies = [
     { name = "ruamel-yaml" },
     { name = "setuptools" },
     { name = "stable-baselines3" },
+    { name = "stable-retro" },
     { name = "torch" },
     { name = "torchvision" },
     { name = "vizdoom" },
@@ -1632,6 +1633,7 @@ requires-dist = [
     { name = "ruamel-yaml" },
     { name = "setuptools", specifier = "<80" },
     { name = "stable-baselines3", specifier = ">=2.0.0" },
+    { name = "stable-retro" },
     { name = "torch" },
     { name = "torchvision" },
     { name = "vizdoom" },
@@ -4269,6 +4271,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/9a/2f/8458240c8908a550254c80b64f8c03d6d46156664df3515a1331ae730b4e/pygame-2.6.1-pp39-pypy39_pp73-macosx_10_15_x86_64.whl", hash = "sha256:bbb7167c92103a2091366e9af26d4914ba3776666e8677d3c93551353fffa626", size = 12782440, upload-time = "2024-09-29T14:28:25.73Z" },
     { url = "https://files.pythonhosted.org/packages/b8/a5/ef76a85da2cb7bc6b9fc54b0a56cf75f244c8adcd16bab8d0d9d7398bfed/pygame-2.6.1-pp39-pypy39_pp73-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:17498a2b043bc0e795faedef1b081199c688890200aef34991c1941caa2d2c89", size = 14182026, upload-time = "2024-09-29T11:40:28.978Z" },
     { url = "https://files.pythonhosted.org/packages/8b/11/5519d3dfc8046822289dbd8ffde407e30ddb56b6f4a78ca39121a545a322/pygame-2.6.1-pp39-pypy39_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:7103c60939bbc1e05cfc7ba3f1d2ad3bbf103b7828b82a7166a9ab6f51950146", size = 13869271, upload-time = "2024-09-29T11:40:31.176Z" },
+]
+
+[[package]]
+name = "pyglet"
+version = "1.5.31"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f7/c0/59130a7edbcc8f84e35870b00a712538ca05415ff02d17181277b8ef8f05/pyglet-1.5.31.zip", hash = "sha256:a5e422b4c27b0fc99e92103bf493109cca5c18143583b868b3b4631a98ae9417", size = 6900712, upload-time = "2024-12-24T07:10:58.022Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e2/43/46aa0ab49f2f5145d201780c7595cf0c305fb4fb5d00d6639792a3d0e770/pyglet-1.5.31-py3-none-any.whl", hash = "sha256:f68413564bbec380e4815898fef0fb7a4a494dc3f8718bfbf28ce2a802634c88", size = 1143660, upload-time = "2024-12-24T07:10:50.769Z" },
 ]
 
 [[package]]
@@ -8314,6 +8325,27 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/df/25/e71fabe1fdce82118a12bd8a92900d9b5c33d2a7e545ebcf5a582a5d23e9/stable_baselines3-2.6.0.tar.gz", hash = "sha256:972ef537a9a8f2b9de06cdca87ef1f33df5fc8239cfe64fed88976d7c799c2f7", size = 214085, upload-time = "2025-03-24T14:33:14.562Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/54/60/6900e8186168e6e23a2125655fb4fe53130256480cc7950dadcee030cd67/stable_baselines3-2.6.0-py3-none-any.whl", hash = "sha256:d4a4c95b5593c6135a5764767d829498677559069110aa3768fe1254f1c457e3", size = 184525, upload-time = "2025-03-24T14:33:12.437Z" },
+]
+
+[[package]]
+name = "stable-retro"
+version = "0.9.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "farama-notifications" },
+    { name = "gymnasium" },
+    { name = "pyglet" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ca/27/58d7da779d45dac3c98571fec001b269ba40f99b008a749c9ccace5b9f15/stable_retro-0.9.5.tar.gz", hash = "sha256:736741d19a091efd5b12b164a2f6b4bda562147bb96751f629bedd1551cefb97", size = 112223924, upload-time = "2025-05-22T03:19:08.068Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e4/36/bffeea7375f0b104da2f3c88b7fecda520e34e26fb27646ef7835fa77b6b/stable_retro-0.9.5-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:740756a395d912ab3438f3a1814057150425fe3ad3c948a3065903473235563f", size = 86914499, upload-time = "2025-05-22T03:18:11.034Z" },
+    { url = "https://files.pythonhosted.org/packages/47/ec/b868d18ccf2d14750a36a7557525e952cf2a4b43da83df1b4175027e1786/stable_retro-0.9.5-cp310-cp310-manylinux_2_28_x86_64.whl", hash = "sha256:087d510e33dc4928c6d6d3339291f3beab0503d5cae58237e8f28f43343679ff", size = 96366358, upload-time = "2025-05-22T03:18:18.673Z" },
+    { url = "https://files.pythonhosted.org/packages/c7/39/33f46b336e5634a08fc5e2a6addb1a9f219ba5b3d6b0caa154bd0d9133d6/stable_retro-0.9.5-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:0a24eedddf789da9700f7a12fd34e6885839dd030cb599bab576ef793663c0f1", size = 86915540, upload-time = "2025-05-22T03:18:23.914Z" },
+    { url = "https://files.pythonhosted.org/packages/8a/27/647aae53b7156f8ecaf132d1ba89d2d84177bd80d03af364b83a7d300e0b/stable_retro-0.9.5-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:a7f53061eb598b5d482f5403cbe89feab7064679f36796dcb08a2a4a9142c3c0", size = 96384715, upload-time = "2025-05-22T03:18:28.92Z" },
+    { url = "https://files.pythonhosted.org/packages/3a/53/93bdb2d68b6e340f4d36ade311764f84ce846913430af79ee62417556b95/stable_retro-0.9.5-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:59129ad98c0104df4c6d7abfc3a1842679dfc9d4a34ce373b7993904bfe64f36", size = 86920197, upload-time = "2025-05-22T03:18:34.038Z" },
+    { url = "https://files.pythonhosted.org/packages/10/ee/a36f10e287d0a0746787799a7493d66cb2dc90af8c4296effa1919034e9b/stable_retro-0.9.5-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:6d2a1bc8bcbf750187c97fb5f35c3fa08e1b20e3748f80dc5a7197a4db33b6c2", size = 96373503, upload-time = "2025-05-22T03:18:39.333Z" },
+    { url = "https://files.pythonhosted.org/packages/59/bf/c344f42f903a0cef8cbee82f423adac42145b158f2eca80444ee89efed1e/stable_retro-0.9.5-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:1216f3883e3b04068669699c7dc5cf9c071b23e50ed3da2d56bc2f046d192c24", size = 86914593, upload-time = "2025-05-22T03:18:56.811Z" },
+    { url = "https://files.pythonhosted.org/packages/2f/a6/91f98bc68f376ec16f4e785cd604a1036b50fcc3067e57dad0d142e2b68c/stable_retro-0.9.5-cp39-cp39-manylinux_2_28_x86_64.whl", hash = "sha256:e9f3594880d6bc6c6b0148c9817d6b3500584f09e955c3d80f1d0be18da9b68b", size = 96371599, upload-time = "2025-05-22T03:19:02.073Z" },
 ]
 
 [[package]]

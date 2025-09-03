@@ -71,7 +71,7 @@ def load_model(model_path, config):
                 policy_type,
                 input_dim=int(input_dim),
                 action_dim=int(output_dim),
-                hidden=config.hidden_dims,
+                hidden_dims=config.hidden_dims,
                 obs_space=obs_space,
                 **policy_kwargs,
             )

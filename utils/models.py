@@ -30,11 +30,12 @@ def resolve_activation(activation_id: str) -> type[nn.Module]:
     return mapping[key]
 
 
-def build_mlp(input_dims, hidden_dims, activation:str):
+def build_mlp(input_shape: tuple[int, ...], hidden_dims: tuple[int, ...], activation:str):
     """ Create a stack of sequential linear layers with the given activation function. """
+    assert len(input_shape) == 1, "Input shape must be 1D"
     activation_cls = resolve_activation(activation)
     layers = []
-    last_dim = input_dims
+    last_dim = input_shape[0]
     for hidden_dim in hidden_dims:
         layers += [nn.Linear(last_dim, hidden_dim), activation_cls()]
         last_dim = hidden_dim
@@ -54,11 +55,12 @@ class NatureCNN(nn.Module):
 
     def __init__(
         self,
+        *,
         in_channels: int,
         channels=(32, 64, 64),
         kernel_sizes=(8, 4, 3),
         strides=(4, 2, 1),
-        activation: "str | type[nn.Module] | nn.Module" = nn.ReLU,
+        activation: str,
         flatten: bool = True,
     ):
         super().__init__()
@@ -83,8 +85,9 @@ class MLPPolicy(nn.Module):
     def __init__(
         self, 
         input_dim: int, 
+        hidden_dims: tuple[int, ...], 
         output_dim: int, 
-        hidden_dims: Iterable[int] | int = (64, 64), activation: "str | type[nn.Module] | nn.Module" = nn.Tanh
+        activation: str,
     ):
         super().__init__()
 
@@ -122,17 +125,20 @@ class MLPPolicy(nn.Module):
 class MLPActorCritic(nn.Module):
     def __init__(
         self, 
-        input_dim: int, 
-        output_dim: int, 
-        hidden_dims: Iterable[int],
+        input_shape: tuple[int, ...], 
+        hidden_dims: tuple[int, ...], 
+        output_shape: tuple[int, ...], 
         activation: str
     ):
         super().__init__()
 
-        self.backbone = build_mlp(input_dim, hidden_dims, activation)
+        assert len(input_shape) == 1, "Input shape must be 1D"
+        assert len(output_shape) == 1, "Output shape must be 1D"
+
+        self.backbone = build_mlp(input_shape, hidden_dims, activation)
 
         # Create the policy head
-        self.policy_head = nn.Linear(hidden_dims[-1], output_dim)
+        self.policy_head = nn.Linear(hidden_dims[-1], output_shape[0])
 
         # Create the value head
         self.value_head = nn.Linear(hidden_dims[-1], 1)
@@ -310,11 +316,11 @@ class CNNPolicy(nn.Module):
 
     def __init__(
         self,
-        obs_shape,
-        action_dim: int,
-        hidden_dims=(256,),
-        activation: "str | type[nn.Module] | nn.Module" = nn.ReLU,
-        in_channels: int | None = None,
+        input_shape: tuple[int, ...], 
+        hidden_dims: tuple[int, ...], 
+        output_shape: tuple[int, ...], 
+        activation: str,
+        *,
         channels=(32, 64, 64),
         kernel_sizes=(8, 4, 3),
         strides=(4, 2, 1),

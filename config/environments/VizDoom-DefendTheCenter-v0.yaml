@@ -24,7 +24,6 @@ ppo:
   gae_lambda: 0.95
   # Visual preprocessing
   policy_kwargs:
-    activation: relu
     channels: [32, 64, 64]
     kernel_sizes: [8, 4, 3]
     strides: [4, 2, 1]

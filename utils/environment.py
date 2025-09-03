@@ -52,20 +52,20 @@ def _build_env_alepy__objects(env_id, obs_type, render_mode, **env_kwargs):
 
 def _build_env_alepy__rgb(env_id, obs_type, render_mode, **env_kwargs):
     import gymnasium as gym
-    from gymnasium.wrappers.atari import AtariPreprocessing  # type: ignore
 
     # Create the environment
     env = gym.make(env_id, obs_type=obs_type, render_mode=render_mode, **env_kwargs)
 
     # Apply standard Atari preprocessing
-    env = AtariPreprocessing(
-        env,
-        grayscale_obs=True,
-        scale_obs=False,
-        screen_size=84,
-        frame_skip=4,  #TODO: how to softcode these
-        terminal_on_life_loss=False,
-    )
+    #from gymnasium.wrappers.atari import AtariPreprocessing  # type: ignore
+    #env = AtariPreprocessing(
+    #    env,
+    #    grayscale_obs=True,
+    #    scale_obs=False,
+    #    screen_size=84,
+    #    frame_skip=4,  #TODO: how to softcode these
+    #    terminal_on_life_loss=False,
+    #)
 
     # Return the environment
     return env

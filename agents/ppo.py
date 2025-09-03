@@ -14,15 +14,16 @@ class PPO(BaseAgent):
 
     # TODO: do this in init?
     def create_models(self):
-        input_dim = self.train_env.get_input_dim()
-        output_dim = self.train_env.get_output_dim()
+        input_shape = self.train_env.observation_space.shape
+        output_shape = self.train_env.action_space.shape
+        if not output_shape: output_shape = (self.train_env.action_space.n,)
         self.policy_model = create_actor_critic_policy(
             self.config.policy,
-            input_dim=input_dim,
-            action_dim=output_dim,
+            input_shape=input_shape,
+            output_shape=output_shape,
             hidden_dims=self.config.hidden_dims,
+            activation=self.config.activation,
             # TODO: redundancy with input_dim/output_dim?
-            obs_space=self.train_env.observation_space,
             **self.config.policy_kwargs,
         )
 

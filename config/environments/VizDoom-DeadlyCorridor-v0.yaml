@@ -19,7 +19,6 @@ ppo:
   policy_lr: 2.5e-4
   # CNN defaults suitable for 84x84 inputs
   policy_kwargs:
-    activation: relu
     channels: [32, 64, 64]
     kernel_sizes: [8, 4, 3]
     strides: [4, 2, 1]

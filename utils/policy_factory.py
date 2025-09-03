@@ -56,25 +56,32 @@ def _infer_hwc_from_space(obs_space, input_dim: int) -> Tuple[int, int, int]:
 
 
 def create_actor_critic_policy(
-    policy_type: str | type[nn.Module],
+    policy_type: str,
     *,
-    input_dim: int,
-    action_dim: int,
+    input_shape: tuple[int, ...],
+    output_shape: tuple[int, ...],
     hidden_dims: Iterable[int],
     activation: str,
     obs_space=None,
     **policy_kwargs,
 ):
-    if policy_type == 'cnn':
-        hwc = _infer_hwc_from_space(obs_space, input_dim)
-        return CNNActorCritic(
-            obs_shape=hwc,
-            action_dim=action_dim,
-            hidden_dims=hidden_dims,
+    if policy_type == 'mlp':
+        return MLPActorCritic(
+            input_shape, 
+            hidden_dims, 
+            output_shape, 
+            activation,
             **policy_kwargs,
         )
-    elif policy_type == 'mlp':
-        return MLPActorCritic(input_dim, action_dim, hidden_dims=hidden_dims, activation=activation)
+    elif policy_type == 'cnn':
+        hwc = _infer_hwc_from_space(obs_space, input_dim)
+        return CNNActorCritic(
+            input_shape, 
+            hidden_dims, 
+            output_shape, 
+            activation,
+            **policy_kwargs,
+        )
     else:
         raise ValueError(f"Invalid policy type: {policy_type}")
 

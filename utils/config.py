@@ -124,8 +124,11 @@ class Config:
     # The dimensions of the hidden layers in the MLP
     hidden_dims: Union[int, Tuple[int, ...]] = (64, 64)
 
+    # The activation function to use in the MLP
+    activation: str = "relu"
+
     # Additional kwargs to pass to the policy factory
-    policy_kwargs: Optional[Dict[str, Any]] = field(default_factory=lambda: {"activation": "relu"})
+    policy_kwargs: Optional[Dict[str, Any]] = field(default_factory=lambda: {})
 
     # The learning rate for the policy (algo defaults in subclasses)
     policy_lr: Optional[float] = None

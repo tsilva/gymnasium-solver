@@ -381,6 +381,7 @@ class PPOConfig(Config):
     max_grad_norm: float = 0.5
     returns_type: "Config.ReturnsType" = Config.ReturnsType.gae_rtg
     advantages_type: "Config.AdvantagesType" = Config.AdvantagesType.gae
+    policy_targets: "Config.PolicyTargetsType" = Config.PolicyTargetsType.advantages  # type: ignore[assignment]
 
 
 def load_config(config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> Config:

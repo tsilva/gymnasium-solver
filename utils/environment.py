@@ -76,48 +76,12 @@ def _build_env_alepy__ram(env_id, obs_type, render_mode, **env_kwargs):
     return env
 
 def _build_env_vizdoom(env_id, obs_type, render_mode, **env_kwargs):
+    import re
     from gym_wrappers.vizdoom import VizDoomEnv
-    env_id_lower = str(env_id).lower()
-    scenario_map = {
-        "vizdoom-deadly-corridor": "deadly_corridor",
-        "vizdoom-deadlycorridor-v0": "deadly_corridor",
-        "vizdoom-deadlycorridor": "deadly_corridor",
-        "vizdoom-deadlycorridor-v1": "deadly_corridor",
-        "vizdoom-deadly-corridor-v0": "deadly_corridor",
-        "vizdoom-basic": "basic",
-        "vizdoom-basic-v0": "basic",
-        "vizdoom-defend-the-center": "defend_the_center",
-        "vizdoom-defend-the-center-v0": "defend_the_center",
-        "vizdoom-defend-the-line": "defend_the_line",
-        "vizdoom-defend-the-line-v0": "defend_the_line",
-        "vizdoom-health-gathering": "health_gathering",
-        "vizdoom-health-gathering-v0": "health_gathering",
-        # Canonical IDs
-        "vizdoom-deadlycorridor-v0": "deadly_corridor",
-    }
-    # Normalize some canonical forms used by configs
-    canonical = env_id_lower.replace("/", "-")
-    if canonical.startswith("vizdoom-"):
-        scenario = scenario_map.get(canonical)
-    else:
-        scenario = None
-    if scenario is None:
-        # Strict mapping for known IDs
-        if env_id in {"VizDoom-DeadlyCorridor-v0", "vizdoom-deadly-corridor"}:
-            scenario = "deadly_corridor"
-        elif env_id in {"VizDoom-Basic-v0", "vizdoom-basic"}:
-            scenario = "basic"
-        elif env_id in {"VizDoom-DefendTheCenter-v0", "vizdoom-defend-the-center"}:
-            scenario = "defend_the_center"
-        elif env_id in {"VizDoom-DefendTheLine-v0", "vizdoom-defend-the-line"}:
-            scenario = "defend_the_line"
-        elif env_id in {"VizDoom-HealthGathering-v0", "vizdoom-health-gathering"}:
-            scenario = "health_gathering"
-    if scenario is None:
-        # Fallback to deadly corridor if unknown vizdoom id
-        scenario = "deadly_corridor"
+    scenario = env_id.replace("VizDoom-", "").replace("-v0", "").replace("-v1", "").replace("-", "_")
+    scenario = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', scenario)
+    scenario = scenario.lower()
     env = VizDoomEnv(scenario=scenario, render_mode=render_mode, **env_kwargs)
-
     return env
 
 def _build_env_stable_retro(env_id, obs_type, render_mode, **env_kwargs):

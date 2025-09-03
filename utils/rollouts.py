@@ -386,7 +386,14 @@ class RolloutBuffer:
         # Observations: use CPU buffers and convert at return time
         obs_np = self.obs_buf[start:end]  # (T, N, *obs_shape)
         obs_t = torch.as_tensor(obs_np, dtype=torch.float32, device=self.device)
-        states = obs_t.transpose(0, 1).reshape(n_envs * T, -1)
+        obs_t_env_major = obs_t.transpose(0, 1)  # (N, T, *obs_shape)
+        # Preserve image tensors (C,H,W) without flattening; flatten only vectors/scalars
+        if len(self.obs_shape) == 0:
+            states = obs_t_env_major.reshape(n_envs * T, 1)
+        elif len(self.obs_shape) == 1:
+            states = obs_t_env_major.reshape(n_envs * T, int(self.obs_shape[0]))
+        else:
+            states = obs_t_env_major.reshape(n_envs * T, *self.obs_shape)
 
         def _flat_env_major_cpu_to_torch(arr: np.ndarray, dtype: torch.dtype) -> torch.Tensor:
             return torch.as_tensor(_flat_env_major(arr, start, end), dtype=dtype, device=self.device)
@@ -403,7 +410,13 @@ class RolloutBuffer:
 
         # Next observations: same env-major flattening as observations
         next_obs_tensor = torch.as_tensor(self.next_obs_buf[start:end], dtype=torch.float32, device=self.device)
-        next_states = next_obs_tensor.transpose(0, 1).reshape(n_envs * T, -1)
+        next_obs_env_major = next_obs_tensor.transpose(0, 1)
+        if len(self.obs_shape) == 0:
+            next_states = next_obs_env_major.reshape(n_envs * T, 1)
+        elif len(self.obs_shape) == 1:
+            next_states = next_obs_env_major.reshape(n_envs * T, int(self.obs_shape[0]))
+        else:
+            next_states = next_obs_env_major.reshape(n_envs * T, *self.obs_shape)
 
         return RolloutTrajectory(
             observations=states,
@@ -509,7 +522,31 @@ class RolloutCollector():
         self.terminal_obs_info contains tuples of (step_idx, env_idx, terminal_obs).
         """
         if not self.terminal_obs_info: return
-        term_obs_batch = np.stack([info[2] for info in self.terminal_obs_info])
+        # Coerce terminal observations to match buffer obs_shape (e.g., HWC -> CHW)
+        exp = tuple(self._buffer.obs_shape)
+        coerced_list = []
+        for (_, _, obs) in self.terminal_obs_info:
+            arr = np.asarray(obs)
+            try:
+                if len(exp) == 3:
+                    C, H, W = int(exp[0]), int(exp[1]), int(exp[2])
+                    if arr.ndim == 3:
+                        # HWC -> CHW
+                        if arr.shape == (H, W, C):
+                            arr = np.transpose(arr, (2, 0, 1))
+                        # Already CHW
+                        elif arr.shape == (C, H, W):
+                            pass
+                        # Grayscale H,W -> add channel
+                        elif arr.shape == (H, W) and C == 1:
+                            arr = arr[None, ...]
+                    elif arr.ndim == 2 and C == 1 and arr.shape == (H, W):
+                        arr = arr[None, ...]
+                # For non-image shapes, keep as-is
+            except Exception:
+                pass
+            coerced_list.append(arr)
+        term_obs_batch = np.stack(coerced_list)
         batch_values = self._predict_values_np(term_obs_batch)
         batch_values = np.atleast_1d(batch_values)
         for i, (step_idx_term, env_idx, _) in enumerate(self.terminal_obs_info):

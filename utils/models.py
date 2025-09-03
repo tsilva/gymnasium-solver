@@ -128,59 +128,47 @@ class MLPActorCritic(nn.Module):
         return policy_dist, value_pred
 
 
-class _ReshapeFlatToImage(nn.Module):
-    """Utility module to reshape flat (N, prod(HWC)) to (N, C, H, W).
+class _EnsureCHW(nn.Module):
+    """Deterministic reshape to CHW using known input shape.
 
-    Assumes original observation shape is HWC. Will transpose to CHW for CNNs.
+    Assumes env builder provides channel-first images (C, H, W). For grayscale
+    (H, W), treats it as (1, H, W). Accepts either flat (N, C*H*W) or 4D (N, C, H, W)
+    tensors and returns (N, C, H, W) without heuristics.
     """
 
-    def __init__(self, obs_shape):
+    def __init__(self, input_shape: tuple[int, ...]):
         super().__init__()
-        assert len(obs_shape) >= 2, "obs_shape must be (H, W, C) or similar"
-        if len(obs_shape) == 2:
-            # No channels dimension; treat as single-channel
-            H, W = int(obs_shape[0]), int(obs_shape[1])
+        if len(input_shape) == 2:
+            H, W = int(input_shape[0]), int(input_shape[1])
             C = 1
-            self.hwc = (H, W, C)
-        elif len(obs_shape) >= 3:
-            # Robustly resolve HWC from either HWC or CHW inputs.
-            # Heuristics mirror utils.policy_factory._infer_hwc_from_space.
-            a, b, c = int(obs_shape[-3]), int(obs_shape[-2]), int(obs_shape[-1])
-            # If the last dim looks like channels (small count), assume HWC
-            if c <= 8 and a >= 8 and b >= 8:
-                H, W, C = a, b, c
-            # If the first dim looks like channels (small or multiple of 3), assume CHW
-            elif int(obs_shape[0]) <= 8 or (int(obs_shape[0]) % 3 == 0 and b >= 8 and c >= 8):
-                H, W, C = int(obs_shape[1]), int(obs_shape[2]), int(obs_shape[0])
-            # Fallbacks: pick the interpretation where spatial dims are larger
-            elif c <= 64:
-                H, W, C = a, b, c
-            else:
-                H, W, C = int(obs_shape[1]), int(obs_shape[2]), int(obs_shape[0])
-            self.hwc = (H, W, C)
+            self.chw = (C, H, W)
+        elif len(input_shape) == 3:
+            # Expect channel-first from VecTransposeImage
+            C, H, W = int(input_shape[0]), int(input_shape[1]), int(input_shape[2])
+            self.chw = (C, H, W)
         else:
-            # Extremely rare fallback; assume square single-channel
-            side = int(max(int(obs_shape[0]), 1))
-            self.hwc = (side, side, 1)
+            # Treat 1D as a degenerate single-channel square as a last resort
+            side = int(max(int(input_shape[0]) if input_shape else 1, 1))
+            self.chw = (1, side, side)
 
     def forward(self, x: torch.Tensor):
-        N = x.shape[0]
-        H, W, C_expected = self.hwc
-        # Flat inputs: (N, H*W*C)
+        C, H, W = self.chw
         if x.ndim == 2:
-            x = x.view(N, H, W, C_expected)
-            return x.permute(0, 3, 1, 2).contiguous()
-        # 4D inputs: allow HWC or CHW with arbitrary channel count (e.g., frame stack)
-        if x.ndim == 4:
-            # If channel-last (N, H, W, Cx), permute to channel-first
+            # Expect flat features; unflatten to CHW
+            N = x.shape[0]
+            return x.view(N, C, H, W)
+        if x.ndim == 3:
+            # Assume (N, H, W) grayscale; add channel dim
+            N = x.shape[0]
             if x.shape[1] == H and x.shape[2] == W:
-                return x.permute(0, 3, 1, 2).contiguous()
-            # If channel-first and spatial dims match, pass through
-            if x.shape[2] == H and x.shape[3] == W:
-                return x.contiguous()
-        # Fallback: best-effort permute assuming input is HWC
+                return x.unsqueeze(1).contiguous()
+        if x.ndim == 4:
+            # Assume already CHW
+            return x.contiguous()
+        # Any other rank: best effort reshape if size matches
         try:
-            return x.permute(0, 3, 1, 2).contiguous()
+            N = x.shape[0]
+            return x.view(N, C, H, W)
         except Exception:
             return x
 
@@ -205,8 +193,8 @@ class _CNNTrunk(nn.Module):
         super().__init__()
 
         # Reshape flat inputs to images (N, C, H, W)
-        self.reshape = _ReshapeFlatToImage(input_shape)
-        H, W, C = self.reshape.hwc
+        self.reshape = _EnsureCHW(input_shape)
+        C, H, W = self.reshape.chw
 
         # Conv stack
         assert len(tuple(channels)) == len(tuple(kernel_sizes)) == len(tuple(strides)), "Conv spec lengths must match"
@@ -220,7 +208,7 @@ class _CNNTrunk(nn.Module):
 
         # Determine feature size with a dummy forward
         with torch.no_grad():
-            dummy = torch.zeros(1, H, W, C)
+            dummy = torch.zeros(1, C, H, W)
             feat = self.convs(self.reshape(dummy))
             feat_dim = int(torch.flatten(feat, 1).shape[1])
 

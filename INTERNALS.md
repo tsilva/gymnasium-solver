@@ -27,7 +27,7 @@ Algo-specific config subclasses:
 ### Environments (`utils/environment.py`, `gym_wrappers/*`)
 - `build_env(env_id, n_envs, seed, subproc, obs_type, frame_stack, norm_obs, env_wrappers, env_kwargs, render_mode, record_video, record_video_kwargs)` builds a vectorized env:
   - ALE via `ale_py` with optional `obs_type in {'rgb','ram','objects'}` (objects uses OCAtari).
-  - For ALE RGB, applies Gymnasium's `AtariPreprocessing` (grayscale+resize+frameskip). When this is active, manual `resize_obs`/`grayscale_obs` flags are ignored to avoid conflicts.
+  - Optional base-env preprocessing (Gymnasium wrappers): `GrayScaleObservation` when `grayscale_obs` is set, and `ResizeObservation` when `resize_obs` is provided. `resize_obs` accepts `(width, height)`; `True` is treated as `(84, 84)` for convenience.
   - VizDoom Deadly Corridor via `gym_wrappers.vizdoom_deadly_corridor.VizDoomDeadlyCorridorEnv` when `env_id` matches.
   - Standard Gymnasium otherwise.
   - Version compatibility: when `gym.make(env_id)` raises a version-not-found error (e.g., `*-v3` unavailable), `build_env` attempts to fall back to lower versions (`*-v2`, `*-v1`, ...) until one is found, emitting a single informational print. The original `env_id` is preserved on the vec env for metadata; the resolved id is attached to the base env as `resolved_env_id` when possible.
@@ -59,13 +59,15 @@ Algo-specific config subclasses:
 ### Rollouts and data pipeline (`utils/rollouts.py`, `utils/dataloaders.py`)
 - `RolloutCollector` collects `n_steps` across `n_envs` and stores into a persistent CPU `RolloutBuffer` to minimize allocs.
 - Supports GAE or Monte Carlo returns; handles `TimeLimit.truncated` with bootstrapped values; maintains rolling windows for ep stats and FPS.
-- Returns flattened env-major tensors via `flatten_slice_env_major` to feed training.
+- `flatten_slice_env_major` preserves image observations in CHW shape and only flattens vectors/scalars. Shapes returned:
+  - Vectors/scalars: `(N*T, D)` or `(N*T, 1)`; Images (CHW): `(N*T, C, H, W)`.
+- Terminal observations for time-limit truncations are coerced to the buffer's CHW shape before value bootstrapping.
 - `build_index_collate_loader_from_collector` creates a `DataLoader` over indices with `MultiPassRandomSampler` to perform `n_epochs` passes over the same rollout without epoch resets.
 
 ### Models and policies (`utils/models.py`, `utils/policy_factory.py`)
-- MLP actor-critic (`ActorCritic`) and policy-only (`MLPPolicy`) for discrete actions; distributions are `Categorical` from logits.
-- CNN variants (`CNNActorCritic`, `CNNPolicyOnly`) reshape flat obs back to image tensors based on inferred HWC; `NatureCNN` feature extractor; configurable via `policy_kwargs`.
-- `policy_factory` routes based on `policy` string or custom module classes; infers image shapes from `observation_space`.
+- MLP actor-critic (`MLPActorCritic`) and policy-only (`MLPPolicy`) for discrete actions; distributions are `Categorical` from logits. `MLPPolicy` accepts either `input_dim`/`output_dim` or `input_shape`/`output_shape` for factory compatibility.
+- CNN variants (`CNNActorCritic`, `CNNPolicy`) share a reusable `_CNNTrunk` (Conv2d stack + optional MLP). Models expect CHW inputs; a deterministic `_EnsureCHW` unflattens when given flat features (no HWC/CHW heuristics).
+- `policy_factory` routes based on `policy` string or custom module classes and forwards `policy_kwargs`.
 
 ### Trainer and callbacks (`utils/trainer_factory.py`, `trainer_callbacks/*`)
 - `build_trainer` constructs a PL `Trainer` with validation cadence controlled externally; progress bar/checkpointing disabled in favor of custom callbacks.

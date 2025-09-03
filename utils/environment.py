@@ -160,6 +160,29 @@ def build_env(
         elif _is_stable_retro_env: env = _build_env_stable_retro(env_id, obs_type, render_mode, **env_kwargs)            
         else: env = _build_env_gymnasium(env_id, obs_type, render_mode, **env_kwargs)
 
+        # Optional image preprocessing on the base env (before vectorization)
+        # - grayscale_obs: convert to single-channel grayscale
+        # - resize_obs: resize observations to (width, height)
+        # Uses Gymnasium built-in wrappers.
+        try:
+            from gymnasium.wrappers import GrayScaleObservation, ResizeObservation
+            if grayscale_obs:
+                # Keep default behavior (no channel dim) to produce (H, W)
+                env = GrayScaleObservation(env)
+            if resize_obs:
+                # Accept explicit (width, height); bool True defaults to (84, 84)
+                if isinstance(resize_obs, (tuple, list)) and len(resize_obs) == 2:
+                    size = (int(resize_obs[0]), int(resize_obs[1]))
+                elif isinstance(resize_obs, bool) and resize_obs is True:
+                    size = (84, 84)
+                else:
+                    size = None
+                if size is not None:
+                    env = ResizeObservation(env, size)
+        except Exception:
+            # Best effort; if wrappers fail to import or apply, continue
+            pass
+
         # Apply configured env wrappers
         for wrapper in env_wrappers:
             env = EnvWrapperRegistry.apply(env, wrapper) # type: ignore
@@ -192,7 +215,7 @@ def build_env(
     # Detect image observations and transpose to channel-first for SB3 CNN policies
     from stable_baselines3.common.preprocessing import is_image_space
     is_image = is_image_space(env.observation_space, check_channels=False)
-
+    
     from stable_baselines3.common.vec_env import VecTransposeImage
     # Only transpose if observations are channel-last images (H, W, C). Grayscale
     # Atari after preprocessing is (H, W) and should not be transposed here.

@@ -1,3 +1,4 @@
+- FEAT: add ETA metric (based on max_timesteps and FPS)
 - BUG: restore grayscaling / resizing logic; think how to unify with atari preprocessing (probably just inspect internals and extract)
 - BUG: fix cnn policy training, in separate file create env and inspect traversing layers
 - FEAT: overridable rollout collector factory methods instead of extra parameter method

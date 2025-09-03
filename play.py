@@ -53,26 +53,40 @@ def load_model(model_path, config):
         output_dim = env.get_output_dim()
         obs_space = getattr(env, "observation_space", None)
 
+        # Derive input/output shapes expected by policy factories
+        # Prefer 1D shapes for MLP; use env's spaces when available
+        if hasattr(env, "observation_space") and getattr(env.observation_space, "shape", None):
+            input_shape = tuple(int(s) for s in env.observation_space.shape)
+        else:
+            input_shape = (int(input_dim),) if input_dim is not None else (1,)
+        if hasattr(env, "action_space") and getattr(env.action_space, "shape", None) and env.action_space.shape:
+            output_shape = tuple(int(s) for s in env.action_space.shape)
+        else:
+            # Discrete
+            output_shape = (int(output_dim),) if output_dim is not None else (1,)
+
         # Policy selection based on algo_id (policy-only for REINFORCE)
-        policy_type = getattr(config, "policy", "mlp")
-        policy_kwargs = config.policy_kwargs
+        policy_type = str(getattr(config, "policy", "mlp")).lower()
+        policy_kwargs = dict(config.policy_kwargs or {})
+        activation = getattr(config, "activation", "relu")
+        hidden_dims = config.hidden_dims
 
         if str(getattr(config, "algo_id", "")).lower() == "reinforce":
             model = create_policy(
                 policy_type,
-                input_dim=int(input_dim),
-                action_dim=int(output_dim),
-                hidden_dims=config.hidden_dims,
-                obs_space=obs_space,
+                input_shape=input_shape,
+                output_shape=output_shape,
+                hidden_dims=hidden_dims,
+                activation=activation,
                 **policy_kwargs,
             )
         else:
             model = create_actor_critic_policy(
                 policy_type,
-                input_dim=int(input_dim),
-                action_dim=int(output_dim),
-                hidden_dims=config.hidden_dims,
-                obs_space=obs_space,
+                input_shape=input_shape,
+                output_shape=output_shape,
+                hidden_dims=hidden_dims,
+                activation=activation,
                 **policy_kwargs,
             )
     finally:

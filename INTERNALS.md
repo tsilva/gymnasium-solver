@@ -3,7 +3,7 @@
 High-signal reference for maintainers and agents. Read this before making changes.
 
 ### Top-level flow
-- **Entry point**: `train.py` parses CLI, loads `Config` via `utils.config.load_config`, sets seeds, creates agent (`agents.create_agent`), calls `agent.learn()`.
+- **Entry point**: `train.py` expects `--config_id "<env>:<variant>"` (e.g., `CartPole-v1:ppo`) and optional `-q/--quiet`; it splits env/variant, loads `Config` via `utils.config.load_config(config_id, variant_id)`, sets the global seed via `stable_baselines3.set_random_seed`, creates the agent (`agents.create_agent`), and calls `agent.learn()`.
 - **Agent lifecycle**: `agents/base_agent.BaseAgent` constructs envs, models, collectors, and the PyTorch Lightning Trainer; subclasses implement `create_models`, `losses_for_batch`, and optimizer.
 - **Training loop**: `BaseAgent.train_dataloader()` collects a rollout with `utils.rollouts.RolloutCollector`, builds an index-collate `DataLoader` (`utils.dataloaders`), and Lightning calls `training_step()` which delegates to `losses_for_batch()`; optim is manual (`automatic_optimization=False`).
 - **Eval**: Validation loop is procedural in hooks; `utils.evaluation.evaluate_policy` runs N episodes on a vectorized env; videos recorded via `VecVideoRecorder` wrapper and `trainer_callbacks.VideoLoggerCallback` watches media dir.
@@ -11,13 +11,11 @@ High-signal reference for maintainers and agents. Read this before making change
 - **Runs**: `utils.run_manager.RunManager` creates `runs/<id>/`, symlinks `runs/@latest-run`, and manages paths; `BaseAgent` dumps `config.json` and writes `run.log` via `utils.logging.stream_output_to_log`.
 - **Checkpoints**: `trainer_callbacks.ModelCheckpointCallback` writes `best.ckpt`/`last.ckpt`; resume controlled by `Config.resume`.
 
-### Configuration model (`utils/config.py`)
+-### Configuration model (`utils/config.py`)
 - `Config` dataclass aggregates env, algo, rollout, model, optimization, eval, logging, and runtime settings. The loader instantiates an algo-specific subclass based on `algo_id`.
-- `load_from_yaml(config_id, variant_id=None)`: loads from `config/environments/*.yaml`, supporting both the legacy multi-block format with `inherits` and the new per-file format (base at root + per-variant sections like `ppo:`). Parses schedules like `lin_0.001` into `*_schedule = 'linear'` and numeric base. For new-style environment files, when `project_id` is not specified, it defaults to the YAML filename (stem). In addition to full IDs like `CartPole-v1_ppo`, `config_id` can be just the project/env name (e.g., `CartPole-v1`); when used this way, `variant_id` selects a variant (e.g., `ppo`), and if omitted, the first variant defined in the YAML file is used by default.
-- Legacy loader `_load_from_legacy_config` remains for `config/hyperparams/<algo>.yaml`.
-- Key derived behaviors: evaluation defaults when `eval_freq_epochs` set; RLZoo-style `normalize` mapped to `normalize_obs/reward`; `policy` in {'mlp','cnn'}; validation via `_compute_validation_controls` helpers.
-
-- Fractional batch size: if `batch_size` in the YAML is a float in (0, 1], it is interpreted as a fraction of the rollout size and resolved at load time to `int(n_envs * n_steps * batch_size)` with a minimum of 1. This happens before validation so assertions see the final integer value.
+- `load_from_yaml(config_id, variant_id)`: loads from `config/environments/*.yaml` using the new per-file format (base fields at the root + per-variant sections like `ppo:`). Schedules like `lin_0.001` are parsed into `*_schedule='linear'` and the numeric base. For new-style environment files, when `project_id` is not specified, it defaults to the YAML filename (stem).
+- Variant selection: `variant_id` is required in the current implementation; there is no auto-default to the first variant.
+- Fractional batch size: when `batch_size` is a float in (0, 1), it is interpreted as a fraction of the rollout size (`n_envs * n_steps`). The fraction must divide the rollout size exactly; the loader asserts divisibility and sets `batch_size = int(rollout_size * fraction)`.
 
 Algo-specific config subclasses:
 - `PPOConfig`: enforces `clip_range > 0`.
@@ -28,13 +26,14 @@ Algo-specific config subclasses:
 - `build_env(env_id, n_envs, seed, subproc, obs_type, frame_stack, norm_obs, env_wrappers, env_kwargs, render_mode, record_video, record_video_kwargs)` builds a vectorized env:
   - ALE via `ale_py` with optional `obs_type in {'rgb','ram','objects'}` (objects uses OCAtari).
   - Optional base-env preprocessing (Gymnasium wrappers): `GrayScaleObservation` when `grayscale_obs` is set, and `ResizeObservation` when `resize_obs` is provided. `resize_obs` accepts `(width, height)`; `True` is treated as `(84, 84)` for convenience.
-  - VizDoom Deadly Corridor via `gym_wrappers.vizdoom_deadly_corridor.VizDoomDeadlyCorridorEnv` when `env_id` matches.
+  - VizDoom via `gym_wrappers.vizdoom.VizDoomEnv` when `env_id` matches `VizDoom-*`.
+  - Retro via `stable-retro` when `env_id` matches `Retro/*`.
   - Standard Gymnasium otherwise.
-  - Version compatibility: when `gym.make(env_id)` raises a version-not-found error (e.g., `*-v3` unavailable), `build_env` attempts to fall back to lower versions (`*-v2`, `*-v1`, ...) until one is found, emitting a single informational print. The original `env_id` is preserved on the vec env for metadata; the resolved id is attached to the base env as `resolved_env_id` when possible.
   - Applies registry wrappers from YAML: `EnvWrapperRegistry.apply` with `{ id: WrapperName, ... }` specs.
-  - Optional `VecNormalize`, `VecFrameStack`, and `VecVideoRecorder`.
+  - Observation normalization: `norm_obs == 'static'` uses `VecNormalizeStatic`; `norm_obs == 'rolling'` uses `VecNormalize`. Note: the config field is `normalize_obs` (bool) but the builder currently expects these string values; a boolean `True/False` will not enable normalization.
+  - Optional `VecFrameStack` and `VecVideoRecorder`.
   - Always wraps with `VecInfoWrapper` for metadata and shape helpers.
-- Wrapper registry: `gym_wrappers.__init__` registers `PixelObservationWrapper`, grayscale/resize aliases, plus domain wrappers like `PongV5_FeatureExtractor`, reward shapers, etc.
+- Wrapper registry: `gym_wrappers.__init__` registers `PixelObservationWrapper` and domain wrappers like `PongV5_FeatureExtractor`, reward shapers, etc.
 
 ### Agents
 - `BaseAgent` (LightningModule):
@@ -104,6 +103,9 @@ Algo-specific config subclasses:
 - Q-Learning assumes discrete obs/action spaces; do not auto-wrap discrete obs into vectors in `build_env` to avoid breaking tabular methods.
 - When `eval_freq_epochs` is None, validation is disabled; otherwise cadence is enforced via PL controls and warmup gates.
 - Use `config.max_timesteps` for progress-based schedules; ensure it’s set for linear decays to have effect.
+- Training CLI uses `--config_id "<env>:<variant>"`; underscore IDs like `Env_Variant` are not parsed by `train.py`.
+- Config loader currently requires an explicit `variant_id`; it does not default to the first variant.
+- Env normalization: pass `normalize_obs: 'static'|'rolling'` for effect; boolean `True/False` does not enable normalization in `build_env`.
 
 ### Directory layout
 ```

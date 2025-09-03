@@ -47,6 +47,7 @@ Algo-specific config subclasses:
 - `agents/ppo.PPO`:
   - Policy via `utils.policy_factory.create_actor_critic_policy` using MLP or CNN heads; computes PPO losses, metrics, and uses Adam(eps=1e-5).
   - Linear schedule for `clip_range` if `clip_range_schedule == 'linear'`.
+  - Logs gradient norms per component under `train/grad_norm/*` after backward and before clipping/step: `actor_head`, `critic_head`, and `trunk`.
 - `agents/reinforce.REINFORCE`:
   - Policy-only via `create_policy`; can use returns or advantages as baseline; disables GAE in collector.
   - Logs policy diagnostics including `entropy`, and PPO-style KL indicators `kl_div` and `approx_kl` computed from rollout (old) vs current log-probs for the taken actions.

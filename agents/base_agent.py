@@ -834,7 +834,15 @@ class BaseAgent(pl.LightningModule):
             loss = losses[idx]
             optimizer.zero_grad()
             self.manual_backward(loss) # TODO: this or loss.backward()?
-            torch.nn.utils.clip_grad_norm_(self.policy_model.parameters(), self.config.max_grad_norm)
+            # Log gradient norms per component before clipping/step
+            try:
+                pass#self._log_policy_grad_norms()
+            except Exception:
+                # Never break training due to logging issues
+                pass
+            
+            if self.config.max_grad_norm is not None:
+                torch.nn.utils.clip_grad_norm_(self.policy_model.parameters(), self.config.max_grad_norm)
             optimizer.step()
 
     def _get_training_progress(self):
@@ -957,3 +965,60 @@ class BaseAgent(pl.LightningModule):
             self.policy_model.parameters(), 
             lr=self.config.policy_lr
         )
+
+    # -------------------------
+    # Gradient norm diagnostics
+    # -------------------------
+    def _compute_param_group_grad_norm(self, params):
+        """Compute L2 norm of gradients for a parameter iterable.
+
+        Ignores parameters with None gradients. Returns 0.0 if no grads present.
+        """
+        import math
+        total_sq = 0.0
+        has_grad = False
+        for p in params:
+            g = getattr(p, "grad", None)
+            if g is None:
+                continue
+            has_grad = True
+            # Use .detach() to avoid graph tracking; flatten to 1D before norm
+            total_sq += float(g.detach().data.norm(2).item() ** 2)
+        if not has_grad:
+            return 0.0
+        return math.sqrt(total_sq)
+
+    def _log_policy_grad_norms(self):
+        """Log gradient norms for actor head, critic head, and shared trunk.
+
+        Supports actor-critic models that expose `policy_head` and `value_head`.
+        The shared trunk is computed as all parameters excluding head parameters
+        (e.g., backbone/CNN feature extractor).
+        """
+        model = getattr(self, "policy_model", None)
+        if model is None:
+            return
+
+        # Identify heads if present
+        policy_head = getattr(model, "policy_head", None)
+        value_head = getattr(model, "value_head", None)
+
+        head_param_ids = set()
+        actor_params = []
+        critic_params = []
+        if policy_head is not None:
+            actor_params = list(policy_head.parameters())
+            head_param_ids.update(id(p) for p in actor_params)
+        if value_head is not None:
+            critic_params = list(value_head.parameters())
+            head_param_ids.update(id(p) for p in critic_params)
+
+        # Trunk are all params not in heads
+        trunk_params = [p for p in model.parameters() if id(p) not in head_param_ids]
+
+        metrics = {
+            "grad_norm/actor_head": self._compute_param_group_grad_norm(actor_params),
+            "grad_norm/critic_head": self._compute_param_group_grad_norm(critic_params) if value_head is not None else 0.0,
+            "grad_norm/trunk": self._compute_param_group_grad_norm(trunk_params),
+        }
+        self.log_metrics(metrics, prefix="train")

@@ -63,11 +63,11 @@ class PPO(BaseAgent):
         # Retrieve the log probabilities of the batch actions under the current policy
         # (since we are training multiple epochs using same rollout, the policy will
         # shift away from the one used to collect the rollout, so log probabilities will change)
-        new_logps = policy_dist.log_prob(actions)
+        new_logprobs = policy_dist.log_prob(actions)
 
         # Calculate the ratio of the new policy to the old policy:
         # log(new) - log(old) = log(new/old) => exp(log(new/old)) = new/old = ratio
-        ratio = torch.exp(new_logps - old_logprobs)
+        ratio = torch.exp(new_logprobs - old_logprobs)
 
         # Scale the advantages by the change ratio
         scaled_advantages = advantages * ratio
@@ -95,6 +95,8 @@ class PPO(BaseAgent):
         # NOTE: this must be done in order, second argument must be the target
         value_loss = F.mse_loss(values_pred, returns) # TODO: what is this scale?
 
+        # TODO: note down why returns cant be normalized (GAE), but why advantages should be
+
         # To encourage exploration we can encourage entropy maximization 
         # by making the negative of the current entropy a loss term
         # (this value must be scaled so that it doesn't dominate the 
@@ -102,6 +104,7 @@ class PPO(BaseAgent):
         entropy = policy_dist.entropy().mean()
         entropy_loss = -entropy
 
+        # TODO: ensure all terms are within similar ranges, add warnings
         # Create the final loss value by mixing the different loss terms
         # according to the coefficients we set in the config 
         # (different weights for each loss term)
@@ -112,8 +115,11 @@ class PPO(BaseAgent):
         # Calculate additional metrics for logging
         # (don't compute gradients during these calculations)
         with torch.no_grad():
+            # Measure how many log probs moved beyond the trusted region (average of how many samples are outside the allowed range)
             clip_fraction = ((ratio < 1.0 - self.clip_range) | (ratio > 1.0 + self.clip_range)).float().mean()
-            kl_div = (old_logprobs - new_logps).mean()
+
+
+            kl_div = (old_logprobs - new_logprobs).mean()
             approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
             explained_var = 1 - torch.var(returns - values_pred) / torch.var(returns)
 

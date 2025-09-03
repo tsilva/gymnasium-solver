@@ -47,17 +47,13 @@ class DummyPolicy(torch.nn.Module):
     def device(self):
         return self.dummy.device
 
-    @torch.inference_mode()
-    def act(self, obs, deterministic=False):
+    def forward(self, obs):
         b = obs.shape[0]
-        a = torch.zeros(b, dtype=torch.int64, device=obs.device)
-        logp = torch.zeros(b, dtype=torch.float32, device=obs.device)
-        v = torch.zeros(b, dtype=torch.float32, device=obs.device)
-        return a, logp, v
-
-    @torch.inference_mode()
-    def predict_values(self, obs):
-        return torch.zeros(obs.shape[0], dtype=torch.float32, device=obs.device)
+        logits = torch.zeros((b, 2), dtype=torch.float32, device=obs.device)
+        logits[:, 0] = 10.0
+        dist = torch.distributions.Categorical(logits=logits)
+        value = torch.zeros(b, dtype=torch.float32, device=obs.device)
+        return dist, value
 
 
 def test_mc_baseline_uses_masked_values_only():

@@ -59,13 +59,12 @@ class _DummyPolicy(torch.nn.Module):
         super().__init__()
         # Register a parameter so _device_of can locate a device
         self._p = torch.nn.Parameter(torch.zeros(1))
-        self.last_deterministic = None
-
-    def act(self, obs_t: torch.Tensor, deterministic: bool = True):
-        # Return vector of zeros actions (shape: [num_envs])
-        self.last_deterministic = deterministic
-        actions = torch.zeros((obs_t.shape[0],), dtype=torch.int64, device=obs_t.device)
-        return actions, None, None
+    
+    def forward(self, obs_t: torch.Tensor):
+        # Always return a distribution that prefers action 0
+        logits = torch.zeros((obs_t.shape[0], 2), dtype=torch.float32, device=obs_t.device)
+        dist = torch.distributions.Categorical(logits=logits)
+        return dist, None
 
 
 def test_evaluate_policy_single_env_exact_counts():
@@ -88,8 +87,7 @@ def test_evaluate_policy_single_env_exact_counts():
     assert metrics["per_env/episodes_0"] == 3
     assert math.isclose(metrics["per_env/ep_rew_mean_0"], (2 + 3 + 1) / 3.0)
     assert math.isclose(metrics["per_env/ep_len_mean_0"], (2 + 3 + 1) / 3.0)
-    # Determinism flag forwarded to policy
-    assert policy.last_deterministic is True
+    # Determinism is handled by evaluation via distribution mode; no policy flag assertion
 
 
 def test_evaluate_policy_balanced_multi_env():

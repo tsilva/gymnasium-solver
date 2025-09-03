@@ -1,30 +1,41 @@
-import random
-
 import torch
+import torch.nn as nn
+from torch.distributions import Categorical
 
 from .base_agent import BaseAgent
 
 
-# TODO: should we get rid of models.py and move models next to agents?
-class QLearningPolicyModel():
-    def __init__(self, q_table, action_space):
+class QLearningPolicyModel(nn.Module):
+    """Forward-only Q-learning policy with epsilon-greedy behavior.
+
+    forward(obs) returns a Categorical distribution whose probabilities are a
+    blend of a one-hot greedy action and a uniform distribution based on the
+    current exploration rate (epsilon). No value head is returned (None).
+    """
+
+    def __init__(self, q_table: torch.Tensor, action_space):
+        super().__init__()
+        # Keep reference to external Q-table tensor (updated by agent)
         self.q_table = q_table
         self.action_space = action_space
         self.exploration_rate = 0.99
         self.exploration_rate_decay = 0.99999
+        # Dummy buffer to expose a device for utilities
+        self.register_buffer("_dev", torch.zeros(1), persistent=False)
 
-    def act(self, obs, deterministic=False):
-        if not deterministic and random.random() < self.exploration_rate: 
-            actions = torch.tensor([self.action_space.sample() for _ in range(obs.shape[0])], device=obs.device)
-        else: 
-            available_actions = self.q_table[obs.int()]
-            actions = torch.argmax(available_actions, dim=1)
-        logps_t = torch.zeros(obs.shape[0], device=obs.device)
-        values_t = torch.zeros(obs.shape[0], device=obs.device)
-        return actions, logps_t, values_t
+    def forward(self, obs: torch.Tensor):
+        # obs expected as integer state indices (possibly batched)
+        q_vals = self.q_table[obs.long()]  # shape: (B, n_actions)
+        # Greedy action per sample
+        greedy = torch.argmax(q_vals, dim=1)
+        n_actions = int(q_vals.shape[1])
 
-    def predict_values(self, obs):
-        return torch.zeros(obs.shape[0], device=obs.device)
+        # Build epsilon-greedy probabilities: (1-eps) on greedy, eps uniform elsewhere
+        eps = float(self.exploration_rate)
+        probs = torch.full_like(q_vals, fill_value=eps / max(n_actions, 1), dtype=torch.float32)
+        probs.scatter_(1, greedy.view(-1, 1), (1.0 - eps) + eps / max(n_actions, 1))
+        dist = Categorical(probs=probs)
+        return dist, None
 
     def decay_exploration(self):
         self.exploration_rate *= self.exploration_rate_decay

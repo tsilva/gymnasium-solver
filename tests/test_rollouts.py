@@ -39,18 +39,11 @@ class DummyPolicy:
     def device(self):
         return torch.device("cpu")
 
-    @torch.inference_mode()
-    def act(self, obs, deterministic=False):
+    def forward(self, obs):
         logits = self.linear(obs)
         dist = torch.distributions.Categorical(logits=logits)
-        a = dist.sample()
-        logp = dist.log_prob(a)
-        v = torch.zeros_like(logp)
-        return a, logp, v
-
-    @torch.inference_mode()
-    def predict_values(self, obs):
-        return torch.zeros(obs.shape[0])
+        # No value head
+        return dist, None
 
 
 @pytest.mark.unit

@@ -6,6 +6,7 @@ import numpy as np
 import torch
 
 from utils.torch import _device_of, inference_ctx
+from utils.policy_ops import policy_act, policy_predict_values
 
 def _to_np(t: torch.Tensor, dtype: np.dtype) -> np.ndarray:
     return t.detach().cpu().numpy().astype(dtype, copy=False)
@@ -499,7 +500,7 @@ class RolloutCollector():
     def _predict_values_np(self, obs_batch: np.ndarray) -> np.ndarray:
         """Run critic on a numpy batch and return float32 numpy array (squeezed)."""
         obs_t = torch.as_tensor(obs_batch, dtype=torch.float32, device=self.device)
-        vals = self.policy_model.predict_values(obs_t).detach().cpu().numpy().astype(np.float32)
+        vals = policy_predict_values(self.policy_model, obs_t).detach().cpu().numpy().astype(np.float32)
         return vals.squeeze()
 
     def _bootstrap_timeouts_batch(self, start: int):
@@ -715,7 +716,7 @@ class RolloutCollector():
             obs_t = torch.as_tensor(self.obs, dtype=torch.float32, device=self.device)
 
             # Perform policy step to determine actions, log probabilities, and value estimates
-            actions_t, logps_t, values_t = self.policy_model.act(obs_t, deterministic=deterministic)
+            actions_t, logps_t, values_t = policy_act(self.policy_model, obs_t, deterministic=deterministic)
 
             # Perform environment step
             actions_np = actions_t.detach().cpu().numpy()

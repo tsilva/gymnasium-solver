@@ -55,7 +55,7 @@ class MLPPolicy(nn.Module):
         # Normalize hidden dims and create MLP backbone
         if isinstance(hidden_dims, int):
             hidden_dims = (hidden_dims,)
-        self.backbone = build_mlp(input_dim, hidden_dims, activation)
+        self.backbone = build_mlp((input_dim,), hidden_dims, activation)
 
         # Create the policy head
         self.policy_head = nn.Linear(hidden_dims[-1], output_dim)
@@ -68,20 +68,6 @@ class MLPPolicy(nn.Module):
         logits = self.policy_head(x)
         dist = Categorical(logits=logits)
         return dist, None  # Return None for value to maintain compatibility
-
-    @torch.inference_mode()
-    def act(self, obs: torch.Tensor, deterministic=False):
-        dist, _ = self.forward(obs)
-        a = dist.sample() if not deterministic else dist.mode
-        return a, dist.log_prob(a), torch.zeros_like(a, dtype=torch.float32)  # Return zero values
-
-    def evaluate_actions(self, obs: torch.Tensor, actions: torch.Tensor):
-        dist, _ = self.forward(obs)
-        return dist.log_prob(actions), dist.entropy(), torch.zeros(obs.shape[0], device=obs.device)
-    
-    def predict_values(self, obs):
-        # Return zeros for compatibility - REINFORCE doesn't use value function
-        return torch.zeros(obs.shape[0], device=obs.device)
 
 class MLPActorCritic(nn.Module):
     def __init__(
@@ -129,21 +115,45 @@ class MLPActorCritic(nn.Module):
         # Return policy distribution and value prediction
         return policy_dist, value_pred
 
-    @torch.inference_mode()
-    def act(self, obs: torch.Tensor, deterministic=False):
-        policy_dist, v = self.forward(obs)
-        a = policy_dist.sample() if not deterministic else policy_dist.mode
-        return a, policy_dist.log_prob(a), v
 
-    def evaluate_actions(self, obs: torch.Tensor, actions: torch.Tensor):
-        dist, v = self.forward(obs)
-        return dist.log_prob(actions), dist.entropy(), v
-    
-    def predict_values(self, obs):
-        x = self.backbone(obs)
-        value = self.value_head(x).squeeze(-1)
-        return value
+class _ReshapeFlatToImage(nn.Module):
+    """Utility module to reshape flat (N, prod(HWC)) to (N, C, H, W).
 
+    Assumes original observation shape is HWC. Will transpose to CHW for CNNs.
+    """
+
+    def __init__(self, obs_shape):
+        super().__init__()
+        assert len(obs_shape) >= 2, "obs_shape must be (H, W, C) or similar"
+        if len(obs_shape) == 2:
+            # No channels dimension; treat as single-channel
+            H, W = obs_shape
+            C = 1
+            self.hwc = (H, W, C)
+        else:
+            H, W, C = obs_shape[-3:]
+            self.hwc = (H, W, C)
+
+    def forward(self, x: torch.Tensor):
+        N = x.shape[0]
+        H, W, C_expected = self.hwc
+        # Flat inputs: (N, H*W*C)
+        if x.ndim == 2:
+            x = x.view(N, H, W, C_expected)
+            return x.permute(0, 3, 1, 2).contiguous()
+        # 4D inputs: allow HWC or CHW with arbitrary channel count (e.g., frame stack)
+        if x.ndim == 4:
+            # If channel-last (N, H, W, Cx), permute to channel-first
+            if x.shape[1] == H and x.shape[2] == W:
+                return x.permute(0, 3, 1, 2).contiguous()
+            # If channel-first and spatial dims match, pass through
+            if x.shape[2] == H and x.shape[3] == W:
+                return x.contiguous()
+        # Fallback: best-effort permute assuming input is HWC
+        try:
+            return x.permute(0, 3, 1, 2).contiguous()
+        except Exception:
+            return x
 
 
 class CNNActorCritic(nn.Module):
@@ -218,20 +228,6 @@ class CNNActorCritic(nn.Module):
         value = self.value_head(x).squeeze(-1)
         return dist, value
 
-    @torch.inference_mode()
-    def act(self, obs_flat: torch.Tensor, deterministic=False):
-        dist, v = self.forward(obs_flat)
-        a = dist.sample() if not deterministic else dist.mode
-        return a, dist.log_prob(a), v
-
-    def evaluate_actions(self, obs_flat: torch.Tensor, actions: torch.Tensor):
-        dist, v = self.forward(obs_flat)
-        return dist.log_prob(actions), dist.entropy(), v
-
-    def predict_values(self, obs_flat: torch.Tensor):
-        x = self._forward_features(obs_flat)
-        return self.value_head(x).squeeze(-1)
-
 
 class CNNPolicy(nn.Module):
     """CNN-based policy-only network (no value head) for REINFORCE."""
@@ -304,17 +300,3 @@ class CNNPolicy(nn.Module):
         logits = self.policy_head(x)
         dist = Categorical(logits=logits)
         return dist, None
-
-    @torch.inference_mode()
-    def act(self, obs_flat: torch.Tensor, deterministic=False):
-        dist, _ = self.forward(obs_flat)
-        a = dist.sample() if not deterministic else dist.mode
-        return a, dist.log_prob(a), torch.zeros_like(a, dtype=torch.float32)
-
-    def evaluate_actions(self, obs_flat: torch.Tensor, actions: torch.Tensor):
-        dist, _ = self.forward(obs_flat)
-        return dist.log_prob(actions), dist.entropy(), torch.zeros(obs_flat.shape[0], device=obs_flat.device)
-
-    def predict_values(self, obs_flat: torch.Tensor):
-        return torch.zeros(obs_flat.shape[0], device=obs_flat.device)
-

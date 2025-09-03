@@ -57,30 +57,27 @@ class DummyVecEnvTimeout1:
 
 
 class DeterministicPolicy(torch.nn.Module):
-    """Policy that returns fixed actions, zero values in act(), and value=10*mean(obs_features) in predict_values()."""
+    """Forward-only policy that always selects action 0; values are zero during
+    rollouts but non-zero for terminal bootstrapping based on obs magnitude.
+    """
 
     def __init__(self):
         super().__init__()
-        # Dummy parameter so _device_of can find a device without StopIteration
         self.dummy = torch.nn.Parameter(torch.tensor(0.0), requires_grad=False)
 
     @property
     def device(self):
         return self.dummy.device
 
-    def act(self, obs, deterministic=False):
-        # Always choose action 0 deterministically
+    def forward(self, obs):
         batch = obs.shape[0]
-        a = torch.zeros(batch, dtype=torch.int64, device=obs.device)
-        logp = torch.zeros(batch, dtype=torch.float32, device=obs.device)
-        v = torch.zeros(batch, dtype=torch.float32, device=obs.device)
-        return a, logp, v
-
-    def predict_values(self, obs):
-        # Reduce any observation shape to a per-sample scalar by mean over features
-        flattened = obs.reshape(obs.shape[0], -1).mean(dim=1)
-        val = 10.0 * flattened
-        return val.to(dtype=torch.float32)
+        logits = torch.zeros((batch, 2), dtype=torch.float32, device=obs.device)
+        logits[:, 0] = 10.0  # force action 0 as mode/sample
+        dist = torch.distributions.Categorical(logits=logits)
+        flat_mean = obs.reshape(obs.shape[0], -1).mean(dim=1)
+        # Only produce a non-zero value for large terminal observations (e.g., 42)
+        value = torch.where(flat_mean >= 10.0, 10.0 * flat_mean, torch.tensor(0.0, device=obs.device))
+        return dist, value
 
 
 @pytest.mark.unit

@@ -14,6 +14,7 @@ import numpy as np
 import torch
 
 from .torch import _device_of, inference_ctx
+from .policy_ops import policy_act
 
 
 def _balanced_targets(n_envs: int, total_episodes: int) -> List[int]:
@@ -73,7 +74,7 @@ def evaluate_policy(
                 break
 
             obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device)
-            actions_t, _, _ = policy_model.act(obs_t, deterministic=deterministic)
+            actions_t, _, _ = policy_act(policy_model, obs_t, deterministic=deterministic)
             actions = actions_t.detach().cpu().numpy()
 
             next_obs, rewards, dones, infos = env.step(actions)

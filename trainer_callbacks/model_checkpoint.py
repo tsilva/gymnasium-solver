@@ -236,22 +236,17 @@ class ModelCheckpointCallback(BaseCallback):
             return current_value < self.best_metric_value
     
     def on_validation_epoch_end(self, trainer, pl_module):
-        """Save a timestamped checkpoint on eval epochs; skip cleanly when eval is gated (warmup)."""
+        """Save a timestamped checkpoint every eval epoch, maintain best/last symlinks, and early stop when needed."""
 
-        # During warmup, validation loop still advances but eval hooks may skip logging.
-        # Be tolerant: if the monitored metric isn't present, treat this as a non-eval epoch.
-        logged_metrics = getattr(trainer, "logged_metrics", {})
-
+        logged_metrics = trainer.logged_metrics
+        assert self.monitor in logged_metrics, f"Monitor metric '{self.monitor}' not found in logged metrics: {trainer.logged_metrics.keys()}"
+        
         current_metric_value = None
         if self.monitor in logged_metrics:
-            try:
-                current_metric_value = float(logged_metrics[self.monitor])
-            except Exception:
-                current_metric_value = None
+            current_metric_value = float(logged_metrics[self.monitor])
 
         if current_metric_value is None:
-            # No eval metrics this epoch (likely warmup); nothing to checkpoint.
-            # Still allow early stopping/tracking logic to run gracefully.
+            # Nothing to monitor this epoch
             self._handle_early_stopping_and_tracking(trainer, pl_module)
             return
 
@@ -449,7 +444,13 @@ class ModelCheckpointCallback(BaseCallback):
     
     def on_fit_end(self, trainer, pl_module):
         """Handle training completion summary and ensure symlinks are consistent."""
-        # Avoid redundant end-of-training prints; report is handled elsewhere
+        # Print completion summary
+        if self.best_checkpoint_path:
+            print(f"Best model saved at {self.best_checkpoint_path} with eval reward {pl_module.best_eval_reward:.2f}")
+        elif self.last_checkpoint_path:
+            print(f"Last model saved at {self.last_checkpoint_path}")
+        else:
+            print("No checkpoints were saved during training")
 
         # Ensure best/last symlinks are pointing to the latest epoch artifacts
         try:

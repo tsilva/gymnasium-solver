@@ -44,51 +44,87 @@ class PPO(BaseAgent):
         # use type for this? check sb3
         states = batch.observations
         actions = batch.actions
-        old_logprobs = batch.log_prob
+        old_logprobs = batch.log_prob # TODO: call log_probs
         advantages = batch.advantages
         returns = batch.returns
 
+        # TODO: perform these ops before calling losses_for_batch?
+        # Batch-normalize advantage if requested
         normalize_advantages = self.config.normalize_advantages == "batch"
-
-        # Batch-level advantage normalization if enabled
         if normalize_advantages:
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
         ent_coef = self.config.ent_coef
         vf_coef = self.config.vf_coef
 
-        dist, value = self.policy_model(states)
+        # Infer policy_distribution and value_predictions from the actor critic model
+        policy_dist, values_pred = self.policy_model(states)
 
-        new_logps = dist.log_prob(actions)
+        # Retrieve the log probabilities of the batch actions under the current policy
+        # (since we are training multiple epochs using same rollout, the policy will
+        # shift away from the one used to collect the rollout, so log probabilities will change)
+        new_logps = policy_dist.log_prob(actions)
 
+        # Calculate the ratio of the new policy to the old policy:
+        # log(new) - log(old) = log(new/old) => exp(log(new/old)) = new/old = ratio
         ratio = torch.exp(new_logps - old_logprobs)
-        policy_loss_1 = advantages * ratio
-        policy_loss_2 = advantages * torch.clamp(ratio, 1.0 - self.clip_range, 1.0 + self.clip_range)
-        policy_loss = -torch.min(policy_loss_1, policy_loss_2).mean()
 
-        # Entropy bonus
-        entropy = dist.entropy().mean()
+        # Scale the advantages by the change ratio
+        scaled_advantages = advantages * ratio
+
+        # Scale the advantages by a clamped ratio that is truncated within the allowed range
+        scaled_advantages_clamped = advantages * torch.clamp(ratio, 1.0 - self.clip_range, 1.0 + self.clip_range)
+
+        # Now ensure that each advantage is the minimum of the two
+        # (this ensures that no advantage is beyond the allowed range by truncating 
+        # when it passes it and allowing the actual value when its inside the allowed range)
+        min_scaled_advantages = torch.min(scaled_advantages, scaled_advantages_clamped)
+
+        # Now we calculate the mean advantage to get the value we want to maximize
+        mean_advantage = min_scaled_advantages.mean()
+
+        # Negating the mean advantage give us the policy loss.
+        # Gradient descent will minimize the loss, and as a 
+        # consequence will maximize the mean advantage. Since
+        # this advantage is always within a secure range, there
+        # will be less variance in the policy loss making optimization more stable.
+        policy_loss = -mean_advantage
+
+        # The value head must predict the returns, so its loss is 
+        # just the MSE between the predicted (values) and target returns
+        # NOTE: this must be done in order, second argument must be the target
+        value_loss = F.mse_loss(values_pred, returns) # TODO: what is this scale?
+
+        # To encourage exploration we can encourage entropy maximization 
+        # by making the negative of the current entropy a loss term
+        # (this value must be scaled so that it doesn't dominate the 
+        # policy loss or value loss and also is not dominated by them)
+        entropy = policy_dist.entropy().mean()
         entropy_loss = -entropy
 
-        # Value loss (predictions first, targets second)
-        # NOTE: this must be done in order, second argument must be the target
-        value_loss = F.mse_loss(value, returns)
+        # Create the final loss value by mixing the different loss terms
+        # according to the coefficients we set in the config 
+        # (different weights for each loss term)
+        scaled_value_loss = vf_coef * value_loss
+        scaled_entropy_loss = ent_coef * entropy_loss
+        loss = policy_loss + scaled_value_loss + scaled_entropy_loss
 
-        loss = policy_loss + vf_coef * value_loss + ent_coef * entropy_loss
-
-        # Metrics (detached for logging)
-        # inside train_on_batch
+        # Calculate additional metrics for logging
+        # (don't compute gradients during these calculations)
         with torch.no_grad():
             clip_fraction = ((ratio < 1.0 - self.clip_range) | (ratio > 1.0 + self.clip_range)).float().mean()
             kl_div = (old_logprobs - new_logps).mean()
             approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
-            explained_var = 1 - torch.var(returns - value) / torch.var(returns)
+            explained_var = 1 - torch.var(returns - values_pred) / torch.var(returns)
 
+        # Log all metrics (will be avarages and flushed by end of epoch)
         self.log_metrics({
             'loss': loss.detach(),
             'policy_loss': policy_loss.detach(),
             'entropy_loss': entropy_loss.detach(),
+            'entropy_loss_scaled': scaled_entropy_loss.detach(),
             'value_loss': value_loss.detach(),
+            'value_loss_scaled': scaled_value_loss.detach(),
             'entropy': entropy.detach(),
             'clip_fraction': clip_fraction.detach(),
             'kl_div': kl_div.detach(),

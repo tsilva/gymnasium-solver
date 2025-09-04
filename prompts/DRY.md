@@ -18,4 +18,4 @@ Audit the codebase as much as required before making any changes.
 3. Return the improved version of the files, preserving the same functionality.
 4. Summarize the key changes you made.
 
-The codebase is located in the following files/folders:
+Perform your refactor on the following location(s):

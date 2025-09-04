@@ -24,6 +24,14 @@ if platform.system() == "Darwin":
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
+# UI constants to keep strings consistent
+DISPLAY_RAW = "Rendered (raw)"
+DISPLAY_STACK = "Processed (stack)"
+FRAME_LABEL_RAW = "Frame (raw)"
+FRAME_LABEL_STACK = "Frame (processed stack)"
+PLAY_ICON = "\u25B6"  # ▶
+PAUSE_ICON = "\u23F8"  # ⏸
+
 # Local minimal loaders to avoid depending on play.py helpers
 def _load_config_from_run(run_id: str):
     """Load a run's config.json as an attribute-access object.
@@ -806,11 +814,11 @@ def build_ui(default_run_id: str = "@latest-run"):
             with gr.Column(scale=7):
                 display_mode = gr.Dropdown(
                     label="Display",
-                    choices=["Rendered (raw)"],
-                    value="Rendered (raw)",
+                    choices=[DISPLAY_RAW],
+                    value=DISPLAY_RAW,
                     interactive=True,
                 )
-                frame_image = gr.Image(label="Frame (raw)", height=400, type="numpy", image_mode="RGB")
+                frame_image = gr.Image(label=FRAME_LABEL_RAW, height=400, type="numpy", image_mode="RGB")
             with gr.Column(scale=5):
                 current_step_table = gr.Dataframe(
                     headers=["metric", "value"],
@@ -834,7 +842,7 @@ def build_ui(default_run_id: str = "@latest-run"):
                     interactive=True,
                 )
             with gr.Column(scale=1, min_width=60):
-                play_pause_btn = gr.Button(value="▶", variant="secondary")
+                play_pause_btn = gr.Button(value=PLAY_ICON, variant="secondary")
 
         frames_state = gr.State([])  # active frames displayed
         frames_raw_state = gr.State([])  # type: ignore[var-annotated]
@@ -948,6 +956,20 @@ def build_ui(default_run_id: str = "@latest-run"):
                 pass
             return []
 
+        def _initial_display_state(active_frames: List[np.ndarray] | None, frame_label: str, steps: List[Dict[str, Any]] | None):
+            first = (active_frames[0] if active_frames else None) if isinstance(active_frames, list) else None
+            slider = gr.update(minimum=0, maximum=(len(active_frames) - 1 if active_frames else 0), step=1, value=0)
+            vert = _vertical_from_steps_index(steps, 0)
+            return (
+                gr.update(value=first, label=frame_label),
+                slider,
+                (active_frames or []),
+                0,
+                False,
+                gr.update(value=PLAY_ICON),
+                gr.update(value=vert),
+            )
+
         def _inspect(rid: str, ckpt_label: str | None, det: bool, nsteps: int):
             frames_raw, _frames_proc_unused, frames_stack, steps, info = run_episode(rid, ckpt_label, det, int(nsteps))
             def _round3(x):
@@ -979,38 +1001,36 @@ def build_ui(default_run_id: str = "@latest-run"):
             # Initialize gallery selection, states, play button, and slider range
             # Compute available display modes
             has_stack = isinstance(frames_stack, list) and len(frames_stack) > 0
-            choices = ["Rendered (raw)"] + (["Processed (stack)"] if has_stack else [])
-            # Default to processed stack when available; otherwise raw
+            choices = [DISPLAY_RAW] + ([DISPLAY_STACK] if has_stack else [])
+
             if has_stack:
+                display_value = DISPLAY_STACK
+                frame_label = FRAME_LABEL_STACK
                 active_frames = frames_stack
-                first = active_frames[0] if active_frames else None
-                display_value = "Processed (stack)"
-                frame_label = "Frame (processed stack)"
-                max_idx = len(active_frames) - 1 if active_frames else 0
             else:
+                display_value = DISPLAY_RAW
+                frame_label = FRAME_LABEL_RAW
                 active_frames = frames_raw
-                first = active_frames[0] if active_frames else None
-                display_value = "Rendered (raw)"
-                frame_label = "Frame (raw)"
-                max_idx = len(frames_raw) - 1 if frames_raw else 0
+
+            frame_img_upd, slider_upd, active_list, idx_val, playing_val, play_btn_upd, vert_pairs = _initial_display_state(active_frames, frame_label, steps)
 
             return (
-                gr.update(value=display_value, choices=choices),  # display_mode
-                gr.update(value=first, label=frame_label),        # frame_image
-                gr.update(minimum=0, maximum=max_idx, step=1, value=0),  # frame_slider
-                (_vertical_from_steps_index(steps, 0)),   # current_step_table
-                rows,                                       # step_table
-                info.get("env_spec", {}),                   # env_spec_json
-                info.get("model_spec", {}),                 # model_spec_json
-                info.get("checkpoint_metrics", {}),         # ckpt_metrics_json
-                active_frames,                               # frames_state (active list)
-                0,                                          # index_state
-                False,                                      # playing_state
-                gr.update(value="▶"),                    # play_pause_btn label
-                rows,                                       # rows_state
-                steps,                                      # steps_state
-                frames_raw,                                 # frames_raw_state
-                (frames_stack or []),                       # frames_stack_state
+                gr.update(value=display_value, choices=choices),
+                frame_img_upd,
+                slider_upd,
+                vert_pairs,
+                rows,
+                info.get("env_spec", {}),
+                info.get("model_spec", {}),
+                info.get("checkpoint_metrics", {}),
+                active_list,
+                idx_val,
+                playing_val,
+                play_btn_upd,
+                rows,
+                steps,
+                frames_raw,
+                (frames_stack or []),
             )
         run_btn.click(
             _inspect,
@@ -1056,14 +1076,14 @@ def build_ui(default_run_id: str = "@latest-run"):
                 gr.update(value=row_val),           # current_step_table
                 row_idx,                            # index_state
                 False,                              # playing_state
-                gr.update(value="▶"),           # play_pause_btn label
+                gr.update(value=PLAY_ICON),         # play_pause_btn label
             )
         step_table.select(_on_step_select, inputs=[frames_state, steps_state], outputs=[frame_image, frame_slider, current_step_table, index_state, playing_state, play_pause_btn])
 
         # Play/Pause handler
         def _on_play_pause(playing: bool):
             new_playing = not bool(playing)
-            return new_playing, gr.update(value=("⏸" if new_playing else "▶"))
+            return new_playing, gr.update(value=(PAUSE_ICON if new_playing else PLAY_ICON))
 
         # Core helper to build current-frame UI updates from frames/index/steps
         def _current_view_updates(frames: List[np.ndarray], idx: int | float | None, steps: List[Dict[str, Any]] | None):
@@ -1075,13 +1095,13 @@ def build_ui(default_run_id: str = "@latest-run"):
         def _on_slider_change(frames: List[np.ndarray], val: int, playing: bool, steps: List[Dict[str, Any]] | None):
             """Update current frame when user releases the slider, preserving play state."""
             img, row_val, i = _current_view_updates(frames, val, steps)
-            return gr.update(value=img), gr.update(value=row_val), i, playing, gr.update(value=("⏸" if playing else "▶"))
+            return gr.update(value=img), gr.update(value=row_val), i, playing, gr.update(value=(PAUSE_ICON if playing else PLAY_ICON))
         play_pause_btn.click(_on_play_pause, inputs=[playing_state], outputs=[playing_state, play_pause_btn])
         # While dragging, update the frame live for fast visual scanning (and pause playback)
         def _on_slider_input(frames: List[np.ndarray], val: int | float | None, steps: List[Dict[str, Any]] | None):
             # Pause while scrubbing for smoother UX and to avoid race with autoplay
             img, row_val, i = _current_view_updates(frames, val, steps)
-            return gr.update(value=img), gr.update(value=row_val), i, False, gr.update(value="▶")
+            return gr.update(value=img), gr.update(value=row_val), i, False, gr.update(value=PLAY_ICON)
 
         frame_slider.input(
             _on_slider_input,
@@ -1099,36 +1119,25 @@ def build_ui(default_run_id: str = "@latest-run"):
             if int(idx) < len(frames) - 1:
                 new_idx = int(idx) + 1
                 img, row_val, _ = _current_view_updates(frames, new_idx, steps)
-                return gr.update(value=img), gr.update(value=new_idx), gr.update(value=row_val), new_idx, True, gr.update(value="⏸")
+                return gr.update(value=img), gr.update(value=new_idx), gr.update(value=row_val), new_idx, True, gr.update(value=PAUSE_ICON)
             # Reached end: stop
             last_idx = len(frames) - 1
             img, row_val, _ = _current_view_updates(frames, last_idx, steps)
-            return gr.update(value=img), gr.update(value=last_idx), gr.update(value=row_val), last_idx, False, gr.update(value="▶")
+            return gr.update(value=img), gr.update(value=last_idx), gr.update(value=row_val), last_idx, False, gr.update(value=PLAY_ICON)
 
         if timer is not None:
             timer.tick(_on_tick, inputs=[frames_state, index_state, playing_state, steps_state], outputs=[frame_image, frame_slider, current_step_table, index_state, playing_state, play_pause_btn])
 
         # Display mode switcher
         def _on_display_mode(mode: str, raw: List[np.ndarray], stack: List[np.ndarray], steps: List[Dict[str, Any]] | None):
-            mode = str(mode or "Rendered (raw)")
-            if mode == "Processed (stack)" and isinstance(stack, list) and len(stack) > 0:
+            mode = str(mode or DISPLAY_RAW)
+            if mode == DISPLAY_STACK and isinstance(stack, list) and len(stack) > 0:
                 active = stack
-                label = "Frame (processed stack)"
+                label = FRAME_LABEL_STACK
             else:
                 active = raw if isinstance(raw, list) else []
-                label = "Frame (raw)"
-            first = active[0] if active else None
-            # Build current step stats for index 0
-            vert = _vertical_from_steps_index(steps, 0)
-            return (
-                gr.update(value=first, label=label),
-                gr.update(minimum=0, maximum=(len(active) - 1 if active else 0), step=1, value=0),
-                active,
-                0,
-                False,
-                gr.update(value="▶"),
-                gr.update(value=vert),
-            )
+                label = FRAME_LABEL_RAW
+            return _initial_display_state(active, label, steps)
 
         display_mode.change(
             _on_display_mode,

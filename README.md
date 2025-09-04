@@ -47,7 +47,7 @@ python play.py --run-id @latest-run --episodes 5
 ```
 - **Inspect a run (UI)** 🔍:
 ```bash
-python inspect.py --run-id @latest-run --port 7860 --host 127.0.0.1
+python inspector.py --run-id @latest-run --port 7860 --host 127.0.0.1
 ```
 
 ### ⚙️ Configs (YAML)

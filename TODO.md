@@ -1,3 +1,5 @@
+- Create prompt for reviewing codebase fully, thinking deeply on how it interacts and then fix/improve INTERNALS.md based on it
+
 - PPO: confirm each epoch reshufles data
 - PPO: kl early stopping / adaptive kl penalty
 - PPO: rollout normalization
@@ -19,7 +21,7 @@
 - TODO: add kl divergence metric to reinforce
 - TODO: keep working on guide
 - REFACTOR: move hidden_dims inside policy_kwargsp
-- FEAT: ensure we can see baseline advantages in inspect.py
+- FEAT: ensure we can see baseline advantages in inspector.py
 - BUG: PPO can solve FrozenLake-v1, but REINFORCE cannot. REINFORCE is likely not implemented correctly.
 - EXP: Tune CartPole-v1:PPO to train as fast as REINFORCE
 - Add config defaults based on algo
@@ -35,8 +37,8 @@
 - can I create an exploration model by just making loss higher the more the model can predict the future?
 - TODO: add config file beautifier that ensure attributes are set in the correct order
 - TODO: add config file validator that ensures that all attributes are set and that they are set to the correct type
-- runs: along with each checkpoint we are saving a json file with the metrics at that checkpoint. We also want to save a CSV with the rollout data for that epoch; this data should contain exactly the same data as the table in inspect.py, so we can encapsualte the function that generates the csv and reuse it in both places.
-- inspect.py: add LLM debugging support
+- runs: along with each checkpoint we are saving a json file with the metrics at that checkpoint. We also want to save a CSV with the rollout data for that epoch; this data should contain exactly the same data as the table in inspector.py, so we can encapsualte the function that generates the csv and reuse it in both places.
+- inspector.py: add LLM debugging support
 - BUG: checkpoint jsons not storing correct metrics
 - add support for resuming training from a checkpoint
 - FEAT: Add support for specifyingpo extra reward metrics for each environment, then make the reward shaper assign value for each of those rewards

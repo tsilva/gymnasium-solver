@@ -81,7 +81,7 @@ Algo-specific config subclasses:
 
 ### Scripts and tools
 - `play.py`: loads best/last checkpoint from `runs/<id>/checkpoints` and steps env for rendering.
-- `inspect.py` / `inspector_app.py`: Gradio UI to browse episodes for a run.
+- `inspector.py`: Gradio UI to browse episodes for a run.
   - Visualizes raw rendered frames for all envs.
   - Shows processed observations and frame stacks when available:
     - Image observations: processed single frame plus tiled frame-stack grid.

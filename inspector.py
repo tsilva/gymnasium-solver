@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Inspector application logic (separated to avoid stdlib inspect shadowing).
+Inspector application logic.
 
-Run via: python inspect.py [args]
+Run via: python inspector.py [args]
 """
 
 from __future__ import annotations

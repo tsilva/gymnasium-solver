@@ -41,9 +41,11 @@ reinforce_baseline_rtg:
   policy_targets: "advantages"
   normalize_advantages: "batch"
 
+# Tuned: 76288 steps
 ppo:
   #seed: 100 # TODO: seed setting does not seem to be doing anything
   algo_id: ppo
+  max_timesteps: 100000
   n_envs: 8
   n_steps: 32
   batch_size: 256
@@ -51,5 +53,9 @@ ppo:
   policy_lr: lin_0.001
   gae_lambda: 0.8
   clip_range: lin_0.2
-  eval_freq_epochs: 100
+  normalize_advantages: "rollout"
+  eval_freq_epochs: null
+  early_stop_on_train_threshold: True
+  early_stop_on_eval_threshold: False
   #frame_stack: 2 # TODO: not converging faster with frame stacking here, why?
+

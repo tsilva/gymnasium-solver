@@ -34,6 +34,11 @@ def test_compute_validation_controls_positive():
     assert controls["limit_val_batches"] == 1.0
     assert controls["check_val_every_n_epoch"] == 5
 
+def test_compute_validation_controls_zero_disables():
+    controls = BaseAgent._compute_validation_controls(0)
+    assert controls["limit_val_batches"] == 0
+    assert controls["check_val_every_n_epoch"] == 1
+
 
 def test_should_run_eval_no_warmup():
     class Cfg:
@@ -68,3 +73,15 @@ def test_should_run_eval_with_warmup():
     assert inst._should_run_eval(2) is True   # E=3
     assert inst._should_run_eval(3) is False  # E=4
     assert inst._should_run_eval(4) is True   # E=5
+
+
+def test_should_run_eval_zero_freq_never_runs():
+    class Cfg:
+        eval_freq_epochs = 0
+        eval_warmup_epochs = 0
+
+    inst = BaseAgent.__new__(BaseAgent)
+    inst.config = Cfg()
+
+    for e in range(0, 10):
+        assert inst._should_run_eval(e) is False

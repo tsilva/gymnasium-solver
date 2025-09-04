@@ -405,62 +405,70 @@ class BaseAgent(pl.LightningModule):
         video_path = checkpoint_dir / "final.mp4"
         final_metrics = None
 
-        # Detect Retro and evaluate with a temporary env to avoid multi-instance limit
+        # If validation is disabled (eval_freq_epochs is None or <= 0), skip final evaluation/video
         try:
-            from utils.environment import is_stable_retro_env_id as _is_retro_fn  # type: ignore
+            _freq = getattr(self.config, "eval_freq_epochs", None)
+            _eval_disabled = (_freq is None) or (int(_freq) <= 0)
         except Exception:
-            _is_retro_fn = lambda _eid: False
-        use_temp_env = False
-        try:
-            use_temp_env = bool(_is_retro_fn(self.config.env_id))
-        except Exception:
-            use_temp_env = False
+            _eval_disabled = True
 
-        if use_temp_env:
-            from utils.environment import build_env
-            temp_env = build_env(
-                self.config.env_id,
-                seed=self.config.seed + 2000,
-                n_envs=1,
-                subproc=False,
-                render_mode="rgb_array",
-                record_video=True,
-                record_video_kwargs={
-                    "video_length": None,
-                    "record_env_idx": 0,
-                },
-                env_wrappers=self.config.env_wrappers,
-                env_kwargs=self.config.env_kwargs,
-                obs_type=self.config.obs_type,
-                frame_stack=self.config.frame_stack,
-                grayscale_obs=self.config.grayscale_obs,
-                resize_obs=self.config.resize_obs,
-                norm_obs=self.config.normalize_obs,
-            )
+        if not _eval_disabled:
+            # Detect Retro and evaluate with a temporary env to avoid multi-instance limit
             try:
-                with temp_env.recorder(str(video_path), record_video=True):
+                from utils.environment import is_stable_retro_env_id as _is_retro_fn  # type: ignore
+            except Exception:
+                _is_retro_fn = lambda _eid: False
+            use_temp_env = False
+            try:
+                use_temp_env = bool(_is_retro_fn(self.config.env_id))
+            except Exception:
+                use_temp_env = False
+
+            if use_temp_env:
+                from utils.environment import build_env
+                temp_env = build_env(
+                    self.config.env_id,
+                    seed=self.config.seed + 2000,
+                    n_envs=1,
+                    subproc=False,
+                    render_mode="rgb_array",
+                    record_video=True,
+                    record_video_kwargs={
+                        "video_length": None,
+                        "record_env_idx": 0,
+                    },
+                    env_wrappers=self.config.env_wrappers,
+                    env_kwargs=self.config.env_kwargs,
+                    obs_type=self.config.obs_type,
+                    frame_stack=self.config.frame_stack,
+                    grayscale_obs=self.config.grayscale_obs,
+                    resize_obs=self.config.resize_obs,
+                    norm_obs=self.config.normalize_obs,
+                )
+                try:
+                    with temp_env.recorder(str(video_path), record_video=True):
+                        from utils.evaluation import evaluate_policy
+                        final_metrics = evaluate_policy(
+                            temp_env,
+                            self.policy_model,
+                            n_episodes=1,
+                            deterministic=self.config.eval_deterministic,
+                            max_steps_per_episode=2000,
+                        )
+                finally:
+                    try:
+                        temp_env.close()
+                    except Exception:
+                        pass
+            else:
+                with self.test_env.recorder(str(video_path), record_video=True):
                     from utils.evaluation import evaluate_policy
                     final_metrics = evaluate_policy(
-                        temp_env,
+                        self.test_env,
                         self.policy_model,
                         n_episodes=1,
                         deterministic=self.config.eval_deterministic,
-                        max_steps_per_episode=2000,
                     )
-            finally:
-                try:
-                    temp_env.close()
-                except Exception:
-                    pass
-        else:
-            with self.test_env.recorder(str(video_path), record_video=True):
-                from utils.evaluation import evaluate_policy
-                final_metrics = evaluate_policy(
-                    self.test_env,
-                    self.policy_model,
-                    n_episodes=1,
-                    deterministic=self.config.eval_deterministic,
-                )
         # Always attempt to write metrics JSON alongside the final video
         try:
             if final_metrics is not None:
@@ -562,6 +570,13 @@ class BaseAgent(pl.LightningModule):
         eval_freq = self.config.eval_freq_epochs
         warmup = self.config.eval_warmup_epochs or 0
 
+        # Treat non-positive values as disabled
+        try:
+            if eval_freq is not None and int(eval_freq) <= 0:
+                eval_freq = None
+        except Exception:
+            eval_freq = None
+
         # If warmup is active, request validation every epoch and gate in hooks
         eval_freq_epochs = 1 if (eval_freq is not None and warmup > 0) else eval_freq
         limit_val_batches = 0 if eval_freq_epochs is None else 1.0
@@ -659,9 +674,12 @@ class BaseAgent(pl.LightningModule):
         - If E == eval_warmup_epochs: run (first eval after warmup)
         - Otherwise: run when (E - eval_warmup_epochs) % eval_freq_epochs == 0
         """
-        # If eval_freq_epochs is None, never evaluate
+        # If eval_freq_epochs is None or <= 0, never evaluate
         freq = self.config.eval_freq_epochs
-        if freq is None:
+        try:
+            if freq is None or int(freq) <= 0:
+                return False
+        except Exception:
             return False
 
         warmup = int(self.config.eval_warmup_epochs or 0)
@@ -966,7 +984,13 @@ class BaseAgent(pl.LightningModule):
         When eval_freq_epochs is None, validation is disabled.
         Otherwise, validation runs once per eval_freq_epochs.
         """
+        # Treat None or non-positive values as disabled
         if eval_freq_epochs is None:
+            return {"limit_val_batches": 0, "check_val_every_n_epoch": 1}
+        try:
+            if int(eval_freq_epochs) <= 0:
+                return {"limit_val_batches": 0, "check_val_every_n_epoch": 1}
+        except Exception:
             return {"limit_val_batches": 0, "check_val_every_n_epoch": 1}
         return {"limit_val_batches": 1.0, "check_val_every_n_epoch": int(eval_freq_epochs)}
 

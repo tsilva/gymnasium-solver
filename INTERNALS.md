@@ -100,7 +100,7 @@ Algo-specific config subclasses:
 ### Conventions and gotchas
 - Observations are flattened only for vectors/scalars; image observations are preserved as CHW tensors through the rollout/DataLoader path. CNN models consume CHW directly (a small trunk handles shape consistency).
 - Q-Learning assumes discrete obs/action spaces; do not auto-wrap discrete obs into vectors in `build_env` to avoid breaking tabular methods.
-- When `eval_freq_epochs` is None, validation is disabled; otherwise cadence is enforced via PL controls and warmup gates.
+- When `eval_freq_epochs` is None or 0, validation is disabled; otherwise cadence is enforced via PL controls and warmup gates.
 - Use `config.max_timesteps` for progress-based schedules; ensure it’s set for linear decays to have effect.
 - Training CLI uses `--config_id "<env>:<variant>"`; underscore-only IDs like `Env_Variant` are not parsed by `train.py`. The config loader itself supports fully qualified IDs (e.g., `CartPole-v1_ppo`) and default-variant selection, but the current CLI does not.
 - Env normalization: pass `normalize_obs: 'static'|'rolling'` for effect; boolean `True/False` does not enable normalization in `build_env`.

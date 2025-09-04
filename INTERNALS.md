@@ -71,7 +71,7 @@ Algo-specific config subclasses:
 - `build_trainer` constructs a PL `Trainer` with validation cadence controlled externally; progress bar/checkpointing disabled in favor of custom callbacks.
 - Callbacks include:
   - `CSVMetricsLoggerCallback`: writes `metrics.csv` under run dir.
-  - `PrintMetricsCallback`: pretty prints metrics with precision/delta rules from `utils.metrics`.
+  - `PrintMetricsCallback`: pretty prints metrics with precision/delta rules from `utils.metrics`. The underlying `utils.table_printer.NamespaceTablePrinter` maintains a short numeric history per metric and appends an inline ASCII sparkline to each value to visualize trends (width ~32 by default).
   - `HyperparamSyncCallback`: hot-reloads config changes from file; can enable manual control.
   - `ModelCheckpointCallback`: saves best/last; supports resume.
   - `VideoLoggerCallback`: uploads videos from run media dir.

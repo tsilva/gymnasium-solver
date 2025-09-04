@@ -101,7 +101,7 @@ env_wrappers:
 - 📁 Each training creates `runs/<id>/` with `config.json`, `checkpoints/*.ckpt`, `logs/`, and `videos/`
 - 🔗 `runs/@latest-run` symlink points to the most recent run
 - 🏷️ Best/last checkpoints: `best.ckpt`, `last.ckpt` (auto-detected by `play.py` and the inspector)
-- 📈 Metrics: prints and logs `train/*` and `eval/*` including `ep_rew_mean` and running best as `ep_rew_best` (highlighted in blue in the console table; highlight rules configurable in `config/metrics.yaml`)
+- 📈 Metrics: prints and logs `train/*` and `eval/*` including `ep_rew_mean` and running best as `ep_rew_best` (highlighted in blue in the console table; highlight rules configurable in `config/metrics.yaml`). The console table also shows an inline ASCII sparkline (e.g., `█▇▇▆▅▄▃▂▁`) per numeric metric to visualize recent trends.
 
 ### 📤 Publish to Hugging Face Hub
 Authenticate once (`huggingface-cli login`) or set `HF_TOKEN`, then:

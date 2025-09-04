@@ -114,6 +114,10 @@ class NamespaceTablePrinter:
         highlight_row_for: Optional[Iterable[str]] = None,
         highlight_row_bg_color: str = "bg_blue",
         highlight_row_bold: bool = True,
+        # Trend charts (sparklines)
+        show_sparklines: bool = True,
+        sparkline_width: int = 32,
+        sparkline_history_cap: int = 512,
     ):
         self.float_fmt = float_fmt
         self.indent = indent
@@ -136,10 +140,18 @@ class NamespaceTablePrinter:
 
         self._prev: Optional[Dict[str, Any]] = None
         self._last_height: int = 0
+        # In-memory history for sparklines (per full metric key)
+        self._history: Dict[str, List[float]] = {}
+        self.show_sparklines = bool(show_sparklines)
+        self.sparkline_width = int(sparkline_width)
+        self.sparkline_history_cap = max(1, int(sparkline_history_cap))
 
     def update(self, data: Dict[str, Any]) -> None:
         if not data:
             return
+
+        # Update numeric history for sparkline rendering
+        self._update_history(data)
 
         grouped = self._group_by_namespace(data)
         ns_names = list(grouped.keys())
@@ -178,6 +190,15 @@ class NamespaceTablePrinter:
                     val_disp = f"{val_str} {delta_disp}"
                 else:
                     val_disp = val_str
+                # Append sparkline trend chart for numeric metrics if enabled
+                try:
+                    if self.show_sparklines and _is_number(v):
+                        chart = self._spark_for_key(full_key, self.sparkline_width)
+                        if chart:
+                            val_disp = f"{val_disp}  {chart}"
+                except Exception:
+                    # Never break formatting on sparkline issues
+                    pass
                 f_sub[sub] = val_disp
                 val_candidates.append(self._strip_ansi(val_disp))
             formatted[ns] = f_sub
@@ -222,6 +243,58 @@ class NamespaceTablePrinter:
         self._render_lines(lines)
         self._prev = dict(data)
         self._last_height = len(lines)
+
+    # ---------- sparkline helpers ----------
+    def _update_history(self, data: Dict[str, Any]) -> None:
+        """Append numeric metric values to per-key history with a soft cap.
+
+        History is maintained across updates to render compact trends inline.
+        """
+        for k, v in data.items():
+            try:
+                if _is_number(v):
+                    val = float(v)
+                    hist = self._history.setdefault(k, [])
+                    hist.append(val)
+                    # Soft cap history to avoid unbounded growth
+                    if len(hist) > self.sparkline_history_cap:
+                        # Keep the most recent tail
+                        self._history[k] = hist[-self.sparkline_history_cap :]
+            except Exception:
+                # Ignore values that cannot be cast/recorded
+                pass
+
+    def _spark_for_key(self, full_key: str, width: int) -> str:
+        """Return an ASCII sparkline for the given metric key.
+
+        Uses a fixed set of 8 block characters and rescales the last N points
+        into the requested width. Returns an empty string when insufficient data.
+        """
+        values = self._history.get(full_key)
+        if not values or len(values) < 2 or width <= 0:
+            return ""
+        data = self._downsample(values, max(1, width))
+        vmin = min(data)
+        vmax = max(data)
+        if vmax == vmin:
+            # Flat series → use a light horizontal bar of requested width
+            return "─" * min(width, len(data))
+        blocks = "▁▂▃▄▅▆▇█"
+        rng = (vmax - vmin) or 1.0
+        out_chars: List[str] = []
+        for v in data:
+            idx = int((v - vmin) / rng * (len(blocks) - 1))
+            idx = max(0, min(idx, len(blocks) - 1))
+            out_chars.append(blocks[idx])
+        return "".join(out_chars)
+
+    @staticmethod
+    def _downsample(seq: List[float], target: int) -> List[float]:
+        if len(seq) <= target:
+            return list(seq)
+        step = len(seq) / float(target)
+        # Uniform index sampling (keep chronological order)
+        return [seq[int(i * step)] for i in range(target)]
 
     def _render_lines(self, lines):
         text = "\n".join(lines)

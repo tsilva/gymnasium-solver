@@ -24,8 +24,145 @@ if platform.system() == "Darwin":
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
     os.environ.setdefault("SDL_AUDIODRIVER", "dummy")
 
-from play import load_model as _load_model
-from play import load_config_from_run as _load_config_from_run
+# Local minimal loaders to avoid depending on play.py helpers
+def _load_config_from_run(run_id: str):
+    """Load a run's config.json as an attribute-access object.
+
+    Falls back from runs/<id>/config.json to runs/<id>/configs/config.json.
+    Returns a simple object exposing keys as attributes, with sensible defaults.
+    """
+    import json
+    from types import SimpleNamespace
+
+    run_dir = _resolve_run_dir(run_id)
+    cfg_path = run_dir / "config.json"
+    if not cfg_path.exists():
+        alt = run_dir / "configs" / "config.json"
+        if alt.exists():
+            cfg_path = alt
+    if not cfg_path.exists():
+        raise FileNotFoundError(f"config.json not found under run: {run_dir}")
+    with open(cfg_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    # Provide defaults to fields the inspector uses
+    defaults = {
+        "env_wrappers": [],
+        "normalize_obs": False,
+        "frame_stack": 1,
+        "obs_type": "rgb",
+        "env_kwargs": {},
+        "grayscale_obs": False,
+        "resize_obs": False,
+        "policy_kwargs": {},
+        "policy": "mlp",
+        "hidden_dims": (64, 64),
+        "activation": "relu",
+        "gamma": 0.99,
+        "gae_lambda": 0.95,
+    }
+    for k, v in defaults.items():
+        data.setdefault(k, v)
+
+    return SimpleNamespace(**data)
+
+
+def _load_model(ckpt_path: Path, config):
+    """Build a policy model from config/env shapes and load weights from a checkpoint.
+
+    Creates a short-lived helper env to infer input/output shapes, then closes it
+    before the long-lived env used by the inspector is constructed (important for
+    Retro environments that do not allow multiple emulator instances per process).
+    """
+    from utils.environment import build_env
+    from utils.policy_factory import create_actor_critic_policy, create_policy
+
+    # Helper env strictly for shape inference
+    helper_env = build_env(
+        config.env_id,
+        seed=getattr(config, "seed", 42),
+        env_wrappers=getattr(config, "env_wrappers", []),
+        norm_obs=getattr(config, "normalize_obs", False),
+        n_envs=1,
+        frame_stack=getattr(config, "frame_stack", 1),
+        obs_type=getattr(config, "obs_type", None),
+        render_mode=None,
+        env_kwargs=getattr(config, "env_kwargs", {}),
+        subproc=False,
+        grayscale_obs=getattr(config, "grayscale_obs", False),
+        resize_obs=getattr(config, "resize_obs", False),
+    )
+
+    try:
+        # Derive input/output shapes from the helper env
+        try:
+            input_dim = helper_env.get_input_dim() if hasattr(helper_env, "get_input_dim") else None
+        except Exception:
+            input_dim = None
+        try:
+            output_dim = helper_env.get_output_dim() if hasattr(helper_env, "get_output_dim") else None
+        except Exception:
+            output_dim = None
+
+        obs_shape = getattr(helper_env, "observation_space", None)
+        act_space = getattr(helper_env, "action_space", None)
+        input_shape = None
+        output_shape = None
+        if obs_shape is not None and hasattr(obs_shape, "shape") and obs_shape.shape:
+            # Use the full shape (e.g., CHW for images; flat for vectors)
+            input_shape = tuple(int(s) for s in obs_shape.shape)
+        elif input_dim is not None:
+            input_shape = (int(input_dim),)
+
+        if act_space is not None and hasattr(act_space, "n"):
+            output_shape = (int(act_space.n),)
+        elif output_dim is not None:
+            output_shape = (int(output_dim),)
+
+        if not input_shape or not output_shape:
+            raise RuntimeError("Could not infer model input/output shapes from environment")
+
+        policy_type = str(getattr(config, "policy", "mlp")).lower()
+        hidden_dims = getattr(config, "hidden_dims", (64, 64))
+        if isinstance(hidden_dims, int):
+            hidden_dims = (hidden_dims,)
+        activation = str(getattr(config, "activation", "relu"))
+        policy_kwargs = getattr(config, "policy_kwargs", {}) or {}
+
+        algo_id = str(getattr(config, "algo_id", "")).lower()
+        if algo_id == "ppo":
+            model = create_actor_critic_policy(
+                policy_type,
+                input_shape=input_shape,
+                output_shape=output_shape,
+                hidden_dims=hidden_dims,
+                activation=activation,
+                **policy_kwargs,
+            )
+        else:
+            # Policy-only (REINFORCE and other stateless baselines)
+            model = create_policy(
+                policy_type,
+                input_shape=input_shape,
+                output_shape=output_shape,
+                hidden_dims=hidden_dims,
+                activation=activation,
+                **policy_kwargs,
+            )
+
+        # Load weights
+        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+        state_dict = ckpt.get("model_state_dict") if isinstance(ckpt, dict) else None
+        if not isinstance(state_dict, dict):
+            raise RuntimeError(f"Invalid checkpoint: missing model_state_dict in {ckpt_path}")
+        model.load_state_dict(state_dict)
+        model.eval()
+        return model
+    finally:
+        try:
+            helper_env.close()
+        except Exception:
+            pass
 from utils.rollouts import (
     compute_batched_mc_returns,
     compute_batched_gae_advantages_and_returns,
@@ -127,9 +264,10 @@ def list_checkpoints_for_run(run_id: str) -> Tuple[List[str], Dict[str, Path], s
 
     def score(p: Path):
         name = p.name
-        if name in {"best.ckpt", "best.ckpt"}:  # support legacy and new names
+        # Prefer best, then last, then everything else by recency.
+        if name in {"best.ckpt", "best_checkpoint.ckpt"}:  # support legacy and new names
             return (0, -p.stat().st_mtime)
-        if name in {"last.ckpt", "last.ckpt"}:
+        if name in {"last.ckpt", "last_checkpoint.ckpt"}:
             return (1, -p.stat().st_mtime)
         return (2, -p.stat().st_mtime)
 
@@ -139,10 +277,10 @@ def list_checkpoints_for_run(run_id: str) -> Tuple[List[str], Dict[str, Path], s
     mapping: Dict[str, Path] = {}
     for p in files:
         label = p.name
-        if label in {"best.ckpt", "best.ckpt"}:
-            label = "best.ckpt (best)"
-        elif label in {"last.ckpt", "last.ckpt"}:
-            label = "last.ckpt (last)"
+        if label in {"best.ckpt", "best_checkpoint.ckpt"}:
+            label = f"{label} (best)"
+        elif label in {"last.ckpt", "last_checkpoint.ckpt"}:
+            label = f"{label} (last)"
         labels.append(label)
         mapping[label] = p
 
@@ -388,7 +526,8 @@ def run_episode(
         pass
 
     frames: List[np.ndarray] = []  # raw rendered frames for human monitoring
-    processed_frames: List[np.ndarray] = []  # model-processed single-frame views (if applicable)
+    # Single-frame "processed" views are currently unused in the UI; skip collecting
+    processed_frames: List[np.ndarray] = []  # kept for signature compatibility
     stack_frames: List[np.ndarray] = []  # tiled frame-stack views (if applicable)
 
     # Heuristics and helpers to convert observations to displayable images
@@ -574,7 +713,6 @@ def run_episode(
             # Build processed/stack views from current observation (pre-step)
             try:
                 obs0 = _obs_first_env(obs)
-                processed_img = None
                 stack_img = None
                 # Try to derive a stacking hint from config
                 n_stack_hint = None
@@ -583,11 +721,9 @@ def run_episode(
                 except Exception:
                     n_stack_hint = None
 
-                # Compute a processed single-frame image from the observation when it is image-like
+                # Build a stack grid from the observation channels when frame stacking is enabled
                 if isinstance(obs0, np.ndarray) and obs0.ndim in (2, 3):
                     hwc = _ensure_hwc(obs0)
-                    processed_img = _to_rgb(hwc)
-                    # Prefer building a stack grid from the processed observation channels when frame stacking is enabled
                     if n_stack_hint is not None and int(n_stack_hint) > 1:
                         split = _split_stack(hwc, assume_rgb_groups=True, n_stack_hint=n_stack_hint)
                         if isinstance(split, list) and len(split) >= 2:
@@ -611,8 +747,6 @@ def run_episode(
                     if grid_from_frames is not None:
                         stack_img = grid_from_frames
 
-                if processed_img is not None:
-                    processed_frames.append(processed_img)
                 if stack_img is not None:
                     stack_frames.append(stack_img)
             except Exception:
@@ -902,6 +1036,31 @@ def build_ui(default_run_id: str = "@latest-run"):
                 pairs.append([name, _format_stat_value(val)])
             return pairs
 
+        # DRY helpers: build consistent row values and vertical pairs from a step dict
+        def _row_vals_from_step_dict(step_dict: Dict[str, Any] | None) -> List[Any]:
+            if not isinstance(step_dict, dict):
+                return []
+            return [
+                bool(step_dict.get("done")),
+                int(step_dict.get("step", 0)),
+                step_dict.get("action"),
+                step_dict.get("action_label"),
+                step_dict.get("probs"),
+                step_dict.get("reward"),
+                step_dict.get("cum_reward"),
+                step_dict.get("mc_return"),
+                step_dict.get("value"),
+                step_dict.get("gae_adv"),
+            ]
+
+        def _vertical_from_steps_index(steps: List[Dict[str, Any]] | None, idx: int) -> List[List[str]]:
+            try:
+                if steps and 0 <= int(idx) < len(steps):
+                    return _verticalize_row(_row_vals_from_step_dict(steps[int(idx)]))
+            except Exception:
+                pass
+            return []
+
         def _inspect(rid: str, ckpt_label: str | None, det: bool, nsteps: int):
             frames_raw, _frames_proc_unused, frames_stack, steps, info = run_episode(rid, ckpt_label, det, int(nsteps))
             rows = []
@@ -934,21 +1093,7 @@ def build_ui(default_run_id: str = "@latest-run"):
             # Initialize gallery selection, states, and play button label
             # Initialize the image (first frame) and slider range
             first_frame = frames_raw[0] if frames_raw else None
-            # Compute vertical from raw dict for highest fidelity
-            def _vertical_from_step_dict(step_dict: Dict[str, Any]) -> List[List[str]]:
-                row_vals = [
-                    bool(step_dict.get("done")),
-                    int(step_dict.get("step", 0)),
-                    step_dict.get("action"),
-                    step_dict.get("action_label"),
-                    step_dict.get("probs"),
-                    step_dict.get("reward"),
-                    step_dict.get("cum_reward"),
-                    step_dict.get("mc_return"),
-                    step_dict.get("value"),
-                    step_dict.get("gae_adv"),
-                ]
-                return _verticalize_row(row_vals)
+            # Compute available display modes
             # Compute available display modes
             has_stack = isinstance(frames_stack, list) and len(frames_stack) > 0
             choices = ["Rendered (raw)"] + (["Processed (stack)"] if has_stack else [])
@@ -970,7 +1115,7 @@ def build_ui(default_run_id: str = "@latest-run"):
                 gr.update(value=display_value, choices=choices),  # display_mode
                 gr.update(value=first, label=frame_label),        # frame_image
                 gr.update(minimum=0, maximum=max_idx, step=1, value=0),  # frame_slider
-                (_vertical_from_step_dict(steps[0]) if steps else []),   # current_step_table
+                (_vertical_from_steps_index(steps, 0)),   # current_step_table
                 rows,                                       # step_table
                 info.get("env_spec", {}),                   # env_spec_json
                 info.get("model_spec", {}),                 # model_spec_json
@@ -1022,23 +1167,7 @@ def build_ui(default_run_id: str = "@latest-run"):
 
             # Update the displayed image and slider; also pause playback and sync index state
             img = frames[row_idx] if (isinstance(frames, list) and 0 <= row_idx < len(frames)) else None
-            if steps and 0 <= row_idx < len(steps):
-                s = steps[row_idx]
-                row_vals = [
-                    bool(s.get("done")),
-                    int(s.get("step", 0)),
-                    s.get("action"),
-                    s.get("action_label"),
-                    s.get("probs"),
-                    s.get("reward"),
-                    s.get("cum_reward"),
-                    s.get("mc_return"),
-                    s.get("value"),
-                    s.get("gae_adv"),
-                ]
-                row_val = _verticalize_row(row_vals)
-            else:
-                row_val = []
+            row_val = _vertical_from_steps_index(steps, row_idx)
             return (
                 gr.update(value=img),               # frame_image
                 gr.update(value=row_idx),           # frame_slider
@@ -1062,23 +1191,7 @@ def build_ui(default_run_id: str = "@latest-run"):
             """
             idx = int(val) if val is not None else 0
             img = frames[idx] if (isinstance(frames, list) and 0 <= idx < len(frames)) else None
-            if steps and 0 <= idx < len(steps):
-                s = steps[idx]
-                row_vals = [
-                    bool(s.get("done")),
-                    int(s.get("step", 0)),
-                    s.get("action"),
-                    s.get("action_label"),
-                    s.get("probs"),
-                    s.get("reward"),
-                    s.get("cum_reward"),
-                    s.get("mc_return"),
-                    s.get("value"),
-                    s.get("gae_adv"),
-                ]
-                row_val = _verticalize_row(row_vals)
-            else:
-                row_val = []
+            row_val = _vertical_from_steps_index(steps, idx)
             return gr.update(value=img), gr.update(value=row_val), idx, playing, gr.update(value=("⏸" if playing else "▶"))
         play_pause_btn.click(_on_play_pause, inputs=[playing_state], outputs=[playing_state, play_pause_btn])
         # While dragging, update the frame live for fast visual scanning (and pause playback)
@@ -1087,23 +1200,7 @@ def build_ui(default_run_id: str = "@latest-run"):
             idx = int(val) if val is not None else 0
             img = frames[idx] if (isinstance(frames, list) and 0 <= idx < len(frames)) else None
             # Pause while scrubbing for smoother UX and to avoid race with autoplay
-            if steps and 0 <= idx < len(steps):
-                s = steps[idx]
-                row_vals = [
-                    bool(s.get("done")),
-                    int(s.get("step", 0)),
-                    s.get("action"),
-                    s.get("action_label"),
-                    s.get("probs"),
-                    s.get("reward"),
-                    s.get("cum_reward"),
-                    s.get("mc_return"),
-                    s.get("value"),
-                    s.get("gae_adv"),
-                ]
-                row_val = _verticalize_row(row_vals)
-            else:
-                row_val = []
+            row_val = _vertical_from_steps_index(steps, idx)
             return gr.update(value=img), gr.update(value=row_val), idx, False, gr.update(value="▶")
 
         frame_slider.input(
@@ -1121,43 +1218,11 @@ def build_ui(default_run_id: str = "@latest-run"):
                 return gr.update(), gr.update(), gr.update(), idx, playing, gr.update()
             if int(idx) < len(frames) - 1:
                 new_idx = int(idx) + 1
-                if steps and 0 <= new_idx < len(steps):
-                    s = steps[new_idx]
-                    row_vals = [
-                        bool(s.get("done")),
-                        int(s.get("step", 0)),
-                        s.get("action"),
-                        s.get("action_label"),
-                        s.get("probs"),
-                        s.get("reward"),
-                        s.get("cum_reward"),
-                        s.get("mc_return"),
-                        s.get("value"),
-                        s.get("gae_adv"),
-                    ]
-                    row_val = _verticalize_row(row_vals)
-                else:
-                    row_val = []
+                row_val = _vertical_from_steps_index(steps, new_idx)
                 return gr.update(value=frames[new_idx]), gr.update(value=new_idx), gr.update(value=row_val), new_idx, True, gr.update(value="⏸")
             # Reached end: stop
             last_idx = len(frames) - 1
-            if steps and 0 <= last_idx < len(steps):
-                s = steps[last_idx]
-                row_vals = [
-                    bool(s.get("done")),
-                    int(s.get("step", 0)),
-                    s.get("action"),
-                    s.get("action_label"),
-                    s.get("probs"),
-                    s.get("reward"),
-                    s.get("cum_reward"),
-                    s.get("mc_return"),
-                    s.get("value"),
-                    s.get("gae_adv"),
-                ]
-                row_val = _verticalize_row(row_vals)
-            else:
-                row_val = []
+            row_val = _vertical_from_steps_index(steps, last_idx)
             return gr.update(value=frames[last_idx]), gr.update(value=last_idx), gr.update(value=row_val), last_idx, False, gr.update(value="▶")
 
         if timer is not None:
@@ -1174,23 +1239,7 @@ def build_ui(default_run_id: str = "@latest-run"):
                 label = "Frame (raw)"
             first = active[0] if active else None
             # Build current step stats for index 0
-            if steps and len(steps) > 0:
-                s0 = steps[0]
-                row_vals = [
-                    bool(s0.get("done")),
-                    int(s0.get("step", 0)),
-                    s0.get("action"),
-                    s0.get("action_label"),
-                    s0.get("probs"),
-                    s0.get("reward"),
-                    s0.get("cum_reward"),
-                    s0.get("mc_return"),
-                    s0.get("value"),
-                    s0.get("gae_adv"),
-                ]
-                vert = _verticalize_row(row_vals)
-            else:
-                vert = []
+            vert = _vertical_from_steps_index(steps, 0)
             return (
                 gr.update(value=first, label=label),
                 gr.update(minimum=0, maximum=(len(active) - 1 if active else 0), step=1, value=0),

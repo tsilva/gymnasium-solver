@@ -1,11 +1,9 @@
-- simplify env and then vecenv
-- PPO: kl early stopping / adaptive kl penalty
-- PPO: rollout normalization
-- FEAT: add ETA metric (based on max_timesteps and FPS)
+- REFACTOR: simplify envinfo/vecenvinfo wrappers
+- REFACTOR: simplify CNN policy creation, test manually first
 - BUG: restore grayscaling / resizing logic; think how to unify with atari preprocessing (probably just inspect internals and extract)
+- PPO: kl early stopping / adaptive kl penalty
 - BUG: fix cnn policy training, in separate file create env and inspect traversing layers
 - FEAT: overridable rollout collector factory methods instead of extra parameter method
-- TEST: check model init logits are unbiased
 - FEAT: log checkpoint times to wandb
 - BUG: reset optimizer on learning rate changes
 - TODO: make sure max timelimit is logged at training start

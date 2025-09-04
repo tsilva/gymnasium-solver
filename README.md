@@ -30,16 +30,14 @@ pip install -e .
 ```
 
 ### 🚀 Quickstart
-- **Train** 🏃 (env + optional variant from `config/environments/*.yaml`):
+- **Train** 🏃 (uses `--config_id "<env>:<variant>"`; defaults to `CartPole-v1:ppo` when omitted):
 ```bash
-# Default to the first variant in the env YAML
-python train.py CartPole-v1 -q
+# Explicit config (recommended)
+python train.py --config_id "CartPole-v1:ppo" -q
+python train.py --config_id "CartPole-v1:reinforce" -q
 
-# Or choose a specific variant (e.g., ppo, reinforce)
-python train.py CartPole-v1 ppo -q
-
-# Backwards compatible: full config id still works
-python train.py --config CartPole-v1_ppo -q
+# Uses train.py default when --config_id is omitted
+python train.py -q
 ```
 - **Play a trained policy** 🎮 (auto-loads best/last checkpoint from a run):
 ```bash
@@ -71,15 +69,18 @@ ppo:
     - { id: CartPoleV1_RewardShaper, angle_reward_scale: 1.0 }
 ```
 
-You still select a config by ID, e.g. `CartPole-v1_ppo`. The loader also remains compatible with the legacy multi-block format for a transitional period. When `project_id` is omitted in environment YAMLs, it is inferred from the file name.
+Selection:
+- Programmatic (Python): `load_config("CartPole-v1_ppo")` or `load_config("CartPole-v1", "ppo")`; omitting a variant defaults to the first defined (prefers `ppo`, then `reinforce`, then `qlearning`).
+- CLI (train.py): pass `--config_id "<env>:<variant>"` (colon, not underscore), e.g., `--config_id "CartPole-v1:ppo"`.
+The loader remains compatible with the legacy multi-block format for a transitional period. When `project_id` is omitted in environment YAMLs, it is inferred from the file name.
 
 Key fields: `env_id`, `algo_id`, `n_envs`, `n_steps`, `batch_size`, `max_timesteps`, `policy` (`mlp|cnn`), `hidden_dims`, `obs_type` (`rgb|ram|objects` for ALE).
 
 Batch size can be either an absolute integer or a fraction in (0, 1]. If fractional, it is resolved as `batch_size = floor(n_envs * n_steps * fraction)`, with a minimum of 1.
 
-- Advantage normalization: set `normalize_advantages` to `rollout` (normalize once per rollout, SB3-style), `batch` (normalize per mini-batch), or `off`. Boolean `true/false` are accepted as aliases for `rollout/off`.
+- Advantage normalization: set `normalize_advantages` to `rollout` (normalize once per rollout, SB3-style), `batch` (normalize per mini-batch), or `off`.
 
-REINFORCE options: set `reinforce_returns` to control how Monte Carlo returns scale log-probs: `reward_to_go` (default) or `episode` (true vanilla; multiply every timestep by the episode's total return).
+REINFORCE options: set `returns_type` to control Monte Carlo returns used for scaling log-probs: `mc:rtg` (reward-to-go; default) or `mc:episode` (classic vanilla: make return constant across each episode segment).
 
 VizDoom support: set `env_id` to `VizDoom-DeadlyCorridor-v0`. Requires `pip install vizdoom` and access to `deadly_corridor.cfg`/`deadly_corridor.wad` (auto-discovered from the installed package, or set `VIZDOOM_SCENARIOS_DIR` or `env_kwargs.config_path`).
 
@@ -88,7 +89,7 @@ Register-by-name wrappers via `EnvWrapperRegistry` (see `gym_wrappers/__init__.p
 - `PixelObservationWrapper`
 - `DiscreteToBinary`
 - `PongV5_FeatureExtractor`, `PongV5_RewardShaper`
-- `MountainCarV0_RewardShaper`, `CartPoleV1_RewardShaper`
+- `MountainCarV0_RewardShaper`, `CartPoleV1_RewardShaper`, `VizDoom_RewardShaper`
 
 Use in YAML:
 ```yaml
@@ -113,11 +114,12 @@ Uploads run artifacts under `artifacts/` and attaches a preview video when found
 
 ### 🗂️ Project layout
 ```
-agents/           # PPO, REINFORCE, QLearning
-utils/            # config, env, logging, models, rollouts, etc.
-gym_wrappers/     # registry + wrappers (feature extractors, reward shaping, pixels)
-config/           # environment YAML configs
-runs/             # training outputs (checkpoints, videos, logs, config)
+agents/            # PPO, REINFORCE, QLearning
+utils/             # config, env, logging, models, rollouts, etc.
+gym_wrappers/      # registry + wrappers (feature extractors, reward shaping, pixels)
+trainer_callbacks/ # logging, early stopping, checkpointing, hyperparam sync, videos
+config/            # environment YAML configs
+runs/              # training outputs (checkpoints, videos, logs, config)
 ```
 
 ### 🧪 Tests

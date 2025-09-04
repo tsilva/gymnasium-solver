@@ -3,19 +3,19 @@
 High-signal reference for maintainers and agents. Read this before making changes.
 
 ### Top-level flow
-- **Entry point**: `train.py` expects `--config_id "<env>:<variant>"` (e.g., `CartPole-v1:ppo`) and optional `-q/--quiet`; it splits env/variant, loads `Config` via `utils.config.load_config(config_id, variant_id)`, sets the global seed via `stable_baselines3.set_random_seed`, creates the agent (`agents.create_agent`), and calls `agent.learn()`.
+- **Entry point**: `train.py` expects `--config_id "<env>:<variant>"` (e.g., `CartPole-v1:ppo`) and optional `-q/--quiet`; it splits env/variant, loads `Config` via `utils.config.load_config(config_id, variant_id)`, sets the global seed via `stable_baselines3.common.utils.set_random_seed`, creates the agent (`agents.create_agent`), and calls `agent.learn()`.
 - **Agent lifecycle**: `agents/base_agent.BaseAgent` constructs envs, models, collectors, and the PyTorch Lightning Trainer; subclasses implement `create_models`, `losses_for_batch`, and optimizer.
 - **Training loop**: `BaseAgent.train_dataloader()` collects a rollout with `utils.rollouts.RolloutCollector`, builds an index-collate `DataLoader` (`utils.dataloaders`), and Lightning calls `training_step()` which delegates to `losses_for_batch()`; optim is manual (`automatic_optimization=False`).
 - **Eval**: Validation loop is procedural in hooks; `utils.evaluation.evaluate_policy` runs N episodes on a vectorized env; videos recorded via `VecVideoRecorder` wrapper and `trainer_callbacks.VideoLoggerCallback` watches media dir.
   - For Retro environments (stable-retro), evaluation/test envs are created lazily with `n_envs=1` to avoid multi-emulator-per-process errors, and `evaluate_policy` uses a hard cap on per-episode steps (currently 1,000 for validation; 2,000 for final video) to prevent very long episodes.
 - **Runs**: `utils.run_manager.RunManager` creates `runs/<id>/`, symlinks `runs/@latest-run`, and manages paths; `BaseAgent` dumps `config.json` and writes `run.log` via `utils.logging.stream_output_to_log`.
-- **Checkpoints**: `trainer_callbacks.ModelCheckpointCallback` writes `best.ckpt`/`last.ckpt`; resume controlled by `Config.resume`.
+- **Checkpoints**: `trainer_callbacks.ModelCheckpointCallback` writes `best.ckpt`/`last.ckpt`. Resume is enabled by passing `resume=True` to the callback and is gated by an optional `config.resume` flag when present.
 
--### Configuration model (`utils/config.py`)
+### Configuration model (`utils/config.py`)
 - `Config` dataclass aggregates env, algo, rollout, model, optimization, eval, logging, and runtime settings. The loader instantiates an algo-specific subclass based on `algo_id`.
 - `load_from_yaml(config_id, variant_id)`: loads from `config/environments/*.yaml` using the new per-file format (base fields at the root + per-variant sections like `ppo:`). Schedules like `lin_0.001` are parsed into `*_schedule='linear'` and the numeric base. For new-style environment files, when `project_id` is not specified, it defaults to the YAML filename (stem).
-- Variant selection: `variant_id` is required in the current implementation; there is no auto-default to the first variant.
-- Fractional batch size: when `batch_size` is a float in (0, 1), it is interpreted as a fraction of the rollout size (`n_envs * n_steps`). The fraction must divide the rollout size exactly; the loader asserts divisibility and sets `batch_size = int(rollout_size * fraction)`.
+- Variant selection: when `variant_id` is omitted, the loader auto-selects a default variant for the given project. Preference order is `ppo`, then `reinforce`, then `qlearning` when available; otherwise the first variant in lexical order is chosen. Note: the current CLI (`train.py`) still requires `env:variant` and does not exercise this default.
+- Fractional batch size: when `batch_size` is a float in (0, 1], it is interpreted as a fraction of the rollout size (`n_envs * n_steps`). The loader computes `floor(rollout_size * fraction)` with a minimum of 1; no divisibility assertion is enforced.
 
 Algo-specific config subclasses:
 - `PPOConfig`: enforces `clip_range > 0`.
@@ -30,7 +30,7 @@ Algo-specific config subclasses:
   - Retro via `stable-retro` when `env_id` matches `Retro/*`.
   - Standard Gymnasium otherwise.
   - Applies registry wrappers from YAML: `EnvWrapperRegistry.apply` with `{ id: WrapperName, ... }` specs.
-  - Observation normalization: `norm_obs == 'static'` uses `VecNormalizeStatic`; `norm_obs == 'rolling'` uses `VecNormalize`. Note: the config field is `normalize_obs` (bool) but the builder currently expects these string values; a boolean `True/False` will not enable normalization.
+- Observation normalization: `norm_obs == 'static'` uses `VecNormalizeStatic`; `norm_obs == 'rolling'` uses `VecNormalize`. Note: the config field is `normalize_obs` (bool) but the builder currently expects these string values; a boolean `True/False` will not enable normalization.
   - Optional `VecFrameStack` and `VecVideoRecorder`.
   - Always wraps with `VecInfoWrapper` for metadata and shape helpers.
 - Wrapper registry: `gym_wrappers.__init__` registers `PixelObservationWrapper` and domain wrappers like `PongV5_FeatureExtractor`, reward shapers, etc.
@@ -48,10 +48,9 @@ Algo-specific config subclasses:
   - Linear schedule for `clip_range` if `clip_range_schedule == 'linear'`.
   - Logs gradient norms per component under `train/grad_norm/*` after backward and before clipping/step: `actor_head`, `critic_head`, and `trunk`.
 - `agents/reinforce.REINFORCE`:
-  - Policy-only via `create_policy`; can use returns or advantages as baseline; disables GAE in collector.
+  - Policy-only via `create_policy`; can use returns or advantages as policy targets (`config.policy_targets`), with GAE disabled in the collector for classic REINFORCE behavior.
   - Logs policy diagnostics including `entropy`, and PPO-style KL indicators `kl_div` and `approx_kl` computed from rollout (old) vs current log-probs for the taken actions.
-  - Monte Carlo return mode configurable via `Config.reinforce_returns`:
-    `'reward_to_go'` (default) or `'episode'` (classic vanilla REINFORCE: scale all timesteps by the episode's total return).
+  - Monte Carlo return mode is controlled by the loader/collector via `returns_type` (e.g., `mc:rtg` as default or `mc:episode` to scale all timesteps by the episode return).
 - `agents/qlearning.QLearning`:
   - Tabular Q-table on discrete obs/action spaces; custom `QLearningPolicyModel` with epsilon decay; no optimizer.
 
@@ -99,12 +98,11 @@ Algo-specific config subclasses:
 - **Metrics/logging**: extend `utils.metrics` rules or callbacks; prefer buffering via `MetricsBuffer` to avoid Lightning overhead.
 
 ### Conventions and gotchas
-- Observations are flattened before reaching models; CNNs must reshape using inferred HWC.
+- Observations are flattened only for vectors/scalars; image observations are preserved as CHW tensors through the rollout/DataLoader path. CNN models consume CHW directly (a small trunk handles shape consistency).
 - Q-Learning assumes discrete obs/action spaces; do not auto-wrap discrete obs into vectors in `build_env` to avoid breaking tabular methods.
 - When `eval_freq_epochs` is None, validation is disabled; otherwise cadence is enforced via PL controls and warmup gates.
 - Use `config.max_timesteps` for progress-based schedules; ensure it’s set for linear decays to have effect.
-- Training CLI uses `--config_id "<env>:<variant>"`; underscore IDs like `Env_Variant` are not parsed by `train.py`.
-- Config loader currently requires an explicit `variant_id`; it does not default to the first variant.
+- Training CLI uses `--config_id "<env>:<variant>"`; underscore-only IDs like `Env_Variant` are not parsed by `train.py`. The config loader itself supports fully qualified IDs (e.g., `CartPole-v1_ppo`) and default-variant selection, but the current CLI does not.
 - Env normalization: pass `normalize_obs: 'static'|'rolling'` for effect; boolean `True/False` does not enable normalization in `build_env`.
 
 ### Directory layout

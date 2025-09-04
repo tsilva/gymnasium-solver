@@ -441,12 +441,13 @@ class RolloutCollector():
         stats_window_size=100, # Size of the rolling window for stats
         gamma: float = 0.99, # Discount factor for future rewards
         gae_lambda: float = 0.95, # GAE lambda parameter (advantage estimation smoothing)
-        returns_type: str, # Which returns type to use (eg: "episode" or "reward_to_go") # TODO: not optional
+        returns_type: Optional[str] = None, # Which returns type to use (compat: accepts aliases)
         normalize_returns: bool = False, # Whether to normalize returns
-        advantages_type: str, # Which advantages type to use (eg: "baseline" or "gae") # TODO: not optional
+        advantages_type: Optional[str] = None, # Which advantages type to use (compat: accepts aliases)
         normalize_advantages: bool = False, # Whether to normalize advantages
         buffer_maxsize: Optional[int] = None, # Maximum size of the rollout buffer
         mc_treat_timeouts_as_terminals: bool = True,
+        use_gae: Optional[bool] = None,
         **kwargs
     ) -> None:
         self.env = env
@@ -455,9 +456,37 @@ class RolloutCollector():
         self.stats_window_size = stats_window_size
         self.gamma = gamma
         self.gae_lambda = gae_lambda
-        self.returns_type = returns_type
+        # Normalize type specifiers and support legacy flags
+        def _to_str(x):
+            try:
+                return str(x.value)  # Enum-like
+            except Exception:
+                return None if x is None else str(x)
+
+        rtype = _to_str(returns_type)
+        atype = _to_str(advantages_type)
+        # If unspecified, infer from use_gae flag
+        if rtype is None or atype is None:
+            if bool(use_gae):
+                rtype = rtype or "gae:rtg"
+                atype = atype or "gae"
+            else:
+                rtype = rtype or "mc:rtg"
+                atype = atype or "baseline"
+        # Accept loose aliases
+        alias_map = {
+            "episode": "mc:episode",
+            "reward_to_go": "mc:rtg",
+            "rtg": "mc:rtg",
+            "gae": "gae",
+            "baseline": "baseline",
+        }
+        rtype = alias_map.get(rtype, rtype)
+        atype = alias_map.get(atype, atype)
+
+        self.returns_type = rtype
         self.normalize_returns = normalize_returns
-        self.advantages_type = advantages_type
+        self.advantages_type = atype
         self.normalize_advantages = normalize_advantages
         self.mc_treat_timeouts_as_terminals = mc_treat_timeouts_as_terminals # TODO: review this
         self.kwargs = kwargs

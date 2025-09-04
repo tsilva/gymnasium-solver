@@ -1,5 +1,4 @@
-- Create prompt for reviewing codebase fully, thinking deeply on how it interacts and then fix/improve INTERNALS.md based on it
-
+- ADD ETA metric
 - PPO: confirm each epoch reshufles data
 - PPO: kl early stopping / adaptive kl penalty
 - PPO: rollout normalization
@@ -11,7 +10,7 @@
 - FEAT: log checkpoint times to wandb
 - BUG: reset optimizer on learning rate changes
 - TODO: make sure max timelimit is logged at training start
-- TODO: beat lunarlander with ppo and only then with reinforce (truncate episode lengths for faster training)
+- TODO: beat lunarlander with ppo and only then with reinforce (trun[cate episode lengths for faster training)
 - REFACTOR: consider changing eval_freq to timesteps so it doesnt depend on n_updates
 - FEAT: log target metrics to tensorboard
 - FEAT: figure out if I should log variance instead of std

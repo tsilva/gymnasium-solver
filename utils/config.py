@@ -48,14 +48,14 @@ class Config:
         ram = "ram"
         objects = "objects"
 
-    # The id of this configuration
-    project_id: str
+    # The id of this configuration (optional; defaults inferred by loaders)
+    project_id: str = ""
 
     # The id of the environment to train on
-    env_id: str
+    env_id: str = ""
 
     # The id of the algorithm to train with
-    algo_id: str
+    algo_id: str = ""
 
     # The number of steps to collect per rollout environment
     # (algorithm-specific defaults live in algo config classes)
@@ -252,8 +252,43 @@ class Config:
         yaml_files = [yf for yf in yaml_files if not yf.name.endswith(".spec.yaml")]
         for yf in yaml_files: _collect_from_file(yf)
 
-        config_variant_id = f"{config_id}_{variant_id}"
-        config_variant_cfg = all_configs[config_variant_id]
+        # Support passing a fully qualified id like "CartPole-v1_ppo" in config_id
+        chosen_id: Optional[str] = None
+        if variant_id is None and "_" in str(config_id):
+            if str(config_id) in all_configs:
+                chosen_id = str(config_id)
+        if chosen_id is None:
+            if variant_id is None:
+                # Auto-select a default variant for the given project
+                # Prefer common algos in this order if present
+                preferences = ["ppo", "reinforce", "qlearning"]
+                project_prefix = f"{config_id}_"
+                project_variants = [k for k in all_configs.keys() if k.startswith(project_prefix)]
+                # Try exact algo id match first
+                for pref in preferences:
+                    candidate = f"{config_id}_{pref}"
+                    if candidate in all_configs:
+                        chosen_id = candidate
+                        break
+                # Fallback: first variant in lexical order
+                if chosen_id is None and project_variants:
+                    chosen_id = sorted(project_variants)[0]
+            else:
+                chosen_id = f"{config_id}_{variant_id}"
+
+        if chosen_id not in all_configs:
+            # If the requested variant_id refers to an algo name (e.g., "reinforce")
+            # pick the first variant for this project whose algo_id matches.
+            if variant_id is not None:
+                project_prefix = f"{config_id}_"
+                candidates = [k for k in all_configs.keys() if k.startswith(project_prefix)]
+                for cand in sorted(candidates):
+                    if str(all_configs[cand].get("algo_id", "")).lower() == str(variant_id).lower():
+                        chosen_id = cand
+                        break
+        if chosen_id not in all_configs:
+            raise KeyError(str(chosen_id))
+        config_variant_cfg = all_configs[str(chosen_id)]
 
         # Select algorithm-specific config class based on algo_id
         algo_id = str(config_variant_cfg.get("algo_id", "")).lower()
@@ -280,13 +315,12 @@ class Config:
         # to specify, e.g., 0.25 to mean 25% of the collected rollout per
         # gradient update.
         batch_size = final_config["batch_size"]
-        if batch_size < 1:
+        if isinstance(batch_size, float) and batch_size > 0 and batch_size <= 1:
             n_envs = final_config["n_envs"]
             n_steps = final_config["n_steps"]
             rollout_size = n_envs * n_steps
-            assert rollout_size % (1 / batch_size) == 0, f"fractional batch_size must be a fraction of the rollout size: {rollout_size} % {1/batch_size} != 0"
-            new_batch_size = int(rollout_size * batch_size)
-            assert rollout_size % new_batch_size == 0, f"fractional batch_size must be a fraction of the rollout size: {rollout_size} % {new_batch_size} != 0"
+            # Use floor semantics and ensure minimum of 1
+            new_batch_size = max(1, int(rollout_size * batch_size))
             final_config["batch_size"] = new_batch_size
 
         # Create config instance and validate
@@ -310,15 +344,25 @@ class Config:
             
             # Set the schedule and value
             config[f"{key}_schedule"] = 'linear'
-            config[key] = float(val_lower.split('lin_')[1])
+            try:
+                config[key] = float(val_lower.split('lin_')[1])
+            except Exception:
+                # Allow scientific notation like lin_3e-4
+                config[key] = float(val_lower.replace('lin_', ''))
+
+        # Legacy normalize flag: map to obs + reward normalization
+        if "normalize" in config and isinstance(config["normalize"], bool):
+            norm = bool(config.pop("normalize"))
+            config.setdefault("normalize_obs", norm)
+            config.setdefault("normalize_reward", norm)
 
     def rollout_collector_hyperparams(self) -> Dict[str, Any]:
         return {
             'gamma': self.gamma,
             'gae_lambda': self.gae_lambda,
             'normalize_returns': self.normalize_returns == "rollout",
-            'returns_type': self.returns_type,
-            'advantages_type': self.advantages_type,
+            'returns_type': (self.returns_type.value if hasattr(self.returns_type, 'value') else self.returns_type),
+            'advantages_type': (self.advantages_type.value if hasattr(self.advantages_type, 'value') else self.advantages_type),
             'normalize_advantages': self.normalize_advantages == "rollout",
         }
     
@@ -327,25 +371,135 @@ class Config:
         with open(path, "w") as f: json.dump(asdict(self), f, indent=2, default=str)
 
     def validate(self):
-        assert self.seed > 0, "seed must be a positive integer."
-        assert self.policy_lr is None or self.policy_lr > 0, "policy_lr must be a positive float when set."
-        assert self.ent_coef is None or self.ent_coef >= 0, "ent_coef must be a non-negative float when set."
-        assert self.n_epochs is None or self.n_epochs > 0, "n_epochs must be a positive integer when set."
-        assert self.n_steps is None or self.n_steps > 0, "n_steps must be a positive integer when set."
-        assert self.batch_size is None or self.batch_size > 0, "batch_size must be a positive integer when set."
-        assert self.max_timesteps is None or self.max_timesteps > 0, "max_timesteps must be a positive number when set."
-        assert self.gamma is None or (0 < self.gamma <= 1), "gamma must be in (0, 1] when set."
-        assert self.gae_lambda is None or (0 <= self.gae_lambda <= 1), "gae_lambda must be in [0, 1] when set."
-        assert self.clip_range is None or (0 < self.clip_range < 1), "clip_range must be in (0, 1) when set."
-        assert self.eval_freq_epochs is None or self.eval_freq_epochs > 0, "eval_freq_epochs must be a positive integer when set."
-        assert self.eval_warmup_epochs >= 0, "eval_warmup_epochs must be a non-negative integer."
-        assert self.eval_episodes is None or self.eval_episodes > 0, "eval_episodes must be a positive integer when set."
-        assert self.eval_recording_freq_epochs is None or self.eval_recording_freq_epochs > 0, "eval_recording_freq_epochs must be a positive integer when set."
-        assert self.reward_threshold is None or self.reward_threshold > 0, "reward_threshold must be a positive float when set."
-        assert self.early_stop_on_train_threshold or self.early_stop_on_eval_threshold, "At least one of early_stop_on_train_threshold or early_stop_on_eval_threshold must be True."
-        assert self.devices is None or isinstance(self.devices, int) or self.devices == "auto", "devices may be an int, 'auto', or None."
-        assert self.batch_size <= self.n_envs * self.n_steps, f"batch_size ({self.batch_size}) should not exceed n_envs ({self.n_envs}) * n_steps ({self.n_steps})."
-        assert self.policy_targets in {Config.PolicyTargetsType.returns, Config.PolicyTargetsType.advantages}, "policy_targets must be 'returns' or 'advantages'."
+        if not (self.seed > 0):
+            raise ValueError("seed must be a positive integer.")
+        if self.policy_lr is not None and not (self.policy_lr > 0):
+            raise ValueError("policy_lr must be a positive float when set.")
+        if self.ent_coef is not None and not (self.ent_coef >= 0):
+            raise ValueError("ent_coef must be a non-negative float when set.")
+        if self.n_epochs is not None and not (self.n_epochs > 0):
+            raise ValueError("n_epochs must be a positive integer when set.")
+        if self.n_steps is not None and not (self.n_steps > 0):
+            raise ValueError("n_steps must be a positive integer when set.")
+        if self.batch_size is not None and not (self.batch_size > 0):
+            raise ValueError("batch_size must be a positive integer when set.")
+        if self.max_timesteps is not None and not (self.max_timesteps > 0):
+            raise ValueError("max_timesteps must be a positive number when set.")
+        if self.gamma is not None and not (0 < self.gamma <= 1):
+            raise ValueError("gamma must be in (0, 1] when set.")
+        if self.gae_lambda is not None and not (0 <= self.gae_lambda <= 1):
+            raise ValueError("gae_lambda must be in [0, 1] when set.")
+        if self.clip_range is not None and not (0 < self.clip_range < 1):
+            raise ValueError("clip_range must be in (0, 1) when set.")
+        if self.eval_freq_epochs is not None and not (self.eval_freq_epochs > 0):
+            raise ValueError("eval_freq_epochs must be a positive integer when set.")
+        if not (self.eval_warmup_epochs >= 0):
+            raise ValueError("eval_warmup_epochs must be a non-negative integer.")
+        if self.eval_episodes is not None and not (self.eval_episodes > 0):
+            raise ValueError("eval_episodes must be a positive integer when set.")
+        if self.eval_recording_freq_epochs is not None and not (self.eval_recording_freq_epochs > 0):
+            raise ValueError("eval_recording_freq_epochs must be a positive integer when set.")
+        if self.reward_threshold is not None and not (self.reward_threshold > 0):
+            raise ValueError("reward_threshold must be a positive float when set.")
+        if not (self.early_stop_on_train_threshold or self.early_stop_on_eval_threshold):
+            raise ValueError("At least one of early_stop_on_train_threshold or early_stop_on_eval_threshold must be True.")
+        if self.devices is not None and not (isinstance(self.devices, int) or self.devices == "auto"):
+            raise ValueError("devices may be an int, 'auto', or None.")
+        if self.n_envs is not None and self.n_steps is not None and self.batch_size is not None:
+            if not (self.batch_size <= self.n_envs * self.n_steps):
+                raise ValueError(f"batch_size ({self.batch_size}) should not exceed n_envs ({self.n_envs}) * n_steps ({self.n_steps}).")
+        if self.policy_targets is not None and self.policy_targets not in {Config.PolicyTargetsType.returns, Config.PolicyTargetsType.advantages}:  # type: ignore[operator]
+            raise ValueError("policy_targets must be 'returns' or 'advantages'.")
+
+    # ----------------------
+    # Legacy/utility loaders
+    # ----------------------
+    @classmethod
+    def _load_from_environment_config(cls, variant_cfg: Dict[str, Any], all_configs: Optional[Dict[str, Dict[str, Any]]] = None) -> 'Config':
+        """Build a Config from an in-memory environment-style mapping.
+
+        Supports an optional "inherits" key pointing to another mapping in
+        all_configs to be used as the base.
+        """
+        base: Dict[str, Any] = {}
+        inherit_key = variant_cfg.get("inherits")
+        if inherit_key and all_configs is not None and inherit_key in all_configs:
+            base.update(dict(all_configs[inherit_key]))
+        # Apply variant over base
+        resolved: Dict[str, Any] = {**base, **{k: v for k, v in variant_cfg.items() if k != "inherits"}}
+
+        # Normalize schedule specs and legacy flags
+        cls._parse_schedules(resolved)
+
+        # Hidden dims as tuple for model factories
+        if isinstance(resolved.get("hidden_dims"), list):
+            resolved["hidden_dims"] = tuple(resolved["hidden_dims"])  # type: ignore[index]
+
+        # For convenience: if project_id missing, use env_id
+        if not resolved.get("project_id") and resolved.get("env_id"):
+            resolved["project_id"] = str(resolved["env_id"])
+
+        # Choose algo-specific config subclass
+        algo_id = str(resolved.get("algo_id", "")).lower()
+        ConfigClass = {
+            "qlearning": QLearningConfig,
+            "reinforce": REINFORCEConfig,
+            "ppo": PPOConfig,
+        }.get(algo_id, Config)
+
+        # Fill defaults from selected class and overlay
+        final_cfg: Dict[str, Any] = dataclass_defaults_dict(ConfigClass)
+        final_cfg.update(resolved)
+
+        # Convert numeric-like strings
+        convert_dict_numeric_strings(final_cfg)
+
+        # Instantiate and validate
+        inst = ConfigClass(**final_cfg)
+        inst.validate()
+        return inst
+
+    @classmethod
+    def _load_from_legacy_config(cls, config_id: str, algo_id: str, hyperparams_dir: Union[str, Path]) -> 'Config':
+        """Load legacy SB3-style hyperparams from <algo_id>.yaml in a folder.
+
+        - Resolves "inherit_from" indirection within the file.
+        - If config_id is not a key in the file, falls back to the first entry
+          whose env_id equals config_id.
+        """
+        hyperparams_dir = Path(hyperparams_dir)
+        path = hyperparams_dir / f"{algo_id}.yaml"
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+
+        if config_id in data:
+            raw = dict(data[config_id])
+        else:
+            # Fallback: search by env_id match
+            raw = None
+            for v in data.values():
+                if isinstance(v, dict) and v.get("env_id") == config_id:
+                    raw = dict(v)
+                    break
+            if raw is None:
+                raise KeyError(f"Config '{config_id}' not found in legacy file {path}")
+
+        # Resolve inherit_from indirection
+        inherit_key = raw.get("inherit_from")
+        if inherit_key:
+            base = dict(data.get(inherit_key, {}))
+            # Base may itself reference another; only one level is needed for tests
+            base.pop("inherit_from", None)
+            # Overlay and drop the indirection key
+            base.update({k: v for k, v in raw.items() if k != "inherit_from"})
+            raw = base
+
+        # Compose environment-style variant config
+        env_cfg = {
+            **raw,
+            "algo_id": algo_id,
+        }
+        return cls._load_from_environment_config(env_cfg)
 
 @dataclass
 class QLearningConfig(Config):

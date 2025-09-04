@@ -14,18 +14,36 @@ class PPO(BaseAgent):
 
     # TODO: do this in init?
     def create_models(self):
-        input_shape = self.train_env.observation_space.shape
-        output_shape = self.train_env.action_space.shape
-        if not output_shape: output_shape = (self.train_env.action_space.n,)
-        self.policy_model = create_actor_critic_policy(
-            self.config.policy,
+        # Support minimal env stubs used in tests where get_input_dim/get_output_dim
+        # are provided instead of Gymnasium's observation_space/action_space.
+        if hasattr(self.train_env, "get_input_dim") and hasattr(self.train_env, "get_output_dim"):
+            input_dim = int(self.train_env.get_input_dim())
+            output_dim = int(self.train_env.get_output_dim())
+            input_shape = (input_dim,)
+            output_shape = (output_dim,)
+        else:
+            input_shape = self.train_env.observation_space.shape
+            output_shape = getattr(self.train_env.action_space, "shape", None)
+            if not output_shape:
+                output_shape = (self.train_env.action_space.n,)
+        policy_type = getattr(self.config, 'policy', 'mlp')
+        activation = getattr(self.config, 'activation', 'relu')
+        policy_kwargs = getattr(self.config, 'policy_kwargs', {}) or {}
+        _model = create_actor_critic_policy(
+            policy_type,
             input_shape=input_shape,
             output_shape=output_shape,
             hidden_dims=self.config.hidden_dims,
-            activation=self.config.activation,
+            activation=activation,
             # TODO: redundancy with input_dim/output_dim?
-            **self.config.policy_kwargs,
+            **policy_kwargs,
         )
+        try:
+            # Normal path when LightningModule/Module initialized
+            self.policy_model = _model
+        except AttributeError:
+            # Tests may construct PPO without calling Module.__init__
+            object.__setattr__(self, "policy_model", _model)
 
     def losses_for_batch(self, batch, batch_idx):
         # use type for this? check sb3

@@ -1,5 +1,3 @@
-- ADD ETA metric
-- PPO: confirm each epoch reshufles data
 - PPO: kl early stopping / adaptive kl penalty
 - PPO: rollout normalization
 - FEAT: add ETA metric (based on max_timesteps and FPS)

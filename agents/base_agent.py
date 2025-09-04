@@ -246,17 +246,31 @@ class BaseAgent(pl.LightningModule):
             # Be defensive: if collector lacks the deque, proceed without pruning
             pass
 
+        # Prepare metrics to log
+        _metrics = {
+            **rollout_metrics,
+            "time_elapsed": time_elapsed,
+            "epoch": self.current_epoch,
+            "fps": fps_total,  # run-wide average FPS
+            "fps_instant": fps_instant,
+        }
+
+        # Derive ETA (seconds remaining) from FPS and max_timesteps if available
+        try:
+            max_ts = float(self.config.max_timesteps) if self.config.max_timesteps is not None else None
+        except Exception:
+            max_ts = None
+        if max_ts is not None:
+            try:
+                remaining = max(0.0, float(max_ts) - float(total_timesteps))
+                if float(fps_total) > 0.0:
+                    _metrics["eta_s"] = float(remaining / float(fps_total))
+            except Exception:
+                # Be robust: skip ETA if any cast/division fails
+                pass
+
         # Log metrics to the buffer
-        self.log_metrics(
-            {
-                **rollout_metrics,
-                "time_elapsed": time_elapsed,
-                "epoch": self.current_epoch,
-                "fps": fps_total, # TODO: epoch_fps vs run_fps
-                "fps_instant": fps_instant,
-            },
-            prefix="train",
-        )
+        self.log_metrics(_metrics, prefix="train")
 
         #self._flush_metrics()
 

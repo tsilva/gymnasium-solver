@@ -16,10 +16,12 @@ _global:
     - "train/ep_len_last"
     - "train/epoch"
     - "train/total_timesteps"
+    - "train/eta_s"
     - "train/total_episodes"
     - "train/total_rollouts"
     - "train/rollout_timesteps"
     - "train/rollout_episodes"
+    - "train/fps"
     - "train/fps_instant"
     - "train/epoch_fps"
     - "train/rollout_fps"
@@ -160,6 +162,12 @@ fps:
   precision: 0
   force_integer: true
   description: "Training throughput in frames (environment steps) per second"
+  min: 0.0
+
+eta:
+  precision: 0
+  force_integer: true
+  description: "Estimated seconds remaining to reach max_timesteps"
   min: 0.0
 
 fps_instant:

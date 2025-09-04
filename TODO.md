@@ -1,4 +1,3 @@
-- TODO: create prompt to audit tests
 - PPO: confirm each epoch reshufles data
 - PPO: kl early stopping / adaptive kl penalty
 - PPO: rollout normalization

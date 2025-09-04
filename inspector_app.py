@@ -697,10 +697,11 @@ def run_episode(
             dones_buf.append(bool(terminated or truncated))
             truncated_buf.append(bool(truncated))
 
+            action_idx = int(action[0]) if isinstance(action, np.ndarray) else int(action)
             steps.append({
                 "step": t,
-                "action": int(action[0]) if isinstance(action, np.ndarray) else int(action),
-                "action_label": (action_labels[int(action[0]) if isinstance(action, np.ndarray) else int(action)] if action_labels is not None else None),
+                "action": action_idx,
+                "action_label": (action_labels[action_idx] if action_labels is not None and 0 <= action_idx < len(action_labels) else None),
                 "reward": float(reward),
                 "cum_reward": float(total_reward),
                 "value": float(val) if val is not None else None,
@@ -837,7 +838,6 @@ def build_ui(default_run_id: str = "@latest-run"):
         frames_state = gr.State([])  # active frames displayed
         frames_raw_state = gr.State([])  # type: ignore[var-annotated]
         frames_stack_state = gr.State([])  # type: ignore[var-annotated]
-        has_stack_state = gr.State(False)
         index_state = gr.State(0)
         playing_state = gr.State(False)
         rows_state = gr.State([])  # type: ignore[var-annotated]
@@ -949,33 +949,32 @@ def build_ui(default_run_id: str = "@latest-run"):
 
         def _inspect(rid: str, ckpt_label: str | None, det: bool, nsteps: int):
             frames_raw, _frames_proc_unused, frames_stack, steps, info = run_episode(rid, ckpt_label, det, int(nsteps))
-            rows = []
             def _round3(x):
                 try:
                     return round(float(x), 3)
                 except Exception:
                     return x
-            for s in steps:
-                # Format probabilities, optionally with labels
-                probs_fmt = None
-                probs = s.get("probs")
-                if isinstance(probs, list):
-                    try:
-                        probs_fmt = "[" + ", ".join(f"{float(p):.3f}" for p in probs) + "]"
-                    except Exception:
-                        probs_fmt = "[" + ", ".join(str(p) for p in probs) + "]"
-                rows.append([
+            def _format_probs(probs: Any) -> str | None:
+                try:
+                    if isinstance(probs, list):
+                        return "[" + ", ".join(f"{float(p):.3f}" for p in probs) + "]"
+                except Exception:
+                    pass
+                return str(probs) if probs is not None else None
+            def _table_row_from_step(s: Dict[str, Any]) -> List[Any]:
+                return [
                     s["done"],
                     s["step"],
                     s["action"],
                     s.get("action_label"),
-                    probs_fmt,
+                    _format_probs(s.get("probs")),
                     s["reward"],
                     s["cum_reward"],
                     _round3(s.get("mc_return", None)),
                     _round3(s.get("value", None)),
                     _round3(s.get("gae_adv", None)),
-                ])
+                ]
+            rows = [_table_row_from_step(s) for s in steps]
             # Initialize gallery selection, states, and play button label
             # Initialize the image (first frame) and slider range
             first_frame = frames_raw[0] if frames_raw else None
@@ -1014,12 +1013,11 @@ def build_ui(default_run_id: str = "@latest-run"):
                 steps,                                      # steps_state
                 frames_raw,                                 # frames_raw_state
                 (frames_stack or []),                       # frames_stack_state
-                has_stack,                                  # has_stack_state
             )
         run_btn.click(
             _inspect,
             inputs=[run_id, checkpoint, deterministic, max_steps],
-            outputs=[display_mode, frame_image, frame_slider, current_step_table, step_table, env_spec_json, model_spec_json, ckpt_metrics_json, frames_state, index_state, playing_state, play_pause_btn, rows_state, steps_state, frames_raw_state, frames_stack_state, has_stack_state],
+            outputs=[display_mode, frame_image, frame_slider, current_step_table, step_table, env_spec_json, model_spec_json, ckpt_metrics_json, frames_state, index_state, playing_state, play_pause_btn, rows_state, steps_state, frames_raw_state, frames_stack_state],
         )
 
         # Keep rows_state in sync if the user edits the table

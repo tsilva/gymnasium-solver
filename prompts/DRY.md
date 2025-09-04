@@ -9,6 +9,10 @@ Your job is to:
 
 Please:
 
+Think hard as necessary before making any changes.
+
+Audit the codebase as much as required before making any changes.
+
 1. Identify duplication and unnecessary complexity.
 2. Refactor into simpler, more readable code.
 3. Return the improved version of the files, preserving the same functionality.

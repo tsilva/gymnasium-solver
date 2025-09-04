@@ -313,8 +313,8 @@ def run_episode(
 ) -> Tuple[List[np.ndarray], List[np.ndarray] | None, List[np.ndarray] | None, List[Dict[str, Any]], Dict[str, Any]]:
     config = _load_config_from_run(run_id)
 
-    labels, mapping, default_label = list_checkpoints_for_run(run_id)
-    if not labels:
+    ckpt_labels, mapping, default_label = list_checkpoints_for_run(run_id)
+    if not ckpt_labels:
         raise FileNotFoundError("No checkpoints found for this run")
     selected_label = checkpoint_label or default_label
     ckpt_path = mapping[selected_label]
@@ -349,9 +349,9 @@ def run_episode(
     action_labels: List[str] | None = None
     try:
         if hasattr(env, "get_action_labels"):
-            labels = env.get_action_labels()  # type: ignore[attr-defined]
-            if isinstance(labels, list):
-                action_labels = [str(x) for x in labels]
+            act_labels_raw = env.get_action_labels()  # type: ignore[attr-defined]
+            if isinstance(act_labels_raw, list):
+                action_labels = [str(x) for x in act_labels_raw]
     except Exception:
         action_labels = None
 
@@ -605,6 +605,7 @@ def run_episode(
         n_stack_hint = int(getattr(config, "frame_stack", None) or 0)
     except Exception:
         n_stack_hint = None
+    has_stack_hint = bool(n_stack_hint is not None and int(n_stack_hint) > 1)
 
     try:
         while t < max_steps:
@@ -627,7 +628,7 @@ def run_episode(
                 # Build a stack grid from the observation channels when frame stacking is enabled
                 if isinstance(obs0, np.ndarray) and obs0.ndim in (2, 3):
                     hwc = _ensure_hwc(obs0)
-                    if n_stack_hint is not None and int(n_stack_hint) > 1:
+                    if has_stack_hint:
                         split = _split_stack(hwc, assume_rgb_groups=True, n_stack_hint=n_stack_hint)
                         if isinstance(split, list) and len(split) >= 2:
                             grid = _make_grid(split, cols=None)
@@ -635,7 +636,7 @@ def run_episode(
                                 stack_img = grid
                 # Vector observation fallback (only if we still don't have a frame-based stack)
                 elif stack_img is None and isinstance(obs0, np.ndarray) and (obs0.ndim == 1 or (obs0.ndim == 2 and 1 in obs0.shape)) and obs_type_cfg not in {"ram", "objects"}:
-                    if n_stack_hint is not None and int(n_stack_hint) > 1:
+                    if has_stack_hint:
                         vec = obs0.reshape(-1)
                         frames_vec = _vector_stack_to_frames(vec, n_stack_hint=n_stack_hint, row_height=8)
                         if frames_vec:
@@ -644,7 +645,7 @@ def run_episode(
                                 stack_img = grid
 
                 # As a final fallback for non-image observations, build a grid from the last N rendered frames
-                if stack_img is None and n_stack_hint is not None and int(n_stack_hint) > 1 and isinstance(frames, list) and len(frames) >= 1:
+                if stack_img is None and has_stack_hint and isinstance(frames, list) and len(frames) >= 1:
                     last = frames[-int(n_stack_hint):]
                     grid_from_frames = _make_grid([_ensure_hwc(f) for f in last], cols=None)
                     if grid_from_frames is not None:
@@ -975,10 +976,7 @@ def build_ui(default_run_id: str = "@latest-run"):
                     _round3(s.get("gae_adv", None)),
                 ]
             rows = [_table_row_from_step(s) for s in steps]
-            # Initialize gallery selection, states, and play button label
-            # Initialize the image (first frame) and slider range
-            first_frame = frames_raw[0] if frames_raw else None
-            # Compute available display modes
+            # Initialize gallery selection, states, play button, and slider range
             # Compute available display modes
             has_stack = isinstance(frames_stack, list) and len(frames_stack) > 0
             choices = ["Rendered (raw)"] + (["Processed (stack)"] if has_stack else [])
@@ -991,7 +989,7 @@ def build_ui(default_run_id: str = "@latest-run"):
                 max_idx = len(active_frames) - 1 if active_frames else 0
             else:
                 active_frames = frames_raw
-                first = first_frame
+                first = active_frames[0] if active_frames else None
                 display_value = "Rendered (raw)"
                 frame_label = "Frame (raw)"
                 max_idx = len(frames_raw) - 1 if frames_raw else 0
@@ -1067,25 +1065,23 @@ def build_ui(default_run_id: str = "@latest-run"):
             new_playing = not bool(playing)
             return new_playing, gr.update(value=("⏸" if new_playing else "▶"))
 
-        def _on_slider_change(frames: List[np.ndarray], val: int, playing: bool, steps: List[Dict[str, Any]] | None):
-            """Update current frame when user releases the slider.
+        # Core helper to build current-frame UI updates from frames/index/steps
+        def _current_view_updates(frames: List[np.ndarray], idx: int | float | None, steps: List[Dict[str, Any]] | None):
+            i = int(idx) if idx is not None else 0
+            img = frames[i] if (isinstance(frames, list) and 0 <= i < len(frames)) else None
+            row_val = _vertical_from_steps_index(steps, i)
+            return img, row_val, i
 
-            Preserve current playing state so programmatic slider updates during autoplay
-            don't pause playback.
-            """
-            idx = int(val) if val is not None else 0
-            img = frames[idx] if (isinstance(frames, list) and 0 <= idx < len(frames)) else None
-            row_val = _vertical_from_steps_index(steps, idx)
-            return gr.update(value=img), gr.update(value=row_val), idx, playing, gr.update(value=("⏸" if playing else "▶"))
+        def _on_slider_change(frames: List[np.ndarray], val: int, playing: bool, steps: List[Dict[str, Any]] | None):
+            """Update current frame when user releases the slider, preserving play state."""
+            img, row_val, i = _current_view_updates(frames, val, steps)
+            return gr.update(value=img), gr.update(value=row_val), i, playing, gr.update(value=("⏸" if playing else "▶"))
         play_pause_btn.click(_on_play_pause, inputs=[playing_state], outputs=[playing_state, play_pause_btn])
         # While dragging, update the frame live for fast visual scanning (and pause playback)
         def _on_slider_input(frames: List[np.ndarray], val: int | float | None, steps: List[Dict[str, Any]] | None):
-            # Use the slider's current value passed as an input to avoid any evt.value staleness
-            idx = int(val) if val is not None else 0
-            img = frames[idx] if (isinstance(frames, list) and 0 <= idx < len(frames)) else None
             # Pause while scrubbing for smoother UX and to avoid race with autoplay
-            row_val = _vertical_from_steps_index(steps, idx)
-            return gr.update(value=img), gr.update(value=row_val), idx, False, gr.update(value="▶")
+            img, row_val, i = _current_view_updates(frames, val, steps)
+            return gr.update(value=img), gr.update(value=row_val), i, False, gr.update(value="▶")
 
         frame_slider.input(
             _on_slider_input,
@@ -1102,12 +1098,12 @@ def build_ui(default_run_id: str = "@latest-run"):
                 return gr.update(), gr.update(), gr.update(), idx, playing, gr.update()
             if int(idx) < len(frames) - 1:
                 new_idx = int(idx) + 1
-                row_val = _vertical_from_steps_index(steps, new_idx)
-                return gr.update(value=frames[new_idx]), gr.update(value=new_idx), gr.update(value=row_val), new_idx, True, gr.update(value="⏸")
+                img, row_val, _ = _current_view_updates(frames, new_idx, steps)
+                return gr.update(value=img), gr.update(value=new_idx), gr.update(value=row_val), new_idx, True, gr.update(value="⏸")
             # Reached end: stop
             last_idx = len(frames) - 1
-            row_val = _vertical_from_steps_index(steps, last_idx)
-            return gr.update(value=frames[last_idx]), gr.update(value=last_idx), gr.update(value=row_val), last_idx, False, gr.update(value="▶")
+            img, row_val, _ = _current_view_updates(frames, last_idx, steps)
+            return gr.update(value=img), gr.update(value=last_idx), gr.update(value=row_val), last_idx, False, gr.update(value="▶")
 
         if timer is not None:
             timer.tick(_on_tick, inputs=[frames_state, index_state, playing_state, steps_state], outputs=[frame_image, frame_slider, current_step_table, index_state, playing_state, play_pause_btn])
@@ -1144,7 +1140,6 @@ def build_ui(default_run_id: str = "@latest-run"):
         def _export_csv(rows: List[List[Any]] | None, rid: str, ckpt_label: str | None):
             import csv
             import tempfile
-            import os
 
             # Normalize possible pandas.DataFrame or None → list of lists
             if rows is None:

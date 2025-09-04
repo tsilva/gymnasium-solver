@@ -288,70 +288,8 @@ def list_checkpoints_for_run(run_id: str) -> Tuple[List[str], Dict[str, Path], s
     return labels, mapping, default_label
 
 
-def _load_env_info_yaml(env_id: str) -> Dict[str, Any] | None:
-    """
-    Load env_info YAML for the given env_id.
-
-    Search order:
-      1) ENV_INFO_DIR environment variable
-      2) Project default: <project_root>/config/environments
-
-    Supports nested env IDs like 'ALE/Pong-v5' → 'ALE/Pong-v5.spec.yaml'.
-    Also supports flattened filenames where '/' is replaced by '-', e.g.,
-    'ALE-Pong-v5.spec.yaml'.
-    """
-    import yaml  # local import to avoid hard dependency when unused
-    import os
-
-    candidates: List[Path] = []
-    custom_dir = os.environ.get("ENV_INFO_DIR")
-    if custom_dir:
-        candidates.append(Path(custom_dir))
-    try:
-        # inspector_app.py lives at the project root
-        project_root = Path(__file__).resolve().parent
-        candidates.append(project_root / "config" / "environments")
-    except Exception:
-        pass
-
-    for base in candidates:
-        try:
-            # Prefer new '.spec.yaml' suffix, then fall back to legacy '.yaml'
-            names = [f"{env_id}.spec.yaml", f"{env_id}.yaml"]
-            # Flattened fallback: replace '/' with '-' in filenames
-            flat = env_id.replace("/", "-")
-            names.extend([f"{flat}.spec.yaml", f"{flat}.yaml"])
-            for name in names:
-                path = base / name
-                if path.is_file():
-                    with open(path, "r", encoding="utf-8") as f:
-                        data = yaml.safe_load(f) or {}
-                    if isinstance(data, dict):
-                        return data
-        except Exception:
-            continue
-    return None
-
-
-def _extract_action_labels(env_info: Dict[str, Any] | None) -> List[str] | None:
-    """Return ordered list of action labels if present and valid, else None."""
-    if not isinstance(env_info, dict):
-        return None
-    try:
-        action_space = env_info.get("action_space") or {}
-        discrete = action_space.get("discrete")
-        labels_map = action_space.get("labels")
-        if not isinstance(discrete, int) or discrete <= 0 or not isinstance(labels_map, dict):
-            return None
-        ordered: List[str] = []
-        for i in range(discrete):
-            label = labels_map.get(i)
-            if not isinstance(label, str):
-                return None
-            ordered.append(label)
-        return ordered
-    except Exception:
-        return None
+# Note: Action labels/spec/fps fallbacks are provided by VecInfoWrapper methods.
+# Avoid duplicating YAML parsing here; call env.get_action_labels(), env.get_spec(), etc.
 
 
 def _to_batch_obs(obs) -> torch.Tensor:
@@ -407,7 +345,7 @@ def run_episode(
         resize_obs=getattr(config, "resize_obs", False),
     )
 
-    # Load action labels from vec env wrapper if available; fallback to YAML
+    # Load action labels from vec env wrapper if available
     action_labels: List[str] | None = None
     try:
         if hasattr(env, "get_action_labels"):
@@ -416,39 +354,15 @@ def run_episode(
                 action_labels = [str(x) for x in labels]
     except Exception:
         action_labels = None
-    if action_labels is None:
-        env_info_yaml = _load_env_info_yaml(config.env_id)
-        action_labels = _extract_action_labels(env_info_yaml)
 
-    # Collect environment spec for summary tabs
-    try:
-        env_spec_obj = getattr(env, "get_spec", None)() if hasattr(env, "get_spec") else None
-    except Exception:
-        env_spec_obj = None
-    try:
-        reward_range = env.get_reward_range() if hasattr(env, "get_reward_range") else None
-    except Exception:
-        reward_range = None
-    try:
-        reward_threshold = env.get_reward_threshold() if hasattr(env, "get_reward_threshold") else None
-    except Exception:
-        reward_threshold = None
-    try:
-        input_dim = env.get_input_dim() if hasattr(env, "get_input_dim") else None
-    except Exception:
-        input_dim = None
-    try:
-        output_dim = env.get_output_dim() if hasattr(env, "get_output_dim") else None
-    except Exception:
-        output_dim = None
-    try:
-        observation_space_str = str(getattr(env, "observation_space", None))
-    except Exception:
-        observation_space_str = None
-    try:
-        action_space_str = str(getattr(env, "action_space", None))
-    except Exception:
-        action_space_str = None
+    # Collect environment spec for summary tabs (VecInfoWrapper exposes safe helpers)
+    env_spec_obj = env.get_spec() if hasattr(env, "get_spec") else None
+    reward_range = env.get_reward_range() if hasattr(env, "get_reward_range") else None
+    reward_threshold = env.get_reward_threshold() if hasattr(env, "get_reward_threshold") else None
+    input_dim = env.get_input_dim() if hasattr(env, "get_input_dim") else None
+    output_dim = env.get_output_dim() if hasattr(env, "get_output_dim") else None
+    observation_space_str = str(getattr(env, "observation_space", None))
+    action_space_str = str(getattr(env, "action_space", None))
     env_spec_summary: Dict[str, Any] = {
         "env_id": config.env_id,
         "n_envs": getattr(env, "num_envs", None),
@@ -461,7 +375,7 @@ def run_episode(
         "env_wrappers": getattr(config, "env_wrappers", None),
         "frame_stack": getattr(config, "frame_stack", None),
         "normalize_obs": getattr(config, "normalize_obs", None),
-        "spec_id": getattr(getattr(env_spec_obj, "id", None), "__str__", lambda: None)() if env_spec_obj is not None else None,
+        "spec_id": (str(getattr(env_spec_obj, "id", None)) if env_spec_obj is not None else None),
         "action_labels": action_labels,
     }
 
@@ -526,8 +440,6 @@ def run_episode(
         pass
 
     frames: List[np.ndarray] = []  # raw rendered frames for human monitoring
-    # Single-frame "processed" views are currently unused in the UI; skip collecting
-    processed_frames: List[np.ndarray] = []  # kept for signature compatibility
     stack_frames: List[np.ndarray] = []  # tiled frame-stack views (if applicable)
 
     # Heuristics and helpers to convert observations to displayable images
@@ -573,16 +485,7 @@ def run_episode(
             # else assume HWC already
         return x
 
-    def _to_rgb(img: np.ndarray) -> np.ndarray:
-        x = _ensure_hwc(img)
-        if x.ndim != 3:
-            return None  # type: ignore[return-value]
-        c = x.shape[2]
-        if c == 1:
-            x = np.repeat(x, 3, axis=2)
-        elif c >= 3:
-            x = x[:, :, :3]
-        return _to_uint8_img(x)
+    # No single-frame processed RGB conversion needed; UI focuses on raw render and stack grid.
 
     def _split_stack(img: np.ndarray, assume_rgb_groups: bool, n_stack_hint: int | None) -> List[np.ndarray]:
         """Split a stacked (C,H,W) or (H,W,C) image into a list of single-frame grayscale/RGB images.
@@ -697,6 +600,11 @@ def run_episode(
     gae_lambda: float = float(getattr(config, "gae_lambda", 0.95))
     # Used to decide how to visualize non-image observations
     obs_type_cfg = str(getattr(config, "obs_type", "")).lower()
+    # Derive a fixed stacking hint once
+    try:
+        n_stack_hint = int(getattr(config, "frame_stack", None) or 0)
+    except Exception:
+        n_stack_hint = None
 
     try:
         while t < max_steps:
@@ -714,12 +622,7 @@ def run_episode(
             try:
                 obs0 = _obs_first_env(obs)
                 stack_img = None
-                # Try to derive a stacking hint from config
-                n_stack_hint = None
-                try:
-                    n_stack_hint = int(getattr(config, "frame_stack", None) or 0)
-                except Exception:
-                    n_stack_hint = None
+                # n_stack_hint precomputed above
 
                 # Build a stack grid from the observation channels when frame stacking is enabled
                 if isinstance(obs0, np.ndarray) and obs0.ndim in (2, 3):
@@ -847,11 +750,10 @@ def run_episode(
             steps[i]["mc_return"] = float(mc_returns[i])
             steps[i]["gae_adv"] = float(gae_adv[i])
 
-    # Only return processed/stack frames if lists are non-empty (else None)
-    processed_out = processed_frames if processed_frames else None
+    # Only return stack frames if lists are non-empty (else None)
     stack_out = stack_frames if stack_frames else None
 
-    return frames, processed_out, stack_out, steps, {
+    return frames, None, stack_out, steps, {
         "total_reward": float(total_reward),
         "steps": t,
         "env_id": config.env_id,
@@ -944,25 +846,9 @@ def build_ui(default_run_id: str = "@latest-run"):
         # Timer for autoplay (fallback if Timer doesn't exist in older Gradio)
         timer = None
         try:
-            # Try to infer FPS for smoother playback
-            inferred_fps = None
-            try:
-                # Quick attempt: load env_info YAML for the initial run's env
-                cfg = _load_config_from_run(initial_run)
-                if cfg and getattr(cfg, "env_id", None):
-                    info = _load_env_info_yaml(cfg.env_id)
-                    if isinstance(info, dict):
-                        rfps = info.get("render_fps")
-                        if isinstance(rfps, (int, float)) and rfps > 0:
-                            inferred_fps = int(rfps)
-            except Exception:
-                inferred_fps = None
-
             TimerCls = getattr(gr, "Timer", None)
             if TimerCls is not None:
-                # Default to 30 FPS if unknown
-                fps_val = int(inferred_fps) if isinstance(inferred_fps, int) and inferred_fps > 0 else 30
-                timer = TimerCls(1/float(fps_val))
+                timer = TimerCls(1/30.0)  # default to 30 FPS
         except Exception:
             timer = None
         # Table headers are reused for CSV export and for the current-step vertical view

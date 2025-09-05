@@ -8,7 +8,7 @@ def _maybe_init_wandb_sweep(config: Config):
     algo_id = config.algo_id
     config = Config.create_for_algo(algo_id, **{
         **asdict(config),
-        **wandb.config,
+        **dict(wandb.config),
     })
     wandb.init(config=asdict(config)) # TODO: do I need to do this here?
     return config

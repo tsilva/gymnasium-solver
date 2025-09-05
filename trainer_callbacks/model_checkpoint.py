@@ -236,17 +236,38 @@ class ModelCheckpointCallback(BaseCallback):
             return current_value < self.best_metric_value
     
     def on_validation_epoch_end(self, trainer, pl_module):
-        """Save a timestamped checkpoint every eval epoch, maintain best/last symlinks, and early stop when needed."""
+        """Save checkpoints on eval epochs and handle best/last/threshold logic.
 
-        logged_metrics = trainer.logged_metrics
-        assert self.monitor in logged_metrics, f"Monitor metric '{self.monitor}' not found in logged metrics: {trainer.logged_metrics.keys()}"
-        
-        current_metric_value = None
-        if self.monitor in logged_metrics:
+        During warmup epochs (or when eval is skipped), the monitored metric may
+        not be present in `trainer.logged_metrics`. In that case, gracefully
+        return without asserting, keeping early-stopping/tracking logic intact.
+        """
+
+        # If the module exposes eval scheduling, respect it to avoid attempting
+        # to save checkpoints on epochs where evaluation was intentionally skipped
+        try:
+            should_eval_fn = getattr(pl_module, "_should_run_eval", None)
+            if callable(should_eval_fn):
+                if not bool(should_eval_fn(pl_module.current_epoch)):
+                    # Still run legacy tracking so train-threshold early stopping can fire
+                    self._handle_early_stopping_and_tracking(trainer, pl_module)
+                    return
+        except Exception:
+            # Be robust: if the helper isn't available or fails, fall through and
+            # rely on the presence of the monitor metric below
+            pass
+
+        logged_metrics = getattr(trainer, "logged_metrics", {})
+
+        # If the monitored metric wasn't logged this epoch (e.g., warmup), skip
+        if self.monitor not in logged_metrics:
+            self._handle_early_stopping_and_tracking(trainer, pl_module)
+            return
+
+        # Convert to float defensively
+        try:
             current_metric_value = float(logged_metrics[self.monitor])
-
-        if current_metric_value is None:
-            # Nothing to monitor this epoch
+        except Exception:
             self._handle_early_stopping_and_tracking(trainer, pl_module)
             return
 

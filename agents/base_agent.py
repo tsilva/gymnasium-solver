@@ -669,10 +669,11 @@ class BaseAgent(pl.LightningModule):
 
         Scheduling uses 1-based epoch numbers for human-friendly config:
         - Let E = epoch_idx + 1
-        - If eval_freq_epochs is None: never evaluate
-        - If E < eval_warmup_epochs: skip
-        - If E == eval_warmup_epochs: run (first eval after warmup)
-        - Otherwise: run when (E - eval_warmup_epochs) % eval_freq_epochs == 0
+        - If eval_freq_epochs is None or <= 0: never evaluate
+        - If eval_warmup_epochs <= 0: evaluate at E == 1 and then on multiples of eval_freq_epochs
+        - If eval_warmup_epochs > 0: skip all E <= eval_warmup_epochs, then evaluate on
+          the configured cadence grid (i.e., E % eval_freq_epochs == 0). Example:
+          warmup=50 and freq=15 -> first eval at E=60 (epoch_idx=59).
         """
         # If eval_freq_epochs is None or <= 0, never evaluate
         freq = self.config.eval_freq_epochs
@@ -687,12 +688,12 @@ class BaseAgent(pl.LightningModule):
         if warmup <= 0:
             # First epoch (E==1) then multiples of freq
             return E == 1 or (E % int(freq) == 0)
-        
-        # With warmup, first eval at E==warmup, then every freq epochs thereafter
-        if E < warmup:
+
+        # With warmup, skip boundary and align to the cadence grid strictly after warmup
+        if E <= warmup:
             return False
-        
-        return ((E - warmup) % int(freq)) == 0
+
+        return (E % int(freq)) == 0
 
     # -------------------------
     # Pre-prompt guidance helpers

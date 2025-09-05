@@ -66,13 +66,14 @@ def test_should_run_eval_with_warmup():
     inst = BaseAgent.__new__(BaseAgent)
     inst.config = Cfg()
 
-    # Before warmup (E < 3): skip
+    # Before or at warmup (E <= 3): skip
     assert inst._should_run_eval(0) is False  # E=1
     assert inst._should_run_eval(1) is False  # E=2
-    # At warmup boundary and then every freq
-    assert inst._should_run_eval(2) is True   # E=3
-    assert inst._should_run_eval(3) is False  # E=4
-    assert inst._should_run_eval(4) is True   # E=5
+    assert inst._should_run_eval(2) is False  # E=3 (boundary is skipped)
+    # After warmup: align to cadence grid (multiples of 2)
+    assert inst._should_run_eval(3) is True   # E=4
+    assert inst._should_run_eval(4) is False  # E=5
+    assert inst._should_run_eval(5) is True   # E=6
 
 
 def test_should_run_eval_zero_freq_never_runs():

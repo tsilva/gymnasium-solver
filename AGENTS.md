@@ -31,6 +31,14 @@ This repository allows autonomous and assisted agents to make changes and answer
 - **Tests**: When behavior changes or is newly added, create or update tests.
 - **Config/docs**: Update `README.md`, `EXPERIMENTS.md`, and relevant configs when user-facing behavior or defaults change.
 
+### Root-cause-first changes
+- **Diagnose deeply**: Before editing, trace the failing behavior to its true cause. Read adjacent modules, follow data flow, and verify assumptions; do not guess.
+- **Plan minimal intervention**: Choose the smallest targeted change that fixes the root cause. Write down the intended change before applying it.
+- **No symptom patches**: Do not add hardcoded values, special-case branches, broad try/excepts, or duplicate logic that merely hides the bug.
+- **Avoid code bloat**: Do not introduce knobs/flags or helper layers to “make it work” unless they directly eliminate the root cause and are justified.
+- **Prove it**: Reproduce the issue, then add/adjust a focused test or reproducible check. The fix should make the test pass for the right reason.
+- **Explain why**: In the edit summary, include a one-line root-cause statement and why this is the minimal, correct fix.
+
 ### Documentation maintenance
 - After completing any task, update `INTERNALS.md` and `README.md` with relevant changes. If no updates are needed, leave them untouched.
 
@@ -60,6 +68,7 @@ This repository allows autonomous and assisted agents to make changes and answer
 ### Decision-making when uncertain
 - If blocked by missing information, ask one focused question and propose a sensible default.
 - If multiple viable approaches exist, briefly list trade-offs and choose one with the least risk/complexity.
+ - Prefer asking for clarity over shipping a workaround that papers over the issue.
 
 ### Repository-specific guidance
 - Respect the existing testing layout in `tests/` and update or add tests near related modules.
@@ -70,6 +79,7 @@ This repository allows autonomous and assisted agents to make changes and answer
 - Bulk refactoring or formatting unrelated code.
 - Introducing new runtime dependencies without necessity or explanation.
 - Deleting or overwriting user work without explicit instruction.
+ - Symptom-masking hacks (hardcoded values, broad exception swallowing, duplicate branches) that avoid fixing the root cause.
 
 ### Change management
 - Group related changes into coherent edits. Include brief rationales in summaries.
@@ -78,9 +88,11 @@ This repository allows autonomous and assisted agents to make changes and answer
 ### Quick checklists
 **Before editing**
 - Clarify goal and constraints; scan related files for context.
-- Plan minimal changes to achieve the goal.
+ - Identify and state the suspected root cause.
+ - Plan a minimal intervention that addresses that root cause.
 
 **After editing**
 - Validate imports, types, and obvious edge cases.
 - Run tests/build if feasible; ensure no new failures.
 - Summarize changes and their impact concisely.
+ - Add or update a regression test that proves the fix, when reasonable.

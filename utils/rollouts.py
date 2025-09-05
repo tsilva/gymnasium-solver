@@ -473,11 +473,17 @@ class RolloutCollector():
             else:
                 rtype = rtype or "mc:rtg"
                 atype = atype or "baseline"
-        # Accept loose aliases
+        # Accept loose aliases (including Enum member names)
         alias_map = {
+            # Human-friendly shorthands
             "episode": "mc:episode",
             "reward_to_go": "mc:rtg",
             "rtg": "mc:rtg",
+            # Enum member names (from utils.config.Config enums)
+            "mc_episode": "mc:episode",
+            "mc_rtg": "mc:rtg",
+            "gae_rtg": "gae:rtg",
+            # Advantages
             "gae": "gae",
             "baseline": "baseline",
         }

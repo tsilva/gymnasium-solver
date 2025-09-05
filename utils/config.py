@@ -253,50 +253,16 @@ class Config:
         for yf in yaml_files: _collect_from_file(yf)
 
         # Support passing a fully qualified id like "CartPole-v1_ppo" in config_id
-        chosen_id: Optional[str] = None
-        if variant_id is None and "_" in str(config_id):
-            if str(config_id) in all_configs:
-                chosen_id = str(config_id)
-        if chosen_id is None:
-            if variant_id is None:
-                # Auto-select a default variant for the given project
-                # Prefer common algos in this order if present
-                preferences = ["ppo", "reinforce", "qlearning"]
-                project_prefix = f"{config_id}_"
-                project_variants = [k for k in all_configs.keys() if k.startswith(project_prefix)]
-                # Try exact algo id match first
-                for pref in preferences:
-                    candidate = f"{config_id}_{pref}"
-                    if candidate in all_configs:
-                        chosen_id = candidate
-                        break
-                # Fallback: first variant in lexical order
-                if chosen_id is None and project_variants:
-                    chosen_id = sorted(project_variants)[0]
-            else:
-                chosen_id = f"{config_id}_{variant_id}"
-
-        if chosen_id not in all_configs:
-            # If the requested variant_id refers to an algo name (e.g., "reinforce")
-            # pick the first variant for this project whose algo_id matches.
-            if variant_id is not None:
-                project_prefix = f"{config_id}_"
-                candidates = [k for k in all_configs.keys() if k.startswith(project_prefix)]
-                for cand in sorted(candidates):
-                    if str(all_configs[cand].get("algo_id", "")).lower() == str(variant_id).lower():
-                        chosen_id = cand
-                        break
-        if chosen_id not in all_configs:
-            raise KeyError(str(chosen_id))
+        chosen_id: f"{config_id}_{variant_id}"
         config_variant_cfg = all_configs[str(chosen_id)]
 
         # Select algorithm-specific config class based on algo_id
-        algo_id = str(config_variant_cfg.get("algo_id", "")).lower()
+        algo_id = config_variant_cfg["algo_id"].lower()
         ConfigClass = {
             "qlearning": QLearningConfig,
             "reinforce": REINFORCEConfig,
             "ppo": PPOConfig,
-        }.get(str(algo_id).lower(), Config)
+        }[algo_id]
 
         # Create dict with dataclass defaults from the selected class
         final_config: Dict[str, Any] = dataclass_defaults_dict(ConfigClass)

@@ -253,19 +253,19 @@ class Config:
         for yf in yaml_files: _collect_from_file(yf)
 
         # Support passing a fully qualified id like "CartPole-v1_ppo" in config_id
-        chosen_id: f"{config_id}_{variant_id}"
-        config_variant_cfg = all_configs[str(chosen_id)]
+        chosen_id = f"{config_id}_{variant_id}"
+        config_variant_cfg = all_configs[chosen_id]
 
         # Select algorithm-specific config class based on algo_id
         algo_id = config_variant_cfg["algo_id"].lower()
-        ConfigClass = {
+        config_class = {
             "qlearning": QLearningConfig,
             "reinforce": REINFORCEConfig,
             "ppo": PPOConfig,
         }[algo_id]
 
         # Create dict with dataclass defaults from the selected class
-        final_config: Dict[str, Any] = dataclass_defaults_dict(ConfigClass)
+        final_config: Dict[str, Any] = dataclass_defaults_dict(config_class)
 
         # Apply config variant over dataclass defaults
         final_config.update(config_variant_cfg)
@@ -290,7 +290,7 @@ class Config:
             final_config["batch_size"] = new_batch_size
 
         # Create config instance and validate
-        instance = ConfigClass(**final_config)
+        instance = config_class(**final_config)
         instance.validate()
 
         # Return the validated config

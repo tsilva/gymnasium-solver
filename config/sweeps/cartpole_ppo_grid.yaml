@@ -1,0 +1,34 @@
+name: cartpole-ppo-grid
+project: CartPole-v1
+method: grid
+metric:
+  name: train/ep_rew_mean
+  goal: maximize
+
+# You can override or extend these parameters in W&B UI as needed.
+parameters:
+  # Optimizer
+  policy_lr:
+    values: [3e-5, 1e-4, 3e-4, 1e-3]
+  # PPO-specific stability
+  clip_range:
+    values: [0.1, 0.2, 0.3]
+  n_epochs:
+    values: [5, 10, 20]
+  # Regularization / exploration
+  ent_coef:
+    values: [0.0, 0.01]
+  # Batch size as a fraction of rollout (n_envs * n_steps)
+  batch_size:
+    values: [0.25, 0.5, 1.0]
+
+program: train.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - --config_id
+  - "CartPole-v1:ppo"
+  - -q
+  - --wandb_sweep
+

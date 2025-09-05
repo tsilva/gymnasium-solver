@@ -129,3 +129,19 @@ pytest -q
 
 ### 📄 License
 MIT
+
+### 🌀 W&B Sweeps
+- Train under a sweep: set your sweep `program` to call `python train.py --config_id "<env>:<variant>"` (e.g., `CartPole-v1:ppo`).
+- The script auto-detects W&B Agent via `WANDB_SWEEP_ID` and merges `wandb.config` into the main config before training. You can also force this behavior with `--wandb_sweep`.
+- Parameter names map 1:1 to config fields (e.g., `n_envs`, `n_steps`, `batch_size`, `policy_lr`, `clip_range`, `gamma`, `gae_lambda`, `ent_coef`, `vf_coef`, `max_timesteps`, etc.). Linear schedules like `lin_0.001` are supported for sweep values.
+- Fractional `batch_size` in (0, 1] is resolved as a fraction of `n_envs * n_steps` after overrides are applied.
+
+Example sweep specs:
+- Grid: `config/sweeps/cartpole_ppo_grid.yaml`
+- Bayesian: `config/sweeps/cartpole_ppo_bayes.yaml`
+
+Usage:
+```bash
+wandb sweep config/sweeps/cartpole_ppo_grid.yaml
+wandb agent <entity>/<project>/<sweep_id>
+```

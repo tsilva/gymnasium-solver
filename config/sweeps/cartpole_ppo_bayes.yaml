@@ -1,0 +1,36 @@
+name: cartpole-ppo-bayes
+project: CartPole-v1
+method: bayes
+metric:
+  name: train/ep_rew_mean
+  goal: maximize
+early_terminate:
+  type: hyperband
+  min_iter: 5
+
+parameters:
+  policy_lr:
+    distribution: log_uniform_values
+    min: 3e-5
+    max: 3e-3
+  clip_range:
+    distribution: uniform
+    min: 0.05
+    max: 0.35
+  n_epochs:
+    values: [5, 10, 20]
+  ent_coef:
+    values: [0.0, 0.005, 0.01]
+  batch_size:
+    values: [0.25, 0.5, 1.0]
+
+program: train.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - --config_id
+  - "CartPole-v1:ppo"
+  - -q
+  - --wandb_sweep
+

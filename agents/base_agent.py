@@ -705,18 +705,33 @@ class BaseAgent(pl.LightningModule):
         def _sanitize_name(name: str) -> str:
             return name.replace("/", "-").replace("\\", "-")
 
-        project_name = self.config.project_id if self.config.project_id else _sanitize_name(self.config.env_id)
-        experiment_name = f"{self.config.algo_id}-{self.config.seed}"
-        wandb_logger = WandbLogger(
-            project=project_name, 
-            name=experiment_name,
-            log_model=True, 
-            config=asdict(self.config)
-        )
-    
-        # TODO: can I just do *
+        # If a W&B run is already active (e.g., under a sweep), avoid re-initializing
+        # and do not attempt to overwrite the run config. PL's WandbLogger will attach
+        # to the existing run when present.
+        try:
+            import wandb  # type: ignore
+            active_run = getattr(wandb, "run", None)
+        except Exception:
+            active_run = None
+
+        if active_run is not None:
+            wandb_logger = WandbLogger(log_model=True)
+        else:
+            project_name = self.config.project_id if self.config.project_id else _sanitize_name(self.config.env_id)
+            experiment_name = f"{self.config.algo_id}-{self.config.seed}"
+            wandb_logger = WandbLogger(
+                project=project_name,
+                name=experiment_name,
+                log_model=True,
+                config=asdict(self.config),
+            )
+
+        # Define the common step metric; works both for new and attached runs
         wandb_run = wandb_logger.experiment
-        wandb_run.define_metric("*", step_metric="train/total_timesteps")
+        try:
+            wandb_run.define_metric("*", step_metric="train/total_timesteps")
+        except Exception:
+            pass
 
         return wandb_logger
     

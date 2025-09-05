@@ -4,6 +4,7 @@ High-signal reference for maintainers and agents. Read this before making change
 
 ### Top-level flow
 - **Entry point**: `train.py` expects `--config_id "<env>:<variant>"` (e.g., `CartPole-v1:ppo`) and optional `-q/--quiet`; it splits env/variant, loads `Config` via `utils.config.load_config(config_id, variant_id)`, sets the global seed via `stable_baselines3.common.utils.set_random_seed`, creates the agent (`agents.create_agent`), and calls `agent.learn()`.
+- **W&B sweeps**: When launched by a W&B Agent (auto-detected via `WANDB_SWEEP_ID`) or with `--wandb_sweep`, `train.py` calls `wandb.init(config=asdict(config))` early and merges `wandb.config` into the main `Config` before creating the agent. Schedule strings like `lin_0.001` are parsed, and fractional `batch_size` in (0, 1] is resolved against `n_envs * n_steps` post-override.
 - **Agent lifecycle**: `agents/base_agent.BaseAgent` constructs envs, models, collectors, and the PyTorch Lightning Trainer; subclasses implement `create_models`, `losses_for_batch`, and optimizer.
 - **Training loop**: `BaseAgent.train_dataloader()` collects a rollout with `utils.rollouts.RolloutCollector`, builds an index-collate `DataLoader` (`utils.dataloaders`), and Lightning calls `training_step()` which delegates to `losses_for_batch()`; optim is manual (`automatic_optimization=False`).
 - **Eval**: Validation loop is procedural in hooks; `utils.evaluation.evaluate_policy` runs N episodes on a vectorized env; videos recorded via `VecVideoRecorder` wrapper and `trainer_callbacks.VideoLoggerCallback` watches media dir.

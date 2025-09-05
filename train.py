@@ -5,13 +5,11 @@ from dataclasses import asdict
 from utils.config import load_config, Config
 
 def _maybe_init_wandb_sweep(config: Config):
-    algo_id = config.algo_id
-    config = Config.create_for_algo(algo_id, **{
-        **asdict(config),
-        **dict(wandb.config),
-    })
-    wandb.init(config=asdict(config)) # TODO: do I need to do this here?
-    return config
+    base = asdict(config)
+    wandb.init(config=base)
+    merged = dict(wandb.config)
+    algo_id = merged.get("algo_id", config.algo_id)
+    return Config.create_for_algo(algo_id, merged)
 
 def main():
     # Parse command line arguments

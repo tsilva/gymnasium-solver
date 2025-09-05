@@ -45,17 +45,19 @@ reinforce_baseline_rtg:
 ppo:
   #seed: 100 # TODO: seed setting does not seem to be doing anything
   algo_id: ppo
-  max_timesteps: 100000
+  max_timesteps: 50000
   n_envs: 8
   n_steps: 32
-  batch_size: 256
+  batch_size: 0.25 #256
   n_epochs: 20
   policy_lr: lin_0.001
   gae_lambda: 0.8
-  clip_range: lin_0.2
+  clip_range: lin_0.1 #lin_0.2
+  policy_lr: 1e-3
   normalize_advantages: "rollout"
-  eval_freq_epochs: null
-  early_stop_on_train_threshold: True
-  early_stop_on_eval_threshold: False
+  #eval_warmup_epochs: 15
+  #eval_freq_epochs: 15
+  #early_stop_on_train_threshold: True
+  early_stop_on_eval_threshold: True
   #frame_stack: 2 # TODO: not converging faster with frame stacking here, why?
 

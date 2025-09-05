@@ -4,7 +4,7 @@ import argparse
 from dataclasses import asdict
 from utils.config import load_config, Config
 
-def _maybe_init_wandb_sweep(config: Config):
+def _init_wandb_sweep(config: Config):
     base = asdict(config)
     wandb.init(config=base)
     merged = dict(wandb.config)
@@ -30,7 +30,7 @@ def main():
     # If running under a W&B agent or explicitly requested, initialize wandb early
     # and merge sweep overrides into our Config before creating the agent.
     use_wandb_sweep = bool(args.wandb_sweep) or bool(os.environ.get("WANDB_SWEEP_ID") or os.environ.get("SWEEP_ID"))
-    if use_wandb_sweep: config = _maybe_init_wandb_sweep(config)
+    if use_wandb_sweep: config = _init_wandb_sweep(config)
 
     # TODO: move this out of here
     # Set global random seed

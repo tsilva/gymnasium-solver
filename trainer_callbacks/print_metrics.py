@@ -167,9 +167,16 @@ class PrintMetricsCallback(BaseCallback):
         if not metrics:
             return
 
-        # Skip if nothing changed materially since last print
-        if not self._metrics_changed(metrics):
-            return
+        # Skip if nothing changed materially since last print, unless we are about to stop.
+        # When early stopping triggers, force a final print of the most recent metrics table
+        # so the last epoch is visible in the console output.
+        try:
+            should_force = bool(getattr(trainer, "should_stop", False))
+        except Exception:
+            should_force = False
+        if not should_force:
+            if not self._metrics_changed(metrics):
+                return
 
         # Validate metric delta rules before printing
         self._validate_metric_deltas(metrics)

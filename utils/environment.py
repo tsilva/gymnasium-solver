@@ -140,9 +140,11 @@ def build_env(
         VecFrameStack,
         VecNormalize
     )
+    from gym_wrappers.env_info import EnvInfoWrapper
     from gym_wrappers.vec_info import VecInfoWrapper
     from gym_wrappers.vec_normalize_static import VecNormalizeStatic
     from gym_wrappers.vec_video_recorder import VecVideoRecorder
+    from gym_wrappers.vec_env_info import VecEnvInfoWrapper
         
     # If recording video was requrested, assert valid render mode and subproc disabled 
     if record_video and render_mode != "rgb_array": raise ValueError("Video recording requires render_mode='rgb_array'")
@@ -159,6 +161,7 @@ def build_env(
         elif _is_vizdoom_env: env = _build_env_vizdoom(env_id, obs_type, render_mode, **env_kwargs)
         elif _is_stable_retro_env: env = _build_env_stable_retro(env_id, obs_type, render_mode, **env_kwargs)            
         else: env = _build_env_gymnasium(env_id, obs_type, render_mode, **env_kwargs)
+
 
         # Optional image preprocessing on the base env (before vectorization)
         # - grayscale_obs: convert to single-channel grayscale
@@ -187,11 +190,14 @@ def build_env(
         for wrapper in env_wrappers:
             env = EnvWrapperRegistry.apply(env, wrapper) # type: ignore
 
+        # TODO: modify existing timelimit if available
         # Truncate episode lengths if requested
-        if max_episode_steps is not None:
-            from gymnasium.wrappers import TimeLimit
-            env = TimeLimit(env, max_episode_steps=max_episode_steps)
+        #if max_episode_steps is not None:
+        #    from gymnasium.wrappers import TimeLimit
+        #    env = TimeLimit(env, max_episode_steps=max_episode_steps)
 
+        env = EnvInfoWrapper(env)
+        
         # Return the environment
         return env
 
@@ -205,7 +211,7 @@ def build_env(
         vec_env_cls=vec_env_cls, 
         vec_env_kwargs=vec_env_kwargs
     )
-
+    
     # Ensure the vectorized env exposes render_mode for downstream wrappers (e.g., video recorder)
     setattr(env, "render_mode", render_mode)
 
@@ -238,10 +244,6 @@ def build_env(
             **record_video_kwargs
         )
 
-    # Add instrospection info wrapper that 
-    # allows easily querying for env details
-    # through the vectorized wrapper
-    # This should be added last to get the final observation space dimensions
-    env = VecInfoWrapper(env)
+    env = VecEnvInfoWrapper(env)
 
     return env

@@ -360,6 +360,35 @@ class ModelCheckpointCallback(BaseCallback):
                     f"Early stopping at epoch {pl_module.current_epoch} with eval mean reward {current_metric_value:.2f} >= threshold {effective_threshold}"
                 )
                 trainer.should_stop = True
+                # Proactively print the final metrics table so the last epoch is visible
+                # even when early stopping interrupts the normal print cadence.
+                try:
+                    # Prefer the existing PrintMetricsCallback for consistent formatting
+                    pm = None
+                    try:
+                        from trainer_callbacks.print_metrics import PrintMetricsCallback as _PM
+                        for cb in getattr(trainer, 'callbacks', []) or []:
+                            if isinstance(cb, _PM):
+                                pm = cb
+                                break
+                    except Exception:
+                        pm = None
+                    if pm is not None:
+                        pm._maybe_print(trainer, stage="val-epoch")  # type: ignore[attr-defined]
+                    else:
+                        # Fallback to a simple one-off print using the current logged metrics
+                        metrics_to_print = {}
+                        for d in (getattr(trainer, "logged_metrics", {}), getattr(trainer, "callback_metrics", {}), getattr(trainer, "progress_bar_metrics", {})):
+                            try:
+                                for k, v in dict(d).items():
+                                    metrics_to_print[k] = (v.item() if hasattr(v, 'item') else v)
+                            except Exception:
+                                pass
+                        if metrics_to_print:
+                            from utils.table_printer import print_namespaced_dict
+                            print_namespaced_dict(metrics_to_print)
+                except Exception:
+                    pass
 
         # Delegate to legacy tracking (will early stop if missed above)
         self._handle_early_stopping_and_tracking(trainer, pl_module)
@@ -444,6 +473,33 @@ class ModelCheckpointCallback(BaseCallback):
             train_ep_rew_mean >= float(threshold)):
             print(f"Early stopping at epoch {pl_module.current_epoch} with train mean reward {train_ep_rew_mean:.2f} >= threshold {threshold}")
             trainer.should_stop = True
+            # Ensure the final epoch metrics table is printed before exiting
+            try:
+                # Prefer the existing PrintMetricsCallback for consistent formatting
+                pm = None
+                try:
+                    from trainer_callbacks.print_metrics import PrintMetricsCallback as _PM
+                    for cb in getattr(trainer, 'callbacks', []) or []:
+                        if isinstance(cb, _PM):
+                            pm = cb
+                            break
+                except Exception:
+                    pm = None
+                if pm is not None:
+                    pm._maybe_print(trainer, stage="train-epoch")  # type: ignore[attr-defined]
+                else:
+                    metrics_to_print = {}
+                    for d in (getattr(trainer, "logged_metrics", {}), getattr(trainer, "callback_metrics", {}), getattr(trainer, "progress_bar_metrics", {})):
+                        try:
+                            for k, v in dict(d).items():
+                                metrics_to_print[k] = (v.item() if hasattr(v, 'item') else v)
+                        except Exception:
+                            pass
+                    if metrics_to_print:
+                        from utils.table_printer import print_namespaced_dict
+                        print_namespaced_dict(metrics_to_print)
+            except Exception:
+                pass
 
         if self.save_last:
             checkpoint_dir = self._get_checkpoint_dir(pl_module)

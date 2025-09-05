@@ -7,8 +7,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
 
 import yaml
-from .dict_utils import convert_dict_numeric_strings, dataclass_defaults_dict
-
 
 @dataclass
 class Config:
@@ -211,7 +209,16 @@ class Config:
     quiet: bool = False
 
     @classmethod
-    def load_from_yaml(cls, config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> 'Config':
+    def create_for_algo(cls, algo_id: str, config_dict: Dict[str, Any]) -> 'Config':
+        config_cls = {
+            "ppo": PPOConfig,
+            "reinforce": REINFORCEConfig,
+            "qlearning": QLearningConfig,   
+        }[algo_id]
+        return config_cls(**config_dict)
+
+    @classmethod
+    def create_from_yaml(cls, config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> 'Config':
         """Load config from environment YAMLs"""
         # Get the project root directory
         project_root = Path(__file__).parent.parent
@@ -256,71 +263,52 @@ class Config:
         chosen_id = f"{config_id}_{variant_id}"
         config_variant_cfg = all_configs[chosen_id]
 
-        # Select algorithm-specific config class based on algo_id
+        # Create and return the config instance
         algo_id = config_variant_cfg["algo_id"].lower()
-        config_class = {
-            "qlearning": QLearningConfig,
-            "reinforce": REINFORCEConfig,
-            "ppo": PPOConfig,
-        }[algo_id]
-
-        # Create dict with dataclass defaults from the selected class
-        final_config: Dict[str, Any] = dataclass_defaults_dict(config_class)
-
-        # Apply config variant over dataclass defaults
-        final_config.update(config_variant_cfg)
-
-        # Convert numeric strings to numbers
-        convert_dict_numeric_strings(final_config)
-
-        # Parse schedule specifiers like lin_0.001
-        Config._parse_schedules(final_config)
-
-        # Support fractional batch_size: interpret 0 < batch_size <= 1 as a
-        # fraction of the rollout size (n_envs * n_steps). This allows configs
-        # to specify, e.g., 0.25 to mean 25% of the collected rollout per
-        # gradient update.
-        batch_size = final_config["batch_size"]
-        if isinstance(batch_size, float) and batch_size > 0 and batch_size <= 1:
-            n_envs = final_config["n_envs"]
-            n_steps = final_config["n_steps"]
-            rollout_size = n_envs * n_steps
-            # Use floor semantics and ensure minimum of 1
-            new_batch_size = max(1, int(rollout_size * batch_size))
-            final_config["batch_size"] = new_batch_size
-
-        # Create config instance and validate
-        instance = config_class(**final_config)
-        instance.validate()
-
-        # Return the validated config
+        instance = cls.create_for_algo(algo_id, config_variant_cfg)
         return instance
 
-    @classmethod
-    def _parse_schedules(cls, config: Dict[str, Any]) -> None:
+    def __post_init__(self):
+        self._resolve_defaults()
+        self._resolve_numeric_strings()
+        self._resolve_batch_size()
+        self._resolve_schedules()
+        self.validate()
+        
+    def _resolve_defaults(self) -> None:
+        from dataclasses import MISSING
+        for f in self.__dataclass_fields__.values():
+            value = getattr(self, f.name)
+            if value is not None: continue
+            if f.default is not MISSING: setattr(self, f.name, f.default)
+            elif f.default_factory is not MISSING: setattr(self, f.name, f.default_factory())
+
+    def _resolve_numeric_strings(self) -> None:
+        for key, value in list(asdict(self).items()):
+            if not isinstance(value, str): continue
+            try: setattr(self, key, float(value))
+            except: pass
+
+    def _resolve_batch_size(self) -> None:
+        batch_size = self.batch_size
+        if batch_size > 1: return
+        rollout_size = self.n_envs * self.n_steps
+        new_batch_size = max(1, int(rollout_size * batch_size))
+        self.batch_size = new_batch_size
+
+    def _resolve_schedules(self) -> None:
         # Iterate over the dictionary items (as list) to avoid 
         # modifying the dictionary size during iteration
-        for key, value in list(config.items()):
+        for key, value in list(asdict(self).items()):
             # Skip non-string values    
             if not isinstance(value, str): continue
 
-            # Skip non-linear schedule values
+            # If linear schedule was requested unpack the 
+            # value into the corresponding fields
             val_lower = value.lower()
-            if not val_lower.startswith('lin_'): continue
-            
-            # Set the schedule and value
-            config[f"{key}_schedule"] = 'linear'
-            try:
-                config[key] = float(val_lower.split('lin_')[1])
-            except Exception:
-                # Allow scientific notation like lin_3e-4
-                config[key] = float(val_lower.replace('lin_', ''))
-
-        # Legacy normalize flag: map to obs + reward normalization
-        if "normalize" in config and isinstance(config["normalize"], bool):
-            norm = bool(config.pop("normalize"))
-            config.setdefault("normalize_obs", norm)
-            config.setdefault("normalize_reward", norm)
+            if val_lower.startswith('lin_'):
+                setattr(self, f"{key}_schedule", 'linear')
+                setattr(self, key, float(val_lower.split('lin_')[1]))
 
     def rollout_collector_hyperparams(self) -> Dict[str, Any]:
         return {
@@ -377,99 +365,8 @@ class Config:
         if self.policy_targets is not None and self.policy_targets not in {Config.PolicyTargetsType.returns, Config.PolicyTargetsType.advantages}:  # type: ignore[operator]
             raise ValueError("policy_targets must be 'returns' or 'advantages'.")
 
-    # ----------------------
-    # Legacy/utility loaders
-    # ----------------------
-    @classmethod
-    def _load_from_environment_config(cls, variant_cfg: Dict[str, Any], all_configs: Optional[Dict[str, Dict[str, Any]]] = None) -> 'Config':
-        """Build a Config from an in-memory environment-style mapping.
-
-        Supports an optional "inherits" key pointing to another mapping in
-        all_configs to be used as the base.
-        """
-        base: Dict[str, Any] = {}
-        inherit_key = variant_cfg.get("inherits")
-        if inherit_key and all_configs is not None and inherit_key in all_configs:
-            base.update(dict(all_configs[inherit_key]))
-        # Apply variant over base
-        resolved: Dict[str, Any] = {**base, **{k: v for k, v in variant_cfg.items() if k != "inherits"}}
-
-        # Normalize schedule specs and legacy flags
-        cls._parse_schedules(resolved)
-
-        # Hidden dims as tuple for model factories
-        if isinstance(resolved.get("hidden_dims"), list):
-            resolved["hidden_dims"] = tuple(resolved["hidden_dims"])  # type: ignore[index]
-
-        # For convenience: if project_id missing, use env_id
-        if not resolved.get("project_id") and resolved.get("env_id"):
-            resolved["project_id"] = str(resolved["env_id"])
-
-        # Choose algo-specific config subclass
-        algo_id = str(resolved.get("algo_id", "")).lower()
-        ConfigClass = {
-            "qlearning": QLearningConfig,
-            "reinforce": REINFORCEConfig,
-            "ppo": PPOConfig,
-        }.get(algo_id, Config)
-
-        # Fill defaults from selected class and overlay
-        final_cfg: Dict[str, Any] = dataclass_defaults_dict(ConfigClass)
-        final_cfg.update(resolved)
-
-        # Convert numeric-like strings
-        convert_dict_numeric_strings(final_cfg)
-
-        # Instantiate and validate
-        inst = ConfigClass(**final_cfg)
-        inst.validate()
-        return inst
-
-    @classmethod
-    def _load_from_legacy_config(cls, config_id: str, algo_id: str, hyperparams_dir: Union[str, Path]) -> 'Config':
-        """Load legacy SB3-style hyperparams from <algo_id>.yaml in a folder.
-
-        - Resolves "inherit_from" indirection within the file.
-        - If config_id is not a key in the file, falls back to the first entry
-          whose env_id equals config_id.
-        """
-        hyperparams_dir = Path(hyperparams_dir)
-        path = hyperparams_dir / f"{algo_id}.yaml"
-        with open(path, "r", encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
-
-        if config_id in data:
-            raw = dict(data[config_id])
-        else:
-            # Fallback: search by env_id match
-            raw = None
-            for v in data.values():
-                if isinstance(v, dict) and v.get("env_id") == config_id:
-                    raw = dict(v)
-                    break
-            if raw is None:
-                raise KeyError(f"Config '{config_id}' not found in legacy file {path}")
-
-        # Resolve inherit_from indirection
-        inherit_key = raw.get("inherit_from")
-        if inherit_key:
-            base = dict(data.get(inherit_key, {}))
-            # Base may itself reference another; only one level is needed for tests
-            base.pop("inherit_from", None)
-            # Overlay and drop the indirection key
-            base.update({k: v for k, v in raw.items() if k != "inherit_from"})
-            raw = base
-
-        # Compose environment-style variant config
-        env_cfg = {
-            **raw,
-            "algo_id": algo_id,
-        }
-        return cls._load_from_environment_config(env_cfg)
-
 @dataclass
 class QLearningConfig(Config):
-    # Basic defaults for tabular Q-learning style collection
     n_steps: int = 256
     batch_size: int = 64
     n_epochs: int = 1
@@ -477,7 +374,6 @@ class QLearningConfig(Config):
 
 @dataclass
 class REINFORCEConfig(Config):
-    # Literature-style defaults for REINFORCE
     n_steps: int = 2048
     batch_size: int = 2048
     n_epochs: int = 1
@@ -491,7 +387,6 @@ class REINFORCEConfig(Config):
 
 @dataclass
 class PPOConfig(Config):
-    # Literature/SB3-style defaults for PPO
     n_steps: int = 2048
     batch_size: int = 64
     n_epochs: int = 10
@@ -509,4 +404,4 @@ class PPOConfig(Config):
 
 def load_config(config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> Config:
     """Convenience function to load configuration."""
-    return Config.load_from_yaml(config_id, variant_id, config_dir)
+    return Config.create_from_yaml(config_id, variant_id, config_dir)

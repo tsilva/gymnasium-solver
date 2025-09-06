@@ -594,24 +594,27 @@ class BaseAgent(pl.LightningModule):
     
     def _prompt_user_start_training(self):
         from utils.user import prompt_confirm
+        from utils.logging import format_banner, ansi, _color_enabled
 
-        print("\n=== Run Details ===")
-        print(f"Run directory: {self.run_manager.get_run_dir()}")
-        print(f"Run ID: {self.run_manager.get_run_id()}")
-        print("=" * 30)
+        width = 60
+        use_color = _color_enabled()
+        print("\n" + ansi(format_banner("Run Details", width=width), "cyan", "bold", enable=use_color))
+        print(f"- {ansi('Run directory:', 'cyan', 'bold', enable=use_color)} {ansi(str(self.run_manager.get_run_dir()), 'gray', enable=use_color)}")
+        print(f"- {ansi('Run ID:', 'cyan', 'bold', enable=use_color)} {ansi(str(self.run_manager.get_run_id()), 'gray', enable=use_color)}")
+        print(ansi("=" * width, "cyan", enable=use_color))
 
-        print("\n=== Environment Details ===")
+        print("\n" + ansi(format_banner("Environment Details", width=width), "cyan", "bold", enable=use_color))
         if hasattr(self.train_env, 'print_spec'):
             self.train_env.print_spec()
         else:
             # Minimal fallback for stub env used in tests
             try:
-                print(f"n_envs: {getattr(self.train_env, 'num_envs', '?')}")
-                print(f"input_dim: {getattr(self, 'input_dim', '?')}")
-                print(f"output_dim: {getattr(self, 'output_dim', '?')}")
+                print(f"- {ansi('n_envs:', 'cyan', 'bold', enable=use_color)} {ansi(str(getattr(self.train_env, 'num_envs', '?')), 'gray', enable=use_color)}")
+                print(f"- {ansi('input_dim:', 'cyan', 'bold', enable=use_color)} {ansi(str(getattr(self, 'input_dim', '?')), 'gray', enable=use_color)}")
+                print(f"- {ansi('output_dim:', 'cyan', 'bold', enable=use_color)} {ansi(str(getattr(self, 'output_dim', '?')), 'gray', enable=use_color)}")
             except Exception:
                 pass
-        print("=" * 30)
+        print(ansi("=" * width, "cyan", enable=use_color))
 
         # Also log configuration details for reproducibility
         try:

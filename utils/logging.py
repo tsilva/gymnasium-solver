@@ -205,6 +205,74 @@ class StreamRedirector:
 # Global log file manager instance
 _log_manager = None
 
+
+def _color_enabled(stream=None) -> bool:
+    """Return True if ANSI colors should be enabled for the given stream."""
+    try:
+        import os, sys
+        s = stream or sys.stdout
+        return bool(getattr(s, "isatty", lambda: False)() and os.environ.get("NO_COLOR") is None)
+    except Exception:
+        return False
+
+
+def ansi(text: str, *styles: str, enable: bool | None = None) -> str:
+    """Wrap text with ANSI styles (supports combos like bold+cyan).
+
+    Styles: red, green, yellow, blue, magenta, cyan, gray, bold, bg_*
+    If enable is None, auto-detect using stdout; when False, returns text untouched.
+    """
+    try:
+        if enable is None:
+            enable = _color_enabled()
+        if not enable or not styles:
+            return text
+        codes = {
+            "red": "31",
+            "green": "32",
+            "yellow": "33",
+            "blue": "34",
+            "magenta": "35",
+            "cyan": "36",
+            "gray": "90",
+            "bold": "1",
+            # Backgrounds
+            "bg_black": "40",
+            "bg_red": "41",
+            "bg_green": "42",
+            "bg_yellow": "43",
+            "bg_blue": "44",
+            "bg_magenta": "45",
+            "bg_cyan": "46",
+            "bg_white": "47",
+        }
+        seq = ";".join(codes[s] for s in styles if s in codes)
+        if not seq:
+            return text
+        return f"\x1b[{seq}m{text}\x1b[0m"
+    except Exception:
+        return text
+
+
+def format_banner(title: str, *, width: int = 60, char: str = "=") -> str:
+    """Return a centered, single-line banner like '===== Title ====='.
+
+    - Keeps ASCII by default for broad terminal compatibility.
+    - If the title is longer than width, returns the raw title padded with spaces.
+    """
+    try:
+        text = f" {title} "
+        if width <= 0:
+            return text.strip()
+        if len(text) >= width:
+            return text
+        left = (width - len(text)) // 2
+        right = width - len(text) - left
+        return f"{char * left}{text}{char * right}"
+    except Exception:
+        # Be fail-safe — never crash due to formatting
+        return f"=== {title} ==="
+
 def get_log_manager() -> Optional[LogFileManager]:
     """Get the global log manager instance."""
     return _log_manager
@@ -249,7 +317,10 @@ def log_config_details(config, file: Optional[TextIO] = None) -> None:
     """
     out: TextIO = file or sys.stdout
     try:
-        out.write("=== Configuration Details ===\n")
+        color = _color_enabled(out if file is not None else None)
+        banner = format_banner("Configuration Details")
+        out.write("\n")
+        out.write(ansi(banner, "cyan", "bold", enable=color) + "\n")
         # Prefer dataclass asdict, fall back to attribute introspection
         items = None
         try:
@@ -274,7 +345,10 @@ def log_config_details(config, file: Optional[TextIO] = None) -> None:
                     attrs[name] = value
             items = attrs.items()
         for k, v in sorted(items):
-            out.write(f"{k}: {v}\n")
+            key_disp = ansi(f"{k}:", "cyan", "bold", enable=color)
+            val_disp = ansi(str(v), "gray", enable=color)
+            out.write(f"{key_disp} {val_disp}\n")
+        out.write(ansi("=" * 60, "cyan", enable=color) + "\n")
         out.flush()
     except Exception:
         # Do not let logging issues crash the program

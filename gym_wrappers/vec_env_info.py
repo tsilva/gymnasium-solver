@@ -462,15 +462,24 @@ class VecEnvInfoWrapper(VecEnvWrapper):
         return None
     
     def print_spec(self):
+        # Lazy import to avoid circulars and keep this module light
+        try:
+            from utils.logging import ansi, _color_enabled
+            use_color = _color_enabled()
+        except Exception:
+            def ansi(s, *_, **__):
+                return s
+            use_color = False
+
         # Observation space and action space from vectorized env
-        print(f"Observation space: {self.observation_space}")
-        print(f"Action space: {self.action_space}")
+        print(f"- {ansi('Observation space:', 'cyan', 'bold', enable=use_color)} {ansi(str(self.observation_space), 'gray', enable=use_color)}")
+        print(f"- {ansi('Action space:', 'cyan', 'bold', enable=use_color)} {ansi(str(self.action_space), 'gray', enable=use_color)}")
 
         # Reward range and threshold when available
         reward_range = self.get_reward_range()
-        print(f"Reward range: {reward_range}")
+        print(f"- {ansi('Reward range:', 'cyan', 'bold', enable=use_color)} {ansi(str(reward_range), 'gray', enable=use_color)}")
 
         # Reward threshold if defined
         reward_threshold = self.get_reward_threshold()
-        print(f"Reward threshold: {reward_threshold}")
+        print(f"- {ansi('Reward threshold:', 'cyan', 'bold', enable=use_color)} {ansi(str(reward_threshold), 'gray', enable=use_color)}")
         

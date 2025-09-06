@@ -234,8 +234,17 @@ def ansi(text: str, *styles: str, enable: bool | None = None) -> str:
             "blue": "34",
             "magenta": "35",
             "cyan": "36",
+            "white": "37",
             "gray": "90",
+            "bright_red": "91",
+            "bright_green": "92",
+            "bright_yellow": "93",
+            "bright_blue": "94",
+            "bright_magenta": "95",
+            "bright_cyan": "96",
+            "bright_white": "97",
             "bold": "1",
+            "dim": "2",
             # Backgrounds
             "bg_black": "40",
             "bg_red": "41",
@@ -252,6 +261,29 @@ def ansi(text: str, *styles: str, enable: bool | None = None) -> str:
         return f"\x1b[{seq}m{text}\x1b[0m"
     except Exception:
         return text
+
+
+def format_kv_line(
+    key: str,
+    value: object,
+    *,
+    key_width: int = 20,
+    bullet: str = "- ",
+    key_color: str = "bright_blue",
+    val_color: str = "bright_white",
+    enable_color: bool | None = None,
+) -> str:
+    """Return a single aligned key/value line with colors.
+
+    Example: "-   Key name ..........: Value"
+    """
+    try:
+        s_key = f"{key}:"
+        if key_width and key_width > 0:
+            s_key = f"{s_key:<{key_width+1}}"  # +1 to include colon in width
+        return f"{bullet}{ansi(s_key, key_color, 'bold', enable=enable_color)} {ansi(str(value), val_color, enable=enable_color)}"
+    except Exception:
+        return f"{bullet}{key}: {value}"
 
 
 def format_banner(title: str, *, width: int = 60, char: str = "=") -> str:
@@ -318,9 +350,11 @@ def log_config_details(config, file: Optional[TextIO] = None) -> None:
     out: TextIO = file or sys.stdout
     try:
         color = _color_enabled(out if file is not None else None)
-        banner = format_banner("Configuration Details")
+        # Fancy banner using heavier char when coloring
+        banner_char = "━" if color else "="
+        banner = format_banner("Configuration Details", char=banner_char)
         out.write("\n")
-        out.write(ansi(banner, "cyan", "bold", enable=color) + "\n")
+        out.write(ansi(banner, "bright_magenta", "bold", enable=color) + "\n")
         # Prefer dataclass asdict, fall back to attribute introspection
         items = None
         try:
@@ -344,11 +378,13 @@ def log_config_details(config, file: Optional[TextIO] = None) -> None:
                         continue
                     attrs[name] = value
             items = attrs.items()
-        for k, v in sorted(items):
-            key_disp = ansi(f"{k}:", "cyan", "bold", enable=color)
-            val_disp = ansi(str(v), "gray", enable=color)
-            out.write(f"{key_disp} {val_disp}\n")
-        out.write(ansi("=" * 60, "cyan", enable=color) + "\n")
+        items = list(sorted(items))
+        # Align keys by longest length
+        max_k = max((len(k) for k, _ in items), default=0)
+        for k, v in items:
+            line = format_kv_line(k, v, key_width=max_k, key_color="bright_blue", val_color="bright_white", enable_color=color)
+            out.write(line + "\n")
+        out.write(ansi(("━" if color else "=") * 60, "bright_magenta", enable=color) + "\n")
         out.flush()
     except Exception:
         # Do not let logging issues crash the program

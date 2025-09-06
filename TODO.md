@@ -6,7 +6,7 @@
 - REFACTOR: simplify envinfo/vecenvinfo wrappers (connect vecenvinfo to envinfo)
 - REFACTOR: simplify CNN policy creation, test manually first
 - BUG: restore grayscaling / resizing logic; think how to unify with atari preprocessing (probably just inspect internals and extract)
-- PPO: kl early stopping / adaptive kl penalty
+- FEAT: add kl early stopping to PPO
 - BUG: fix cnn policy training, in separate file create env and inspect traversing layers
 - FEAT: overridable rollout collector factory methods instead of extra parameter method
 - FEAT: log checkpoint times to wandb
@@ -14,7 +14,6 @@
 - TODO: make sure max timelimit is logged at training start
 - TODO: beat lunarlander with ppo and only then with reinforce (trun[cate episode lengths for faster training)
 - REFACTOR: consider changing eval_freq to timesteps so it doesnt depend on n_updates
-- FEAT: log target metrics to tensorboard
 - FEAT: figure out if I should log variance instead of std
 - TODO: x metric cant be total timesteps because that increases with parallelization.... must be n_updates? index by epoch? or add updates metric?
 - TODO: optimal single metric for best training (samples/reward)

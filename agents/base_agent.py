@@ -598,23 +598,25 @@ class BaseAgent(pl.LightningModule):
 
         width = 60
         use_color = _color_enabled()
-        print("\n" + ansi(format_banner("Run Details", width=width), "cyan", "bold", enable=use_color))
-        print(f"- {ansi('Run directory:', 'cyan', 'bold', enable=use_color)} {ansi(str(self.run_manager.get_run_dir()), 'gray', enable=use_color)}")
-        print(f"- {ansi('Run ID:', 'cyan', 'bold', enable=use_color)} {ansi(str(self.run_manager.get_run_id()), 'gray', enable=use_color)}")
-        print(ansi("=" * width, "cyan", enable=use_color))
+        banner_char = "━" if use_color else "="
+        print("\n" + ansi(format_banner("Run Details", width=width, char=banner_char), "bright_magenta", "bold", enable=use_color))
+        from utils.logging import format_kv_line
+        print(format_kv_line("Run directory", self.run_manager.get_run_dir(), key_width=14, key_color="bright_blue", val_color="bright_white", enable_color=use_color))
+        print(format_kv_line("Run ID", self.run_manager.get_run_id(), key_width=14, key_color="bright_blue", val_color="bright_white", enable_color=use_color))
+        print(ansi(banner_char * width, "bright_magenta", enable=use_color))
 
-        print("\n" + ansi(format_banner("Environment Details", width=width), "cyan", "bold", enable=use_color))
+        print("\n" + ansi(format_banner("Environment Details", width=width, char=banner_char), "bright_magenta", "bold", enable=use_color))
         if hasattr(self.train_env, 'print_spec'):
             self.train_env.print_spec()
         else:
             # Minimal fallback for stub env used in tests
             try:
-                print(f"- {ansi('n_envs:', 'cyan', 'bold', enable=use_color)} {ansi(str(getattr(self.train_env, 'num_envs', '?')), 'gray', enable=use_color)}")
-                print(f"- {ansi('input_dim:', 'cyan', 'bold', enable=use_color)} {ansi(str(getattr(self, 'input_dim', '?')), 'gray', enable=use_color)}")
-                print(f"- {ansi('output_dim:', 'cyan', 'bold', enable=use_color)} {ansi(str(getattr(self, 'output_dim', '?')), 'gray', enable=use_color)}")
+                print(format_kv_line("n_envs", getattr(self.train_env, 'num_envs', '?'), key_width=14, key_color="bright_blue", val_color="bright_white", enable_color=use_color))
+                print(format_kv_line("input_dim", getattr(self, 'input_dim', '?'), key_width=14, key_color="bright_blue", val_color="bright_white", enable_color=use_color))
+                print(format_kv_line("output_dim", getattr(self, 'output_dim', '?'), key_width=14, key_color="bright_blue", val_color="bright_white", enable_color=use_color))
             except Exception:
                 pass
-        print(ansi("=" * width, "cyan", enable=use_color))
+        print(ansi(banner_char * width, "bright_magenta", enable=use_color))
 
         # Also log configuration details for reproducibility
         try:

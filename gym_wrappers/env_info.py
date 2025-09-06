@@ -34,6 +34,11 @@ class EnvInfoWrapper(gym.ObservationWrapper):
         reward_threshold = spec['reward_threshold']
         return reward_threshold
 
+    # ObservationWrapper requires implementing this method. We do not
+    # transform observations; return them unchanged.
+    def observation(self, observation):  # type: ignore[override]
+        return observation
+
 if __name__ == "__main__":
     env = gym.make("CartPole-v1")
     env_info = EnvInfoWrapper(env)

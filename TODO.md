@@ -1,3 +1,4 @@
+- add adamw support
 - REFACTOR: simplify envinfo/vecenvinfo wrappers (connect vecenvinfo to envinfo)
 - REFACTOR: simplify CNN policy creation, test manually first
 - BUG: restore grayscaling / resizing logic; think how to unify with atari preprocessing (probably just inspect internals and extract)

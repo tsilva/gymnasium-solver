@@ -46,6 +46,11 @@ class Config:
         ram = "ram"
         objects = "objects"
 
+    class OptimizerType(str, Enum):
+        adam = "adam"
+        adamw = "adamw"
+        sgd = "sgd"
+
     # The id of this configuration (optional; defaults inferred by loaders)
     project_id: str = ""
 
@@ -130,6 +135,9 @@ class Config:
 
     # The learning rate for the policy (algo defaults in subclasses)
     policy_lr: Optional[float] = None
+
+    # Optimizer to use for policy updates
+    optimizer: "Config.OptimizerType" = OptimizerType.adamw  # type: ignore[assignment]
 
     # The schedule for the policy learning rate
     policy_lr_schedule: Optional[str] = None

@@ -115,7 +115,7 @@ Tip: If you’re also using n_steps, choose it to keep updates frequent (e.g., c
 
 Learning rate (policy)
 
-Log-sweep: {3e-5, 1e-4, 3e-4, 1e-3, 3e-3} (Adam).
+Log-sweep: {3e-5, 1e-4, 3e-4, 1e-3, 3e-3} (AdamW by default; optimizer configurable).
 
 Pick by area under the learning curve (sample-efficiency + final return).
 
@@ -173,7 +173,7 @@ If policy collapses early: raise entropy or slow the anneal.
 
 Optimizer betas / weight decay
 
-Adam β2 0.999 (default). If value loss lags, try β2 0.99.
+AdamW β2 0.999 (default). If value loss lags, try β2 0.99.
 
 Tiny L2 (e.g., 1e-4) only if you see overfitting on short horizons.
 

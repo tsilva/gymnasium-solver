@@ -35,7 +35,7 @@
 
 ## 4. Set the stabilizers (good defaults)
 - **Advantage:** GAE `λ = 0.95`, `γ = 0.99`  
-- **Optimizer:** Adam, `lr = 3e-4` (decay over time)  
+- **Optimizer:** AdamW, `lr = 3e-4` (decay over time)  
 - **Clip:** `ε = 0.1–0.2` (decay a bit over time)  
 - **Entropy bonus:** `0.0–0.01` (sparser rewards → lean higher)  
 - Normalize observations & advantages; consider reward normalization for high-var tasks.  

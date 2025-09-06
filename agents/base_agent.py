@@ -1011,11 +1011,28 @@ class BaseAgent(pl.LightningModule):
         return {"limit_val_batches": 1.0, "check_val_every_n_epoch": int(eval_freq_epochs)}
 
         
+    def _make_optimizer(self, params):
+        """Create optimizer from config with sensible defaults.
+
+        Defaults to AdamW with eps=1e-5; supports 'adam', 'adamw', and 'sgd'.
+        """
+        # Resolve optimizer name possibly coming from Enum or str
+        opt = getattr(self.config, "optimizer", "adamw")
+        try:
+            opt_name = (opt.value if hasattr(opt, "value") else str(opt)).lower()
+        except Exception:
+            opt_name = "adamw"
+        lr = self.config.policy_lr
+
+        if opt_name == "adam":
+            return torch.optim.Adam(params, lr=lr, eps=1e-5)
+        if opt_name == "sgd":
+            return torch.optim.SGD(params, lr=lr)
+        # Default/fallback: AdamW
+        return torch.optim.AdamW(params, lr=lr, eps=1e-5)
+
     def configure_optimizers(self):
-        return torch.optim.Adam(
-            self.policy_model.parameters(), 
-            lr=self.config.policy_lr
-        )
+        return self._make_optimizer(self.policy_model.parameters())
 
     # -------------------------
     # Gradient norm diagnostics

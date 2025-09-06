@@ -45,7 +45,7 @@ Algo-specific config subclasses:
   - Schedules: learning rate and PPO clip range with linear decay based on progress `total_steps / max_timesteps`.
   - Logging: W&B via `WandbLogger` with project derived from `env_id`; defines step metric `train/total_timesteps`.
 - `agents/ppo.PPO`:
-  - Policy via `utils.policy_factory.create_actor_critic_policy` using MLP or CNN heads; computes PPO losses, metrics, and uses Adam(eps=1e-5).
+  - Policy via `utils.policy_factory.create_actor_critic_policy` using MLP or CNN heads; computes PPO losses, metrics, and uses AdamW (eps=1e-5) by default (configurable via `optimizer`).
   - Linear schedule for `clip_range` if `clip_range_schedule == 'linear'`.
   - Logs gradient norms per component under `train/grad_norm/*` after backward and before clipping/step: `actor_head`, `critic_head`, and `trunk`.
 - `agents/reinforce.REINFORCE`:

@@ -1,4 +1,8 @@
-- add adamw support
+- FEAT: add normalization support 
+- FEAT: add discrete env support
+- FEAT: add sweeping support
+
+
 - REFACTOR: simplify envinfo/vecenvinfo wrappers (connect vecenvinfo to envinfo)
 - REFACTOR: simplify CNN policy creation, test manually first
 - BUG: restore grayscaling / resizing logic; think how to unify with atari preprocessing (probably just inspect internals and extract)
@@ -12,7 +16,6 @@
 - REFACTOR: consider changing eval_freq to timesteps so it doesnt depend on n_updates
 - FEAT: log target metrics to tensorboard
 - FEAT: figure out if I should log variance instead of std
-- FEAT: add sweeping support
 - TODO: x metric cant be total timesteps because that increases with parallelization.... must be n_updates? index by epoch? or add updates metric?
 - TODO: optimal single metric for best training (samples/reward)
 - TODO: add kl divergence metric to reinforce
@@ -20,10 +23,6 @@
 - REFACTOR: move hidden_dims inside policy_kwargsp
 - FEAT: ensure we can see baseline advantages in inspector.py
 - BUG: PPO can solve FrozenLake-v1, but REINFORCE cannot. REINFORCE is likely not implemented correctly.
-- EXP: Tune CartPole-v1:PPO to train as fast as REINFORCE
-- Add config defaults based on algo
-- FEAT: add normalization support 
-- FEAT: add discrete env support
 - TASK: solve Pong-v5_objects, then propagate to other envs
 - BUG: run is being logged even when training is not started, bold terminal
 - https://github.com/kenjyoung/MinAtar

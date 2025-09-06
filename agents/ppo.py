@@ -146,8 +146,8 @@ class PPO(BaseAgent):
         return loss
     
     def configure_optimizers(self):
-        # TODO: Match SB3's Adam defaults more closely by setting eps=1e-5
-        return torch.optim.Adam(self.policy_model.parameters(), lr=self.config.policy_lr, eps=1e-5)
+        # Use BaseAgent-configured optimizer (defaults to AdamW with eps=1e-5)
+        return self._make_optimizer(self.policy_model.parameters())
     
     # TODO: find a way to not have to inherit this
     def _update_schedules(self):

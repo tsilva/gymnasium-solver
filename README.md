@@ -74,7 +74,7 @@ Selection:
 - CLI (train.py): pass `--config_id "<env>:<variant>"` (colon, not underscore), e.g., `--config_id "CartPole-v1:ppo"`.
 The loader remains compatible with the legacy multi-block format for a transitional period. When `project_id` is omitted in environment YAMLs, it is inferred from the file name.
 
-Key fields: `env_id`, `algo_id`, `n_envs`, `n_steps`, `batch_size`, `max_timesteps`, `policy` (`mlp|cnn`), `hidden_dims`, `obs_type` (`rgb|ram|objects` for ALE).
+Key fields: `env_id`, `algo_id`, `n_envs`, `n_steps`, `batch_size`, `max_timesteps`, `policy` (`mlp|cnn`), `hidden_dims`, `obs_type` (`rgb|ram|objects` for ALE), `optimizer` (`adamw` default; supports `adam|adamw|sgd`).
 
 Batch size can be either an absolute integer or a fraction in (0, 1]. If fractional, it is resolved as `batch_size = floor(n_envs * n_steps * fraction)`, with a minimum of 1.
 

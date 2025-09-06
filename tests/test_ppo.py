@@ -132,6 +132,6 @@ def test_ppo_create_models_and_optimizer():
 
     # Optimizer wiring
     opt = agent.configure_optimizers()
-    assert isinstance(opt, torch.optim.Adam)
+    assert isinstance(opt, torch.optim.AdamW)
     assert any(abs(pg["lr"] - 1e-3) < 1e-12 for pg in opt.param_groups)
     assert all(pg.get("eps", None) == 1e-5 for pg in opt.param_groups)

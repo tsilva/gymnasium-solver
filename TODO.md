@@ -2,7 +2,29 @@
 - FEAT: add discrete env support
 - FEAT: add sweeping support
 
+ ppo_tuned2:
+      - policy_lr: 5e-4
+      - clip_range: 0.2
+      - ent_coef: 0.0015
+      - vf_coef: 0.45
+      - batch_size: 1024 (or keep 2048 and set n_epochs: 12)
+      - eval_deterministic: true
+  
+  Optionally:
+  
+  - Add - { id: PongV5_RewardShaper } to env_wrappers for a shaped variant.
+  
+  Would you like me to:
+  
+  - Patch the YAML to add ppo_tuned2 with the above, and set up a quick run?
+  - Also fix the get_reward_treshold typo (safe, unrelated to learning)?
+  
+  If you prefer minimal change first, I’ll only bump clip_range to 0.2 and policy_lr to 5e-4 and rerun to verify approx_kl moves into the
+  0.01–0.02 band.
 
+
+- TODO: how is pongv5 determinism enforce
+- TODO: run pongv5 sweep
 - REFACTOR: simplify envinfo/vecenvinfo wrappers (connect vecenvinfo to envinfo)
 - REFACTOR: simplify CNN policy creation, test manually first
 - BUG: restore grayscaling / resizing logic; think how to unify with atari preprocessing (probably just inspect internals and extract)

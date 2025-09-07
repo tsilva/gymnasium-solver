@@ -29,3 +29,29 @@ ppo:
   hidden_dims: [256, 256] 
   eval_freq_epochs: 50 
   eval_episodes: 10  
+
+# Tuned PPO variant to avoid late-stage plateaus on sticky-actions Pong.
+# Key changes:
+# - Keep LR and clip_range constant (no linear decay) to prevent vanishing updates.
+# - Normalize advantages per rollout to stabilize gradient scales.
+# - Slightly lower entropy and value loss weights for stronger policy signal.
+# - Increase epochs to leverage each rollout more.
+ppo_tuned:
+  algo_id: ppo
+  n_envs: 32
+  n_steps: 256
+  batch_size: 2048
+  n_epochs: 10
+  # Disable LR/clip decay; keep gradients meaningful late in training
+  policy_lr: 3e-4
+  clip_range: 0.15
+  # Stronger policy updates, less entropy/critic dominance
+  ent_coef: 0.003
+  vf_coef: 0.5
+  hidden_dims: [256, 256]
+  # Stabilize scale of advantages
+  normalize_advantages: "rollout"
+  # Keep eval cadence
+  eval_freq_epochs: 50
+  eval_episodes: 10
+  subproc: true

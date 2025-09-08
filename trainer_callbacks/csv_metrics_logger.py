@@ -41,15 +41,15 @@ class CSVMetricsLoggerCallback(pl.Callback):
         self._logger = CsvMetricsLogger(self._path, queue_size=self._queue_size)
 
     def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
-        metrics = pl_module._metrics_buffer.means()
+        metrics = pl_module._epoch_metrics_buffer.means()
         self._logger.log_metrics(metrics)   
 
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
-        metrics = pl_module._metrics_buffer.means()
+        metrics = pl_module._epoch_metrics_buffer.means()
         self._logger.log_metrics(metrics)
 
     def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
-        metrics = pl_module._metrics_buffer.means()
+        metrics = pl_module._epoch_metrics_buffer.means()
         self._logger.log_metrics(metrics)
         self._close()
 

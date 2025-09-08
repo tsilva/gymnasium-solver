@@ -204,16 +204,12 @@ class BaseAgent(pl.LightningModule):
         # Clear the metrics buffer (all callbacks will have logged by now)
         self._epoch_metrics_buffer.clear()
 
-    # TODO: this method is still pretty weird
     def _on_train_epoch_end__log_metrics(self):
-        # Don'y log until we have at least one episode completed 
+        # Don't log until we have at least one episode completed 
         # (otherwise we won't be able to get reliable metrics)
         rollout_metrics = self.train_collector.get_metrics()
         total_episodes = rollout_metrics.get("total_episodes", 0)
         if total_episodes == 0: return
-
-        # TODO: review this
-        rollout_metrics.pop("action_dist", None)
 
         # Global & instant FPS from the same tracker
         total_timesteps = int(rollout_metrics["total_timesteps"])
@@ -221,40 +217,19 @@ class BaseAgent(pl.LightningModule):
         fps_total = self._timing_tracker.fps_since("on_fit_start", steps_now=total_timesteps)
         fps_instant = self._timing_tracker.fps_since("on_train_epoch_start", steps_now=total_timesteps)
 
-        # If no episodes have completed yet, avoid logging ep_*_mean metrics
-        # to external sinks (e.g., W&B/CSV) to prevent an initial zero spike.
-        # Keep immediate last stats available for local use/tests.
-        try:
-            if len(self.train_collector.episode_reward_deque) == 0:
-                rollout_metrics.pop("ep_rew_mean", None)
-                rollout_metrics.pop("ep_len_mean", None)
-        except Exception:
-            # Be defensive: if collector lacks the deque, proceed without pruning
-            pass
-
         # Prepare metrics to log
         _metrics = {
-            **rollout_metrics,
+            **{k:v for k, v in rollout_metrics.items() if k.endswith("_dist")},
             "time_elapsed": time_elapsed,
             "epoch": self.current_epoch,
-            "fps": fps_total,  # run-wide average FPS
+            "fps": fps_total,
             "fps_instant": fps_instant,
         }
 
         # Derive ETA (seconds remaining) from FPS and max_timesteps if available
-        try:
-            max_ts = float(self.config.max_timesteps) if self.config.max_timesteps is not None else None
-        except Exception:
-            max_ts = None
-        if max_ts is not None:
-            try:
-                remaining = max(0.0, float(max_ts) - float(total_timesteps))
-                if float(fps_total) > 0.0:
-                    _metrics["eta_s"] = float(remaining / float(fps_total))
-            except Exception:
-                # Be robust: skip ETA if any cast/division fails
-                pass
-
+        if fps_total > 0.0 and self.config.max_timesteps is not None:
+            _metrics["eta_s"] = float(self.config.max_timesteps / float(fps_total))
+    
         # Log metrics to the buffer
         self.log_metrics(_metrics, prefix="train")
 

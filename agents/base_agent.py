@@ -198,9 +198,10 @@ class BaseAgent(pl.LightningModule):
         # Log end of epoch metrics
         self._on_train_epoch_end__log_metrics()
 
-        #self._flush_metrics()  
-
         self._update_schedules()
+
+        # Clear the metrics buffer (all callbacks will have logged by now)
+        self._metrics_buffer.clear()
 
     def _on_train_epoch_end__log_metrics(self):
         # Don'y log until we have at least one episode completed 
@@ -317,9 +318,8 @@ class BaseAgent(pl.LightningModule):
         }, prefix="eval")
 
     def on_validation_epoch_end(self):
-        # Validation epoch end is called after all validation steps are done
-        # (nothing to do because we already did everything in the validation step)
-        pass
+        # Clear the metrics buffer (all callbacks will have logged by now)
+        self._metrics_buffer.clear()
 
     def on_fit_end(self):
         # Log training completion time
@@ -600,6 +600,7 @@ class BaseAgent(pl.LightningModule):
         """Assemble trainer callbacks, with an optional end-of-training report."""
         # Lazy imports to avoid heavy deps at module import time
         from trainer_callbacks import (
+            WandbMetricsLoggerCallback,
             CSVMetricsLoggerCallback,
             PrintMetricsCallback,
             HyperparamSyncCallback,
@@ -614,6 +615,9 @@ class BaseAgent(pl.LightningModule):
         # CSV Metrics Logger (writes metrics.csv under the run directory)
         csv_path = self.run_manager.ensure_path("metrics.csv")
         callbacks.append(CSVMetricsLoggerCallback(csv_path=str(csv_path)))
+
+        # W&B Logger (logs metrics to W&B)
+        callbacks.append(WandbMetricsLoggerCallback())
 
         # Formatting/precision rules for pretty printing
         from utils.metrics import (
@@ -781,27 +785,6 @@ class BaseAgent(pl.LightningModule):
         # Add to epoch aggregation buffer and terminal history
         self._metrics_buffer.log(prefixed)
         self._metrics_history.update(prefixed)
-
-    # TODO: not sure about this 
-    def _flush_metrics(self, *, log_to_lightning: bool = True):
-        """
-        Compute means from the metrics buffer and clear it.
-
-        When log_to_lightning is True (default), forward the aggregated
-        metrics to Lightning's logger via self.log_dict. Some lifecycle hooks
-        (e.g., on_fit_end) disallow self.log(), so callers can set
-        log_to_lightning=False to avoid Lightning logging in those contexts.
-        """
-        means = self._metrics_buffer.means()
-
-        try:
-            if log_to_lightning:
-                # Forward aggregated metrics to Lightning when allowed
-                self.log_dict(means)
-        finally:
-            # Always clear buffer regardless of logging outcome
-            self._metrics_buffer.clear()
-        return means
 
     # -------------------------
     # Small testable helpers

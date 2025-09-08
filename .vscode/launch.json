@@ -2,34 +2,16 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug: Single W&B sweep trial (offline)",
-      "type": "python",
-      "request": "launch",
-      "program": "scripts/debug_sweep.py",
-      "console": "integratedTerminal",
-      "env": {
-        "WANDB_MODE": "offline",
-        "WANDB_SWEEP_ID": "debug-local-sweep",
-        "DEBUG_SWEEP_CONFIG_ID": "CartPole-v1:ppo"
-      }
-    },
-    {
-      "name": "Debug: train.py with sweep overrides",
+      "name": "Debug: train.py",
       "type": "python",
       "request": "launch",
       "program": "train.py",
       "args": [
         "--config_id",
-        "CartPole-v1:ppo",
-        "--wandb_sweep",
-        "-q"
+        "CartPole-v1:ppo"
       ],
       "console": "integratedTerminal",
-      "env": {
-        "WANDB_MODE": "offline",
-        "WANDB_SWEEP_ID": "debug-local-sweep",
-        "WANDB_SWEEP_OVERRIDES": "{\"policy_lr\": 0.0003, \"clip_range\": 0.2, \"n_epochs\": 10, \"ent_coef\": 0.0, \"batch_size\": 0.5, \"max_timesteps\": 2000}"
-      }
+      "env": {}
     }
   ]
 }

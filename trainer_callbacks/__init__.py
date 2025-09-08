@@ -3,10 +3,11 @@
 from .hyperparameter_sync import HyperparamSyncCallback
 from .model_checkpoint import ModelCheckpointCallback
 from .print_metrics import PrintMetricsCallback
-from .csv_logger import CSVMetricsLoggerCallback
+from .csv_metrics_logger import CSVMetricsLoggerCallback
 from .video_logger import VideoLoggerCallback
 from .end_of_training_report import EndOfTrainingReportCallback
 from .early_stopping import EarlyStoppingCallback
+from .wandb_metrics_logger import WandbMetricsLoggerCallback
 
 __all__ = [
     "PrintMetricsCallback",
@@ -16,4 +17,5 @@ __all__ = [
     "EndOfTrainingReportCallback",
     "EarlyStoppingCallback",
     "CSVMetricsLoggerCallback",
+    "WandbMetricsLoggerCallback",
 ]

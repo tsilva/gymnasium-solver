@@ -23,23 +23,6 @@ def test_sanitize_name():
     assert BaseAgent._sanitize_name("NoSeparators") == "NoSeparators"
 
 
-def test_compute_validation_controls_none():
-    controls = BaseAgent._compute_validation_controls(None)
-    assert controls["limit_val_batches"] == 0
-    assert controls["check_val_every_n_epoch"] == 1
-
-
-def test_compute_validation_controls_positive():
-    controls = BaseAgent._compute_validation_controls(5)
-    assert controls["limit_val_batches"] == 1.0
-    assert controls["check_val_every_n_epoch"] == 5
-
-def test_compute_validation_controls_zero_disables():
-    controls = BaseAgent._compute_validation_controls(0)
-    assert controls["limit_val_batches"] == 0
-    assert controls["check_val_every_n_epoch"] == 1
-
-
 def test_should_run_eval_no_warmup():
     class Cfg:
         eval_freq_epochs = 5

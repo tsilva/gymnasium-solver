@@ -606,16 +606,16 @@ class BaseAgent(pl.LightningModule):
         print(ansi(banner_char * width, "bright_magenta", enable=use_color))
 
         print("\n" + ansi(format_banner("Environment Details", width=width, char=banner_char), "bright_magenta", "bold", enable=use_color))
-        if hasattr(self.train_env, 'print_spec'):
-            self.train_env.print_spec()
-        else:
-            # Minimal fallback for stub env used in tests
-            try:
-                print(format_kv_line("n_envs", getattr(self.train_env, 'num_envs', '?'), key_width=14, key_color="bright_blue", val_color="bright_white", enable_color=use_color))
-                print(format_kv_line("input_dim", getattr(self, 'input_dim', '?'), key_width=14, key_color="bright_blue", val_color="bright_white", enable_color=use_color))
-                print(format_kv_line("output_dim", getattr(self, 'output_dim', '?'), key_width=14, key_color="bright_blue", val_color="bright_white", enable_color=use_color))
-            except Exception:
-                pass
+
+        # Observation space and action space from vectorized env
+        print(format_kv_line("Observation space", self.train_env.observation_space, key_width=18, key_color="bright_blue", val_color="bright_white", enable_color=use_color))
+        print(format_kv_line("Action space", self.train_env.action_space, key_width=18, key_color="bright_blue", val_color="bright_white", enable_color=use_color))
+
+        # Reward threshold if defined
+        reward_threshold = self.train_env.get_reward_threshold()
+        print(format_kv_line("Reward threshold", reward_threshold, key_width=18, key_color="bright_blue", val_color="bright_white", enable_color=use_color))
+        
+
         print(ansi(banner_char * width, "bright_magenta", enable=use_color))
 
         # Also log configuration details for reproducibility

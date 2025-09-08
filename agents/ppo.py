@@ -15,11 +15,11 @@ class PPO(BaseAgent):
     # TODO: do this in init?
     def create_models(self):
         input_shape = self.train_env.observation_space.shape
-        output_shape = getattr(self.train_env.action_space, "shape", None)
+        output_shape = self.train_env.action_space.shape
         if not output_shape: output_shape = (self.train_env.action_space.n,)
-        policy_type = getattr(self.config, 'policy', 'mlp')
-        activation = getattr(self.config, 'activation', 'relu')
-        policy_kwargs = getattr(self.config, 'policy_kwargs', {}) or {}
+        policy_type = self.config.policy#getattr(self.config, 'policy', 'mlp')
+        activation = self.config.activation#getattr(self.config, 'activation', 'relu')
+        policy_kwargs = self.config.policy_kwargs#getattr(self.config, 'policy_kwargs', {}) or {}
         _model = create_actor_critic_policy(
             policy_type,
             input_shape=input_shape,

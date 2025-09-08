@@ -229,7 +229,7 @@ clip_fraction:
   max: 1.0
   algorithm_rules:
     ppo:
-      threshold: 0.5
+      threshold: 0.2
       condition: "less_than"
       message: "High clip fraction ({current_value:.3f}) indicates policy is changing too rapidly. Consider reducing learning rate or clip_range."
       level: "warning"

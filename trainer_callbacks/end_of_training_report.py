@@ -317,8 +317,5 @@ class EndOfTrainingReportCallback(BaseCallback):
         )
 
         # Write file
-        try:
-            report_path.write_text("\n".join(lines), encoding="utf-8")
-            print(f"End-of-training report written to: {report_path}")
-        except Exception as e:
-            print(f"Warning: failed to write end-of-training report: {e}")
+        report_path.write_text("\n".join(lines), encoding="utf-8")
+        

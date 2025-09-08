@@ -49,8 +49,6 @@ class CSVMetricsLoggerCallback(pl.Callback):
         self._logger.log_metrics(metrics)
 
     def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
-        metrics = pl_module._epoch_metrics_buffer.means()
-        self._logger.log_metrics(metrics)
         self._close()
 
     def teardown(self, trainer: pl.Trainer, pl_module: pl.LightningModule, stage: str | None = None) -> None:

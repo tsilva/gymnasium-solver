@@ -592,14 +592,12 @@ class BaseAgent(pl.LightningModule):
         )
         trainer.fit(self)
     
-    def _prompt_user_start_training(self):
-        from utils.user import prompt_confirm
-        from utils.logging import format_banner, ansi, _color_enabled
+    def _display_details(self, data_json: dict):
+        from utils.logging import format_banner, ansi, _color_enabled, format_kv_line
 
         width = 60
         use_color = _color_enabled()
         banner_char = "━" if use_color else "="
-
 
         def _create_banner(title: str):
             return ansi(format_banner(title, width=width, char=banner_char), "bright_magenta", "bold", enable=use_color)
@@ -607,33 +605,34 @@ class BaseAgent(pl.LightningModule):
         def _create_kv_line(key: str, value: str):
             return format_kv_line(key, value, key_width=14, key_color="bright_blue", val_color="bright_white", enable_color=use_color)
 
-        print("\n" + _create_banner("Run Details"))     
-        from utils.logging import format_kv_line
-        print(_create_kv_line("Run directory", self.run_manager.get_run_dir()))
-        print(_create_kv_line("Run ID", self.run_manager.get_run_id()))
-        print(ansi(banner_char * width, "bright_magenta", enable=use_color))
+        output_lines = []
+        for title, data in data_json.items():
+            output_lines.append("\n" + _create_banner(title))
+            for key, value in data.items():
+                output_lines.append(_create_kv_line(key, value))
+            output_lines.append(ansi(banner_char * width, "bright_magenta", enable=use_color))
+        print("\n".join(output_lines))
+    
+    def _prompt_user_start_training(self):
+        from utils.user import prompt_confirm
 
-        print("\n" + _create_banner("Environment Details"))
-
-        # Observation space and action space from vectorized env
-        print(_create_kv_line("Observation space", self.train_env.observation_space))
-        print(_create_kv_line("Action space", self.train_env.action_space))
-
-        # Reward threshold if defined
-        reward_threshold = self.train_env.get_reward_threshold()
-        print(_create_kv_line("Reward threshold", reward_threshold))
-        
-
-        print(_create_banner("Configuration Details"))
-
-        # Also log configuration details for reproducibility
-        try:
-            import utils.logging as _logging_mod
-            _log_fn = getattr(_logging_mod, "log_config_details", None)
-            if callable(_log_fn):
-                _log_fn(self.config)
-        except Exception:
-            pass
+        self._display_details({
+            "Run Details": {
+                "Run directory": self.run_manager.get_run_dir(),
+                "Run ID": self.run_manager.get_run_id(),
+            },
+            "Environment Details": {
+                "Observation space": self.train_env.observation_space,
+                "Action space": self.train_env.action_space,
+                "Reward threshold": self.train_env.get_reward_threshold(),
+            },
+            "Configuration Details": {
+                "Run ID": self.run_manager.get_run_id(),
+                "Observation space": self.train_env.observation_space,
+                "Action space": self.train_env.action_space,
+                "Reward threshold": self.train_env.get_reward_threshold()
+            },
+        })
 
         # Ask for confirmation before any heavy setup (keep prior prints grouped)
         # Before prompting, suggest better defaults if we detect mismatches

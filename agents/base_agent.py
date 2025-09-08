@@ -526,7 +526,7 @@ class BaseAgent(pl.LightningModule):
         printer_cb = PrintMetricsCallback(
             every_n_steps=None,
             every_n_epochs=1,
-            digits=4,
+            digits=4, # TODO: should this be configurable?
             metric_precision=metric_precision,
             metric_delta_rules=metric_delta_rules,
             algorithm_metric_rules=algo_metric_rules,
@@ -704,13 +704,11 @@ class BaseAgent(pl.LightningModule):
         The shared trunk is computed as all parameters excluding head parameters
         (e.g., backbone/CNN feature extractor).
         """
-        model = getattr(self, "policy_model", None)
-        if model is None:
-            return
+        policy_model = self.policy_model
 
         # Identify heads if present
-        policy_head = getattr(model, "policy_head", None)
-        value_head = getattr(model, "value_head", None)
+        policy_head = policy_model.policy_head
+        value_head = policy_model.value_head
 
         head_param_ids = set()
         actor_params = []
@@ -723,7 +721,7 @@ class BaseAgent(pl.LightningModule):
             head_param_ids.update(id(p) for p in critic_params)
 
         # Trunk are all params not in heads
-        trunk_params = [p for p in model.parameters() if id(p) not in head_param_ids]
+        trunk_params = [p for p in policy_model.parameters() if id(p) not in head_param_ids]
 
         metrics = {
             "grad_norm/actor_head": self._compute_param_group_grad_norm(actor_params),

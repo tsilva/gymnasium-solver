@@ -389,3 +389,28 @@ def log_config_details(config, file: Optional[TextIO] = None) -> None:
     except Exception:
         # Do not let logging issues crash the program
         pass
+
+
+def display_config_summary(data_json: dict, *, width: int = 60) -> None:
+    """Display structured configuration data in a formatted, colored banner layout.
+    
+    Args:
+        data_json: Dictionary where keys are section titles and values are key-value pairs
+        width: Width of the display banner (default: 60)
+    """
+    use_color = _color_enabled()
+    banner_char = "━" if use_color else "="
+
+    def _create_banner(title: str):
+        return ansi(format_banner(title, width=width, char=banner_char), "bright_magenta", "bold", enable=use_color)
+
+    def _create_kv_line(key: str, value: str):
+        return format_kv_line(key, value, key_width=14, key_color="bright_blue", val_color="bright_white", enable_color=use_color)
+
+    output_lines = []
+    for title, data in data_json.items():
+        output_lines.append("\n" + _create_banner(title))
+        for key, value in data.items():
+            output_lines.append(_create_kv_line(key, value))
+        output_lines.append(ansi(banner_char * width, "bright_magenta", enable=use_color))
+    print("\n".join(output_lines))

@@ -77,74 +77,49 @@ class BaseAgent(pl.LightningModule):
             **self.rollout_collector_hyperparams(),
         )
 
-        # Validation/Test envs
-        # Retro (Gym Retro) cannot have multiple emulator instances per process.
-        # To respect this, we create evaluation envs lazily (just-in-time) and
-        # close them immediately after use during validation/test for Retro.
-        try:
-            from utils.environment import is_stable_retro_env_id as _is_retro_fn  # type: ignore
-        except Exception:
-            _is_retro_fn = lambda _eid: False
-        _is_retro = False
-        try:
-            _is_retro = bool(_is_retro_fn(config.env_id))
-        except Exception:
-            _is_retro = False
-
-        if not _is_retro:
-            # Standard path: keep persistent eval/test envs with video recorder wrapper
-            self.validation_env = build_env(
-                config.env_id,
-                **{
-                    **common_env_kwargs,
-                    "seed": config.seed + 1000,  # different seed to minimize correlation
-                    "subproc": False,
-                    "render_mode": "rgb_array",
-                    "record_video": True,
-                    "record_video_kwargs": {
-                        "video_length": 100,  # cap video length to avoid bottlenecks
-                        "record_env_idx": 0,
-                    },
+        # Create validation environment and collector
+        self.validation_env = build_env(
+            config.env_id,
+            **{
+                **common_env_kwargs,
+                "seed": config.seed + 1000,  # different seed to minimize correlation
+                "subproc": False,
+                "render_mode": "rgb_array",
+                "record_video": True,
+                "record_video_kwargs": {
+                    "video_length": 100,  # cap video length to avoid bottlenecks
+                    "record_env_idx": 0,
                 },
-            )
-            self.validation_collector = RolloutCollector(
-                self.validation_env,
-                self.policy_model,
-                n_steps=self.config.n_steps,
-                **self.rollout_collector_hyperparams(),
-            )
+            },
+        )
+        self.validation_collector = RolloutCollector(
+            self.validation_env,
+            self.policy_model,
+            n_steps=self.config.n_steps,
+            **self.rollout_collector_hyperparams(),
+        )
 
-            self.test_env = build_env(
-                config.env_id,
-                **{
-                    **common_env_kwargs,
-                    "seed": config.seed + 2000,
-                    "subproc": False,
-                    "render_mode": "rgb_array",
-                    "record_video": True,
-                    "record_video_kwargs": {
-                        "video_length": None,  # full video
-                        "record_env_idx": 0,
-                    },
+        # Create test environment and collector
+        self.test_env = build_env(
+            config.env_id,
+            **{
+                **common_env_kwargs,
+                "seed": config.seed + 2000,
+                "subproc": False,
+                "render_mode": "rgb_array",
+                "record_video": True,
+                "record_video_kwargs": {
+                    "video_length": None,  # full video
+                    "record_env_idx": 0,
                 },
-            )
-            self.test_collector = RolloutCollector(
-                self.test_env,
-                self.policy_model,
-                n_steps=self.config.n_steps,
-                **self.rollout_collector_hyperparams(),
-            )
-        else:
-            # Retro path: do not create envs now; create/close them on demand.
-            # Provide a minimal stub for callbacks that query reward thresholds.
-            class _EvalEnvStub:
-                def get_reward_threshold(self):
-                    return None
-
-            self.validation_env = _EvalEnvStub()
-            self.validation_collector = None  # created lazily if needed
-            self.test_env = _EvalEnvStub()
-            self.test_collector = None
+            },
+        )
+        self.test_collector = RolloutCollector(
+            self.test_env,
+            self.policy_model,
+            n_steps=self.config.n_steps,
+            **self.rollout_collector_hyperparams(),
+        )
 
     @must_implement
     def create_models(self):

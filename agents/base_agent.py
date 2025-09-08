@@ -219,7 +219,7 @@ class BaseAgent(pl.LightningModule):
 
         # Prepare metrics to log
         _metrics = {
-            **{k:v for k, v in rollout_metrics.items() if k.endswith("_dist")},
+            **{k:v for k, v in rollout_metrics.items() if not k.endswith("_dist")},
             "time_elapsed": time_elapsed,
             "epoch": self.current_epoch,
             "fps": fps_total,
@@ -251,7 +251,7 @@ class BaseAgent(pl.LightningModule):
     # TODO: there are train/fps drops caused by running the collector N times (its not only the video recording); cause currently unknown
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         # If eval shouldn't be run this epoch, skip the step (eg: warmup epochs)
-        if not self._should_run_eval(self.current_epoch):
+        if not self._should_run_eval(self.current_epoch): # TODO: can this be done in the trainer itself?
             return None
 
         # Decide if we record a video this eval epoch
@@ -272,27 +272,13 @@ class BaseAgent(pl.LightningModule):
                 deterministic=self.config.eval_deterministic,
             )
         
+        # Log eval metrics
         total_timesteps = int(eval_metrics.get("total_timesteps", 0))
         epoch_fps = self._timing_tracker.fps_since("on_validation_epoch_start", steps_now=total_timesteps)
-
-        # Log metrics
-        #if not self.config.log_per_env_eval_metrics:
-        eval_metrics = {k: v for k, v in eval_metrics.items() if not k.startswith("per_env/")}
-
-        # TODO: what is this?
-        # If evaluation produced zero episodes (edge cases), avoid logging
-        # ep_*_mean to external sinks to prevent an initial zero spike.
-        try:
-            if int(eval_metrics.get("total_episodes", 0)) <= 0:
-                eval_metrics.pop("ep_rew_mean", None)
-                eval_metrics.pop("ep_len_mean", None)
-        except Exception:
-            pass
-
         self.log_metrics({
+            **{k: v for k, v in eval_metrics.items() if not k.startswith("per_env/")},
             "epoch": int(self.current_epoch), 
             "epoch_fps": epoch_fps, 
-            **eval_metrics
         }, prefix="eval")
 
     def on_validation_epoch_end(self):
@@ -386,6 +372,7 @@ class BaseAgent(pl.LightningModule):
         self.run_manager = RunManager(wandb_run.id)
         
         # Save configuration to run directory
+        # TODO: pass loggable data instead?
         config_path = self.run_manager.ensure_path("config.json")
         self.config.save_to_json(config_path)
         

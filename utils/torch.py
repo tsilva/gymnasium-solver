@@ -96,6 +96,24 @@ def _activation_instance_from_spec(spec: "str | type[nn.Module] | nn.Module") ->
     return nn.ReLU()
 
 
+def assert_detached(*tensors: torch.Tensor) -> bool:
+    """Assert that all tensors are detached from the computation graph.
+    
+    Args:
+        *tensors: Variable number of tensors to check
+        
+    Returns:
+        True if all tensors are detached
+        
+    Raises:
+        AssertionError: If any tensor still requires gradients or is connected to a computation graph
+    """
+    for t in tensors:
+        assert not t.requires_grad, "Tensor still requires grad"
+        assert t.grad_fn is None, "Tensor is still connected to a computation graph"
+    return True
+
+
 def init_model_weights(
     model: nn.Module,
     *,

@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 
 from utils.policy_factory import create_actor_critic_policy
+from utils.torch import assert_detached
 
 from .base_agent import BaseAgent
 
@@ -37,6 +38,9 @@ class PPO(BaseAgent):
         old_logprobs = batch.log_prob # TODO: call log_probs
         advantages = batch.advantages
         returns = batch.returns
+
+        # Assert that the tensors are detached
+        assert_detached(states, actions, old_logprobs, advantages, returns)
 
         # TODO: use util (use pytorch function if available)
         # TODO: perform these ops before calling losses_for_batch?

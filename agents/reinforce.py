@@ -1,15 +1,9 @@
 from utils.policy_factory import create_policy
+from utils.torch import assert_detached
 
 from .base_agent import BaseAgent
 
 import torch
-
-# TODO: move to util
-def assert_detached(*tensors: torch.Tensor):
-    for t in tensors:
-        assert not t.requires_grad, "Tensor still requires grad"
-        assert t.grad_fn is None, "Tensor is still connected to a computation graph"
-    return True
 
 class REINFORCE(BaseAgent):
     

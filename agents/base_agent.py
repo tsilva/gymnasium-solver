@@ -599,24 +599,32 @@ class BaseAgent(pl.LightningModule):
         width = 60
         use_color = _color_enabled()
         banner_char = "━" if use_color else "="
-        print("\n" + ansi(format_banner("Run Details", width=width, char=banner_char), "bright_magenta", "bold", enable=use_color))
+
+
+        def _create_banner(title: str):
+            return ansi(format_banner(title, width=width, char=banner_char), "bright_magenta", "bold", enable=use_color)
+
+        def _create_kv_line(key: str, value: str):
+            return format_kv_line(key, value, key_width=14, key_color="bright_blue", val_color="bright_white", enable_color=use_color)
+
+        print("\n" + _create_banner("Run Details"))     
         from utils.logging import format_kv_line
-        print(format_kv_line("Run directory", self.run_manager.get_run_dir(), key_width=14, key_color="bright_blue", val_color="bright_white", enable_color=use_color))
-        print(format_kv_line("Run ID", self.run_manager.get_run_id(), key_width=14, key_color="bright_blue", val_color="bright_white", enable_color=use_color))
+        print(_create_kv_line("Run directory", self.run_manager.get_run_dir()))
+        print(_create_kv_line("Run ID", self.run_manager.get_run_id()))
         print(ansi(banner_char * width, "bright_magenta", enable=use_color))
 
-        print("\n" + ansi(format_banner("Environment Details", width=width, char=banner_char), "bright_magenta", "bold", enable=use_color))
+        print("\n" + _create_banner("Environment Details"))
 
         # Observation space and action space from vectorized env
-        print(format_kv_line("Observation space", self.train_env.observation_space, key_width=18, key_color="bright_blue", val_color="bright_white", enable_color=use_color))
-        print(format_kv_line("Action space", self.train_env.action_space, key_width=18, key_color="bright_blue", val_color="bright_white", enable_color=use_color))
+        print(_create_kv_line("Observation space", self.train_env.observation_space))
+        print(_create_kv_line("Action space", self.train_env.action_space))
 
         # Reward threshold if defined
         reward_threshold = self.train_env.get_reward_threshold()
-        print(format_kv_line("Reward threshold", reward_threshold, key_width=18, key_color="bright_blue", val_color="bright_white", enable_color=use_color))
+        print(_create_kv_line("Reward threshold", reward_threshold))
         
 
-        print(ansi(banner_char * width, "bright_magenta", enable=use_color))
+        print(_create_banner("Configuration Details"))
 
         # Also log configuration details for reproducibility
         try:

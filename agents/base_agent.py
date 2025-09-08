@@ -327,39 +327,22 @@ class BaseAgent(pl.LightningModule):
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
 
         # TODO: encapsulate in callback
-        history = getattr(self, "_metrics_history", None)
-        if history and history.as_dict():
-            print_terminal_ascii_summary(history.as_dict())
+        print_terminal_ascii_summary(self._metrics_history.as_dict())
 
         # Record final evaluation video and save associated metrics JSON next to it
         checkpoint_dir = self.run_manager.ensure_path("checkpoints/")
         video_path = checkpoint_dir / "final.mp4"
-        final_metrics = None
-
-        # If validation is disabled (eval_freq_epochs is None or <= 0), skip final evaluation/video
-        try:
-            _freq = getattr(self.config, "eval_freq_epochs", None)
-            _eval_disabled = (_freq is None) or (int(_freq) <= 0)
-        except Exception:
-            _eval_disabled = True
-
-        if not _eval_disabled:
-            with self.test_env.recorder(str(video_path), record_video=True):
-                from utils.evaluation import evaluate_policy
-                final_metrics = evaluate_policy(
-                    self.test_env,
-                    self.policy_model,
-                    n_episodes=1,
-                    deterministic=self.config.eval_deterministic,
-                )
-        # Always attempt to write metrics JSON alongside the final video
-        try:
-            if final_metrics is not None:
-                json_path = video_path.with_suffix(".json")
-                with open(json_path, "w", encoding="utf-8") as f:
-                    json.dump(final_metrics, f, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
+        with self.test_env.recorder(str(video_path), record_video=True):
+            from utils.evaluation import evaluate_policy
+            final_metrics = evaluate_policy(
+                self.test_env,
+                self.policy_model,
+                n_episodes=1,
+                deterministic=self.config.eval_deterministic,
+            )
+            json_path = video_path.with_suffix(".json")
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(final_metrics, f, ensure_ascii=False, indent=2)
 
         # Ensure a final checkpoint exists even if validation was disabled and no
         # eval checkpoints were produced. Also create convenient last/best symlinks

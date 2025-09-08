@@ -111,11 +111,7 @@ def test_ppo_clip_range_schedule_update():
 def test_ppo_create_models_and_optimizer():
     # Minimal train_env stub with required API
     class _Env:
-        def get_input_dim(self):
-            return 4
-
-        def get_output_dim(self):
-            return 3
+        pass
 
     agent = object.__new__(PPO)
     agent.config = SimpleNamespace(hidden_dims=(32, 32), policy_lr=1e-3)

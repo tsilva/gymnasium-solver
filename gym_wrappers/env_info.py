@@ -34,9 +34,8 @@ class EnvInfoWrapper(gym.ObservationWrapper):
         reward_threshold = spec['reward_threshold']
         return reward_threshold
 
-    # ObservationWrapper requires implementing this method. We do not
-    # transform observations; return them unchanged.
-    def observation(self, observation):  # type: ignore[override]
+    # NOTE: required by ObservationWrapper
+    def observation(self, observation): 
         return observation
 
 if __name__ == "__main__":

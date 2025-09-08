@@ -14,18 +14,9 @@ class PPO(BaseAgent):
 
     # TODO: do this in init?
     def create_models(self):
-        # Support minimal env stubs used in tests where get_input_dim/get_output_dim
-        # are provided instead of Gymnasium's observation_space/action_space.
-        if hasattr(self.train_env, "get_input_dim") and hasattr(self.train_env, "get_output_dim"):
-            input_dim = int(self.train_env.get_input_dim())
-            output_dim = int(self.train_env.get_output_dim())
-            input_shape = (input_dim,)
-            output_shape = (output_dim,)
-        else:
-            input_shape = self.train_env.observation_space.shape
-            output_shape = getattr(self.train_env.action_space, "shape", None)
-            if not output_shape:
-                output_shape = (self.train_env.action_space.n,)
+        input_shape = self.train_env.observation_space.shape
+        output_shape = getattr(self.train_env.action_space, "shape", None)
+        if not output_shape: output_shape = (self.train_env.action_space.n,)
         policy_type = getattr(self.config, 'policy', 'mlp')
         activation = getattr(self.config, 'activation', 'relu')
         policy_kwargs = getattr(self.config, 'policy_kwargs', {}) or {}

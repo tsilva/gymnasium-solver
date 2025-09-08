@@ -113,60 +113,6 @@ class VecEnvInfoWrapper(VecEnvWrapper):
             
         return None
 
-    def get_reward_range(self):
-        """Return the reward_range from the underlying environment if available.
-
-        Attempts the following, in order:
-        - Direct attribute on first base env (DummyVecEnv path)
-        - Fallback to Gymnasium registry by resolving spec and instantiating a temp env
-        """
-        # Try reading from the first underlying base env
-        try:
-            base = self._first_base_env()
-            if base is not None and hasattr(base, "reward_range"):
-                rr = getattr(base, "reward_range")
-                # ensure it is a tuple-like of length 2
-                if isinstance(rr, (tuple, list)) and len(rr) == 2:
-                    return tuple(rr)
-        except Exception:
-            pass
-
-        # Try complementary env info YAML
-        yaml_rr = self._get_complement_reward_range()
-        if isinstance(yaml_rr, (tuple, list)) and len(yaml_rr) == 2:
-            return tuple(yaml_rr)
-
-        # Last resort: resolve via env spec and a temporary instance
-        try:
-            env_id = None
-            spec = self.get_spec()
-            if spec is not None:
-                env_id = getattr(spec, "id", None)
-            if env_id:
-                import gymnasium as gym
-                if env_id.startswith("ALE/"):
-                    try:
-                        import ale_py
-                        gym.register_envs(ale_py)
-                    except Exception:
-                        pass
-                # Instantiate a lightweight temp env to read reward_range
-                try:
-                    tmp_env = gym.make(env_id)
-                    rr = getattr(tmp_env, "reward_range", None)
-                    try:
-                        tmp_env.close()
-                    except Exception:
-                        pass
-                    if isinstance(rr, (tuple, list)) and len(rr) == 2:
-                        return tuple(rr)
-                except Exception:
-                    pass
-        except Exception:
-            pass
-
-        return None
-    
     # --- complementary info (YAML) ------------------------------------------
     def _get_env_id(self) -> Optional[str]:
         """Best-effort retrieval of the base environment id (e.g., 'CartPole-v1')."""
@@ -383,84 +329,6 @@ class VecEnvInfoWrapper(VecEnvWrapper):
             pass
         return None
     
-    def get_input_dim(self):
-        """
-        Return a reasonable flat input dimension for the observation space.
-
-        - Discrete: return 1 (use scalar ID as input)
-        - Box: return first dimension (assumes flat features or 1D vector)
-        - MultiDiscrete: return number of subspaces
-        - Tuple: sum of subspace flat dims when possible
-        """
-        from gymnasium import spaces
-
-        obs_space = self.venv.observation_space
-
-        # Discrete spaces (e.g., Taxi-v3): use scalar state id as a single feature
-        if isinstance(obs_space, spaces.Discrete):
-            return 1
-
-        # Box spaces: favor 1D vectors; otherwise return first dim as a heuristic
-        if isinstance(obs_space, spaces.Box):
-            if len(obs_space.shape) == 1:
-                return int(obs_space.shape[0])
-            # For 2D/3D observations, fallback to product if small, else first dim
-            try:
-                prod = int(1)
-                for s in obs_space.shape:
-                    prod *= int(s)
-                # Avoid very large flatten sizes silently; caller may choose CNN
-                return prod
-            except Exception:
-                return int(obs_space.shape[0]) if obs_space.shape else None
-
-        # MultiDiscrete: number of discrete components
-        if isinstance(obs_space, spaces.MultiDiscrete):
-            return int(obs_space.nvec.size)
-
-        # Tuple: sum of component flat dims when possible
-        if isinstance(obs_space, spaces.Tuple):
-            dims = []
-            for s in obs_space.spaces:
-                if isinstance(s, spaces.Discrete):
-                    dims.append(1)
-                elif hasattr(s, 'shape') and s.shape:
-                    dims.append(int(np.prod(s.shape)))
-                else:
-                    dims.append(0)
-            return int(sum(dims)) if dims else None
-
-        # Dict: sum flattened dims of each subspace
-        if isinstance(obs_space, spaces.Dict):
-            total = 0
-            for key, sub in obs_space.spaces.items():
-                if isinstance(sub, spaces.Discrete):
-                    total += 1
-                elif hasattr(sub, 'shape') and sub.shape:
-                    try:
-                        total += int(np.prod(sub.shape))
-                    except Exception:
-                        return None
-                else:
-                    return None
-            return int(total)
-
-        # Fallback
-        if hasattr(obs_space, 'shape') and obs_space.shape:
-            return int(obs_space.shape[0])
-        return None
-
-    def get_output_dim(self):
-        """
-        Return the output dimension (action space size).
-        """
-        action_space = self.venv.action_space
-        if hasattr(action_space, 'n'):  # Discrete action space
-            return action_space.n
-        elif hasattr(action_space, 'shape') and action_space.shape:  # Continuous action space
-            return action_space.shape[0]
-        return None
-    
     def print_spec(self):
         # Lazy import to avoid circulars and keep this module light
         try:
@@ -476,10 +344,6 @@ class VecEnvInfoWrapper(VecEnvWrapper):
         # Observation space and action space from vectorized env
         print(format_kv_line("Observation space", self.observation_space, key_width=18, key_color="bright_blue", val_color="bright_white", enable_color=use_color))
         print(format_kv_line("Action space", self.action_space, key_width=18, key_color="bright_blue", val_color="bright_white", enable_color=use_color))
-
-        # Reward range and threshold when available
-        reward_range = self.get_reward_range()
-        print(format_kv_line("Reward range", reward_range, key_width=18, key_color="bright_blue", val_color="bright_white", enable_color=use_color))
 
         # Reward threshold if defined
         reward_threshold = self.get_reward_threshold()

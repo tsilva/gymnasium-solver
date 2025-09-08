@@ -115,12 +115,6 @@ class DummyVecEnvForPPO:
         self._step = np.zeros(self.num_envs, dtype=np.int64)
         self._obs = np.zeros((self.num_envs, self._obs_dim), dtype=np.float32)
 
-    def get_input_dim(self):
-        return self._obs_dim
-
-    def get_output_dim(self):
-        return self._action_dim
-
     def reset(self):
         self._step.fill(0)
         self._obs.fill(0.0)

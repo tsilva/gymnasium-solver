@@ -102,31 +102,8 @@ def _load_model(ckpt_path: Path, config):
     )
 
     try:
-        # Derive input/output shapes from the helper env
-        try:
-            input_dim = helper_env.get_input_dim() if hasattr(helper_env, "get_input_dim") else None
-        except Exception:
-            input_dim = None
-        try:
-            output_dim = helper_env.get_output_dim() if hasattr(helper_env, "get_output_dim") else None
-        except Exception:
-            output_dim = None
-
-        obs_shape = getattr(helper_env, "observation_space", None)
-        act_space = getattr(helper_env, "action_space", None)
-        input_shape = None
-        output_shape = None
-        if obs_shape is not None and hasattr(obs_shape, "shape") and obs_shape.shape:
-            # Use the full shape (e.g., CHW for images; flat for vectors)
-            input_shape = tuple(int(s) for s in obs_shape.shape)
-        elif input_dim is not None:
-            input_shape = (int(input_dim),)
-
-        if act_space is not None and hasattr(act_space, "n"):
-            output_shape = (int(act_space.n),)
-        elif output_dim is not None:
-            output_shape = (int(output_dim),)
-
+        input_shape = helper_env.observation_space
+        output_shape = helper_env.action_space
         if not input_shape or not output_shape:
             raise RuntimeError("Could not infer model input/output shapes from environment")
 
@@ -367,8 +344,6 @@ def run_episode(
     env_spec_obj = env.get_spec() if hasattr(env, "get_spec") else None
     reward_range = env.get_reward_range() if hasattr(env, "get_reward_range") else None
     reward_threshold = env.get_reward_threshold() if hasattr(env, "get_reward_threshold") else None
-    input_dim = env.get_input_dim() if hasattr(env, "get_input_dim") else None
-    output_dim = env.get_output_dim() if hasattr(env, "get_output_dim") else None
     observation_space_str = str(getattr(env, "observation_space", None))
     action_space_str = str(getattr(env, "action_space", None))
     env_spec_summary: Dict[str, Any] = {
@@ -378,8 +353,6 @@ def run_episode(
         "action_space": action_space_str,
         "reward_range": reward_range,
         "reward_threshold": reward_threshold,
-        "input_dim": input_dim,
-        "output_dim": output_dim,
         "env_wrappers": getattr(config, "env_wrappers", None),
         "frame_stack": getattr(config, "frame_stack", None),
         "normalize_obs": getattr(config, "normalize_obs", None),

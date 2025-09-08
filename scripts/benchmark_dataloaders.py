@@ -75,8 +75,8 @@ def make_rollout_dataset(cfg: BenchmarkConfig):
     )
 
     # Build policy model compatible with env
-    input_dim = env.get_input_dim()
-    output_dim = env.get_output_dim()
+    input_dim = env.observation_space.shape[0]
+    output_dim = env.action_space.n
     policy = MLPActorCritic(input_dim, output_dim, hidden_dims=exp_cfg.hidden_dims).to(torch.device("cpu"))
 
     # Build collector and collect one rollout

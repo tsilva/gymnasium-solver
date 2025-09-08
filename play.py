@@ -113,16 +113,6 @@ def load_model(ckpt_path: Path, config):
     )
 
     try:
-        # Derive input/output shapes from the helper env
-        try:
-            input_dim = helper_env.get_input_dim() if hasattr(helper_env, "get_input_dim") else None
-        except Exception:
-            input_dim = None
-        try:
-            output_dim = helper_env.get_output_dim() if hasattr(helper_env, "get_output_dim") else None
-        except Exception:
-            output_dim = None
-
         obs_space = getattr(helper_env, "observation_space", None)
         act_space = getattr(helper_env, "action_space", None)
         input_shape = None

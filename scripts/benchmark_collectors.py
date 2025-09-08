@@ -94,10 +94,8 @@ def _effective_subproc(cfg, override: Optional[bool]) -> Optional[bool]:
 
 
 def _build_policy_model(env, hidden_dims) -> MLPActorCritic:
-    input_dim = env.get_input_dim()
-    output_dim = env.get_output_dim()
-    if input_dim is None or output_dim is None:
-        raise RuntimeError("Could not infer model input/output dims from environment")
+    input_dim = env.observation_space.shape[0]
+    output_dim = env.action_space.n
     hd = hidden_dims if isinstance(hidden_dims, (list, tuple)) else (hidden_dims,)
     return MLPActorCritic(input_dim, output_dim, hidden_dims=hd)
 

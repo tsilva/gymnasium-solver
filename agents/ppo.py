@@ -20,7 +20,7 @@ class PPO(BaseAgent):
         policy_type = self.config.policy#getattr(self.config, 'policy', 'mlp')
         activation = self.config.activation#getattr(self.config, 'activation', 'relu')
         policy_kwargs = self.config.policy_kwargs#getattr(self.config, 'policy_kwargs', {}) or {}
-        _model = create_actor_critic_policy(
+        self.policy_model = create_actor_critic_policy(
             policy_type,
             input_shape=input_shape,
             output_shape=output_shape,
@@ -29,12 +29,6 @@ class PPO(BaseAgent):
             # TODO: redundancy with input_dim/output_dim?
             **policy_kwargs,
         )
-        try:
-            # Normal path when LightningModule/Module initialized
-            self.policy_model = _model
-        except AttributeError:
-            # Tests may construct PPO without calling Module.__init__
-            object.__setattr__(self, "policy_model", _model)
 
     def losses_for_batch(self, batch, batch_idx):
         # use type for this? check sb3
@@ -44,6 +38,7 @@ class PPO(BaseAgent):
         advantages = batch.advantages
         returns = batch.returns
 
+        # TODO: use util (use pytorch function if available)
         # TODO: perform these ops before calling losses_for_batch?
         # Batch-normalize advantage if requested
         normalize_advantages = self.config.normalize_advantages == "batch"
@@ -136,10 +131,7 @@ class PPO(BaseAgent):
 
         return loss
     
-    def configure_optimizers(self):
-        # Use BaseAgent-configured optimizer (defaults to AdamW with eps=1e-5)
-        return self._make_optimizer(self.policy_model.parameters())
-    
+    # TODO: should schedulers be callbacks?
     # TODO: find a way to not have to inherit this
     def _update_schedules(self):
         super()._update_schedules()

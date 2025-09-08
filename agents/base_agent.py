@@ -2,6 +2,7 @@ import torch
 import pytorch_lightning as pl
 import json
 
+from utils.timing import TimingTracker
 from utils.metrics_buffer import MetricsBuffer
 from utils.metrics_history import MetricsHistory
 from utils.decorators import must_implement
@@ -21,17 +22,17 @@ class BaseAgent(pl.LightningModule):
         # (this is needed for multi-model training, eg: policy + value models without shared backbone)
         self.automatic_optimization = False
 
-        # Shared metrics buffer across epochs
-        self._metrics_buffer = MetricsBuffer()
-
-        # Initialize timing tracker for training 
-        # loop performance measurements
-        from utils.timing import TimingTracker
-        self.timing = TimingTracker()
+        # Buffer used to aggregate per-epoch metrics 
+        # (eg: calculate to metric means for logging)
+        self._epoch_metrics_buffer = MetricsBuffer()
 
         # Lightweight history to render ASCII summary at training end
         # Encapsulated in MetricsHistory for clarity and reuse
-        self._metrics_history = MetricsHistory()
+        self._train_metrics_history = MetricsHistory()
+
+        # Initialize timing tracker for training 
+        # loop performance measurements
+        self._timing_tracker = TimingTracker()
 
         self.run_manager = None
 
@@ -139,7 +140,7 @@ class BaseAgent(pl.LightningModule):
 
     def on_fit_start(self):
         # Start the timing tracker for the entire training run
-        self.timing.restart("on_fit_start", steps=0) # TODO: allow tracking arbitrary associated values
+        self._timing_tracker.restart("on_fit_start", steps=0) # TODO: allow tracking arbitrary associated values
 
     def train_dataloader(self):
         # Some lightweight Trainer stubs used in tests don't manage current_epoch on the module.
@@ -170,7 +171,7 @@ class BaseAgent(pl.LightningModule):
     def on_train_epoch_start(self):
         # Start epoch timer
         total_timesteps = self.train_collector.get_metrics()["total_timesteps"]
-        self.timing.restart("on_train_epoch_start", steps=total_timesteps)
+        self._timing_tracker.restart("on_train_epoch_start", steps=total_timesteps)
 
         # Collect fresh trajectories at the start of each training epoch
         # Avoid double-collect on the first epoch: train_dataloader() already
@@ -201,8 +202,9 @@ class BaseAgent(pl.LightningModule):
         self._update_schedules()
 
         # Clear the metrics buffer (all callbacks will have logged by now)
-        self._metrics_buffer.clear()
+        self._epoch_metrics_buffer.clear()
 
+    # TODO: this method is still pretty weird
     def _on_train_epoch_end__log_metrics(self):
         # Don'y log until we have at least one episode completed 
         # (otherwise we won't be able to get reliable metrics)
@@ -215,9 +217,9 @@ class BaseAgent(pl.LightningModule):
 
         # Global & instant FPS from the same tracker
         total_timesteps = int(rollout_metrics["total_timesteps"])
-        time_elapsed = self.timing.seconds_since("on_fit_start")
-        fps_total = self.timing.fps_since("on_fit_start", steps_now=total_timesteps)
-        fps_instant = self.timing.fps_since("on_train_epoch_start", steps_now=total_timesteps)
+        time_elapsed = self._timing_tracker.seconds_since("on_fit_start")
+        fps_total = self._timing_tracker.fps_since("on_fit_start", steps_now=total_timesteps)
+        fps_instant = self._timing_tracker.fps_since("on_train_epoch_start", steps_now=total_timesteps)
 
         # If no episodes have completed yet, avoid logging ep_*_mean metrics
         # to external sinks (e.g., W&B/CSV) to prevent an initial zero spike.
@@ -262,11 +264,12 @@ class BaseAgent(pl.LightningModule):
         return build_dummy_loader()
 
     def on_validation_epoch_start(self):
+        # TODO: why is this being called during warmup epochs?
         # Skip validation entirely during warmup epochs to avoid evaluation overhead
         if not self._should_run_eval(self.current_epoch):
             return
 
-        self.timing.restart("on_validation_epoch_start", steps=0)
+        self._timing_tracker.restart("on_validation_epoch_start", steps=0)
 
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
@@ -285,7 +288,6 @@ class BaseAgent(pl.LightningModule):
         # Run evaluation with optional recording
         checkpoint_dir = self.run_manager.ensure_path("checkpoints/")
         video_path = str(checkpoint_dir / f"epoch={self.current_epoch:02d}.mp4")
-
         with self.validation_env.recorder(video_path, record_video=record_video):
             from utils.evaluation import evaluate_policy
             eval_metrics = evaluate_policy(
@@ -296,12 +298,13 @@ class BaseAgent(pl.LightningModule):
             )
         
         total_timesteps = int(eval_metrics.get("total_timesteps", 0))
-        epoch_fps = self.timing.fps_since("on_validation_epoch_start", steps_now=total_timesteps)
+        epoch_fps = self._timing_tracker.fps_since("on_validation_epoch_start", steps_now=total_timesteps)
 
         # Log metrics
         #if not self.config.log_per_env_eval_metrics:
         eval_metrics = {k: v for k, v in eval_metrics.items() if not k.startswith("per_env/")}
 
+        # TODO: what is this?
         # If evaluation produced zero episodes (edge cases), avoid logging
         # ep_*_mean to external sinks to prevent an initial zero spike.
         try:
@@ -319,15 +322,15 @@ class BaseAgent(pl.LightningModule):
 
     def on_validation_epoch_end(self):
         # Clear the metrics buffer (all callbacks will have logged by now)
-        self._metrics_buffer.clear()
+        self._epoch_metrics_buffer.clear()
 
     def on_fit_end(self):
         # Log training completion time
-        time_elapsed = self.timing.seconds_since("on_fit_start")
+        time_elapsed = self._timing_tracker.seconds_since("on_fit_start")
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
 
         # TODO: encapsulate in callback
-        print_terminal_ascii_summary(self._metrics_history.as_dict())
+        print_terminal_ascii_summary(self._train_metrics_history.as_dict())
 
         # Record final evaluation video and save associated metrics JSON next to it
         checkpoint_dir = self.run_manager.ensure_path("checkpoints/")
@@ -344,10 +347,10 @@ class BaseAgent(pl.LightningModule):
             with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(final_metrics, f, ensure_ascii=False, indent=2)
 
+        # TODO: review this
         # Ensure a final checkpoint exists even if validation was disabled and no
         # eval checkpoints were produced. Also create convenient last/best symlinks
         # for both checkpoint and associated final video/json.
-
         from trainer_callbacks.model_checkpoint import ModelCheckpointCallback
         # If there are no .ckpt files in the run's checkpoint directory, save one now
         has_ckpt = any(p.suffix == ".ckpt" for p in checkpoint_dir.glob("*.ckpt"))
@@ -426,6 +429,7 @@ class BaseAgent(pl.LightningModule):
         eval_freq = self.config.eval_freq_epochs
         warmup = self.config.eval_warmup_epochs or 0
 
+        # TODO: move this inside factory
         # If warmup is active, request validation every epoch and gate in hooks
         eval_freq_epochs = 1 if (eval_freq is not None and warmup > 0) else eval_freq
         limit_val_batches = 0 if eval_freq_epochs is None else 1.0
@@ -445,14 +449,11 @@ class BaseAgent(pl.LightningModule):
         )
         trainer.fit(self)
     
-    def _display_training_info(self, data_json: dict):
-        from utils.logging import display_config_summary
-        display_config_summary(data_json)
-    
     def _prompt_user_start_training(self):
         from utils.user import prompt_confirm
+        from utils.logging import display_config_summary
 
-        self._display_training_info({
+        display_config_summary({
             "Run Details": {
                 "Run directory": self.run_manager.get_run_dir(),
                 "Run ID": self.run_manager.get_run_id(),
@@ -505,6 +506,7 @@ class BaseAgent(pl.LightningModule):
           the configured cadence grid (i.e., E % eval_freq_epochs == 0). Example:
           warmup=50 and freq=15 -> first eval at E=60 (epoch_idx=59).
         """
+        # TODO: review this
         # If eval_freq_epochs is None or <= 0, never evaluate
         freq = self.config.eval_freq_epochs
         try:
@@ -599,7 +601,7 @@ class BaseAgent(pl.LightningModule):
         metric_precision = get_metric_precision_dict()
         metric_delta_rules = get_metric_delta_rules()
         algo_metric_rules = get_algorithm_metric_rules(self.config.algo_id)
-        
+
         # Print metrics once per epoch to align deltas with rollout collection
         printer_cb = PrintMetricsCallback(
             every_n_steps=None,
@@ -740,8 +742,8 @@ class BaseAgent(pl.LightningModule):
         prefixed = {f"{prefix}/{k}": v for k, v in metrics.items()} if prefix else dict(metrics)
 
         # Add to epoch aggregation buffer and terminal history
-        self._metrics_buffer.log(prefixed)
-        self._metrics_history.update(prefixed)
+        self._epoch_metrics_buffer.log(prefixed)
+        self._train_metrics_history.update(prefixed)
 
     # -------------------------
     # Small testable helpers

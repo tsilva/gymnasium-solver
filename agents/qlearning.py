@@ -1,8 +1,10 @@
 import torch
 import torch.nn as nn
 from torch.distributions import Categorical
+from typing import Dict
 
 from .base_agent import BaseAgent
+from utils.torch import compute_param_group_grad_norm
 
 
 class QLearningPolicyModel(nn.Module):
@@ -39,6 +41,18 @@ class QLearningPolicyModel(nn.Module):
 
     def decay_exploration(self):
         self.exploration_rate *= self.exploration_rate_decay
+
+    def compute_grad_norms(self) -> Dict[str, float]:
+        """Compute gradient norms for Q-learning policy.
+        
+        Q-learning doesn't use gradients in the traditional sense since it updates
+        the Q-table directly, but we provide this for compatibility.
+        """
+        # Q-learning doesn't have trainable parameters in the traditional sense
+        # The Q-table is updated directly, not through gradients
+        return {
+            "grad_norm/q_table": 0.0  # No gradients for Q-table updates
+        }
 
 class QLearning(BaseAgent):
     

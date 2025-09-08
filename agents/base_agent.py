@@ -559,19 +559,31 @@ class BaseAgent(pl.LightningModule):
         return callbacks
 
     def _backpropagate_and_step(self, losses):
+        # TODO: create method that encapsulates this logic
         optimizers = self.optimizers()
         if not isinstance(losses, (list, tuple)): losses = [losses]
         if not isinstance(optimizers, (list, tuple)): optimizers = [optimizers]
+        models = [self.policy_model] # TODO: temporary hack
 
-        for idx, optimizer in enumerate(optimizers):
-            loss = losses[idx]
+        # Backpropagate and step for each model, loss, and optimizer combo
+        for model, loss, optimizer in zip(models, losses, optimizers):
+            # Backpropagate loss, zeroing out gradients first 
+            # so they're not accumulated from previous steps
             optimizer.zero_grad()
             self.manual_backward(loss) # TODO: this or loss.backward()?
             
-            self._log_policy_grad_norms()
+            # Compute model gradient norms and log them
+            # (do this before any gradient clipping)
+            metrics = model.compute_grad_norms()
+            self.log_metrics(metrics, prefix="train")
 
-            if self.config.max_grad_norm is not None:
-                torch.nn.utils.clip_grad_norm_(self.policy_model.parameters(), self.config.max_grad_norm)
+            # In case a maximum gradient norm is set, 
+            # clips gradients so that norm isn't exceeded
+            if self.config.max_grad_norm is not None: 
+                torch.nn.utils.clip_grad_norm_(model.parameters(), self.config.max_grad_norm)
+
+            # Perform an optimization step 
+            # using the computed gradients
             optimizer.step()
 
     def _calc_training_progress(self):
@@ -613,10 +625,6 @@ class BaseAgent(pl.LightningModule):
         self._epoch_metrics_buffer.log(prefixed)
         self._train_metrics_history.update(prefixed)
 
-    # -------------------------
-    # Small testable helpers
-    # -------------------------
-
     # TODO: review this method
     def configure_optimizers(self):
         from utils.optimizer_factory import build_optimizer
@@ -625,37 +633,3 @@ class BaseAgent(pl.LightningModule):
             optimizer=self.config.optimizer,
             lr=self.config.policy_lr, # TODO: is this taking annealing into account?
         )
-
-
-    def _log_policy_grad_norms(self):
-        """Log gradient norms for actor head, critic head, and shared trunk.
-
-        Supports actor-critic models that expose `policy_head` and `value_head`.
-        The shared trunk is computed as all parameters excluding head parameters
-        (e.g., backbone/CNN feature extractor).
-        """
-        policy_model = self.policy_model
-
-        # Identify heads if present
-        policy_head = policy_model.policy_head
-        value_head = policy_model.value_head
-
-        head_param_ids = set()
-        actor_params = []
-        critic_params = []
-        if policy_head is not None:
-            actor_params = list(policy_head.parameters())
-            head_param_ids.update(id(p) for p in actor_params)
-        if value_head is not None:
-            critic_params = list(value_head.parameters())
-            head_param_ids.update(id(p) for p in critic_params)
-
-        # Trunk are all params not in heads
-        trunk_params = [p for p in policy_model.parameters() if id(p) not in head_param_ids]
-
-        metrics = {
-            "grad_norm/actor_head": compute_param_group_grad_norm(actor_params),
-            "grad_norm/critic_head": compute_param_group_grad_norm(critic_params) if value_head is not None else 0.0,
-            "grad_norm/trunk": compute_param_group_grad_norm(trunk_params),
-        }
-        self.log_metrics(metrics, prefix="train")

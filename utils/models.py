@@ -7,12 +7,12 @@ models internally reshape flat inputs back to (N, C, H, W) using a provided
 returns flattened observations.
 """
 
-from typing import Iterable
+from typing import Iterable, Dict
 
 import torch
 from torch.distributions import Categorical
 import torch.nn as nn
-from .torch import init_model_weights
+from .torch import init_model_weights, compute_param_group_grad_norm
 
 def resolve_activation(activation_id: str) -> type[nn.Module]:
     key = activation_id.lower()
@@ -30,6 +30,26 @@ def resolve_activation(activation_id: str) -> type[nn.Module]:
     return mapping[key]
 
 
+class GradientNormMixin:
+    """Mixin for models that can compute gradient norms for different parameter groups.
+    
+    Provides a default implementation that computes gradient norms for all parameters
+    and allows subclasses to override for more specific groupings.
+    """
+    
+    def compute_grad_norms(self) -> Dict[str, float]:
+        """Compute gradient norms for different parameter groups.
+        
+        Returns:
+            Dictionary mapping group names to their gradient norms.
+            Default implementation returns a single 'all' group.
+        """
+        all_params = list(self.parameters())
+        return {
+            "grad_norm/all": compute_param_group_grad_norm(all_params)
+        }
+
+
 def build_mlp(input_shape: tuple[int, ...], hidden_dims: tuple[int, ...], activation:str):
     """ Create a stack of sequential linear layers with the given activation function. """
     assert len(input_shape) == 1, "Input shape must be 1D"
@@ -42,7 +62,7 @@ def build_mlp(input_shape: tuple[int, ...], hidden_dims: tuple[int, ...], activa
     return nn.Sequential(*layers)
 
 
-class MLPPolicy(nn.Module):
+class MLPPolicy(nn.Module, GradientNormMixin):
     def __init__(
         self,
         input_dim: int | None = None,
@@ -81,7 +101,17 @@ class MLPPolicy(nn.Module):
         dist = Categorical(logits=logits)
         return dist, None  # Return None for value to maintain compatibility
 
-class MLPActorCritic(nn.Module):
+    def compute_grad_norms(self) -> Dict[str, float]:
+        """Compute gradient norms for MLP policy components."""
+        backbone_params = list(self.backbone.parameters())
+        policy_head_params = list(self.policy_head.parameters())
+        
+        return {
+            "grad_norm/backbone": compute_param_group_grad_norm(backbone_params),
+            "grad_norm/policy_head": compute_param_group_grad_norm(policy_head_params),
+        }
+
+class MLPActorCritic(nn.Module, GradientNormMixin):
     def __init__(
         self, 
         input_shape: tuple[int, ...], 
@@ -126,6 +156,18 @@ class MLPActorCritic(nn.Module):
 
         # Return policy distribution and value prediction
         return policy_dist, value_pred
+
+    def compute_grad_norms(self) -> Dict[str, float]:
+        """Compute gradient norms for MLP actor-critic components."""
+        backbone_params = list(self.backbone.parameters())
+        policy_head_params = list(self.policy_head.parameters())
+        value_head_params = list(self.value_head.parameters())
+        
+        return {
+            "grad_norm/backbone": compute_param_group_grad_norm(backbone_params),
+            "grad_norm/policy_head": compute_param_group_grad_norm(policy_head_params),
+            "grad_norm/value_head": compute_param_group_grad_norm(value_head_params),
+        }
 
 
 class _EnsureCHW(nn.Module):
@@ -239,7 +281,7 @@ class _CNNTrunk(nn.Module):
         return x
 
 
-class CNNActorCritic(nn.Module):
+class CNNActorCritic(nn.Module, GradientNormMixin):
     """CNN-based Actor-Critic for discrete action spaces using a shared trunk."""
 
     def __init__(
@@ -282,8 +324,20 @@ class CNNActorCritic(nn.Module):
         value = self.value_head(x).squeeze(-1)
         return dist, value
 
+    def compute_grad_norms(self) -> Dict[str, float]:
+        """Compute gradient norms for CNN actor-critic components."""
+        trunk_params = list(self.trunk.parameters())
+        policy_head_params = list(self.policy_head.parameters())
+        value_head_params = list(self.value_head.parameters())
+        
+        return {
+            "grad_norm/trunk": compute_param_group_grad_norm(trunk_params),
+            "grad_norm/policy_head": compute_param_group_grad_norm(policy_head_params),
+            "grad_norm/value_head": compute_param_group_grad_norm(value_head_params),
+        }
 
-class CNNPolicy(nn.Module):
+
+class CNNPolicy(nn.Module, GradientNormMixin):
     """CNN-based policy-only network (no value head) using the shared trunk."""
 
     def __init__(
@@ -318,3 +372,13 @@ class CNNPolicy(nn.Module):
         logits = self.policy_head(x)
         dist = Categorical(logits=logits)
         return dist, None
+
+    def compute_grad_norms(self) -> Dict[str, float]:
+        """Compute gradient norms for CNN policy components."""
+        trunk_params = list(self.trunk.parameters())
+        policy_head_params = list(self.policy_head.parameters())
+        
+        return {
+            "grad_norm/trunk": compute_param_group_grad_norm(trunk_params),
+            "grad_norm/policy_head": compute_param_group_grad_norm(policy_head_params),
+        }

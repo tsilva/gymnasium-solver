@@ -114,6 +114,9 @@ class NamespaceTablePrinter:
         highlight_row_for: Optional[Iterable[str]] = None,
         highlight_row_bg_color: str = "bg_blue",
         highlight_row_bold: bool = True,
+        # Bounds-based highlight configuration
+        metric_bounds: Optional[Dict[str, Dict[str, float]]] = None,
+        highlight_bounds_bg_color: str = "bg_yellow",
         # Trend charts (sparklines)
         show_sparklines: bool = True,
         sparkline_width: int = 32,
@@ -137,6 +140,9 @@ class NamespaceTablePrinter:
         self.highlight_row_for = set(highlight_row_for or {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "total_timesteps"})
         self.highlight_row_bg_color = highlight_row_bg_color or "bg_blue"
         self.highlight_row_bold = bool(highlight_row_bold)
+        # Bounds-based highlighting
+        self.metric_bounds = dict(metric_bounds or {})
+        self.highlight_bounds_bg_color = highlight_bounds_bg_color or "bg_yellow"
 
         self._prev: Optional[Dict[str, Any]] = None
         self._last_height: int = 0
@@ -226,17 +232,33 @@ class NamespaceTablePrinter:
                 # Format key cell with padding first, then apply ANSI bold if highlighted
                 key_cell = f"{sub:<{key_width}}"
                 highlight = False
+                row_bg_color = None
                 try:
-                    if sub in self.highlight_row_for:
+                    full_key = f"{ns}/{sub}" if sub else ns
+                    # Priority 1: bounds-based highlight (yellow)
+                    if full_key in self.metric_bounds:
+                        bounds = self.metric_bounds.get(full_key, {})
+                        # Use original raw value for numeric comparison when available
+                        raw_val = grouped.get(ns, {}).get(sub)
+                        if _is_number(raw_val):
+                            vnum = float(raw_val)
+                            below = ("min" in bounds) and (vnum < float(bounds["min"]))
+                            above = ("max" in bounds) and (vnum > float(bounds["max"]))
+                            if below or above:
+                                highlight = True
+                                row_bg_color = self.highlight_bounds_bg_color
+                    # Priority 2: configured row highlight
+                    if not highlight and sub in self.highlight_row_for:
                         if self.highlight_row_bold:
                             key_cell = _ansi("bold", key_cell, self.color)
                         highlight = True
+                        row_bg_color = self.highlight_row_bg_color
                 except Exception:
                     pass
                 row = f"| {' ' * indent}{key_cell} | {val_padded} |"
                 if highlight:
                     # Apply a subtle background to the entire row for visibility
-                    row = _apply_row_background(row, self.highlight_row_bg_color, self.color)
+                    row = _apply_row_background(row, row_bg_color or self.highlight_row_bg_color, self.color)
                 lines.append(row)
         lines.append(border)
 
@@ -434,6 +456,8 @@ def print_namespaced_dict(
     highlight_row_for: Optional[Iterable[str]] = None,
     highlight_row_bg_color: str = "bg_blue",
     highlight_row_bold: bool = True,
+    metric_bounds: Optional[Dict[str, Dict[str, float]]] = None,
+    highlight_bounds_bg_color: str = "bg_yellow",
 ):
     global _default_printer
     if (
@@ -448,6 +472,8 @@ def print_namespaced_dict(
         or _default_printer.highlight_row_for != set(highlight_row_for or {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "total_timesteps"})
         or _default_printer.highlight_row_bg_color != (highlight_row_bg_color or "bg_blue")
         or _default_printer.highlight_row_bold != bool(highlight_row_bold)
+        or _default_printer.metric_bounds != (metric_bounds or {})
+        or _default_printer.highlight_bounds_bg_color != (highlight_bounds_bg_color or "bg_yellow")
     ):
         _default_printer = NamespaceTablePrinter(
             float_fmt=float_fmt,
@@ -461,5 +487,7 @@ def print_namespaced_dict(
             highlight_row_for=highlight_row_for,
             highlight_row_bg_color=highlight_row_bg_color,
             highlight_row_bold=highlight_row_bold,
+            metric_bounds=metric_bounds,
+            highlight_bounds_bg_color=highlight_bounds_bg_color,
         )
     _default_printer.update(data)

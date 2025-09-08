@@ -203,6 +203,8 @@ total_loss:
 approx_kl:
   precision: 4
   description: "Approximate KL divergence between old and new policy distributions"
+  min: 0.0
+  max: 0.1
   algorithm_rules:
     ppo:
       threshold: 0.1

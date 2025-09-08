@@ -107,17 +107,21 @@ class PrintMetricsCallback(BaseCallback):
         from utils.table_printer import NamespaceTablePrinter
         # Load highlight configuration from metrics.yaml if available
         try:
-            from utils.metrics import get_highlight_config
+            from utils.metrics import get_highlight_config, get_metric_bounds
             _hl_cfg = get_highlight_config()
             _hl_value_bold_for = _hl_cfg.get('value_bold_metrics', set())
             _hl_row_for = _hl_cfg.get('row_metrics', set())
             _hl_row_bg_color = _hl_cfg.get('row_bg_color', 'bg_blue')
             _hl_row_bold = bool(_hl_cfg.get('row_bold', True))
+            _metric_bounds = get_metric_bounds()
+            self._metric_bounds = dict(_metric_bounds)
         except Exception:
             _hl_value_bold_for = {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "epoch"}
             _hl_row_for = {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "total_timesteps"}
             _hl_row_bg_color = 'bg_blue'
             _hl_row_bold = True
+            _metric_bounds = {}
+            self._metric_bounds = {}
 
         self._printer = NamespaceTablePrinter(
             # Keep numbers compact and colored like before
@@ -133,6 +137,9 @@ class PrintMetricsCallback(BaseCallback):
             highlight_row_for=_hl_row_for,
             highlight_row_bg_color=_hl_row_bg_color,
             highlight_row_bold=_hl_row_bold,
+            # Highlight out-of-range metrics in yellow per metrics.yaml bounds
+            metric_bounds=_metric_bounds,
+            highlight_bounds_bg_color='bg_yellow',
         )
 
     # ---------- hooks ----------
@@ -203,6 +210,13 @@ class PrintMetricsCallback(BaseCallback):
         # Update previous metrics for next comparison
         self.previous_metrics.update(metrics)
         self._last_printed_metrics = dict(metrics)
+        
+        # After printing, emit any bounds warnings for quick visibility
+        try:
+            self._warn_on_out_of_bounds(metrics)
+        except Exception:
+            # Never break training on bounds warning issues
+            pass
 
     def _validate_metric_deltas(self, current_metrics: Dict[str, Any]) -> None:
         """Validate that metric deltas follow specified rules."""
@@ -437,3 +451,32 @@ class PrintMetricsCallback(BaseCallback):
     def _is_number(self, x: Any) -> bool:
         import numbers
         return isinstance(x, numbers.Number)
+
+    def _warn_on_out_of_bounds(self, current_metrics: Dict[str, Any]) -> None:
+        """Emit warnings for metrics outside configured min/max bounds.
+
+        Uses bounds loaded from metrics.yaml via utils.metrics.get_metric_bounds().
+        Checks namespaced keys (e.g., 'train/approx_kl').
+        """
+        bounds = getattr(self, "_metric_bounds", {}) or {}
+        if not bounds:
+            return
+        for key, val in current_metrics.items():
+            try:
+                if key not in bounds:
+                    continue
+                v = self._to_python_scalar(val)
+                if not self._is_number(v):
+                    continue
+                b = bounds.get(key, {})
+                has_min = "min" in b
+                has_max = "max" in b
+                below = has_min and (float(v) < float(b["min"]))
+                above = has_max and (float(v) > float(b["max"]))
+                if not (below or above):
+                    continue
+                rng = [str(b.get("min")) if has_min else "-inf", str(b.get("max")) if has_max else "+inf"]
+                print(f"⚠️  BOUNDS WARNING: {key}={v} outside [{rng[0]}, {rng[1]}]")
+            except Exception:
+                # Continue on any issues evaluating a single metric's bounds
+                continue

@@ -40,7 +40,7 @@ Algo-specific config subclasses:
 - `BaseAgent` (LightningModule):
   - Creates `train_env`, `validation_env`, `test_env` with different seeds and video settings; builds `RolloutCollector`s for each.
   - Manual optimization in `training_step`; metrics buffered via `utils.metrics_buffer.MetricsBuffer` and printed with `trainer_callbacks.PrintMetricsCallback` using `utils.metrics` rules.
-  - Tracks best episode rewards: exposes `train/ep_rew_best` and `eval/ep_rew_best` computed from the running best of `*/ep_rew_mean` across epochs. These appear in `metrics.csv` and the console table, highlighted in blue (highlight rules configurable via `config/metrics.yaml` under `_global.highlight`).
+  - Tracks best episode rewards: exposes `train/ep_rew_best` and `eval/ep_rew_best` computed from the running best of `*/ep_rew_mean` across epochs. These appear in `metrics.csv` and the console table, highlighted in blue (rules configurable via `config/metrics.yaml` under `_global.highlight`). Additionally, any metric value outside its configured `min`/`max` bounds is highlighted in yellow and emits a console warning for quick visibility.
   - Evaluation cadence controlled by `Config.eval_freq_epochs` and `eval_warmup_epochs`; `on_validation_epoch_start/validation_step` drive `evaluate_policy` and video recording.
   - Schedules: learning rate and PPO clip range with linear decay based on progress `total_steps / max_timesteps`.
   - Logging: W&B via `WandbLogger` with project derived from `env_id`; defines step metric `train/total_timesteps`.

@@ -387,27 +387,15 @@ class BaseAgent(pl.LightningModule):
         # Build callbacks and trainer
         callbacks = self._build_trainer_callbacks()
 
-        # Keep Lightning validation cadence driven by eval_freq_epochs; warmup is enforced in hooks.
-        eval_freq = self.config.eval_freq_epochs
-        warmup = self.config.eval_warmup_epochs or 0
-
-        # TODO: move this inside factory
-        # If warmup is active, request validation every epoch and gate in hooks
-        eval_freq_epochs = 1 if (eval_freq is not None and warmup > 0) else eval_freq
-        limit_val_batches = 0 if eval_freq_epochs is None else 1.0
-        check_val_every_n_epoch = eval_freq_epochs if eval_freq_epochs is not None else 1
-
         from utils.trainer_factory import build_trainer
         trainer = build_trainer(
             logger=wandb_logger,
             callbacks=callbacks,
-            validation_controls={
-                "limit_val_batches": limit_val_batches,
-                "check_val_every_n_epoch": check_val_every_n_epoch,
-            },
             max_epochs=self.config.max_epochs,
             accelerator=self.config.accelerator,
             devices=self.config.devices,
+            eval_freq_epochs=self.config.eval_freq_epochs,
+            eval_warmup_epochs=self.config.eval_warmup_epochs or 0,
         )
         trainer.fit(self)
     

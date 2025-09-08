@@ -524,7 +524,8 @@ class BaseAgent(pl.LightningModule):
     # -------------------------
     # Pre-prompt guidance helpers
     # -------------------------
-
+    
+    # TODO: review this
     def _create_wandb_logger(self):
         from dataclasses import asdict
         from pytorch_lightning.loggers import WandbLogger
@@ -681,6 +682,7 @@ class BaseAgent(pl.LightningModule):
 
         return callbacks
 
+    # TODO: get rid of this method
     def _build_trainer(self, wandb_logger, callbacks, validation_controls):
         from utils.trainer_factory import build_trainer
         return build_trainer(
@@ -691,11 +693,6 @@ class BaseAgent(pl.LightningModule):
             accelerator=self.config.accelerator,
             devices=self.config.devices,
         )
-
-    # Provide a scikit-like API where .fit() forwards to learn() for convenience
-    # (used by tests and top-level scripts). Keep signature minimal.
-    def fit(self):  # type: ignore[override]
-        self.learn()
 
     def _backpropagate_and_step(self, losses):
         optimizers = self.optimizers()
@@ -763,21 +760,13 @@ class BaseAgent(pl.LightningModule):
     
     # TODO: extract to optimizer factory util
     def _make_optimizer(self, params):
-        """Create optimizer from config with sensible defaults.
-
-        Defaults to AdamW with eps=1e-5; supports 'adam', 'adamw', and 'sgd'.
-        """
-        # Resolve optimizer name possibly coming from Enum or str
-        lr = self.config.policy_lr # TODO: what about annealing?
-
-        optimizer_id = self.config.optimizer
-        optimizer_class = {
-            "sgd": torch.optim.SGD,
-            "adam": torch.optim.Adam,
-            "adamw": torch.optim.AdamW,
-        }[optimizer_id]
-        optimizer = optimizer_class(params, lr=lr)
-        return optimizer
+        """Create optimizer via utils.optimizer_factory using config values."""
+        from utils.optimizer_factory import build_optimizer
+        return build_optimizer(
+            params=params,
+            optimizer=self.config.optimizer,
+            lr=self.config.policy_lr,
+        )
 
     def configure_optimizers(self):
         return self._make_optimizer(self.policy_model.parameters())

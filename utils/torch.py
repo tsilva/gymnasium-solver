@@ -114,6 +114,32 @@ def assert_detached(*tensors: torch.Tensor) -> bool:
     return True
 
 
+def compute_param_group_grad_norm(params):
+    """Compute L2 norm of gradients for a parameter iterable.
+
+    Ignores parameters with None gradients. Returns 0.0 if no grads present.
+    
+    Args:
+        params: Iterable of parameters to compute gradient norm for
+        
+    Returns:
+        float: L2 norm of all gradients, or 0.0 if no gradients present
+    """
+    import math
+    total_sq = 0.0
+    has_grad = False
+    for p in params:
+        g = getattr(p, "grad", None)
+        if g is None:
+            continue
+        has_grad = True
+        # Use .detach() to avoid graph tracking; flatten to 1D before norm
+        total_sq += float(g.detach().data.norm(2).item() ** 2)
+    if not has_grad:
+        return 0.0
+    return math.sqrt(total_sq)
+
+
 def init_model_weights(
     model: nn.Module,
     *,

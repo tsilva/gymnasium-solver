@@ -7,6 +7,7 @@ from utils.metrics_buffer import MetricsBuffer
 from utils.metrics_history import MetricsHistory
 from utils.decorators import must_implement
 from utils.reports import print_terminal_ascii_summary
+from utils.torch import compute_param_group_grad_norm
 
 class BaseAgent(pl.LightningModule):
     def __init__(self, config):
@@ -625,27 +626,6 @@ class BaseAgent(pl.LightningModule):
             lr=self.config.policy_lr, # TODO: is this taking annealing into account?
         )
 
-    # -------------------------
-    # Gradient norm diagnostics
-    # -------------------------
-    def _compute_param_group_grad_norm(self, params):
-        """Compute L2 norm of gradients for a parameter iterable.
-
-        Ignores parameters with None gradients. Returns 0.0 if no grads present.
-        """
-        import math
-        total_sq = 0.0
-        has_grad = False
-        for p in params:
-            g = getattr(p, "grad", None)
-            if g is None:
-                continue
-            has_grad = True
-            # Use .detach() to avoid graph tracking; flatten to 1D before norm
-            total_sq += float(g.detach().data.norm(2).item() ** 2)
-        if not has_grad:
-            return 0.0
-        return math.sqrt(total_sq)
 
     def _log_policy_grad_norms(self):
         """Log gradient norms for actor head, critic head, and shared trunk.
@@ -674,8 +654,8 @@ class BaseAgent(pl.LightningModule):
         trunk_params = [p for p in policy_model.parameters() if id(p) not in head_param_ids]
 
         metrics = {
-            "grad_norm/actor_head": self._compute_param_group_grad_norm(actor_params),
-            "grad_norm/critic_head": self._compute_param_group_grad_norm(critic_params) if value_head is not None else 0.0,
-            "grad_norm/trunk": self._compute_param_group_grad_norm(trunk_params),
+            "grad_norm/actor_head": compute_param_group_grad_norm(actor_params),
+            "grad_norm/critic_head": compute_param_group_grad_norm(critic_params) if value_head is not None else 0.0,
+            "grad_norm/trunk": compute_param_group_grad_norm(trunk_params),
         }
         self.log_metrics(metrics, prefix="train")

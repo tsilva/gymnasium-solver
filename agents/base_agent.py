@@ -431,13 +431,17 @@ class BaseAgent(pl.LightningModule):
         limit_val_batches = 0 if eval_freq_epochs is None else 1.0
         check_val_every_n_epoch = eval_freq_epochs if eval_freq_epochs is not None else 1
 
-        trainer = self._build_trainer(
-            wandb_logger, 
-            callbacks, 
-            {
+        from utils.trainer_factory import build_trainer
+        trainer = build_trainer(
+            logger=wandb_logger,
+            callbacks=callbacks,
+            validation_controls={
                 "limit_val_batches": limit_val_batches,
                 "check_val_every_n_epoch": check_val_every_n_epoch,
-            }
+            },
+            max_epochs=self.config.max_epochs,
+            accelerator=self.config.accelerator,
+            devices=self.config.devices,
         )
         trainer.fit(self)
     
@@ -595,6 +599,7 @@ class BaseAgent(pl.LightningModule):
         metric_precision = get_metric_precision_dict()
         metric_delta_rules = get_metric_delta_rules()
         algo_metric_rules = get_algorithm_metric_rules(self.config.algo_id)
+        
         # Print metrics once per epoch to align deltas with rollout collection
         printer_cb = PrintMetricsCallback(
             every_n_steps=None,
@@ -682,17 +687,6 @@ class BaseAgent(pl.LightningModule):
 
         return callbacks
 
-    # TODO: get rid of this method
-    def _build_trainer(self, wandb_logger, callbacks, validation_controls):
-        from utils.trainer_factory import build_trainer
-        return build_trainer(
-            logger=wandb_logger,
-            callbacks=callbacks,
-            validation_controls=validation_controls,
-            max_epochs=self.config.max_epochs,
-            accelerator=self.config.accelerator,
-            devices=self.config.devices,
-        )
 
     def _backpropagate_and_step(self, losses):
         optimizers = self.optimizers()
@@ -758,18 +752,14 @@ class BaseAgent(pl.LightningModule):
         """Replace path separators with dashes for display/logging names."""
         return str(name).replace("/", "-").replace("\\", "-")
     
-    # TODO: extract to optimizer factory util
-    def _make_optimizer(self, params):
-        """Create optimizer via utils.optimizer_factory using config values."""
+    # TODO: review this method
+    def configure_optimizers(self):
         from utils.optimizer_factory import build_optimizer
         return build_optimizer(
-            params=params,
+            params=self.policy_model.parameters(),
             optimizer=self.config.optimizer,
-            lr=self.config.policy_lr,
+            lr=self.config.policy_lr, # TODO: is this taking annealing into account?
         )
-
-    def configure_optimizers(self):
-        return self._make_optimizer(self.policy_model.parameters())
 
     # -------------------------
     # Gradient norm diagnostics

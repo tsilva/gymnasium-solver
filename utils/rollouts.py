@@ -512,6 +512,7 @@ class RolloutCollector():
         # Immediate episode stats (most recent completed episode in any env)
         self._last_episode_reward = 0.0
         self._last_episode_length = 0
+        self._best_episode_reward = 0.0
 
         # Lightweight running statistics (avoid per-sample Python overhead)
         # Obs/reward running stats over all seen samples (scalar over all dims)
@@ -630,6 +631,9 @@ class RolloutCollector():
             # Track last episode stats
             self._last_episode_reward = episode_reward
             self._last_episode_length = episode_length
+
+            # Track best episode reward
+            self._best_episode_reward = max(self._best_episode_reward, episode_reward)
 
             # In case the episode ended due to time limit then mark it as such and 
             # retrieve the last observation (truncated episode observations are the 
@@ -914,6 +918,7 @@ class RolloutCollector():
             "rollout_timesteps": self.rollout_steps,
             "rollout_episodes": self.rollout_episodes,
             "rollout_fps": rollout_fps,  # TODO: this is a mean, it shouln't be
+            "ep_rew_best": float(self._best_episode_reward),
             "ep_rew_last": float(self._last_episode_reward),
             "ep_len_last": int(self._last_episode_length),
             "ep_rew_mean": ep_rew_mean,

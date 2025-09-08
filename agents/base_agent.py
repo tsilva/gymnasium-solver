@@ -36,10 +36,6 @@ class BaseAgent(pl.LightningModule):
 
         self.run_manager = None
 
-        # Track best episode reward means seen so far for train/eval
-        # Populated when logging epoch metrics so they can be surfaced in CSV/console
-        self._best_rewards = {"train": None, "eval": None}
-
         # Create the training environment
         common_env_kwargs = dict(
             seed=config.seed,
@@ -788,16 +784,6 @@ class BaseAgent(pl.LightningModule):
         if isinstance(step_val, (int, float)):
             self._last_step_for_terminal = int(step_val)
 
-        # Update best-so-far trackers when ep_rew_mean is present
-        try:
-            if isinstance(prefix, str) and "ep_rew_mean" in metrics:
-                v = metrics.get("ep_rew_mean")
-                if isinstance(v, (int, float)):
-                    prev = self._best_rewards.get(prefix)
-                    self._best_rewards[prefix] = v if prev is None else max(float(prev), float(v))
-        except Exception:
-            # Never break logging due to best tracking
-            pass
 
         for k, v in prefixed.items():
             if k.endswith("action_dist"): continue
@@ -818,19 +804,6 @@ class BaseAgent(pl.LightningModule):
         """
         means = self._metrics_buffer.means()
 
-        # Surface best-so-far episode rewards as explicit metrics
-        try:
-            bt = self._best_rewards.get("train")
-            if bt is not None:
-                means["train/ep_rew_best"] = float(bt)
-        except Exception:
-            pass
-        try:
-            be = self._best_rewards.get("eval")
-            if be is not None:
-                means["eval/ep_rew_best"] = float(be)
-        except Exception:
-            pass
         try:
             if log_to_lightning:
                 # Forward aggregated metrics to Lightning when allowed

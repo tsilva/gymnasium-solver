@@ -3,6 +3,7 @@ import pytorch_lightning as pl
 import json
 
 from utils.metrics_buffer import MetricsBuffer
+from utils.metrics_history import MetricsHistory
 from utils.decorators import must_implement
 from utils.reports import print_terminal_ascii_summary
 
@@ -29,10 +30,8 @@ class BaseAgent(pl.LightningModule):
         self.timing = TimingTracker()
 
         # Lightweight history to render ASCII summary at training end
-        # Maps metric name -> list[(step, value)]
-        # TODO: move this inside callback
-        self._terminal_history = {}
-        self._last_step_for_terminal = 0
+        # Encapsulated in MetricsHistory for clarity and reuse
+        self._metrics_history = MetricsHistory()
 
         self.run_manager = None
 
@@ -328,8 +327,9 @@ class BaseAgent(pl.LightningModule):
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
 
         # TODO: encapsulate in callback
-        history = getattr(self, "_terminal_history", None)
-        if history: print_terminal_ascii_summary(history)
+        history = getattr(self, "_metrics_history", None)
+        if history and history.as_dict():
+            print_terminal_ascii_summary(history.as_dict())
 
         # Record final evaluation video and save associated metrics JSON next to it
         checkpoint_dir = self.run_manager.ensure_path("checkpoints/")
@@ -779,18 +779,9 @@ class BaseAgent(pl.LightningModule):
 
         prefixed = {f"{prefix}/{k}": v for k, v in metrics.items()} if prefix else dict(metrics)
 
-        # Update last known step from canonical metric if present
-        step_val = prefixed.get("train/total_timesteps")
-        if isinstance(step_val, (int, float)):
-            self._last_step_for_terminal = int(step_val)
-
-
-        for k, v in prefixed.items():
-            if k.endswith("action_dist"): continue
-            if not isinstance(v, (int, float)): continue
-            history = self._terminal_history.setdefault(k, [])
-            step = self._last_step_for_terminal if k != "train/total_timesteps" else int(v)
-            history.append((step, float(v)))
+        # Append numeric metrics to terminal history for ASCII summary
+        # (encapsulated via MetricsHistory)
+        self._metrics_history.update(prefixed)
 
     # TODO: not sure about this 
     def _flush_metrics(self, *, log_to_lightning: bool = True):

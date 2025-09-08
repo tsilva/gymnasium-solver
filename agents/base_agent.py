@@ -775,12 +775,11 @@ class BaseAgent(pl.LightningModule):
         Lightning logger caused significant performance drops, as much as 2x slower train/fps.
         Using custom metric collection / flushing logic to avoid this issue.
         """
-        self._metrics_buffer.log(metrics, prefix=prefix)
-
+        # Build a single prefixed mapping and feed both sinks to avoid duplication
         prefixed = {f"{prefix}/{k}": v for k, v in metrics.items()} if prefix else dict(metrics)
 
-        # Append numeric metrics to terminal history for ASCII summary
-        # (encapsulated via MetricsHistory)
+        # Add to epoch aggregation buffer and terminal history
+        self._metrics_buffer.log(prefixed)
         self._metrics_history.update(prefixed)
 
     # TODO: not sure about this 

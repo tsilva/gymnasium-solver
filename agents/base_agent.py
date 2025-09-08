@@ -194,15 +194,15 @@ class BaseAgent(pl.LightningModule):
         # (we may need to train multiple models with different optimizers))
         return None
 
-    # TODO: aggregate logging
     def on_train_epoch_end(self):
         # Log end of epoch metrics
         self._on_train_epoch_end__log_metrics()
 
-        self._update_schedules()
-
         # Clear the metrics buffer (all callbacks will have logged by now)
         self._epoch_metrics_buffer.clear()
+
+        # Update schedules
+        self._update_schedules()
 
     def _on_train_epoch_end__log_metrics(self):
         # Don't log until we have at least one episode completed 
@@ -384,9 +384,10 @@ class BaseAgent(pl.LightningModule):
         # Prompt user to start training, return if user declines
         if not self._prompt_user_start_training(): return
 
-        # Build callbacks and trainer
+        # Build trainer callbacks
         callbacks = self._build_trainer_callbacks()
 
+        # Build the trainer
         from utils.trainer_factory import build_trainer
         trainer = build_trainer(
             logger=wandb_logger,
@@ -397,6 +398,8 @@ class BaseAgent(pl.LightningModule):
             eval_freq_epochs=self.config.eval_freq_epochs,
             eval_warmup_epochs=self.config.eval_warmup_epochs or 0,
         )
+
+        # Train the agent
         trainer.fit(self)
     
     def _prompt_user_start_training(self):
@@ -444,78 +447,44 @@ class BaseAgent(pl.LightningModule):
                 "For non-image inputs, consider using MLP for better performance."
             )
     
-    # ----- Evaluation scheduling helpers -----
     def _should_run_eval(self, epoch_idx: int) -> bool:
-        """Return True if evaluation should run on this epoch index.
-
-        Scheduling uses 1-based epoch numbers for human-friendly config:
-        - Let E = epoch_idx + 1
-        - If eval_freq_epochs is None or <= 0: never evaluate
-        - If eval_warmup_epochs <= 0: evaluate at E == 1 and then on multiples of eval_freq_epochs
-        - If eval_warmup_epochs > 0: skip all E <= eval_warmup_epochs, then evaluate on
-          the configured cadence grid (i.e., E % eval_freq_epochs == 0). Example:
-          warmup=50 and freq=15 -> first eval at E=60 (epoch_idx=59).
-        """
-        # TODO: review this
-        # If eval_freq_epochs is None or <= 0, never evaluate
+        # If freq is None, never evaluate
         freq = self.config.eval_freq_epochs
-        try:
-            if freq is None or int(freq) <= 0:
-                return False
-        except Exception:
-            return False
+        if freq is None: return False
 
-        warmup = int(self.config.eval_warmup_epochs or 0)
-        E = int(epoch_idx) + 1
-        if warmup <= 0:
-            # First epoch (E==1) then multiples of freq
-            return E == 1 or (E % int(freq) == 0)
+        # If warmup is active, skip all epochs <= warmup
+        E = epoch_idx + 1
+        warmup = self.config.eval_warmup_epochs
+        if warmup is not None and E <= warmup: return False
 
-        # With warmup, skip boundary and align to the cadence grid strictly after warmup
-        if E <= warmup:
-            return False
-
+        # Otherwise, evaluate on the cadence grid
         return (E % int(freq)) == 0
 
     # -------------------------
     # Pre-prompt guidance helpers
     # -------------------------
     
-    # TODO: review this
     def _create_wandb_logger(self):
+        import wandb
         from dataclasses import asdict
         from pytorch_lightning.loggers import WandbLogger
 
         def _sanitize_name(name: str) -> str:
             return name.replace("/", "-").replace("\\", "-")
 
-        # If a W&B run is already active (e.g., under a sweep), avoid re-initializing
-        # and do not attempt to overwrite the run config. PL's WandbLogger will attach
-        # to the existing run when present.
-        try:
-            import wandb  # type: ignore
-            active_run = getattr(wandb, "run", None)
-        except Exception:
-            active_run = None
+        # Create the wandb logger, attach to the existing run if present
+        project_name = self.config.project_id if self.config.project_id else _sanitize_name(self.config.env_id)
+        experiment_name = f"{self.config.algo_id}-{self.config.seed}"
+        wandb_logger = WandbLogger(
+            project=project_name,
+            name=experiment_name,
+            log_model=True,
+            config=asdict(self.config),
+        ) if wandb.run is None else WandbLogger(log_model=True)
 
-        if active_run is not None:
-            wandb_logger = WandbLogger(log_model=True)
-        else:
-            project_name = self.config.project_id if self.config.project_id else _sanitize_name(self.config.env_id)
-            experiment_name = f"{self.config.algo_id}-{self.config.seed}"
-            wandb_logger = WandbLogger(
-                project=project_name,
-                name=experiment_name,
-                log_model=True,
-                config=asdict(self.config),
-            )
-
-        # Define the common step metric; works both for new and attached runs
+        # Define the common step metric
         wandb_run = wandb_logger.experiment
-        try:
-            wandb_run.define_metric("*", step_metric="train/total_timesteps")
-        except Exception:
-            pass
+        wandb_run.define_metric("*", step_metric="train/total_timesteps")
 
         return wandb_logger
     
@@ -532,6 +501,7 @@ class BaseAgent(pl.LightningModule):
             EndOfTrainingReportCallback,
             EarlyStoppingCallback,
         )
+
         # Initialize callbacks list
         callbacks = []
 
@@ -614,8 +584,7 @@ class BaseAgent(pl.LightningModule):
             )
             if self.config.early_stop_on_train_threshold else None
         )
-        if earlystop_train_reward_cb:
-            callbacks.append(earlystop_train_reward_cb)
+        if earlystop_train_reward_cb: callbacks.append(earlystop_train_reward_cb)
 
         # Early stop when mean validation reward reaches a threshold
         reward_threshold = self.validation_env.get_reward_threshold()
@@ -628,8 +597,7 @@ class BaseAgent(pl.LightningModule):
             )
             if self.config.early_stop_on_eval_threshold else None
         )
-        if earlystop_eval_reward_cb:
-            callbacks.append(earlystop_eval_reward_cb)
+        if earlystop_eval_reward_cb: callbacks.append(earlystop_eval_reward_cb)
 
         # When training ends, write a report describing on the training went
         report_cb = EndOfTrainingReportCallback(
@@ -638,7 +606,6 @@ class BaseAgent(pl.LightningModule):
         callbacks.append(report_cb)
 
         return callbacks
-
 
     def _backpropagate_and_step(self, losses):
         optimizers = self.optimizers()
@@ -698,12 +665,7 @@ class BaseAgent(pl.LightningModule):
     # -------------------------
     # Small testable helpers
     # -------------------------
-    # TODO: review this
-    @staticmethod
-    def _sanitize_name(name: str) -> str:
-        """Replace path separators with dashes for display/logging names."""
-        return str(name).replace("/", "-").replace("\\", "-")
-    
+
     # TODO: review this method
     def configure_optimizers(self):
         from utils.optimizer_factory import build_optimizer

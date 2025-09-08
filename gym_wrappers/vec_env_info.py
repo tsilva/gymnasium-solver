@@ -41,3 +41,14 @@ class VecEnvInfoWrapper(VecEnvWrapper):
         base = self._get_env_info_wrapper()
         return base.get_render_fps()
 
+    def get_obs_type(self):
+        base = self._get_env_info_wrapper()
+        return base.get_obs_type()
+
+    def is_rgb_env(self):
+        base = self._get_env_info_wrapper()
+        return base.is_rgb_env()
+
+    def is_ram_env(self):
+        base = self._get_env_info_wrapper()
+        return base.is_ram_env()

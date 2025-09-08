@@ -98,7 +98,7 @@ def test_ppo_clip_range_schedule_update():
         seen.update(m)
 
     agent.log_metrics = _log  # type: ignore
-    agent._get_training_progress = lambda: progress  # type: ignore
+    agent._calc_training_progress = lambda: progress  # type: ignore
 
     agent._update_schedules__clip_range()
 

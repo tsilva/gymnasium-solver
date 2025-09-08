@@ -5,6 +5,10 @@ from dataclasses import asdict
 
 class EnvInfoWrapper(gym.ObservationWrapper):
 
+    def __init__(self, env, **kwargs):
+        super().__init__(env)
+        self._obs_type = kwargs.get('obs_type', None)
+
     def get_id(self):
         return self.env.spec.id
 
@@ -23,6 +27,21 @@ class EnvInfoWrapper(gym.ObservationWrapper):
         _env_spec = self._get_spec__env()
         spec = {**_env_spec, **_file_spec}
         return spec
+
+    def get_obs_type(self):
+        return self._obs_type
+
+    def is_rgb_env(self):
+        obs_type = self.get_obs_type()
+        return obs_type == 'rgb'
+
+    def is_ram_env(self):
+        obs_type = self.get_obs_type()
+        return obs_type == 'ram'
+
+    def is_objects_env(self):
+        obs_type = self.get_obs_type()
+        return obs_type == 'objects' # TODO: dict env?
 
     def get_max_episode_steps(self):
         spec = self.get_spec()

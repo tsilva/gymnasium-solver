@@ -203,7 +203,6 @@ class BaseAgent(pl.LightningModule):
         # Log end of epoch metrics
         self._on_train_epoch_end__log_metrics()
 
-
         #self._flush_metrics()  
 
         self._update_schedules()
@@ -493,16 +492,11 @@ class BaseAgent(pl.LightningModule):
                 "Run ID": self.run_manager.get_run_id(),
             },
             "Environment Details": {
+                "Observation type": self.train_env.get_obs_type(),
                 "Observation space": self.train_env.observation_space,
                 "Action space": self.train_env.action_space,
                 "Reward threshold": self.train_env.get_reward_threshold(),
-            },
-            "Configuration Details": {
-                "Run ID": self.run_manager.get_run_id(),
-                "Observation space": self.train_env.observation_space,
-                "Action space": self.train_env.action_space,
-                "Reward threshold": self.train_env.get_reward_threshold()
-            },
+            }
         })
 
         # Ask for confirmation before any heavy setup (keep prior prints grouped)
@@ -514,37 +508,24 @@ class BaseAgent(pl.LightningModule):
         return start_training
 
     def _maybe_warn_observation_policy_mismatch(self):
-        # utils.environment may be monkeypatched in tests without is_rgb_env. Be robust.
-        try:
-            import utils.environment as _env_mod  # type: ignore
-        except Exception:
-            return
+        from utils.config import Config
 
-        is_rgb_env_fn = getattr(_env_mod, "is_rgb_env", None)
-        if not callable(is_rgb_env_fn):
-            return
+        # In case the observation space is RGB, warn if MLP policy is used
+        is_rgb = self.train_env.is_rgb_env()
+        is_mlp = self.config.policy == Config.PolicyType.mlp
+        is_cnn = self.config.policy == Config.PolicyType.cnn
+        if is_rgb and is_mlp:
+            print(
+                "Warning: Detected RGB image observations with MLP policy. "
+                "For pixel inputs, consider using CNN for better performance."
+            )
 
-        try:
-            # In case the observation space is RGB, warn if MLP policy is used
-            is_rgb = is_rgb_env_fn(self.train_env)
-            policy = getattr(self.config, "policy", None) or ""
-            is_mlp = isinstance(policy, str) and policy.lower() == "mlp"
-            if is_rgb and is_mlp:
-                print(
-                    "Warning: Detected RGB image observations with MLP policy. "
-                    "For pixel inputs, consider using CNN for better performance."
-                )
-
-            # In case the observation space is not RGB, warn if CNN policy is used
-            is_cnn = isinstance(policy, str) and policy.lower() == "cnn"
-            if not is_rgb and is_cnn:
-                print(
-                    "Warning: Detected non-RGB observations with CNN policy. "
-                    "For non-image inputs, consider using MLP for better performance."
-                )
-        except Exception:
-            # If env lacks expected attributes (e.g., test stubs), skip guidance
-            return
+        # In case the observation space is not RGB, warn if CNN policy is used
+        if not is_rgb and is_cnn:
+            print(
+                "Warning: Detected non-RGB observations with CNN policy. "
+                "For non-image inputs, consider using MLP for better performance."
+            )
     
     # ----- Evaluation scheduling helpers -----
     def _should_run_eval(self, epoch_idx: int) -> bool:
@@ -698,10 +679,8 @@ class BaseAgent(pl.LightningModule):
         ) if self.config.max_timesteps else None
         if earlystop_timesteps_cb: callbacks.append(earlystop_timesteps_cb)
 
-        try:
-            reward_threshold = self.train_env.get_reward_threshold()
-        except Exception:
-            reward_threshold = None
+        # Early stop when mean training reward reaches a threshold
+        reward_threshold = self.train_env.get_reward_threshold()
         earlystop_train_reward_cb = (
             EarlyStoppingCallback(
                 "train/ep_rew_mean",
@@ -709,17 +688,13 @@ class BaseAgent(pl.LightningModule):
                 mode="max",
                 verbose=False,
             )
-            if (self.config.early_stop_on_train_threshold and reward_threshold is not None)
-            else None
+            if self.config.early_stop_on_train_threshold else None
         )
         if earlystop_train_reward_cb:
             callbacks.append(earlystop_train_reward_cb)
 
         # Early stop when mean validation reward reaches a threshold
-        try:
-            reward_threshold = self.validation_env.get_reward_threshold()
-        except Exception:
-            reward_threshold = None
+        reward_threshold = self.validation_env.get_reward_threshold()
         earlystop_eval_reward_cb = (
             EarlyStoppingCallback(
                 "eval/ep_rew_mean",
@@ -727,8 +702,7 @@ class BaseAgent(pl.LightningModule):
                 mode="max",
                 verbose=False,
             )
-            if (self.config.early_stop_on_eval_threshold and reward_threshold is not None)
-            else None
+            if self.config.early_stop_on_eval_threshold else None
         )
         if earlystop_eval_reward_cb:
             callbacks.append(earlystop_eval_reward_cb)
@@ -773,16 +747,12 @@ class BaseAgent(pl.LightningModule):
                 torch.nn.utils.clip_grad_norm_(self.policy_model.parameters(), self.config.max_grad_norm)
             optimizer.step()
 
-    def _get_training_progress(self):
-        # Compute progress only when max_timesteps is configured; otherwise treat as 0.
-        try:
-            total = float(self.config.max_timesteps) if self.config.max_timesteps is not None else None
-        except Exception:
-            total = None
-        if total is None or total <= 0.0:
-            return 0.0
-        total_steps = float(self.train_collector.total_steps)
-        return max(0.0, min(total_steps / total, 1.0))
+    def _calc_training_progress(self):
+        max_timesteps = self.config.max_timesteps
+        if max_timesteps is None: return 0.0
+        total_steps = self.train_collector.total_steps
+        training_progress = max(0.0, min(total_steps / max_timesteps, 1.0))
+        return training_progress
 
     def _update_schedules(self):
         self._update_schedules__policy_lr()
@@ -790,9 +760,10 @@ class BaseAgent(pl.LightningModule):
     # TODO: generalize scheduling support
     def _update_schedules__policy_lr(self):
         if self.config.policy_lr_schedule != "linear": return
-        progress = self._get_training_progress()
+        progress = self._calc_training_progress()
         new_policy_lr = max(self.config.policy_lr * (1.0 - progress), 0.0)
         self._change_optimizers_policy_lr(new_policy_lr)
+        # TODO: should I do this here or every epoch?
         # Log scheduled LR under train namespace
         self.log_metrics({"policy_lr": new_policy_lr}, prefix="train")
 
@@ -802,6 +773,7 @@ class BaseAgent(pl.LightningModule):
         for opt in optimizers:
             for pg in opt.param_groups: pg["lr"] = policy_lr
 
+    # TODO: fix this
     def log_metrics(self, metrics, *, prefix=None):
         """
         Lightning logger caused significant performance drops, as much as 2x slower train/fps.

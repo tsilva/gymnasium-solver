@@ -9,31 +9,6 @@ def is_vizdoom_env_id(env_id: str) -> bool:
 def is_stable_retro_env_id(env_id: str) -> bool:
     return env_id.lower().startswith("retro/")
 
-def is_rgb_env(env):
-    import numpy as np
-    from gymnasium import spaces
-
-    # In case the observation space is not a box then it's not RGB
-    if not isinstance(env.observation_space, spaces.Box):
-        return False
-
-    # If the observation space is not a 3D array then it's not RGB
-    if len(env.observation_space.shape) < 3:
-        return False
-
-    # If the observation space is not uint8 then it's not RGB
-    is_uint8 = getattr(env.observation_space, 'dtype', None) == np.uint8
-    if not is_uint8:
-        return False
-    
-    # If the observation space is not 3 channels then it's not RGB
-    n_channels = env.observation_space.shape[-1]
-    if not n_channels == 3:
-        return False
-    
-    # Return True if all checks passed (is RGB)
-    return True
-
 def _build_env_alepy(env_id, obs_type, render_mode, **env_kwargs):
     import ale_py
     import gymnasium as gym

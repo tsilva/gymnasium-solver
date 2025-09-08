@@ -148,7 +148,7 @@ class PPO(BaseAgent):
     def _update_schedules__clip_range(self):
         if self.config.clip_range_schedule != 'linear': return
 
-        progress = self._get_training_progress()
+        progress = self._calc_training_progress()
         new_clip_range = max(self.config.clip_range * (1.0 - progress), 0.0)
         self.clip_range = new_clip_range
 

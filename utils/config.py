@@ -272,8 +272,7 @@ class Config:
         config_variant_cfg = all_configs[chosen_id]
 
         # Create and return the config instance
-        algo_id = config_variant_cfg["algo_id"].lower()
-        instance = cls.build_from_dict(algo_id, config_variant_cfg)
+        instance = cls.build_from_dict(config_variant_cfg)
         return instance
 
     def __post_init__(self):

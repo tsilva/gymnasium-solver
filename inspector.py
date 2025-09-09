@@ -279,8 +279,8 @@ def list_checkpoints_for_run(run_id: str) -> Tuple[List[str], Dict[str, Path], s
 
 def _to_batch_obs(obs) -> torch.Tensor:
     if isinstance(obs, np.ndarray) and obs.ndim > 1:
-        return torch.as_tensor(obs, dtype=torch.float32)
-    return torch.as_tensor(obs, dtype=torch.float32).unsqueeze(0)
+        return torch.as_tensor(obs)
+    return torch.as_tensor(obs).unsqueeze(0)
 
 
 def _ensure_action_shape(env, action):

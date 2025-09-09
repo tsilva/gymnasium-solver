@@ -7,7 +7,7 @@ spaces to derive image shapes for CNN policies and forwards config kwargs.
 
 from __future__ import annotations
 
-from typing import Iterable, Tuple
+from typing import Iterable, Tuple, Union
 
 import torch.nn as nn
 
@@ -58,7 +58,7 @@ def _infer_hwc_from_space(obs_space, input_dim: int) -> Tuple[int, int, int]:
 def create_actor_critic_policy(
     policy_type: str,
     *,
-    input_shape: tuple[int, ...],
+    input_shape: Union[tuple[int, ...], int],
     output_shape: tuple[int, ...],
     hidden_dims: Iterable[int],
     activation: str,
@@ -66,10 +66,10 @@ def create_actor_critic_policy(
 ):
     if policy_type == 'mlp':
         return MLPActorCritic(
-            input_shape,
-            hidden_dims,
-            output_shape,
-            activation,
+            input_shape=input_shape,
+            hidden_dims=hidden_dims,
+            output_shape=output_shape,
+            activation=activation,
             **policy_kwargs,
         )
     elif policy_type == 'cnn':

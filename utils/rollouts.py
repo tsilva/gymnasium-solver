@@ -385,7 +385,7 @@ class RolloutBuffer:
 
         # Observations: use CPU buffers and convert at return time
         obs_np = self.obs_buf[start:end]  # (T, N, *obs_shape)
-        obs_t = torch.as_tensor(obs_np, dtype=torch.float32, device=self.device)
+        obs_t = torch.as_tensor(obs_np, device=self.device)
         obs_t_env_major = obs_t.transpose(0, 1)  # (N, T, *obs_shape)
         # Preserve image tensors (C,H,W) without flattening; flatten only vectors/scalars
         if len(self.obs_shape) == 0:
@@ -409,7 +409,7 @@ class RolloutBuffer:
         returns = _flat_env_major_cpu_to_torch(returns_buf, torch.float32)
 
         # Next observations: same env-major flattening as observations
-        next_obs_tensor = torch.as_tensor(self.next_obs_buf[start:end], dtype=torch.float32, device=self.device)
+        next_obs_tensor = torch.as_tensor(self.next_obs_buf[start:end], device=self.device)
         next_obs_env_major = next_obs_tensor.transpose(0, 1)
         if len(self.obs_shape) == 0:
             next_states = next_obs_env_major.reshape(n_envs * T, 1)
@@ -548,7 +548,7 @@ class RolloutCollector():
     # -------- Small private helpers --------
     def _predict_values_np(self, obs_batch: np.ndarray) -> np.ndarray:
         """Run critic on a numpy batch and return float32 numpy array (squeezed)."""
-        obs_t = torch.as_tensor(obs_batch, dtype=torch.float32, device=self.device)
+        obs_t = torch.as_tensor(obs_batch, device=self.device)
         vals = policy_predict_values(self.policy_model, obs_t).detach().cpu().numpy().astype(np.float32)
         return vals.squeeze()
 
@@ -789,7 +789,8 @@ class RolloutCollector():
         rollout_start = time.time()
         for step_idx in range(self.n_steps):
             # Convert current observations to torch tensor (ship to device)
-            obs_t = torch.as_tensor(self.obs, dtype=torch.float32, device=self.device)
+            # NOTE: autocast because observations may be int (eg: mebedding indices)
+            obs_t = torch.as_tensor(self.obs, device=self.device)
 
             # Perform policy step to determine actions, log probabilities, and value estimates
             actions_t, logps_t, values_t = policy_act(self.policy_model, obs_t, deterministic=deterministic)

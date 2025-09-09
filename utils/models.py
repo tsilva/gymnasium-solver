@@ -7,7 +7,7 @@ models internally reshape flat inputs back to (N, C, H, W) using a provided
 returns flattened observations.
 """
 
-from typing import Iterable, Dict
+from typing import Iterable, Dict, Union
 
 import torch
 from torch.distributions import Categorical
@@ -50,16 +50,42 @@ class GradientNormMixin:
         }
 
 
-def build_mlp(input_shape: tuple[int, ...], hidden_dims: tuple[int, ...], activation:str):
+def build_mlp(input_shape: Union[tuple[int, ...], int], hidden_dims: tuple[int, ...], activation:str):
     """ Create a stack of sequential linear layers with the given activation function. """
-    assert len(input_shape) == 1, "Input shape must be 1D"
+    import numpy as np
+
+    is_int = type(input_shape) in [int, np.int32, np.int64]
+    assert is_int or len(input_shape) == 1, "Input shape must be 1D"
+    
+    # Resolve the activation function id (string) to a class
     activation_cls = resolve_activation(activation)
+
+    # Create a list of layers
     layers = []
-    last_dim = input_shape[0]
-    for hidden_dim in hidden_dims:
-        layers += [nn.Linear(last_dim, hidden_dim), activation_cls()]
-        last_dim = hidden_dim
-    return nn.Sequential(*layers)
+
+    # If input shape is an int, use an 
+    # embedding layer to convert int to vector
+    _hidden_dims = hidden_dims
+    if is_int:
+        n_embeddings = input_shape
+        embedding_dim = hidden_dims[0]
+        layers += [nn.Embedding(n_embeddings, embedding_dim)]
+        last_dim = embedding_dim
+        _hidden_dims = hidden_dims[1:]  
+    # Otherwise, use the first dimension of the input shape
+    else:
+        last_dim = input_shape[0]
+
+    # Create the MLP layers
+    for _hidden_dim in _hidden_dims:
+        layers += [nn.Linear(last_dim, _hidden_dim), activation_cls()]
+        last_dim = _hidden_dim
+
+    # Stack the layers into a sequential model
+    model = nn.Sequential(*layers)
+
+    # Return the model
+    return model
 
 
 class MLPPolicy(nn.Module, GradientNormMixin):
@@ -114,23 +140,30 @@ class MLPPolicy(nn.Module, GradientNormMixin):
 class MLPActorCritic(nn.Module, GradientNormMixin):
     def __init__(
         self, 
-        input_shape: tuple[int, ...], 
+        *,
+        input_shape: Union[tuple[int, ...], int], 
         hidden_dims: tuple[int, ...], 
         output_shape: tuple[int, ...], 
         activation: str
     ):
         super().__init__()
+        
+        import numpy as np
 
-        assert len(input_shape) == 1, "Input shape must be 1D"
+        assert type(input_shape) in [int, np.int32, np.int64] or len(input_shape) == 1, "Input shape must be 1D"
         assert len(output_shape) == 1, "Output shape must be 1D"
 
         self.backbone = build_mlp(input_shape, hidden_dims, activation)
 
         # Create the policy head
-        self.policy_head = nn.Linear(hidden_dims[-1], output_shape[0])
+        policy_input_dim = hidden_dims[-1]
+        policy_output_dim = output_shape[0]
+        self.policy_head = nn.Linear(policy_input_dim, policy_output_dim)
 
         # Create the value head
-        self.value_head = nn.Linear(hidden_dims[-1], 1)
+        value_input_dim = hidden_dims[-1]
+        value_output_dim = 1
+        self.value_head = nn.Linear(value_input_dim, value_output_dim)
 
         # TODO: review this
         # Reusable initialization
@@ -145,9 +178,11 @@ class MLPActorCritic(nn.Module, GradientNormMixin):
         # Forward observation through backbone
         x = self.backbone(obs)
 
+        x = x.squeeze()
+        
         # Forward through policy head and get policy logits
         logits = self.policy_head(x)
-
+  
         # Create categorical distribution from logits
         policy_dist = Categorical(logits=logits)
 

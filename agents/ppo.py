@@ -15,7 +15,11 @@ class PPO(BaseAgent):
 
     # TODO: do this in init?
     def create_models(self):
+        # TODO: hack to force embeddings
         input_shape = self.train_env.observation_space.shape
+        if len(input_shape) == 1:
+            input_shape = self.train_env.observation_space.high[0]
+
         output_shape = self.train_env.action_space.shape
         if not output_shape: output_shape = (self.train_env.action_space.n,)
         policy_type = self.config.policy#getattr(self.config, 'policy', 'mlp')

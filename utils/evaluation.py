@@ -73,7 +73,7 @@ def evaluate_policy(
             if all(count >= tgt for count, tgt in zip(per_env_counts, per_env_targets)):
                 break
 
-            obs_t = torch.as_tensor(obs, dtype=torch.float32, device=device)
+            obs_t = torch.as_tensor(obs, device=device)
             actions_t, _, _ = policy_act(policy_model, obs_t, deterministic=deterministic)
             actions = actions_t.detach().cpu().numpy()
 

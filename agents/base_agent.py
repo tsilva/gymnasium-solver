@@ -363,6 +363,7 @@ class BaseAgent(pl.LightningModule):
                 "Run ID": self.run_manager.get_run_id(),
             },
             "Environment Details": {
+                "Environment ID": self.train_env.get_id(),
                 "Observation type": self.train_env.get_obs_type(),
                 "Observation space": self.train_env.observation_space,
                 "Action space": self.train_env.action_space,

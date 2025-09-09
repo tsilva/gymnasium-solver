@@ -2,7 +2,19 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Debug: train.py",
+      "name": "Debug: train.py (FrozenLake-v1_deterministic:ppo)",
+      "type": "python",
+      "request": "launch",
+      "program": "train.py",
+      "args": [
+        "--config_id",
+        "FrozenLake-v1_deterministic:ppo"
+      ],
+      "console": "integratedTerminal",
+      "env": {}
+    },
+    {
+      "name": "Debug: train.py (CartPole-v1:ppo)",
       "type": "python",
       "request": "launch",
       "program": "train.py",

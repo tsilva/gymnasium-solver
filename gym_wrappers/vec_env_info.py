@@ -29,6 +29,10 @@ class VecEnvInfoWrapper(VecEnvWrapper):
 
     # --- public API ----------------------------------------------------------
 
+    def get_id(self):
+        base = self._get_env_info_wrapper()
+        return base.get_id()
+
     def get_spec(self):
         base = self._get_env_info_wrapper()
         return base.get_spec()

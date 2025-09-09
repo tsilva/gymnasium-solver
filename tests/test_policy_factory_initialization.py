@@ -2,7 +2,7 @@ import math
 import pytest
 import torch
 
-from utils.policy_factory import create_policy, create_actor_critic_policy
+from utils.policy_factory import build_policy, build_actor_critic_policy
 
 
 @pytest.mark.unit
@@ -22,7 +22,7 @@ def test_create_policy_uniform_init(policy_type, input_shape, output_shape, obs_
     their action distribution should be uniform (equal probabilities across actions).
     This guards against biased exploration at initialization time.
     """
-    model = create_policy(
+    model = build_policy(
         policy_type,
         input_shape=input_shape,
         hidden_dims=hidden_dims,
@@ -69,7 +69,7 @@ def test_create_actor_critic_uniform_init(policy_type, input_shape, output_shape
     With zero observations, the policy's distribution should be uniform and
     the value head should output zeros.
     """
-    model = create_actor_critic_policy(
+    model = build_actor_critic_policy(
         policy_type,
         input_shape=input_shape,
         hidden_dims=hidden_dims,
@@ -100,7 +100,7 @@ def test_create_actor_critic_uniform_init(policy_type, input_shape, output_shape
 ])
 def test_cnn_variants_allow_no_hidden_actor_critic(activation):
     """CNN actor-critic should also be unbiased with no MLP hidden layers after conv trunk."""
-    model = create_actor_critic_policy(
+    model = build_actor_critic_policy(
         "cnn",
         input_shape=(1, 84, 84),
         hidden_dims=(),  # no post-CNN MLP
@@ -122,7 +122,7 @@ def test_cnn_variants_allow_no_hidden_actor_critic(activation):
 ])
 def test_cnn_variants_allow_no_hidden_policy_only(activation):
     """CNN policy-only should be unbiased with no MLP hidden layers after conv trunk."""
-    model = create_policy(
+    model = build_policy(
         "cnn",
         input_shape=(1, 84, 84),
         hidden_dims=(),  # no post-CNN MLP

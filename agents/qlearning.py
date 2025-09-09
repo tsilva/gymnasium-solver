@@ -60,7 +60,7 @@ class QLearning(BaseAgent):
         super().__init__(config)
         self.automatic_optimization = False
 
-    def create_models(self):
+    def build_models(self):
         self.exploration_rate = 0.99
         self.exploration_rate_decay = 0.99999
         self.q_table = torch.zeros((self.train_env.observation_space.n, self.train_env.action_space.n))

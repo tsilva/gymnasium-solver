@@ -83,7 +83,7 @@ def _load_model(ckpt_path: Path, config):
     Retro environments that do not allow multiple emulator instances per process).
     """
     from utils.environment import build_env
-    from utils.policy_factory import create_actor_critic_policy, create_policy
+    from utils.policy_factory import build_actor_critic_policy, build_policy
 
     # Helper env strictly for shape inference
     helper_env = build_env(
@@ -116,7 +116,7 @@ def _load_model(ckpt_path: Path, config):
 
         algo_id = str(getattr(config, "algo_id", "")).lower()
         if algo_id == "ppo":
-            model = create_actor_critic_policy(
+            model = build_actor_critic_policy(
                 policy_type,
                 input_shape=input_shape,
                 output_shape=output_shape,
@@ -126,7 +126,7 @@ def _load_model(ckpt_path: Path, config):
             )
         else:
             # Policy-only (REINFORCE and other stateless baselines)
-            model = create_policy(
+            model = build_policy(
                 policy_type,
                 input_shape=input_shape,
                 output_shape=output_shape,

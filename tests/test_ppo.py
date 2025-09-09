@@ -108,7 +108,7 @@ def test_ppo_clip_range_schedule_update():
 
 
 @pytest.mark.unit
-def test_ppo_create_models_and_optimizer():
+def test_ppo_build_models_and_optimizer():
     # Minimal train_env stub with required API
     class _Env:
         pass
@@ -118,7 +118,7 @@ def test_ppo_create_models_and_optimizer():
     agent.train_env = _Env()
 
     # Create model
-    agent.create_models()
+    agent.build_models()
     assert hasattr(agent, "policy_model")
 
     # Forward shape sanity check

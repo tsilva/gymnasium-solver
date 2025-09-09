@@ -179,9 +179,9 @@ def test_full_ppo_train_tiny_loop_progress(monkeypatch):
     cfg.devices = None
 
     # Create agent and run training end-to-end
-    from agents import create_agent
+    from agents import build_agent
 
-    agent = create_agent(cfg)
+    agent = build_agent(cfg)
     agent.fit()
 
     # Verify progress was recorded and loop didn't crash

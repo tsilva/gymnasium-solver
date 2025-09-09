@@ -1,4 +1,4 @@
-def create_agent(config, *args, **kwargs):
+def build_agent(config, *args, **kwargs):
     algo_id = config.algo_id
     if algo_id == "ppo": 
         from .ppo import PPO

@@ -63,7 +63,7 @@ class BaseAgent(pl.LightningModule):
         # Create models now that the environment is available. Subclasses use
         # env shapes to build policy/value networks. Must be called before
         # collectors which require self.policy_model.
-        self.create_models()
+        self.build_models()
 
         # Create the rollout collector for the training environment
         from utils.rollouts import RolloutCollector
@@ -119,7 +119,7 @@ class BaseAgent(pl.LightningModule):
         )
 
     @must_implement
-    def create_models(self):
+    def build_models(self):
         # Subclasses must implement this to create their own models (eg: policy, value)
         pass
 

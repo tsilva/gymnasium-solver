@@ -1,4 +1,4 @@
-from utils.policy_factory import create_policy
+from utils.policy_factory import build_policy
 from utils.torch import assert_detached
 
 from .base_agent import BaseAgent
@@ -7,11 +7,11 @@ import torch
 
 class REINFORCE(BaseAgent):
     
-    def create_models(self):
+    def build_models(self):
         input_shape = self.train_env.observation_space.shape
         output_shape = self.train_env.action_space.shape
         if not output_shape: output_shape = (self.train_env.action_space.n,)
-        self.policy_model = create_policy(
+        self.policy_model = build_policy(
             self.config.policy,
             input_shape=input_shape,
             hidden_dims=self.config.hidden_dims,

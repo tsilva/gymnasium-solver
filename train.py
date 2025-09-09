@@ -9,7 +9,7 @@ def _init_wandb_sweep(config: Config):
     wandb.init(config=base)
     merged = dict(wandb.config)
     algo_id = merged.get("algo_id", config.algo_id)
-    return Config.create_for_algo(algo_id, merged)
+    return Config.build_for_algo(algo_id, merged)
 
 def main():
     # Parse command line arguments
@@ -38,8 +38,8 @@ def main():
     set_random_seed(config.seed)
 
     # Create agent and start learning
-    from agents import create_agent
-    agent = create_agent(config)
+    from agents import build_agent
+    agent = build_agent(config)
     agent.learn()
         
 if __name__ == "__main__":

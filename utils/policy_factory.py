@@ -55,7 +55,7 @@ def _infer_hwc_from_space(obs_space, input_dim: int) -> Tuple[int, int, int]:
     return (side, side, 1)
 
 
-def create_actor_critic_policy(
+def build_actor_critic_policy(
     policy_type: str,
     *,
     input_shape: Union[tuple[int, ...], int],
@@ -84,7 +84,7 @@ def create_actor_critic_policy(
         raise ValueError(f"Invalid policy type: {policy_type}")
 
 
-def create_policy(
+def build_policy(
     policy_type: str | type[nn.Module],
     *,
     input_shape: tuple[int, ...],
@@ -118,7 +118,7 @@ def build_policy_from_env_and_config(env, config):
     policy_type = config.policy#getattr(self.config, 'policy', 'mlp')
     activation = config.activation#getattr(self.config, 'activation', 'relu')
     policy_kwargs = config.policy_kwargs#getattr(self.config, 'policy_kwargs', {}) or {}
-    return create_actor_critic_policy(
+    return build_actor_critic_policy(
         policy_type,
         input_shape=input_shape,
         output_shape=output_shape,

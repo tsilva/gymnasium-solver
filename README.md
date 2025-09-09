@@ -1,6 +1,6 @@
 ## gymnasium-solver 🤖🏋️
 
-Fast, practical reinforcement learning on Gymnasium. Train PPO/REINFORCE/QLearning agents with config-first workflows, vectorized environments, videos, a Gradio run inspector, and one-command publishing to the Hugging Face Hub.
+Fast, practical reinforcement learning on Gymnasium. Train PPO/REINFORCE agents with config-first workflows, vectorized environments, videos, a Gradio run inspector, and one-command publishing to the Hugging Face Hub.
 
 ### ⚠️ Warning
 This project is currently for self-education purposes only. I'm doing a lot of vibe coding: I quickly vibe-code features, then review the code and chisel out the AI slop. At any point the codebase may be ugly and buggy. Please don't assume it's a "real" project until I make the first release. From that point on, I'll start working with branches and a more stable workflow.
@@ -49,7 +49,7 @@ python inspector.py --run-id @latest-run --port 7860 --host 127.0.0.1
 ```
 
 ### ⚙️ Configs (YAML)
-Configs live in `config/environments/*.yaml`. New style puts base fields at the top and per-algorithm variants under their own key. Linear schedules like `lin_0.001` are parsed automatically. The loader selects an algo-specific config subclass based on `algo_id` (e.g., `PPOConfig`, `REINFORCEConfig`, `QLearningConfig`).
+Configs live in `config/environments/*.yaml`. New style puts base fields at the top and per-algorithm variants under their own key. Linear schedules like `lin_0.001` are parsed automatically. The loader selects an algo-specific config subclass based on `algo_id` (e.g., `PPOConfig`, `REINFORCEConfig`).
 
 ```yaml
 # New per-file style
@@ -70,7 +70,7 @@ ppo:
 ```
 
 Selection:
-- Programmatic (Python): `load_config("CartPole-v1_ppo")` or `load_config("CartPole-v1", "ppo")`; omitting a variant defaults to the first defined (prefers `ppo`, then `reinforce`, then `qlearning`).
+- Programmatic (Python): `load_config("CartPole-v1_ppo")` or `load_config("CartPole-v1", "ppo")`; omitting a variant defaults to the first defined (prefers `ppo`, then `reinforce`).
 - CLI (train.py): pass `--config_id "<env>:<variant>"` (colon, not underscore), e.g., `--config_id "CartPole-v1:ppo"`.
 The loader remains compatible with the legacy multi-block format for a transitional period. When `project_id` is omitted in environment YAMLs, it is inferred from the file name.
 
@@ -114,7 +114,7 @@ Uploads run artifacts under `artifacts/` and attaches a preview video when found
 
 ### 🗂️ Project layout
 ```
-agents/            # PPO, REINFORCE, QLearning
+agents/            # PPO, REINFORCE
 utils/             # config, env, logging, models, rollouts, etc.
 gym_wrappers/      # registry + wrappers (feature extractors, reward shaping, pixels)
 trainer_callbacks/ # logging, early stopping, checkpointing, hyperparam sync, videos

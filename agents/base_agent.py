@@ -469,7 +469,7 @@ class BaseAgent(pl.LightningModule):
         )
         callbacks.append(hyperparam_sync_cb)
 
-        # Checkpointing (skip for qlearning which has no torch model)
+        # Checkpointing 
         checkpoint_dir = self.run_manager.ensure_path("checkpoints/")
         checkpoint_cb = ModelCheckpointCallback(
             checkpoint_dir=checkpoint_dir,

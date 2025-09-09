@@ -14,7 +14,7 @@ def _init_wandb_sweep(config: Config):
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Train RL agent.")
-    parser.add_argument("--config_id", type=str, default="FrozenLake-v1_deterministic:ppo", help="Config ID (e.g., CartPole-v1_ppo)")
+    parser.add_argument("--config_id", type=str, default="CartPole-v1:ppo", help="Config ID (e.g., CartPole-v1_ppo)")
     parser.add_argument("--quiet", "-q", action="store_true", default=False, help="Run non-interactively: auto-accept prompts and defaults")
     parser.add_argument("--wandb_sweep", action="store_true", default=False, help="Enable W&B sweep mode: initialize wandb early and merge wandb.config into the main Config before training.")
     args = parser.parse_args()

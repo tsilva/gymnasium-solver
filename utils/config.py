@@ -13,6 +13,8 @@ class Config:
     class PolicyType(str, Enum):
         mlp = "mlp"
         cnn = "cnn"
+        mlp_actorcritic = "mlp_actorcritic"
+        cnn_actorcritic = "cnn_actorcritic"
 
     class AcceleratorType(str, Enum):
         auto = "auto"
@@ -217,10 +219,9 @@ class Config:
     def build_from_dict(cls, config_dict: Dict[str, Any]) -> 'Config':
         _config_dict = config_dict.copy()
         algo_id = _config_dict.pop("algo_id")
-        config_cls = {
+        config_cls = { # TODO: build directly from objects
             "ppo": PPOConfig,
             "reinforce": REINFORCEConfig,
-            "qlearning": QLearningConfig,   
         }[algo_id]
         config = config_cls(**_config_dict)
         return config
@@ -395,18 +396,8 @@ class Config:
             raise ValueError("policy_targets must be 'returns' or 'advantages'.")
 
 @dataclass
-class QLearningConfig(Config):
-    n_steps: int = 256
-    batch_size: int = 64
-    n_epochs: int = 1
-    gamma: float = 0.99
-
-    @property
-    def algo_id(self) -> str:
-        return "qlearning"
-
-@dataclass
 class REINFORCEConfig(Config):
+    policy: "Config.PolicyType" = Config.PolicyType.mlp  # type: ignore[assignment]
     n_steps: int = 2048
     batch_size: int = 2048
     n_epochs: int = 1
@@ -423,6 +414,7 @@ class REINFORCEConfig(Config):
 
 @dataclass
 class PPOConfig(Config):
+    policy: "Config.PolicyType" = Config.PolicyType.mlp_actorcritic  # type: ignore[assignment]
     n_steps: int = 2048
     batch_size: int = 64
     n_epochs: int = 10

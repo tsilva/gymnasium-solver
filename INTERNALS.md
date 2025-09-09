@@ -15,13 +15,12 @@ High-signal reference for maintainers and agents. Read this before making change
 ### Configuration model (`utils/config.py`)
 - `Config` dataclass aggregates env, algo, rollout, model, optimization, eval, logging, and runtime settings. The loader instantiates an algo-specific subclass based on `algo_id`.
 - `load_from_yaml(config_id, variant_id)`: loads from `config/environments/*.yaml` using the new per-file format (base fields at the root + per-variant sections like `ppo:`). Schedules like `lin_0.001` are parsed into `*_schedule='linear'` and the numeric base. For new-style environment files, when `project_id` is not specified, it defaults to the YAML filename (stem).
-- Variant selection: when `variant_id` is omitted, the loader auto-selects a default variant for the given project. Preference order is `ppo`, then `reinforce`, then `qlearning` when available; otherwise the first variant in lexical order is chosen. Note: the current CLI (`train.py`) still requires `env:variant` and does not exercise this default.
+- Variant selection: when `variant_id` is omitted, the loader auto-selects a default variant for the given project. Preference order is `ppo`, then `reinforce`,; otherwise the first variant in lexical order is chosen. Note: the current CLI (`train.py`) still requires `env:variant` and does not exercise this default.
 - Fractional batch size: when `batch_size` is a float in (0, 1], it is interpreted as a fraction of the rollout size (`n_envs * n_steps`). The loader computes `floor(rollout_size * fraction)` with a minimum of 1; no divisibility assertion is enforced.
 
 Algo-specific config subclasses:
 - `PPOConfig`: enforces `clip_range > 0`.
 - `REINFORCEConfig`: validates `policy_targets` in {'returns','advantages'}.
-- `QLearningConfig`: retains base validations; ensures `n_envs >= 1`.
 
 ### Environments (`utils/environment.py`, `gym_wrappers/*`)
 - `build_env(env_id, n_envs, seed, subproc, obs_type, frame_stack, norm_obs, env_wrappers, env_kwargs, render_mode, record_video, record_video_kwargs)` builds a vectorized env:
@@ -52,8 +51,6 @@ Algo-specific config subclasses:
   - Policy-only via `create_policy`; can use returns or advantages as policy targets (`config.policy_targets`), with GAE disabled in the collector for classic REINFORCE behavior.
   - Logs policy diagnostics including `entropy`, and PPO-style KL indicators `kl_div` and `approx_kl` computed from rollout (old) vs current log-probs for the taken actions.
   - Monte Carlo return mode is controlled by the loader/collector via `returns_type` (e.g., `mc:rtg` as default or `mc:episode` to scale all timesteps by the episode return).
-- `agents/qlearning.QLearning`:
-  - Tabular Q-table on discrete obs/action spaces; custom `QLearningPolicyModel` with epsilon decay; no optimizer.
 
 ### Rollouts and data pipeline (`utils/rollouts.py`, `utils/dataloaders.py`)
 - `RolloutCollector` collects `n_steps` across `n_envs` and stores into a persistent CPU `RolloutBuffer` to minimize allocs.
@@ -108,7 +105,7 @@ Algo-specific config subclasses:
 
 ### Directory layout
 ```
-agents/           # PPO, REINFORCE, QLearning, base
+agents/           # PPO, REINFORCE, base
 utils/            # config, env, rollout, dataloaders, models, logging, metrics, etc.
 gym_wrappers/     # registry + wrappers (feature extractors, reward shaping, pixels)
 trainer_callbacks/# logging, early stopping, checkpointing, hyperparam sync, videos

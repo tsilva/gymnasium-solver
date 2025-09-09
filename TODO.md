@@ -1,7 +1,8 @@
 - FEAT: add normalization support 
 - FEAT: add discrete env support
 - FEAT: add sweeping support
-
+- BUG: ep_rew_mean not logged (taxi-v3)
+- FEAT: hp vs pf metrics
  ppo_tuned2:
       - policy_lr: 5e-4
       - clip_range: 0.2

@@ -5,6 +5,9 @@ ent_coef: 0.5
 n_envs: 16
 eval_freq_epochs: 10
 eval_episodes: 10
+env_wrappers:
+  - id: DiscreteEncoder
+    encoding: array
 
 ppo:
   algo_id: ppo

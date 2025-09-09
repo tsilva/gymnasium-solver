@@ -87,7 +87,7 @@ VizDoom support: set `env_id` to `VizDoom-DeadlyCorridor-v0`. Requires `pip inst
 ### 🧰 Environment wrappers
 Register-by-name wrappers via `EnvWrapperRegistry` (see `gym_wrappers/__init__.py`). Available IDs:
 - `PixelObservationWrapper`
-- `DiscreteToBinary`
+- `DiscreteEncoder` (encoding: 'array' | 'binary' | 'onehot')
 - `PongV5_FeatureExtractor`, `PongV5_RewardShaper`
 - `MountainCarV0_RewardShaper`, `CartPoleV1_RewardShaper`, `VizDoom_RewardShaper`
 

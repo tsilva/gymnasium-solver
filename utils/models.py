@@ -178,7 +178,9 @@ class MLPActorCritic(nn.Module, GradientNormMixin):
         # Forward observation through backbone
         x = self.backbone(obs)
 
-        x = x.squeeze()
+        # TODO: this is a hack to deal with the extra dimension provided by embeddings, need to softcode this
+        if x.ndim > 2 and x.shape[1] == 1:
+            x = x.squeeze(1)
         
         # Forward through policy head and get policy logits
         logits = self.policy_head(x)
@@ -417,3 +419,4 @@ class CNNPolicy(nn.Module, GradientNormMixin):
             "grad_norm/trunk": compute_param_group_grad_norm(trunk_params),
             "grad_norm/policy_head": compute_param_group_grad_norm(policy_head_params),
         }
+

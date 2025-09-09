@@ -106,3 +106,25 @@ def create_policy(
         **policy_kwargs,
     )
     return policy
+
+def build_policy_from_env_and_config(env, config):
+    # TODO: hack to force embeddings
+    input_shape = env.observation_space.shape
+    if len(input_shape) == 1:
+        input_shape = env.observation_space.high[0]
+
+    output_shape = env.action_space.shape
+    if not output_shape: output_shape = (env.action_space.n,)
+    policy_type = config.policy#getattr(self.config, 'policy', 'mlp')
+    activation = config.activation#getattr(self.config, 'activation', 'relu')
+    policy_kwargs = config.policy_kwargs#getattr(self.config, 'policy_kwargs', {}) or {}
+    return create_actor_critic_policy(
+        policy_type,
+        input_shape=input_shape,
+        output_shape=output_shape,
+        hidden_dims=config.hidden_dims,
+        activation=activation,
+        # TODO: redundancy with input_dim/output_dim?
+        **policy_kwargs,
+    )
+    

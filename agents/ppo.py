@@ -1,10 +1,11 @@
 import torch
 import torch.nn.functional as F
 
-from utils.policy_factory import create_actor_critic_policy
+from utils.policy_factory import build_policy_from_env_and_config
 from utils.torch import assert_detached
 
 from .base_agent import BaseAgent
+
 
 class PPO(BaseAgent):
     
@@ -14,26 +15,9 @@ class PPO(BaseAgent):
         self.clip_range = config.clip_range
 
     # TODO: do this in init?
+    # TODO: call this build models?
     def create_models(self):
-        # TODO: hack to force embeddings
-        input_shape = self.train_env.observation_space.shape
-        if len(input_shape) == 1:
-            input_shape = self.train_env.observation_space.high[0]
-
-        output_shape = self.train_env.action_space.shape
-        if not output_shape: output_shape = (self.train_env.action_space.n,)
-        policy_type = self.config.policy#getattr(self.config, 'policy', 'mlp')
-        activation = self.config.activation#getattr(self.config, 'activation', 'relu')
-        policy_kwargs = self.config.policy_kwargs#getattr(self.config, 'policy_kwargs', {}) or {}
-        self.policy_model = create_actor_critic_policy(
-            policy_type,
-            input_shape=input_shape,
-            output_shape=output_shape,
-            hidden_dims=self.config.hidden_dims,
-            activation=activation,
-            # TODO: redundancy with input_dim/output_dim?
-            **policy_kwargs,
-        )
+        self.policy_model = build_policy_from_env_and_config(self.train_env, self.config)
 
     def losses_for_batch(self, batch, batch_idx):
         # use type for this? check sb3

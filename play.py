@@ -10,8 +10,6 @@ Alternate play script: minimal and reuse-first.
 from __future__ import annotations
 
 import argparse
-import os
-import platform
 from pathlib import Path
 
 from utils.environment import build_env
@@ -94,82 +92,31 @@ def load_model(ckpt_path: Path, config):
     """
     import torch
     from utils.environment import build_env as _build_env
-    from utils.policy_factory import create_actor_critic_policy, create_policy
+    from utils.policy_factory import build_policy_from_env_and_config
 
     # Helper env strictly for shape inference
     helper_env = _build_env(
         config.env_id,
-        seed=getattr(config, "seed", 42),
-        env_wrappers=getattr(config, "env_wrappers", []),
+        seed=config.seed,
+        env_wrappers=config.env_wrappers,
         norm_obs=getattr(config, "normalize_obs", False),
         n_envs=1,
-        frame_stack=getattr(config, "frame_stack", 1),
-        obs_type=getattr(config, "obs_type", None),
+        frame_stack=config.frame_stack,
+        obs_type=config.obs_type,
         render_mode=None,
-        env_kwargs=getattr(config, "env_kwargs", {}),
+        env_kwargs=config.env_kwargs,
         subproc=False,
-        grayscale_obs=getattr(config, "grayscale_obs", False),
-        resize_obs=getattr(config, "resize_obs", False),
+        grayscale_obs=config.grayscale_obs,
+        resize_obs=config.resize_obs,
     )
 
-    try:
-        obs_space = getattr(helper_env, "observation_space", None)
-        act_space = getattr(helper_env, "action_space", None)
-        input_shape = None
-        output_shape = None
-        if obs_space is not None and hasattr(obs_space, "shape") and obs_space.shape:
-            input_shape = tuple(int(s) for s in obs_space.shape)
-        elif input_dim is not None:
-            input_shape = (int(input_dim),)
-
-        if act_space is not None and hasattr(act_space, "n"):
-            output_shape = (int(act_space.n),)
-        elif output_dim is not None:
-            output_shape = (int(output_dim),)
-
-        if not input_shape or not output_shape:
-            raise RuntimeError("Could not infer model input/output shapes from environment")
-
-        policy_type = str(getattr(config, "policy", "mlp")).lower()
-        hidden_dims = getattr(config, "hidden_dims", (64, 64))
-        if isinstance(hidden_dims, int):
-            hidden_dims = (hidden_dims,)
-        activation = str(getattr(config, "activation", "relu"))
-        policy_kwargs = getattr(config, "policy_kwargs", {}) or {}
-
-        algo_id = str(getattr(config, "algo_id", "")).lower()
-        if algo_id == "ppo":
-            model = create_actor_critic_policy(
-                policy_type,
-                input_shape=input_shape,
-                output_shape=output_shape,
-                hidden_dims=hidden_dims,
-                activation=activation,
-                **policy_kwargs,
-            )
-        else:
-            model = create_policy(
-                policy_type,
-                input_shape=input_shape,
-                output_shape=output_shape,
-                hidden_dims=hidden_dims,
-                activation=activation,
-                **policy_kwargs,
-            )
-
-        # Load weights
-        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-        state_dict = ckpt.get("model_state_dict") if isinstance(ckpt, dict) else None
-        if not isinstance(state_dict, dict):
-            raise RuntimeError(f"Invalid checkpoint: missing model_state_dict in {ckpt_path}")
-        model.load_state_dict(state_dict)
-        model.eval()
-        return model
-    finally:
-        try:
-            helper_env.close()
-        except Exception:
-            pass
+    policy_model = build_policy_from_env_and_config(helper_env, config)
+    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    state_dict = ckpt.get("model_state_dict") if isinstance(ckpt, dict) else None
+    if not isinstance(state_dict, dict): raise RuntimeError(f"Invalid checkpoint: missing model_state_dict in {ckpt_path}")
+    policy_model.load_state_dict(state_dict)
+    policy_model.eval()
+    return policy_model
 
 
 def read_policy(run_id: str, model_path: str | None):
@@ -189,7 +136,6 @@ def read_policy(run_id: str, model_path: str | None):
     policy_model = load_model(ckpt_path, config)
     return policy_model, config, ckpt_path
 
-
 def main():
     p = argparse.ArgumentParser(description="Play a trained agent using RolloutCollector (human render)")
     p.add_argument("--run-id", default="@latest-run", help="Run ID to load (defaults to @latest-run)")
@@ -203,14 +149,11 @@ def main():
     print(f"Using checkpoint: {ckpt_path}")
 
     # Best-effort: prefer software renderer on WSL to avoid GLX issues
-    try:
-        is_wsl = ("microsoft" in platform.release().lower()) or ("WSL_INTEROP" in os.environ)
-        if is_wsl:
-            os.environ.setdefault("SDL_RENDER_DRIVER", "software")
-    except Exception:
-        pass
+    #is_wsl = ("microsoft" in platform.release().lower()) or ("WSL_INTEROP" in os.environ)
+    #if is_wsl: os.environ.setdefault("SDL_RENDER_DRIVER", "software")
 
     # Build a single-env environment with human rendering
+    # TODO: build_env_from_config()
     env = build_env(
         config.env_id,
         seed=config.seed,
@@ -222,40 +165,33 @@ def main():
         obs_type=config.obs_type,
         render_mode="human",
         env_kwargs=config.env_kwargs,
-        grayscale_obs=getattr(config, "grayscale_obs", False),
-        resize_obs=getattr(config, "resize_obs", False),
+        grayscale_obs=config.grayscale_obs,
+        resize_obs=config.resize_obs,
     )
 
-    try:
-        # Initialize rollout collector with training-time hyperparams
-        n_steps = int(config.n_steps) if getattr(config, "n_steps", None) else 2048
-        collector = RolloutCollector(
-            env=env,
-            policy_model=policy_model,
-            n_steps=n_steps,
-            **config.rollout_collector_hyperparams(),
+    # Initialize rollout collector with training-time hyperparams
+    collector = RolloutCollector(
+        env=env,
+        policy_model=policy_model,
+        n_steps=config.n_steps,
+        **config.rollout_collector_hyperparams(),
+    )
+
+    # Initialize obs on first collect; keep collecting until target episodes reached
+    target_eps = max(1, int(args.episodes))
+    start_eps = collector.total_episodes
+    print(f"Playing {target_eps} episode(s) with render_mode='human'...")
+
+    while (collector.total_episodes - start_eps) < target_eps:
+        _ = collector.collect(deterministic=args.deterministic)
+        m = collector.get_metrics()
+        played = collector.total_episodes - start_eps
+        print(
+            f"[episodes {played}/{target_eps}] last_rew={m.get('ep_rew_last', 0):.2f} "
+            f"mean_rew={m.get('ep_rew_mean', 0):.2f} fps={m.get('rollout_fps', 0):.1f}"
         )
 
-        # Initialize obs on first collect; keep collecting until target episodes reached
-        target_eps = max(1, int(args.episodes))
-        start_eps = collector.total_episodes
-        print(f"Playing {target_eps} episode(s) with render_mode='human'...")
-
-        while (collector.total_episodes - start_eps) < target_eps:
-            _ = collector.collect(deterministic=args.deterministic)
-            m = collector.get_metrics()
-            played = collector.total_episodes - start_eps
-            print(
-                f"[episodes {played}/{target_eps}] last_rew={m.get('ep_rew_last', 0):.2f} "
-                f"mean_rew={m.get('ep_rew_mean', 0):.2f} fps={m.get('rollout_fps', 0):.1f}"
-            )
-
-        print("Done.")
-    finally:
-        try:
-            env.close()
-        except Exception:
-            pass
+    print("Done.")
 
 
 if __name__ == "__main__":

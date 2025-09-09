@@ -2,6 +2,14 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Debug: play.py",
+      "type": "python",
+      "request": "launch",
+      "program": "play.py",
+      "console": "integratedTerminal",
+      "env": {}
+    },
+    {
       "name": "Debug: train.py (FrozenLake-v1_deterministic:ppo)",
       "type": "python",
       "request": "launch",

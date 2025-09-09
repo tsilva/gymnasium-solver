@@ -57,9 +57,6 @@ class Config:
     # The id of the environment to train on
     env_id: str = ""
 
-    # The id of the algorithm to train with
-    algo_id: str = ""
-
     # The number of steps to collect per rollout environment
     # (algorithm-specific defaults live in algo config classes)
     n_steps: Optional[int] = None
@@ -320,6 +317,25 @@ class Config:
             if val_lower.startswith('lin_'):
                 setattr(self, f"{key}_schedule", 'linear')
                 setattr(self, key, float(val_lower.split('lin_')[1]))
+
+    def get_env_args(self) -> Dict[str, Any]:
+        return dict(
+            env_id=self.env_id,
+            n_envs=self.n_envs,
+            seed=self.seed,
+            max_episode_steps=self.max_episode_steps,
+            env_wrappers=self.env_wrappers,
+            grayscale_obs=self.grayscale_obs,
+            resize_obs=self.resize_obs,
+            normalize_obs=self.normalize_obs, 
+            frame_stack=self.frame_stack,
+            obs_type=self.obs_type,
+            render_mode=None,
+            subproc=self.subproc,
+            record_video=False, 
+            record_video_kwargs={},
+            env_kwargs=self.env_kwargs
+        )
 
     def rollout_collector_hyperparams(self) -> Dict[str, Any]:
         return {

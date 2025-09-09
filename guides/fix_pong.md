@@ -19,7 +19,7 @@ Concrete fixes (apply 2–4 at once, then re-evaluate after ~1–2M steps)
   - hidden_dims: [256, 256] for more capacity on non-linear object dynamics.
 - Observation features
   - Disable clipping in `PongV5_FeatureExtractor` (clip: false) so normalized features can exceed [0,1] if calibration MIN/MAX are off.
-  - Optionally recompute MIN/MAX from a longer random policy sweep, or enable `norm_obs: true` in config to stabilize feature scale.
+  - Optionally recompute MIN/MAX from a longer random policy sweep, or enable `normalize_obs: true` in config to stabilize feature scale.
 - Evaluation cadence
   - eval_freq_epochs: 100 to reduce eval overhead (not a big factor, but keeps focus on training).
 

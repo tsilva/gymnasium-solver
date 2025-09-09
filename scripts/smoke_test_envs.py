@@ -124,7 +124,7 @@ def run_random_steps_for_config(config_id: str, max_timesteps: int, n_envs: int)
             n_envs=n_envs,
             seed=int(cfg.get("seed", 42)),
             env_wrappers=list(cfg.get("env_wrappers", []) or []),
-            norm_obs=cfg.get("normalize_obs", cfg.get("normalize", False) or False),
+            normalize_obs=cfg.get("normalize_obs", cfg.get("normalize", False) or False),
             frame_stack=int(cfg.get("frame_stack", 1) or 1),
             obs_type=cfg.get("obs_type", None),
             render_mode=None,  # avoid video/render requirements during smoke test

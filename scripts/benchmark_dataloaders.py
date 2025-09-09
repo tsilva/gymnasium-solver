@@ -68,7 +68,7 @@ def make_rollout_dataset(cfg: BenchmarkConfig):
         subproc=exp_cfg.subproc,
         obs_type=exp_cfg.obs_type,
         env_wrappers=exp_cfg.env_wrappers,
-        norm_obs=exp_cfg.normalize_obs,
+        normalize_obs=exp_cfg.normalize_obs,
         frame_stack=exp_cfg.frame_stack,
         render_mode=None,
         env_kwargs=exp_cfg.env_kwargs,

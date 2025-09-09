@@ -99,7 +99,7 @@ def build_env(
     env_wrappers=[], 
     grayscale_obs=False,
     resize_obs=False,
-    norm_obs=False, 
+    normalize_obs=False, 
     frame_stack=None, 
     obs_type=None,
     render_mode=None,
@@ -206,8 +206,8 @@ def build_env(
         env = VecTransposeImage(env)  # (N, C, H, W)
 
     # Enable observation normalization only for non-image observations
-    if norm_obs == "static": env = VecNormalizeStatic(env)
-    elif norm_obs == "rolling": env = VecNormalize(env, norm_obs=norm_obs)
+    if normalize_obs == "static": env = VecNormalizeStatic(env)
+    elif normalize_obs == "rolling": env = VecNormalize(env, norm_obs=normalize_obs)
 
     # Enable frame stacking if requested
     if frame_stack and frame_stack > 1: env = VecFrameStack(env, n_stack=frame_stack)
@@ -225,8 +225,7 @@ def build_env(
     return env
 
 def build_env_from_config(config, **kwargs):
-    params = asdict(config)
-    params.update(kwargs)
-    params.pop("project_id")
-    env_id = params.pop("env_id")
-    return build_env(env_id, **params)
+    env_args = config.get_env_args()
+    env_args.update(kwargs)
+    env_id = env_args.pop("env_id")
+    return build_env(env_id, **env_args)

@@ -17,29 +17,7 @@ from pathlib import Path
 from utils.environment import build_env_from_config
 from utils.rollouts import RolloutCollector
 from typing import Any
-
-# Local constants
-RUNS_DIR = Path("runs")
-
-# TODO: load run object
-def _resolve_run_dir(run_id: str) -> Path:
-    p = RUNS_DIR / run_id
-    assert p.exists(), f"Run directory not found: {p}"
-    return p
-
-def load_config_from_run(run_id: str):
-    import json
-    from utils.config import Config
-    run_dir = _resolve_run_dir(run_id)
-    cfg_path = run_dir / "config.json"
-    with open(cfg_path, "r", encoding="utf-8") as f: data: dict[str, Any] = json.load(f)
-    return Config.build_from_dict(data)
-
-def load_checkpoint_from_run(run_id: str) -> Path:
-    run_dir = _resolve_run_dir(run_id)
-    ckpt_path = run_dir / "checkpoints" / "best.ckpt"
-    if not ckpt_path.exists(): raise FileNotFoundError(f"No checkpoint files found under {ckpt_path}")
-    return ckpt_path
+from utils.run import Run
 
 def load_model(ckpt_path: Path, env, config):
     import torch
@@ -65,11 +43,10 @@ def main():
     if is_wsl: os.environ.setdefault("SDL_RENDER_DRIVER", "software")
 
     # Load checkpoint
-    ckpt_path = load_checkpoint_from_run(args.run_id)
+    run = Run.from_id(args.run_id)
+    ckpt_path = run.best_checkpoint_path
+    config = run.load_config()
     print(f"Using checkpoint: {ckpt_path}")
-
-    # Load configuration 
-    config = load_config_from_run(args.run_id)
 
     # Build a single-env environment with human rendering
     env = build_env_from_config(

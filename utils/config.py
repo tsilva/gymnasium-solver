@@ -348,7 +348,9 @@ class Config:
     
     def save_to_json(self, path: str) -> None:
         """Save configuration to a JSON file."""
-        with open(path, "w") as f: json.dump(asdict(self), f, indent=2, default=str)
+        data = asdict(self)
+        data["algo_id"] = self.algo_id # TODO: do this in serializer method instead
+        with open(path, "w") as f: json.dump(data, f, indent=2, default=str)
     
     # TODO: figure out a way to softcode this
     def validate(self):

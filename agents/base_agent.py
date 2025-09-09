@@ -7,7 +7,6 @@ from utils.metrics_buffer import MetricsBuffer
 from utils.metrics_history import MetricsHistory
 from utils.decorators import must_implement
 from utils.reports import print_terminal_ascii_summary
-from utils.torch import compute_param_group_grad_norm
 
 class BaseAgent(pl.LightningModule):
     def __init__(self, config):
@@ -38,27 +37,8 @@ class BaseAgent(pl.LightningModule):
         self.run_manager = None
 
         # Create the training environment
-        common_env_kwargs = dict(
-            seed=config.seed,
-            n_envs=config.n_envs,
-            max_episode_steps=config.max_episode_steps,
-            subproc=config.subproc,
-            obs_type=config.obs_type,
-            frame_stack=config.frame_stack,
-            grayscale_obs=config.grayscale_obs,
-            resize_obs=config.resize_obs,
-            norm_obs=config.normalize_obs,
-            env_wrappers=config.env_wrappers,
-            env_kwargs=config.env_kwargs,
-        )
-        from utils.environment import build_env
-        self.train_env = build_env(
-            config.env_id,
-            **{
-                **common_env_kwargs, 
-                "seed": config.seed
-            },
-        )
+        from utils.environment import build_env_from_config
+        self.train_env = build_env_from_config(config, seed=config.seed)
 
         # Create models now that the environment is available. Subclasses use
         # env shapes to build policy/value networks. Must be called before
@@ -75,18 +55,15 @@ class BaseAgent(pl.LightningModule):
         )
 
         # Create validation environment and collector
-        self.validation_env = build_env(
-            config.env_id,
-            **{
-                **common_env_kwargs,
-                "seed": config.seed + 1000,  # different seed to minimize correlation
-                "subproc": False,
-                "render_mode": "rgb_array",
-                "record_video": True,
-                "record_video_kwargs": {
-                    "video_length": 100,  # cap video length to avoid bottlenecks
-                    "record_env_idx": 0,
-                },
+        self.validation_env = build_env_from_config(
+            config,
+            seed=config.seed + 1000,
+            subproc=False,
+            render_mode="rgb_array",
+            record_video=True,
+            record_video_kwargs={
+                "video_length": 100,
+                "record_env_idx": 0,
             },
         )
         self.validation_collector = RolloutCollector(
@@ -97,18 +74,15 @@ class BaseAgent(pl.LightningModule):
         )
 
         # Create test environment and collector
-        self.test_env = build_env(
-            config.env_id,
-            **{
-                **common_env_kwargs,
-                "seed": config.seed + 2000,
-                "subproc": False,
-                "render_mode": "rgb_array",
-                "record_video": True,
-                "record_video_kwargs": {
-                    "video_length": None,  # full video
-                    "record_env_idx": 0,
-                },
+        self.test_env = build_env_from_config(
+            config,
+            seed=config.seed + 2000,
+            subproc=False,
+            render_mode="rgb_array",
+            record_video=True,
+            record_video_kwargs={
+                "video_length": None,  # full video
+                "record_env_idx": 0,
             },
         )
         self.test_collector = RolloutCollector(

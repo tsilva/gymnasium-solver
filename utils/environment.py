@@ -1,4 +1,5 @@
 from gym_wrappers.env_wrapper_registry import EnvWrapperRegistry
+from dataclasses import asdict
 
 def is_alepy_env_id(env_id: str) -> bool:
     return env_id.lower().startswith("ale/")
@@ -222,3 +223,10 @@ def build_env(
     env = VecEnvInfoWrapper(env)
 
     return env
+
+def build_env_from_config(config, **kwargs):
+    params = asdict(config)
+    params.update(kwargs)
+    params.pop("project_id")
+    env_id = params.pop("env_id")
+    return build_env(env_id, **params)

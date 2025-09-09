@@ -217,16 +217,19 @@ class Config:
     quiet: bool = False
 
     @classmethod
-    def create_for_algo(cls, algo_id: str, config_dict: Dict[str, Any]) -> 'Config':
+    def build_from_dict(cls, config_dict: Dict[str, Any]) -> 'Config':
+        _config_dict = config_dict.copy()
+        algo_id = _config_dict.pop("algo_id")
         config_cls = {
             "ppo": PPOConfig,
             "reinforce": REINFORCEConfig,
             "qlearning": QLearningConfig,   
         }[algo_id]
-        return config_cls(**config_dict)
+        config = config_cls(**_config_dict)
+        return config
 
     @classmethod
-    def create_from_yaml(cls, config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> 'Config':
+    def build_from_yaml(cls, config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> 'Config':
         """Load config from environment YAMLs"""
         # Get the project root directory
         project_root = Path(__file__).parent.parent
@@ -273,7 +276,7 @@ class Config:
 
         # Create and return the config instance
         algo_id = config_variant_cfg["algo_id"].lower()
-        instance = cls.create_for_algo(algo_id, config_variant_cfg)
+        instance = cls.build_from_dict(algo_id, config_variant_cfg)
         return instance
 
     def __post_init__(self):
@@ -331,7 +334,8 @@ class Config:
     def save_to_json(self, path: str) -> None:
         """Save configuration to a JSON file."""
         with open(path, "w") as f: json.dump(asdict(self), f, indent=2, default=str)
-
+    
+    # TODO: figure out a way to softcode this
     def validate(self):
         if not (self.seed > 0):
             raise ValueError("seed must be a positive integer.")
@@ -380,6 +384,10 @@ class QLearningConfig(Config):
     n_epochs: int = 1
     gamma: float = 0.99
 
+    @property
+    def algo_id(self) -> str:
+        return "qlearning"
+
 @dataclass
 class REINFORCEConfig(Config):
     n_steps: int = 2048
@@ -392,6 +400,9 @@ class REINFORCEConfig(Config):
     returns_type: "Config.ReturnsType" = Config.ReturnsType.mc_rtg  # reward-to-go variant
     policy_targets: "Config.PolicyTargetsType" = Config.PolicyTargetsType.returns  # type: ignore[assignment]
 
+    @property
+    def algo_id(self) -> str:
+        return "reinforce"
 
 @dataclass
 class PPOConfig(Config):
@@ -409,7 +420,10 @@ class PPOConfig(Config):
     advantages_type: "Config.AdvantagesType" = Config.AdvantagesType.gae
     policy_targets: "Config.PolicyTargetsType" = Config.PolicyTargetsType.advantages  # type: ignore[assignment]
 
+    @property
+    def algo_id(self) -> str:
+        return "ppo"
 
 def load_config(config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> Config:
     """Convenience function to load configuration."""
-    return Config.create_from_yaml(config_id, variant_id, config_dir)
+    return Config.build_from_yaml(config_id, variant_id, config_dir)

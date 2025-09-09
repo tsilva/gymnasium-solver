@@ -82,11 +82,12 @@ def _load_model(ckpt_path: Path, config):
     before the long-lived env used by the inspector is constructed (important for
     Retro environments that do not allow multiple emulator instances per process).
     """
-    from utils.environment import build_env
+    from utils.environment import build_env_from_config
     from utils.policy_factory import build_actor_critic_policy, build_policy
 
     # Helper env strictly for shape inference
-    helper_env = build_env(
+    helper_env = build_env_from_config(
+        config,
         config.env_id,
         seed=getattr(config, "seed", 42),
         env_wrappers=getattr(config, "env_wrappers", []),
@@ -312,22 +313,12 @@ def run_episode(
     policy_model = _load_model(ckpt_path, config)
     policy_model.eval()
 
-    from utils.environment import build_env
-
-    env = build_env(
-        config.env_id,
-        seed=42,
-        env_wrappers=config.env_wrappers,
-        norm_obs=config.normalize_obs,
+    from utils.environment import build_env_from_config
+    env = build_env_from_config(
+        config,
         n_envs=1,
-        frame_stack=config.frame_stack,
-        obs_type=config.obs_type,
         render_mode="rgb_array",
-        env_kwargs=config.env_kwargs,
-        subproc=False,
-        # Match training-time preprocessing so model input shapes align
-        grayscale_obs=getattr(config, "grayscale_obs", False),
-        resize_obs=getattr(config, "resize_obs", False),
+        subproc=False
     )
 
     # Load action labels from vec env wrapper if available

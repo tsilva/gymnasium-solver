@@ -1,15 +1,11 @@
+- BUG: ep_rew_mean not logged (taxi-v3)
+- FEAT: hp vs pf metrics
+- BUG: some metrics are not being logged
+- BUG: metrics not making it to wandb
+
 - FEAT: add normalization support 
 - FEAT: add discrete env support (solve taxi-v3, embeddings probably not sized correctly)
 - FEAT: add sweeping support
-- BUG: ep_rew_mean not logged (taxi-v3)
-- FEAT: hp vs pf metrics
- ppo_tuned2:
-      - policy_lr: 5e-4
-      - clip_range: 0.2
-      - ent_coef: 0.0015
-      - vf_coef: 0.45
-      - batch_size: 1024 (or keep 2048 and set n_epochs: 12)
-      - eval_deterministic: true
   
   Optionally:
   

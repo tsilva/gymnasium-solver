@@ -1,7 +1,8 @@
 # Taxi standard challenge configurations
 
 env_id: Taxi-v3
-ent_coef: 0.5
+# Lower entropy; high (0.5) stalls learning on Taxi
+ent_coef: 0.01
 n_envs: 16
 eval_freq_epochs: 10
 eval_episodes: 10
@@ -12,13 +13,16 @@ env_wrappers:
 ppo:
   algo_id: ppo
   max_timesteps: 3e5
-  n_steps: 64                  # 16*64 = 1024 samples/update
+  # Slightly longer rollouts help stabilize updates on Taxi
+  n_steps: 128                 # 16*128 = 2048 samples/update
   batch_size: 256              # 4 minibatches
 
   n_epochs: 10
-  clip_range: 0.1
+  clip_range: 0.2
   policy_lr: 0.0003
-  hidden_dims: [128]        # or [64, 64] if using 19-d one-hot / embedding
+  hidden_dims: [128]        # embeddings via DiscreteEncoder(array) -> 500-cat embedding of dim 128
+  # Normalize advantages per mini-batch (PPO best practice)
+  normalize_advantages: "batch"
 
   # Eval
   eval_episodes: 10

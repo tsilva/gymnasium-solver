@@ -1,5 +1,5 @@
 - FEAT: add normalization support 
-- FEAT: add discrete env support
+- FEAT: add discrete env support (solve taxi-v3, embeddings probably not sized correctly)
 - FEAT: add sweeping support
 - BUG: ep_rew_mean not logged (taxi-v3)
 - FEAT: hp vs pf metrics

@@ -18,16 +18,19 @@ eval_episodes: 100
 
 # Unsolved: 300k timesteps
 reinforce_vanilla:
+  algo_id: reinforce
   returns_type: "mc:episode"
   policy_targets: "returns"
 
 # Solved: 82k timesteps
 reinforce_rtg:
+  algo_id: reinforce
   returns_type: "mc:rtg"
   policy_targets: "returns"
   normalize_returns: "batch"
 
 reinforce_baseline:
+  algo_id: reinforce
   returns_type: "mc:episode"
   advantages_type: "baseline"
   policy_targets: "advantages"
@@ -36,6 +39,7 @@ reinforce_baseline:
 # TODO: same as using returns... investigate
 # Solved: 82k timesteps
 reinforce_baseline_rtg:
+  algo_id: reinforce
   returns_type: "mc:rtg"
   advantages_type: "baseline"
   policy_targets: "advantages"

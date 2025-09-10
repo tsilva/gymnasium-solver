@@ -273,8 +273,19 @@ class BaseAgent(pl.LightningModule):
         csv_path = self.run_manager.ensure_path("metrics.csv")
         csv_logger = CsvLightningLogger(csv_path=str(csv_path))
 
-        # Route all logs to both W&B and CSV loggers
-        lightning_loggers = [wandb_logger, csv_logger]
+        # Prepare a terminal print logger that formats metrics from the unified logging stream
+        from utils.metrics import metrics_config
+        from utils.print_metrics_logger import PrintMetricsLogger
+        _metrics = metrics_config
+        print_logger = PrintMetricsLogger(
+            metric_precision=_metrics.metric_precision_dict(),
+            metric_delta_rules=_metrics.metric_delta_rules(),
+            algorithm_metric_rules=_metrics.algorithm_metric_rules(self.config.algo_id),
+            key_priority=_metrics.key_priority(),
+        )
+
+        # Route all logs to W&B, CSV, and in-terminal table printer
+        lightning_loggers = [wandb_logger, csv_logger, print_logger]
 
         with stream_output_to_log(log_path): self._learn(lightning_loggers)
 
@@ -392,7 +403,6 @@ class BaseAgent(pl.LightningModule):
         # Lazy imports to avoid heavy deps at module import time
         from trainer_callbacks import (
             DispatchMetricsCallback,
-            PrintMetricsCallback,
             ModelCheckpointCallback,
             VideoLoggerCallback,
             EndOfTrainingReportCallback,
@@ -405,23 +415,7 @@ class BaseAgent(pl.LightningModule):
         # Metrics dispatcher: aggregates epoch metrics and logs to Lightning
         callbacks.append(DispatchMetricsCallback())
 
-        # Formatting/precision rules for pretty printing
-        from utils.metrics import metrics_config
-        _metrics = metrics_config
-        metric_precision = _metrics.metric_precision_dict()
-        metric_delta_rules = _metrics.metric_delta_rules()
-        algo_metric_rules = _metrics.algorithm_metric_rules(self.config.algo_id)
-        key_priority = _metrics.key_priority()
-
-        # Print metrics once per epoch to align deltas with rollout collection
-        printer_cb = PrintMetricsCallback(
-            every_n_epochs=1,
-            metric_precision=metric_precision,
-            metric_delta_rules=metric_delta_rules,
-            algorithm_metric_rules=algo_metric_rules,
-            key_priority=key_priority,
-        )
-        callbacks.append(printer_cb)
+        # Printing is now handled by a Logger (PrintMetricsLogger) wired via the Trainer's loggers
 
         # Read hyperparamters from config file (eg: user modified during training)
         #hyperparam_sync_cb = HyperparamSyncCallback(

@@ -219,7 +219,7 @@ class EndOfTrainingReportCallback(pl.Callback):
         if key_last_values.get("train/ep_rew_mean") is not None:
             lines.append(f"- Train ep_rew_mean (last): {float(key_last_values['train/ep_rew_mean']):.3f}")
         if key_last_values.get("val/ep_rew_mean") is not None:
-            lines.append(f"- Eval ep_rew_mean (last): {float(key_last_values['eval/ep_rew_mean']):.3f}")
+            lines.append(f"- Eval ep_rew_mean (last): {float(key_last_values['val/ep_rew_mean']):.3f}")
         if best_eval is not None:
             be, step = best_eval
             step_str = f" at step {int(step)}" if step is not None else ""

@@ -38,7 +38,7 @@ Algo-specific config subclasses:
 ### Agents
 - `BaseAgent` (LightningModule):
   - Creates `train_env`, `validation_env`, `test_env` with different seeds and video settings; builds `RolloutCollector`s for each.
-  - Manual optimization in `training_step`; metrics buffered via `utils.metrics_buffer.MetricsBuffer` and printed with `trainer_callbacks.PrintMetricsCallback` using `utils.metrics` rules.
+  - Manual optimization in `training_step`; metrics are buffered and logged once per epoch, then printed by the `utils.print_metrics_logger.PrintMetricsLogger` (a Lightning logger) using `utils.metrics` rules.
   - Tracks best episode rewards: exposes `train/ep_rew_best` and `eval/ep_rew_best` computed from the running best of `*/ep_rew_mean` across epochs. These appear in `metrics.csv` and the console table, highlighted in blue (rules configurable via `config/metrics.yaml` under `_global.highlight`). Additionally, any metric value outside its configured `min`/`max` bounds is highlighted in yellow and emits a console warning for quick visibility.
   - Evaluation cadence controlled by `Config.eval_freq_epochs` and `eval_warmup_epochs`; `on_validation_epoch_start/validation_step` drive `evaluate_policy` and video recording.
   - Schedules: learning rate and PPO clip range with linear decay based on progress `total_steps / max_timesteps`.
@@ -68,9 +68,8 @@ Algo-specific config subclasses:
 ### Trainer and callbacks (`utils/trainer_factory.py`, `trainer_callbacks/*`)
 - `build_trainer` constructs a PL `Trainer` with validation cadence controlled externally; progress bar/checkpointing disabled in favor of custom callbacks.
 - Logging:
-  - `WandbLogger` plus `CsvLightningLogger` (writes `metrics.csv` under the run dir). Lightning dispatches `log_dict` to both.
+  - `WandbLogger`, `CsvLightningLogger` (writes `metrics.csv`), and `PrintMetricsLogger` (pretty console table). Lightning dispatches `log_dict` to all.
 - Callbacks include:
-  - `PrintMetricsCallback`: pretty prints metrics with precision/delta rules from `utils.metrics`. The underlying `utils.table_printer.NamespaceTablePrinter` maintains a short numeric history per metric and appends an inline ASCII sparkline to each value to visualize trends (width ~32 by default).
   - `HyperparamSyncCallback`: hot-reloads config changes from file; can enable manual control.
   - `ModelCheckpointCallback`: saves best/last; supports resume.
   - `VideoLoggerCallback`: uploads videos from run media dir.

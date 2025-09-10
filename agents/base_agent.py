@@ -549,6 +549,7 @@ class BaseAgent(pl.LightningModule):
         if not isinstance(optimizers, (list, tuple)): optimizers = [optimizers]
         for opt in optimizers:
             for pg in opt.param_groups: pg["lr"] = policy_lr
+            
     # TODO: review this method
     def configure_optimizers(self):
         from utils.optimizer_factory import build_optimizer

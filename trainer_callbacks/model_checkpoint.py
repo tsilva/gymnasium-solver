@@ -374,7 +374,7 @@ class ModelCheckpointCallback(BaseCallback):
                     except Exception:
                         pm = None
                     if pm is not None:
-                        pm._maybe_print(trainer, stage="val-epoch")  # type: ignore[attr-defined]
+                        pm._maybe_print(trainer, stage="val-epoch")
                     else:
                         # Fallback to a simple one-off print using the current logged metrics
                         metrics_to_print = {}
@@ -486,7 +486,7 @@ class ModelCheckpointCallback(BaseCallback):
                 except Exception:
                     pm = None
                 if pm is not None:
-                    pm._maybe_print(trainer, stage="train-epoch")  # type: ignore[attr-defined]
+                    pm._maybe_print(trainer, stage="train-epoch")
                 else:
                     metrics_to_print = {}
                     for d in (getattr(trainer, "logged_metrics", {}), getattr(trainer, "callback_metrics", {}), getattr(trainer, "progress_bar_metrics", {})):

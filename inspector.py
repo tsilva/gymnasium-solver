@@ -325,7 +325,7 @@ def run_episode(
     action_labels: List[str] | None = None
     try:
         if hasattr(env, "get_action_labels"):
-            act_labels_raw = env.get_action_labels()  # type: ignore[attr-defined]
+            act_labels_raw = env.get_action_labels()
             if isinstance(act_labels_raw, list):
                 action_labels = [str(x) for x in act_labels_raw]
     except Exception:
@@ -359,7 +359,7 @@ def run_episode(
         num_params_total = None
         num_params_trainable = None
     try:
-        device = next(policy_model.parameters()).device.type  # type: ignore[attr-defined]
+        device = next(policy_model.parameters()).device.type
     except Exception:
         device = None
     model_spec_summary: Dict[str, Any] = {
@@ -1122,7 +1122,7 @@ def build_ui(default_run_id: str = "@latest-run"):
                 if hasattr(rows, "empty") and hasattr(rows, "to_numpy"):
                     try:
                         import pandas as pd  # type: ignore
-                        rows = rows.where(pd.notnull(rows), None).to_numpy().tolist()  # type: ignore[attr-defined]
+                        rows = rows.where(pd.notnull(rows), None).to_numpy().tolist()
                     except Exception:
                         rows = rows.to_numpy().tolist()  # type: ignore[assignment]
             except Exception:

@@ -43,7 +43,7 @@ def _install_environment_stub(monkeypatch):
         n_envs = kwargs.get("n_envs", 1)
         return DummyVecEnvForPPO(num_envs=n_envs)
 
-    env_mod.build_env = build_env  # type: ignore[attr-defined]
+    env_mod.build_env = build_env
     # Ensure utils package exists in sys.modules for submodule registration
     if "utils" not in sys.modules:
         sys.modules["utils"] = ModuleType("utils")
@@ -95,7 +95,7 @@ def _install_trainer_factory_stub(monkeypatch):
     def build_trainer(*, logger, callbacks, validation_controls, max_epochs, accelerator="cpu", devices=None):  # noqa: ARG001
         return _Trainer(max_epochs=max_epochs)
 
-    tf_mod.build_trainer = build_trainer  # type: ignore[attr-defined]
+    tf_mod.build_trainer = build_trainer
     if "utils" not in sys.modules:
         sys.modules["utils"] = ModuleType("utils")
     monkeypatch.setitem(sys.modules, "utils.trainer_factory", tf_mod)

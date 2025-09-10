@@ -21,7 +21,7 @@ class DispatchMetricsCallback(pl.Callback):
         self._csv_logger = CsvMetricsLogger(self._path, queue_size=self._queue_size)
 
     def on_train_epoch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
-        pl_module.metrics.reset_epoch("train")  # type: ignore[attr-defined]
+        pl_module.metrics.reset_epoch("train")
         
     def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         # Don't log until we have at least one episode completed 
@@ -36,7 +36,7 @@ class DispatchMetricsCallback(pl.Callback):
         fps_total = pl_module._timing_tracker.fps_since("on_fit_start", steps_now=total_timesteps)
         fps_instant = pl_module._timing_tracker.fps_since("on_train_epoch_start", steps_now=total_timesteps)
 
-        epoch_metrics = pl_module.metrics.compute_epoch_means("train")  # type: ignore[attr-defined]
+        epoch_metrics = pl_module.metrics.compute_epoch_means("train")
 
         # Prepare metrics to log
         _metrics = {
@@ -60,12 +60,12 @@ class DispatchMetricsCallback(pl.Callback):
         pl_module.log_dict(prefixed_metrics)
 
         # Update step-aware history with aggregated snapshot
-        pl_module.metrics.update_history(prefixed_metrics)  # type: ignore[attr-defined]
+        pl_module.metrics.update_history(prefixed_metrics)
         
     def on_validation_epoch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         if not pl_module._should_run_eval(pl_module.current_epoch): return
 
-        pl_module.metrics.reset_epoch("eval")  # type: ignore[attr-defined]
+        pl_module.metrics.reset_epoch("eval")
     
 
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
@@ -74,7 +74,7 @@ class DispatchMetricsCallback(pl.Callback):
         # Prepare metrics to log
         rollout_metrics = pl_module.validation_collector.get_metrics()
 
-        epoch_metrics = pl_module.metrics.compute_epoch_means("eval")  # type: ignore[attr-defined]
+        epoch_metrics = pl_module.metrics.compute_epoch_means("eval")
 
         _metrics = {
             **{k:v for k, v in rollout_metrics.items() if not k.endswith("_dist")},
@@ -88,7 +88,7 @@ class DispatchMetricsCallback(pl.Callback):
         
         pl_module.log_dict(prefixed_metrics)
 
-        pl_module.metrics.update_history(prefixed_metrics)  # type: ignore[attr-defined]
+        pl_module.metrics.update_history(prefixed_metrics)
         
     def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         self._close()

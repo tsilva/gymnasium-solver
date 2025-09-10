@@ -42,7 +42,7 @@ if "pytorch_lightning" not in sys.modules:
                     raise RuntimeError(
                         "No optimizers available; override configure_optimizers or set self._optimizers"
                     )
-                self._optimizers = opt  # type: ignore[attr-defined]
+                self._optimizers = opt
             return opt
 
     class Trainer:  # pragma: no cover - placeholder for annotations
@@ -70,9 +70,9 @@ if "pytorch_lightning" not in sys.modules:
     loggers = types.SimpleNamespace(WandbLogger=_WandbLogger)
 
     # Attach to module and register
-    pl.LightningModule = LightningModule  # type: ignore[attr-defined]
-    pl.Trainer = Trainer  # type: ignore[attr-defined]
-    pl.loggers = loggers  # type: ignore[attr-defined]
+    pl.LightningModule = LightningModule
+    pl.Trainer = Trainer
+    pl.loggers = loggers
 
     sys.modules["pytorch_lightning"] = pl
 

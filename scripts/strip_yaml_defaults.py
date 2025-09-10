@@ -19,7 +19,7 @@ ENV_DIR = Path(__file__).resolve().parents[1] / "config" / "environments"
 
 # Build a dict of Config defaults (only fields with default/default_factory)
 DEFAULTS: Dict[str, Any] = {}
-for f in Config.__dataclass_fields__.values():  # type: ignore[attr-defined]
+for f in Config.__dataclass_fields__.values():
     if f.default is not None and f.default is not f.default_factory:  # type: ignore
         # Note: dataclasses uses MISSING; but utils.config already handles MISSING when assembling defaults
         pass
@@ -31,7 +31,7 @@ _defaults_obj = Config(**_required)
 # Collect all attributes and filter out required ones
 DEFAULTS = {
     k: getattr(_defaults_obj, k)
-    for k in _defaults_obj.__dataclass_fields__.keys()  # type: ignore[attr-defined]
+    for k in _defaults_obj.__dataclass_fields__.keys()
     if k not in ("env_id", "algo_id", "n_steps", "batch_size")
 }
 

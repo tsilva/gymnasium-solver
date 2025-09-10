@@ -31,7 +31,7 @@ class VecInfoWrapper(VecEnvWrapper):
         v = self.venv
         # Unwrap nested VecEnvWrapper layers
         while hasattr(v, "venv"):
-            v = v.venv  # type: ignore[attr-defined]
+            v = v.venv
         # Access Dummy/SubprocVecEnv env list when available
         envs = getattr(v, "envs", None)
         if isinstance(envs, (list, tuple)) and len(envs) > 0:
@@ -66,9 +66,9 @@ class VecInfoWrapper(VecEnvWrapper):
         if not info:
             return None
         if hasattr(info, "get_reward_threshold"):
-            return info.get_reward_threshold()  # type: ignore[attr-defined]
+            return info.get_reward_threshold()
         if hasattr(info, "get_reward_treshold"):
-            return info.get_reward_treshold()  # type: ignore[attr-defined]
+            return info.get_reward_treshold()
         return None
 
 __all__ = ["VecInfoWrapper"]

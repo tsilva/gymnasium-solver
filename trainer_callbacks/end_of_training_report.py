@@ -110,7 +110,7 @@ class EndOfTrainingReportCallback(pl.Callback):
     def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         # Resolve run directory
         try:
-            run_dir = Path(pl_module.run_manager.run_dir)  # type: ignore[attr-defined]
+            run_dir = Path(pl_module.run_manager.run_dir)
         except Exception:
             # Fallback to local runs/@latest-run if available
             run_dir = Path("runs/@latest-run")

@@ -41,7 +41,7 @@ class DiscreteEncoder(gym.ObservationWrapper):
                 low=0,
                 high=self.n_states,  # preserves previous behavior
                 shape=(1,),
-                dtype=env.observation_space.dtype,  # type: ignore[attr-defined]
+                dtype=env.observation_space.dtype,
             )
         elif encoding == "binary":
             # Minimum number of bits to represent [0, n_states-1]

@@ -88,7 +88,7 @@ class VecVideoRecorder(VecEnvWrapper):
             try:
                 # Some stacks will have VecInfoWrapper above or below us; try to access helper
                 if hasattr(venv, "get_render_fps"):
-                    inferred = venv.get_render_fps()  # type: ignore[attr-defined]
+                    inferred = venv.get_render_fps()
                     if isinstance(inferred, int) and inferred > 0:
                         fps = inferred
             except Exception:

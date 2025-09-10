@@ -22,7 +22,7 @@ def policy_forward(model: torch.nn.Module, obs: Tensor) -> Tuple[Distribution, O
     """
     # Support plain objects exposing .forward without __call__
     if hasattr(model, "forward"):
-        dist, value = model.forward(obs)  # type: ignore[attr-defined]
+        dist, value = model.forward(obs)
     else:
         dist, value = model(obs)
     return dist, value
@@ -45,7 +45,7 @@ def policy_act(
     # Support alternate minimal policy API used in tests: act() / predict_values()
     if hasattr(model, "act"):
         try:
-            a, logp, v = model.act(obs, deterministic=deterministic)  # type: ignore[attr-defined]
+            a, logp, v = model.act(obs, deterministic=deterministic)
             if v is None:
                 v = torch.zeros(a.shape[0], dtype=torch.float32, device=a.device)
             return a, logp, v.squeeze(-1)
@@ -57,13 +57,13 @@ def policy_act(
     if deterministic:
         # Categorical exposes .mode; for generic distributions, fallback to argmax over probs if present
         try:
-            actions = dist.mode  # type: ignore[attr-defined]
+            actions = dist.mode
         except Exception:
             # Best-effort fallback: treat as categorical over probs/logits
-            if hasattr(dist, "probs") and isinstance(dist.probs, Tensor):  # type: ignore[attr-defined]
-                actions = dist.probs.argmax(dim=-1)  # type: ignore[attr-defined]
-            elif hasattr(dist, "logits") and isinstance(dist.logits, Tensor):  # type: ignore[attr-defined]
-                actions = dist.logits.argmax(dim=-1)  # type: ignore[attr-defined]
+            if hasattr(dist, "probs") and isinstance(dist.probs, Tensor):
+                actions = dist.probs.argmax(dim=-1)
+            elif hasattr(dist, "logits") and isinstance(dist.logits, Tensor):
+                actions = dist.logits.argmax(dim=-1)
             else:
                 actions = dist.sample()
     else:
@@ -81,7 +81,7 @@ def policy_predict_values(model: torch.nn.Module, obs: Tensor) -> Tensor:
     # Support alternate minimal policy API
     if hasattr(model, "predict_values"):
         try:
-            v = model.predict_values(obs)  # type: ignore[attr-defined]
+            v = model.predict_values(obs)
             return v.squeeze(-1)
         except Exception:
             pass

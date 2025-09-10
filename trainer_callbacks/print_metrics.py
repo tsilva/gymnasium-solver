@@ -9,7 +9,6 @@ import pytorch_lightning as pl
 
 import torch
 
-
 class PrintMetricsCallback(pl.Callback):
     """
     Periodically prints a table to stdout with the *latest value* for each logged metric.
@@ -59,7 +58,7 @@ class PrintMetricsCallback(pl.Callback):
 
         # Dedicated table printer to preserve state across prints (avoids global resets)
         from utils.table_printer import NamespaceTablePrinter
-        
+
         # Load highlight configuration from metrics.yaml if available
         from utils.metrics import get_highlight_config, get_metric_bounds
         _hl_cfg = get_highlight_config()
@@ -69,7 +68,6 @@ class PrintMetricsCallback(pl.Callback):
         _hl_row_bold = bool(_hl_cfg.get('row_bold', True))
         _metric_bounds = get_metric_bounds()
         self._metric_bounds = dict(_metric_bounds)
-
 
         self._printer = NamespaceTablePrinter(
             # Keep numbers compact and colored like before
@@ -160,11 +158,7 @@ class PrintMetricsCallback(pl.Callback):
         self._last_printed_metrics = dict(metrics)
         
         # After printing, emit any bounds warnings for quick visibility
-        try:
-            self._warn_on_out_of_bounds(metrics)
-        except Exception:
-            # Never break training on bounds warning issues
-            pass
+        self._warn_on_out_of_bounds(metrics)
 
     def _validate_metric_deltas(self, current_metrics: Dict[str, Any]) -> None:
         """Validate that metric deltas follow specified rules."""
@@ -406,25 +400,19 @@ class PrintMetricsCallback(pl.Callback):
         Uses bounds loaded from metrics.yaml via utils.metrics.get_metric_bounds().
         Checks namespaced keys (e.g., 'train/approx_kl').
         """
-        bounds = getattr(self, "_metric_bounds", {}) or {}
-        if not bounds:
-            return
+        bounds = self._metric_bounds
         for key, val in current_metrics.items():
-            try:
-                if key not in bounds:
-                    continue
-                v = self._to_python_scalar(val)
-                if not self._is_number(v):
-                    continue
-                b = bounds.get(key, {})
-                has_min = "min" in b
-                has_max = "max" in b
-                below = has_min and (float(v) < float(b["min"]))
-                above = has_max and (float(v) > float(b["max"]))
-                if not (below or above):
-                    continue
-                rng = [str(b.get("min")) if has_min else "-inf", str(b.get("max")) if has_max else "+inf"]
-                print(f"⚠️  BOUNDS WARNING: {key}={v} outside [{rng[0]}, {rng[1]}]")
-            except Exception:
-                # Continue on any issues evaluating a single metric's bounds
+            if key not in bounds:
                 continue
+            v = self._to_python_scalar(val)
+            if not self._is_number(v):
+                continue
+            b = bounds.get(key, {})
+            has_min = "min" in b
+            has_max = "max" in b
+            below = has_min and (float(v) < float(b["min"]))
+            above = has_max and (float(v) > float(b["max"]))
+            if not (below or above):
+                continue
+            rng = [str(b.get("min")) if has_min else "-inf", str(b.get("max")) if has_max else "+inf"]
+            print(f"⚠️  BOUNDS WARNING: {key}={v} outside [{rng[0]}, {rng[1]}]")

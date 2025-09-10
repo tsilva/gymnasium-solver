@@ -62,7 +62,7 @@ def test_ppo_policy_clipping_math():
     )
     agent.clip_range = clip
     agent.policy_model = _FakePolicy(new_logps, values)
-    agent.log_metrics = lambda *a, **k: None  # type: ignore
+    agent.buffer_metrics = lambda *a, **k: None  # type: ignore
 
     batch = SimpleNamespace(
         observations=states,
@@ -97,7 +97,7 @@ def test_ppo_clip_range_schedule_update():
     def _log(m, prefix=None):  # noqa: ARG001
         seen.update(m)
 
-    agent.log_metrics = _log  # type: ignore
+    agent.buffer_metrics = _log  # type: ignore
     agent._calc_training_progress = lambda: progress  # type: ignore
 
     agent._update_schedules__clip_range()

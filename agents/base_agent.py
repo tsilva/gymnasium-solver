@@ -170,9 +170,6 @@ class BaseAgent(pl.LightningModule):
         return None
 
     def on_train_epoch_end(self):
-        # Clear the metrics buffer (all callbacks will have logged by now)
-        self._epoch_metrics_buffer.clear()
-
         # Update schedules
         self._update_schedules()
 
@@ -218,15 +215,14 @@ class BaseAgent(pl.LightningModule):
         # Log eval metrics
         total_timesteps = int(eval_metrics.get("total_timesteps", 0))
         epoch_fps = self._timing_tracker.fps_since("on_validation_epoch_start", steps_now=total_timesteps)
-        self.log_metrics({
+        self.buffer_metrics({
             **{k: v for k, v in eval_metrics.items() if not k.startswith("per_env/")},
             "epoch": int(self.current_epoch), 
             "epoch_fps": epoch_fps, 
-        }, prefix="eval")
+        })
 
     def on_validation_epoch_end(self):
-        # Clear the metrics buffer (all callbacks will have logged by now)
-        self._epoch_metrics_buffer.clear()
+        pass
 
     def on_fit_end(self):
         # Log training completion time
@@ -387,7 +383,7 @@ class BaseAgent(pl.LightningModule):
         """Assemble trainer callbacks, with an optional end-of-training report."""
         # Lazy imports to avoid heavy deps at module import time
         from trainer_callbacks import (
-            EpochMetricsLoggerCallback,
+            AggregateMetricsCallback,
             WandbMetricsLoggerCallback,
             CSVMetricsLoggerCallback,
             PrintMetricsCallback,
@@ -404,7 +400,7 @@ class BaseAgent(pl.LightningModule):
         # At the end of each epoch log metrics to buffer
         # (do this before other loggers to make metrics available; 
         # can't do this in module because callbacks are called first)
-        callbacks.append(EpochMetricsLoggerCallback())
+        callbacks.append(AggregateMetricsCallback())
 
         # CSV Metrics Logger (writes metrics.csv under the run directory)
         csv_path = self.run_manager.ensure_path("metrics.csv")
@@ -525,7 +521,7 @@ class BaseAgent(pl.LightningModule):
             # Compute model gradient norms and log them
             # (do this before any gradient clipping)
             metrics = model.compute_grad_norms()
-            self.log_metrics(metrics, prefix="train")
+            self.buffer_metrics(metrics)
 
             # In case a maximum gradient norm is set, 
             # clips gradients so that norm isn't exceeded
@@ -554,7 +550,7 @@ class BaseAgent(pl.LightningModule):
         self._change_optimizers_policy_lr(new_policy_lr)
         # TODO: should I do this here or every epoch?
         # Log scheduled LR under train namespace
-        self.log_metrics({"policy_lr": new_policy_lr}, prefix="train")
+        self.buffer_metrics({"policy_lr": new_policy_lr})
 
     def _change_optimizers_policy_lr(self, policy_lr):
         optimizers = self.optimizers()
@@ -563,17 +559,17 @@ class BaseAgent(pl.LightningModule):
             for pg in opt.param_groups: pg["lr"] = policy_lr
 
     # TODO: fix this
-    def log_metrics(self, metrics, *, prefix=None):
+    def buffer_metrics(self, metrics):#, *, prefix=None):
         """
         Lightning logger caused significant performance drops, as much as 2x slower train/fps.
         Using custom metric collection / flushing logic to avoid this issue.
         """
         # Build a single prefixed mapping and feed both sinks to avoid duplication
-        prefixed = {f"{prefix}/{k}": v for k, v in metrics.items()} if prefix else dict(metrics)
+        #prefixed = {f"{prefix}/{k}": v for k, v in metrics.items()} if prefix else dict(metrics)
 
         # Add to epoch aggregation buffer and terminal history
-        self._epoch_metrics_buffer.log(prefixed)
-        self._train_metrics_history.update(prefixed)
+        self._epoch_metrics_buffer.log(metrics)
+        self._train_metrics_history.update(metrics)
 
     # TODO: review this method
     def configure_optimizers(self):

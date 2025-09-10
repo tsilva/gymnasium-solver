@@ -221,7 +221,7 @@ class HyperparamSyncCallback(BaseCallback):
         # Emit W&B logs for changed hyperparameters under train namespace
         if changed_for_log:
             try:
-                pl_module.log_metrics(changed_for_log, prefix="train")
+                pl_module.buffer_metrics(changed_for_log)
             except Exception:
                 pass
 
@@ -260,7 +260,7 @@ class HyperparamSyncCallback(BaseCallback):
                 except Exception:
                     continue
         if hp:
-            pl_module.log_metrics(hp, prefix="train")
+            pl_module.buffer_metrics(hp)
     
     
     def on_fit_end(self, trainer: TrainerType, pl_module: LightningModuleType) -> None:

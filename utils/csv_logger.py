@@ -54,7 +54,7 @@ class CsvMetricsLogger:
         self._thread = threading.Thread(target=self._run, name="CsvMetricsLogger", daemon=True)
         self._thread.start()
 
-    def log_metrics(self, metrics: Dict[str, Any]) -> None:
+    def buffer_metrics(self, metrics: Dict[str, Any]) -> None:
         """
         Enqueue metrics dict for writing.
 

@@ -107,7 +107,7 @@ class PPO(BaseAgent):
             explained_var = 1 - torch.var(returns - values_pred) / torch.var(returns)
 
         # Log all metrics (will be avarages and flushed by end of epoch)
-        self.log_metrics({
+        self.buffer_metrics({
             'loss': loss.detach(),
             'policy_loss': policy_loss.detach(),
             'entropy_loss': entropy_loss.detach(),
@@ -119,7 +119,7 @@ class PPO(BaseAgent):
             'kl_div': kl_div.detach(),
             'approx_kl': approx_kl.detach(),
             'explained_variance': explained_var.detach()
-        }, prefix="train")
+        })
 
         return loss
     
@@ -137,6 +137,6 @@ class PPO(BaseAgent):
         self.clip_range = new_clip_range
 
         # Log scheduled clip_range under train namespace
-        self.log_metrics({
+        self.buffer_metrics({
             'clip_range': new_clip_range
-        }, prefix="train")
+        })

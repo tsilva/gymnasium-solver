@@ -75,20 +75,17 @@ clip_range:
 # Episode and timestep counts (integers)
 total_episodes:
   precision: 0
-  force_integer: true
   delta_rule: "non_decreasing"  # Should always increase
   description: "Cumulative number of episodes completed across all training"
 
 total_timesteps:
   precision: 0
-  force_integer: true
   # Note: delta_rule removed because eval/total_timesteps can legitimately decrease
   # between evaluation runs when using different eval strategies or env resets
   description: "Cumulative number of environment steps taken across all training"
 
 rollout_timesteps:
   precision: 0
-  force_integer: true
   delta_rule: "non_decreasing"  # Should always increase
   description: "Number of timesteps collected in the current rollout buffer"
 
@@ -99,7 +96,6 @@ ep_rew_mean:
 
 ep_len_mean:
   precision: 0
-  force_integer: true
   description: "Average episode length over recent episodes window"
 
 # Immediate episode stats
@@ -109,7 +105,6 @@ ep_rew_last:
 
 ep_len_last:
   precision: 0
-  force_integer: true
   description: "Length of the most recent completed episode"
 
 ep_rew_min:
@@ -122,12 +117,10 @@ ep_rew_max:
 
 ep_len_min:
   precision: 0
-  force_integer: true
   description: "Minimum episode length observed in recent episodes window"
 
 ep_len_max:
   precision: 0
-  force_integer: true
   description: "Maximum episode length observed in recent episodes window"
 
 ep_rew_std:
@@ -141,13 +134,11 @@ ep_len_std:
 # Training metrics
 epoch:
   precision: 0
-  force_integer: true
   delta_rule: "non_decreasing"  # Should always increase
   description: "Current training epoch number"
 
 n_updates:
   precision: 0
-  force_integer: true
   delta_rule: "non_decreasing"  # Should always increase
   description: "Total number of parameter updates (gradient steps) performed"
 
@@ -160,19 +151,16 @@ time_elapsed:
 
 fps:
   precision: 0
-  force_integer: true
   description: "Training throughput in frames (environment steps) per second"
   min: 0.0
 
 eta:
   precision: 0
-  force_integer: true
   description: "Estimated seconds remaining to reach max_timesteps"
   min: 0.0
 
 fps_instant:
   precision: 0
-  force_integer: true
   description: "Instant training throughput in frames per second measured within the current epoch"
   min: 0.0
 

@@ -410,6 +410,7 @@ class BaseAgent(pl.LightningModule):
         metric_precision = _metrics.metric_precision_dict()
         metric_delta_rules = _metrics.metric_delta_rules()
         algo_metric_rules = _metrics.algorithm_metric_rules(self.config.algo_id)
+        key_priority = _metrics.key_priority()
 
         # Print metrics once per epoch to align deltas with rollout collection
         printer_cb = PrintMetricsCallback(
@@ -417,6 +418,7 @@ class BaseAgent(pl.LightningModule):
             metric_precision=metric_precision,
             metric_delta_rules=metric_delta_rules,
             algorithm_metric_rules=algo_metric_rules,
+            key_priority=key_priority,
         )
         callbacks.append(printer_cb)
 

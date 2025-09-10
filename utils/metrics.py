@@ -40,58 +40,51 @@ class Metrics:
     def _get_global_cfg(self) -> Dict[str, Any]:
         return self._config["_global"]
 
-    # --------- Query helpers (instance methods) ---------
-    def metric_precision_dict(self) -> Dict[str, int]:
-        """Convert metrics config to precision dict keyed by metric name.
-        """
+    def _get_metrics(self) -> Dict[str, Any]:
         global_cfg = self._get_global_cfg()
-        default_precision = global_cfg.get("default_precision", 4)
+        metrics = [(name, value) for name, value in global_cfg.items() if not name.startswith("_") and isinstance(value, dict)]
+        return metrics
 
+    def get_default_precision(self) -> int:
+        global_cfg = self._get_global_cfg()
+        default_precision = global_cfg["default_precision"]
+        return default_precision
+
+    def metric_precision_dict(self) -> Dict[str, int]:
+        """Convert metrics config to precision dict keyed by metric name. """
+        default_precision = self.get_default_precision()
         precision_dict: Dict[str, int] = {}
-        for metric_name, metric_config in global_cfg.items():
-            if metric_name.startswith("_") or not isinstance(metric_config, dict):
-                continue
-
+        for metric_name, metric_config in self._get_metrics():
             precision = int(metric_config.get("precision", default_precision))
-            if metric_config.get("force_integer", False):
-                precision = 0
-
             precision_dict[metric_name] = precision
-
         return precision_dict
 
     def metric_delta_rules(self) -> Dict[str, Callable]:
         """Return delta validation rules per metric (as callables)."""
-        global_cfg = self._get_global_cfg()
         delta_rules: Dict[str, Callable] = {}
 
-        for metric_name, metric_config in global_cfg.items():
-            if metric_name.startswith("_") or not isinstance(metric_config, dict): continue
-
+        # Iterate over all metrics and add the delta rule to the delta rules dictionary
+        for metric_name, metric_config in self._get_metrics():
+            # If no delta rule is defined, skip
             delta_rule = metric_config.get("delta_rule")
-            if not delta_rule:
-                continue
+            if not delta_rule: continue
 
-            if delta_rule == "non_decreasing":
-                rule_fn = lambda prev, curr: curr >= prev
-            else:
-                # Add other rule types as needed
-                continue
+            # If delta rule is non-decreasing, set the rule function
+            if delta_rule == "non_decreasing": rule_fn = lambda prev, curr: curr >= prev
+            else: continue
 
+            # Add the rule function to the delta rules dictionary
             delta_rules[metric_name] = rule_fn
 
+        # Return the delta rules dictionary
         return delta_rules
 
     def algorithm_metric_rules(self, algo_id: str) -> Dict[str, dict]:
         """Return algorithm-specific metric validation rules."""
-        global_cfg = self._get_global_cfg()
         rules: Dict[str, dict] = {}
         namespaces = ["train", "eval", "rollout", "time"]
 
-        for metric_name, metric_config in global_cfg.items():
-            if metric_name.startswith("_") or not isinstance(metric_config, dict):
-                continue
-            
+        for metric_name, metric_config in self._get_metrics():
             # If no algorithm rules are defined, skip
             algorithm_rules = metric_config.get("algorithm_rules", {})
             rule_config = algorithm_rules.get(algo_id.lower())
@@ -163,10 +156,10 @@ class Metrics:
             if metric_name.startswith("_") or not isinstance(metric_cfg, dict): continue
 
             # Initialize bounds dict for the metric
-            metric_bounds: Dict[str, float] = {}
-            if "min" in metric_cfg: metric_bounds["min"] = float(metric_cfg["min"])
-            if "max" in metric_cfg: metric_bounds["max"] = float(metric_cfg["max"])
-            if metric_bounds: bounds[metric_name] = dict(metric_bounds)
+            _bounds: Dict[str, float] = {}
+            if "min" in metric_cfg: _bounds["min"] = float(metric_cfg["min"])
+            if "max" in metric_cfg: _bounds["max"] = float(metric_cfg["max"])
+            if _bounds: bounds[metric_name] = dict(_bounds)
 
         return bounds
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List
 
 import pytorch_lightning as pl
 
@@ -26,16 +26,16 @@ class PrintMetricsCallback(pl.Callback):
 
     def __init__(
         self,
-        every_n_steps: Optional[int] = None,   # if None, don't print by step
-        every_n_epochs: Optional[int] = 1,     # print each epoch by default
-        include: Optional[Iterable[str]] = None,  # regex patterns to keep
-        exclude: Optional[Iterable[str]] = None,  # regex patterns to drop
+        every_n_steps: int | None = None,   # if None, don't print by step
+        every_n_epochs: int | None = 1,     # print each epoch by default
+        include: Iterable[str] | None = None,  # regex patterns to keep
+        exclude: Iterable[str] | None = None,  # regex patterns to drop
         digits: int = 4,                          # rounding for floats
-        metric_precision: Optional[Dict[str, int]] = None,  # precision per metric
-        metric_delta_rules: Optional[Dict[str, callable]] = None,  # delta validation rules per metric
-        algorithm_metric_rules: Optional[Dict[str, dict]] = None,  # algorithm-specific warning rules
+        metric_precision: Dict[str, int] | None = None,  # precision per metric
+        metric_delta_rules: Dict[str, callable] | None = None,  # delta validation rules per metric
+        algorithm_metric_rules: Dict[str, dict] | None = None,  # algorithm-specific warning rules
         min_val_width: int = 15,                  # minimum width for values column
-        key_priority: Optional[List[str]] = None,  # priority order for sorting keys
+        key_priority: List[str] | None = None,  # priority order for sorting keys
     ):
         super().__init__()
         self.every_n_steps = every_n_steps
@@ -367,12 +367,12 @@ class PrintMetricsCallback(pl.Callback):
         _ = header  # currently unused in rendering
         self._printer.update(metrics)
 
-    def _get_wandb_run_url(self, trainer: pl.Trainer) -> Optional[str]:
+    def _get_wandb_run_url(self, trainer: pl.Trainer) -> str | None:
         """Return the W&B run URL from the trainer's logger.
 
         Falls back to constructing the URL from run attributes if needed.
         """
-        def _from_exp(exp) -> Optional[str]:
+        def _from_exp(exp) -> str | None:
             if exp is None:
                 return None
             # Preferred: SDK-provided URL

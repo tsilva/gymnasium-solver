@@ -88,16 +88,16 @@ class PrintMetricsCallback(pl.Callback):
 
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         if self.every_n_epochs is not None and (trainer.current_epoch + 1) % self.every_n_epochs == 0:
-            self._maybe_print(trainer, stage="val-epoch")
+            self._maybe_print(trainer, stage="val")
 
     def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         if self.every_n_epochs is not None and (trainer.current_epoch + 1) % self.every_n_epochs == 0:
-            self._maybe_print(trainer, stage="train-epoch")
+            self._maybe_print(trainer, stage="train")
 
     def on_test_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         # Always print at test end if enabled by epoch cadence
         if self.every_n_epochs is not None:
-            self._maybe_print(trainer, stage="test-epoch")
+            self._maybe_print(trainer, stage="test")
 
     # ---------- internals ----------
     def _maybe_print(self, trainer: pl.Trainer, stage: str):

@@ -36,7 +36,7 @@ class Run:
 
     @property
     def config_path(self) -> Path:
-        """Return config.json path with a legacy fallback under configs/."""
+        """Return config.json path under the run directory."""
         p = self.run_dir / "config.json"
         if p.exists(): return p
         raise FileNotFoundError(f"config.json not found under run: {self.run_dir}")

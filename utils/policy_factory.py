@@ -1,8 +1,8 @@
 """Policy factory utilities.
 
-Centralizes creation of policy networks (MLP vs CNN) for both actor-critic and
-policy-only variants. This encapsulates the logic that inspects observation
-spaces to derive image shapes for CNN policies and forwards config kwargs.
+Centralizes creation of policy networks for both actor-critic and policy-only
+MLP variants. For image observations, higher-level code is expected to provide
+compatible shapes; this module focuses on model instantiation and wiring.
 """
 
 from __future__ import annotations

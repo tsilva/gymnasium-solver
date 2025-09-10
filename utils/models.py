@@ -1,10 +1,6 @@
 """Neural network model utilities.
 
-Includes simple MLP-based Actor-Critic and Policy-only models, plus CNN-based
-variants for image observations (channels-last HWC expected from envs). CNN
-models internally reshape flat inputs back to (N, C, H, W) using a provided
-``obs_shape`` to remain compatible with the current rollout pipeline that
-returns flattened observations.
+Includes simple MLP-based Actor-Critic and Policy-only models.
 """
 
 from typing import Iterable, Dict, Union

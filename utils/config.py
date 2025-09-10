@@ -120,7 +120,7 @@ class Config:
     # Whether the observations are RGB, RAM, or objects
     obs_type: "Config.ObsType" = ObsType.rgb  # type: ignore[assignment]
 
-    # Whether to use a MLP or CNN policy
+    # Whether to use an MLP-based policy or actor-critic
     policy: "Config.PolicyType" = PolicyType.mlp  # type: ignore[assignment]
 
     # The dimensions of the hidden layers in the MLP

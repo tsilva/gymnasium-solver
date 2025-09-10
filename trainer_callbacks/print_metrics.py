@@ -25,7 +25,6 @@ class PrintMetricsCallback(pl.Callback):
 
     def __init__(
         self,
-        every_n_steps: int | None = None,   # if None, don't print by step
         every_n_epochs: int | None = 1,     # print each epoch by default
         include: Iterable[str] | None = None,  # regex patterns to keep
         exclude: Iterable[str] | None = None,  # regex patterns to drop
@@ -37,7 +36,6 @@ class PrintMetricsCallback(pl.Callback):
         key_priority: List[str] | None = None,  # priority order for sorting keys
     ):
         super().__init__()
-        self.every_n_steps = every_n_steps
         self.every_n_epochs = every_n_epochs
         self.include = [re.compile(p) for p in (include or [])]
         self.exclude = [re.compile(p) for p in (exclude or [])]
@@ -87,14 +85,6 @@ class PrintMetricsCallback(pl.Callback):
             metric_bounds=_metric_bounds,
             highlight_bounds_bg_color='bg_yellow',
         )
-
-    # ---------- hooks ----------
-    def on_train_batch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule, outputs, batch, batch_idx):
-        if self.every_n_steps is None:
-            return
-        # global_step increments after optimizer step; print when divisible
-        if trainer.global_step > 0 and trainer.global_step % self.every_n_steps == 0:
-            self._maybe_print(trainer, stage="train-step")
 
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         if self.every_n_epochs is not None and (trainer.current_epoch + 1) % self.every_n_epochs == 0:

@@ -9,6 +9,18 @@ import numbers
 from pytorch_lightning.loggers.logger import Logger as LightningLoggerBase  # type: ignore
 
 import torch
+from utils.logging import ansi as _ansi
+from utils.logging import apply_ansi_background as _apply_bg
+from utils.logging import strip_ansi_codes as _strip_ansi
+from utils.reports import sparkline as _sparkline
+from utils.dict_utils import group_by_namespace as _group_by_namespace
+from utils.torch import to_python_scalar as _to_python_scalar
+from utils.formatting import (
+    is_number as _is_number,
+    format_value as _format_value,
+    format_delta_magnitude as _fmt_delta_mag,
+    get_sort_key as _get_sort_key,
+)
 
 class PrintMetricsLogger(LightningLoggerBase):
     """
@@ -21,28 +33,7 @@ class PrintMetricsLogger(LightningLoggerBase):
     CsvLightningLogger) so all receive the same metrics payload.
     """
 
-    ANSI_CODES = {
-        # Foreground
-        "black": "30",
-        "red": "31",
-        "green": "32",
-        "yellow": "33",
-        "blue": "34",
-        "magenta": "35",
-        "cyan": "36",
-        "gray": "90",
-        # Styles
-        "bold": "1",
-        # Background
-        "bg_black": "40",
-        "bg_red": "41",
-        "bg_green": "42",
-        "bg_yellow": "43",
-        "bg_blue": "44",
-        "bg_magenta": "45",
-        "bg_cyan": "46",
-        "bg_white": "47",
-    }
+    # ANSI codes and helpers are provided by utils.logging
 
     def __init__(
         self,
@@ -124,7 +115,7 @@ class PrintMetricsLogger(LightningLoggerBase):
 
     def log_metrics(self, metrics: dict[str, Any], step: Optional[int] = None) -> None:
         # Convert values to basic Python scalars for rendering/validation
-        simple: Dict[str, Any] = {k: self._to_python_scalar(v) for k, v in dict(metrics).items()}
+        simple: Dict[str, Any] = {k: _to_python_scalar(v) for k, v in dict(metrics).items()}
 
         # Validate deltas and algorithm-specific rules using the latest snapshot
         self._validate_metric_deltas(simple)
@@ -143,27 +134,14 @@ class PrintMetricsLogger(LightningLoggerBase):
         return None
 
     # --- Helpers ---
-    def _to_python_scalar(self, x: Any) -> Any:
-        try:
-            if isinstance(x, torch.Tensor):
-                if x.numel() == 1:
-                    return x.detach().item()
-                return x.detach().float().mean().item()
-            if hasattr(x, "item") and callable(getattr(x, "item")):
-                return x.item()
-            return x
-        except Exception:
-            return x
-
-    def _is_number(self, x: Any) -> bool:
-        return isinstance(x, numbers.Number)
+    # Scalar conversion lives in utils.torch.to_python_scalar
 
     def _validate_metric_deltas(self, current_metrics: Dict[str, Any]) -> None:
         for metric_name, rule_lambda in self.metric_delta_rules.items():
             if metric_name in current_metrics and metric_name in self.previous_metrics:
                 curr = current_metrics[metric_name]
                 prev = self.previous_metrics[metric_name]
-                if not (self._is_number(curr) and self._is_number(prev)):
+                if not (_is_number(curr) and _is_number(prev)):
                     continue
                 try:
                     ok = bool(rule_lambda(prev, curr))
@@ -181,7 +159,7 @@ class PrintMetricsLogger(LightningLoggerBase):
             if metric_name not in current_metrics:
                 continue
             curr = current_metrics[metric_name]
-            if not self._is_number(curr):
+            if not _is_number(curr):
                 continue
             try:
                 check_func = rule_config.get('check')
@@ -196,7 +174,7 @@ class PrintMetricsLogger(LightningLoggerBase):
                             satisfied = bool(check_func(curr))
                         elif metric_name in self.previous_metrics:
                             prev = self.previous_metrics.get(metric_name)
-                            if self._is_number(prev):
+                            if _is_number(prev):
                                 satisfied = bool(check_func(prev, curr))
                             else:
                                 satisfied = True
@@ -216,85 +194,11 @@ class PrintMetricsLogger(LightningLoggerBase):
                 pass
 
     # ------------- Rendering helpers (merged from NamespaceTablePrinter) -------------
-    @classmethod
-    def _ansi(cls, color: Optional[str], s: str, enable: bool) -> str:
-        if not enable or not color:
-            return s
-        code = cls.ANSI_CODES.get(color)
-        if not code:
-            return s
-        return f"\x1b[{code}m{s}\x1b[0m"
+    # ANSI helpers are centralized in utils.logging (ansi, apply_ansi_background)
 
-    @classmethod
-    def _apply_row_background(cls, text: str, bg_color: str, enable: bool) -> str:
-        if not enable or not bg_color:
-            return text
-        code = cls.ANSI_CODES.get(bg_color)
-        if not code:
-            return text
-        start = f"\x1b[{code}m"
-        body = text.replace("\x1b[0m", f"\x1b[0m{start}")
-        return f"{start}{body}\x1b[0m"
+    # Namespacing helper is shared via utils.dict_utils.group_by_namespace
 
-    @staticmethod
-    def _humanize_num(v: numbers.Number, float_fmt: str = ".2f") -> str:
-        if isinstance(v, bool):
-            return "1" if v else "0"
-        if isinstance(v, int):
-            n = abs(v)
-            sign = "-" if v < 0 else ""
-            if n >= 1_000_000_000:
-                return f"{sign}{n/1_000_000_000:.2f}B"
-            if n >= 1_000_000:
-                return f"{sign}{n/1_000_000:.2f}M"
-            if n >= 1_000:
-                return f"{sign}{n/1_000:.2f}k"
-            return str(v)
-        if isinstance(v, float):
-            if 0 < abs(v) < 1e-6:
-                return f"{v:.2e}"
-            return format(v, float_fmt)
-        return str(v)
-
-    @staticmethod
-    def _fmt_plain(v: Any, float_fmt: str = ".2f") -> str:
-        if isinstance(v, float):
-            return format(v, float_fmt)
-        return str(v)
-
-    def _group_by_namespace(self, data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-        grouped: Dict[str, Dict[str, Any]] = {}
-        for k, v in data.items():
-            if "/" in k:
-                ns, sub = k.split("/", 1)
-            else:
-                ns, sub = k, ""
-            grouped.setdefault(ns, {})[sub] = v
-        return grouped
-
-    def _precision_for(self, full_key: str) -> Optional[int]:
-        if full_key in self.metric_precision_map:
-            return int(self.metric_precision_map[full_key])
-        # Fallback to bare metric name (post-slash)
-        bare = full_key.split("/", 1)[-1]
-        if bare in self.metric_precision_map:
-            return int(self.metric_precision_map[bare])
-        return None
-
-    def _format_value(self, v: Any, full_key: str = "") -> str:
-        if v is None:
-            return "—"
-        precision = self._precision_for(full_key) if self._is_number(v) else None
-        if precision is not None and self._is_number(v):
-            if precision == 0:
-                try:
-                    return str(int(round(float(v))))
-                except Exception:
-                    return str(v)
-            return f"{float(v):.{precision}f}"
-        if self.compact_numbers and self._is_number(v):
-            return self._humanize_num(v, self.float_fmt)
-        return self._fmt_plain(v, self.float_fmt)
+    # Value formatting delegated to utils.formatting.format_value
 
     def _delta_for_key(self, ns: str, sub: str, v: Any):
         if self._prev is None:
@@ -303,7 +207,7 @@ class PrintMetricsLogger(LightningLoggerBase):
         if full_key not in self._prev:
             return ("", None)
         prev_v = self._prev[full_key]
-        if not (self._is_number(v) and self._is_number(prev_v)):
+        if not (_is_number(v) and _is_number(prev_v)):
             return ("", None)
         delta = float(v) - float(prev_v)
         if abs(delta) <= self.delta_tol:
@@ -315,97 +219,28 @@ class PrintMetricsLogger(LightningLoggerBase):
             color = "green" if improved else "red"
         else:
             color = "green" if delta > 0 else "red"
-        mag = self._format_delta_magnitude(abs(delta), full_key)
+        mag = _fmt_delta_mag(
+            abs(delta),
+            full_key,
+            precision_map=self.metric_precision_map,
+            compact_numbers=self.compact_numbers,
+            float_fmt=self.float_fmt,
+        )
         return (f"{arrow}{mag}", color)
+    # Delta magnitude formatting delegated to utils.formatting.format_delta_magnitude
+    # Sorting delegated to utils.formatting.get_sort_key
 
-    def _format_delta_magnitude(self, delta: numbers.Number, full_key: str) -> str:
-        if isinstance(delta, int):
-            return self._humanize_num(delta, self.float_fmt) if self.compact_numbers else self._fmt_plain(delta, self.float_fmt)
-        try:
-            import numpy as _np
-            if isinstance(delta, (_np.generic,)):
-                delta = delta.item()
-        except Exception:
-            pass
-        if isinstance(delta, float):
-            precision = self._precision_for(full_key)
-
-            def _decimals_from_fmt(fmt: str) -> int:
-                try:
-                    if fmt and fmt.startswith(".") and fmt.endswith("f"):
-                        return int(fmt[1:-1])
-                except Exception:
-                    pass
-                return 2
-
-            default_decimals = _decimals_from_fmt(self.float_fmt)
-            decimals = int(precision) if isinstance(precision, int) and precision >= 0 else default_decimals
-            first = f"{delta:.{decimals}f}"
-            if first.strip("0").strip(".") != "":
-                try:
-                    as_float = float(first)
-                except ValueError:
-                    as_float = delta
-                if self.compact_numbers and abs(as_float) >= 1000:
-                    return self._humanize_num(as_float, self.float_fmt)
-                return first
-            more_decimals = decimals + 2
-            second = f"{delta:.{more_decimals}f}"
-            if second.strip("0").strip(".") != "":
-                return second
-            return f"{delta:.2e}"
-        return self._fmt_plain(delta, self.float_fmt)
-
-    def _get_sort_key(self, namespace: str, subkey: str) -> tuple:
-        full_key = f"{namespace}/{subkey}" if subkey else namespace
-        try:
-            priority_index = self.key_priority.index(full_key)
-            return (0, priority_index)
-        except ValueError:
-            return (1, subkey.lower())
-
-    @staticmethod
-    def _strip_ansi(s: str) -> str:
-        out = []
-        i = 0
-        while i < len(s):
-            if s[i] == "\x1b":
-                while i < len(s) and s[i] != "m":
-                    i += 1
-                if i < len(s):
-                    i += 1
-            else:
-                out.append(s[i])
-                i += 1
-        return "".join(out)
-
-    def _downsample(self, seq: List[float], target: int) -> List[float]:
-        if len(seq) <= target:
-            return list(seq)
-        step = len(seq) / float(target)
-        return [seq[int(i * step)] for i in range(target)]
+    # ANSI stripping is provided by utils.logging.strip_ansi_codes
 
     def _spark_for_key(self, full_key: str, width: int) -> str:
         values = self._history.get(full_key)
         if not values or len(values) < 2 or width <= 0:
             return ""
-        data = self._downsample(values, max(1, width))
-        vmin = min(data)
-        vmax = max(data)
-        if vmax == vmin:
-            return "─" * min(width, len(data))
-        blocks = "▁▂▃▄▅▆▇█"
-        rng = (vmax - vmin) or 1.0
-        out_chars: List[str] = []
-        for v in data:
-            idx = int((v - vmin) / rng * (len(blocks) - 1))
-            idx = max(0, min(idx, len(blocks) - 1))
-            out_chars.append(blocks[idx])
-        return "".join(out_chars)
+        return _sparkline(values, width)
 
     def _update_history(self, data: Dict[str, Any]) -> None:
         for k, v in data.items():
-            if not self._is_number(v):
+            if not _is_number(v):
                 continue
             val = float(v)
             hist = self._history.setdefault(k, [])
@@ -429,7 +264,7 @@ class PrintMetricsLogger(LightningLoggerBase):
         if not data:
             return
         self._update_history(data)
-        grouped = self._group_by_namespace(data)
+        grouped = _group_by_namespace(data)
         ns_names = list(grouped.keys())
         if self.fixed_section_order:
             pref = [ns for ns in self.fixed_section_order if ns in grouped]
@@ -439,7 +274,9 @@ class PrintMetricsLogger(LightningLoggerBase):
             ns_order = sorted(ns_names)
         for ns in ns_order:
             if self.sort_keys_within_section:
-                grouped[ns] = dict(sorted(grouped[ns].items(), key=lambda kv: self._get_sort_key(ns, kv[0])))
+                grouped[ns] = dict(
+                    sorted(grouped[ns].items(), key=lambda kv: _get_sort_key(ns, kv[0], self.key_priority))
+                )
         formatted: Dict[str, Dict[str, str]] = {}
         val_candidates: List[str] = []
         key_candidates: List[str] = [ns + "/" for ns in ns_order]
@@ -449,27 +286,33 @@ class PrintMetricsLogger(LightningLoggerBase):
             for sub, v in subdict.items():
                 key_candidates.append(sub)
                 full_key = f"{ns}/{sub}" if sub else ns
-                val_str = self._format_value(v, full_key)
+                val_str = _format_value(
+                    v,
+                    full_key,
+                    precision_map=self.metric_precision_map,
+                    compact_numbers=self.compact_numbers,
+                    float_fmt=self.float_fmt,
+                )
                 try:
                     if sub in self.highlight_value_bold_for_set:
-                        val_str = self._ansi("bold", val_str, self.color)
+                        val_str = _ansi(val_str, "bold", enable=self.color)
                 except Exception:
                     pass
                 delta_str, color_name = self._delta_for_key(ns, sub, v)
                 if delta_str:
-                    delta_disp = self._ansi(color_name, delta_str, self.color)
+                    delta_disp = _ansi(delta_str, color_name, enable=self.color)
                     val_disp = f"{val_str} {delta_disp}"
                 else:
                     val_disp = val_str
                 try:
-                    if self.show_sparklines and self._is_number(v):
+                    if self.show_sparklines and _is_number(v):
                         chart = self._spark_for_key(full_key, self.sparkline_width)
                         if chart:
                             val_disp = f"{val_disp}  {chart}"
                 except Exception:
                     pass
                 f_sub[sub] = val_disp
-                val_candidates.append(self._strip_ansi(val_disp))
+                val_candidates.append(_strip_ansi(val_disp))
             formatted[ns] = f_sub
         indent = self.indent
         key_width = max((len(k) for k in key_candidates), default=0)
@@ -484,9 +327,9 @@ class PrintMetricsLogger(LightningLoggerBase):
                 continue
             header = ns + "/"
             header_line = f"| {header:<{indent + key_width}} | {'':>{val_width}} |"
-            lines.append(self._ansi("bold", header_line, self.color))
+            lines.append(_ansi(header_line, "bold", enable=self.color))
             for sub, val in formatted[ns].items():
-                val_display_len = len(self._strip_ansi(val))
+                val_display_len = len(_strip_ansi(val))
                 val_padding = val_width - val_display_len
                 val_padded = (" " * val_padding + val) if val_padding > 0 else val
                 key_cell = f"{sub:<{key_width}}"
@@ -498,7 +341,7 @@ class PrintMetricsLogger(LightningLoggerBase):
                     bounds = self.metric_bounds_map.get(full_key) or self.metric_bounds_map.get(sub)
                     if bounds:
                         raw_val = grouped.get(ns, {}).get(sub)
-                        if self._is_number(raw_val):
+                        if _is_number(raw_val):
                             vnum = float(raw_val)
                             below = ("min" in bounds) and (vnum < float(bounds["min"]))
                             above = ("max" in bounds) and (vnum > float(bounds["max"]))
@@ -508,14 +351,14 @@ class PrintMetricsLogger(LightningLoggerBase):
                     # Priority 2: configured row highlight
                     if not highlight and sub in self.highlight_row_for_set:
                         if self.highlight_row_bold:
-                            key_cell = self._ansi("bold", key_cell, self.color)
+                            key_cell = _ansi(key_cell, "bold", enable=self.color)
                         highlight = True
                         row_bg_color = self.highlight_row_bg_color
                 except Exception:
                     pass
                 row = f"| {' ' * indent}{key_cell} | {val_padded} |"
                 if highlight:
-                    row = self._apply_row_background(row, row_bg_color or self.highlight_row_bg_color, self.color)
+                    row = _apply_bg(row, row_bg_color or self.highlight_row_bg_color, enable=self.color)
                 lines.append(row)
         lines.append(border)
         self._render_lines(lines)

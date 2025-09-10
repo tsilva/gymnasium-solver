@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import itertools
 from contextlib import contextmanager
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -138,6 +139,26 @@ def compute_param_group_grad_norm(params):
     if not has_grad:
         return 0.0
     return math.sqrt(total_sq)
+
+
+def to_python_scalar(x: Any) -> Any:
+    """Convert tensors or numpy scalars to basic Python scalars when possible.
+
+    - torch.Tensor with numel==1 -> .item()
+    - torch.Tensor with more than one element -> float(mean)
+    - objects with .item() -> item()
+    - otherwise returns the input unchanged
+    """
+    try:
+        if isinstance(x, torch.Tensor):
+            if x.numel() == 1:
+                return x.detach().item()
+            return x.detach().float().mean().item()
+        if hasattr(x, "item") and callable(getattr(x, "item")):
+            return x.item()
+        return x
+    except Exception:
+        return x
 
 
 def init_model_weights(

@@ -1,3 +1,39 @@
+from typing import Iterable, List
+
+
+def downsample(seq: Iterable[float], target: int) -> List[float]:
+    """Uniformly downsample a sequence to a target length (best-effort).
+
+    Keeps the first element and samples by index stride; returns a new list.
+    """
+    seq = list(seq)
+    if target <= 0 or len(seq) <= target:
+        return list(seq)
+    step = len(seq) / float(target)
+    return [seq[int(i * step)] for i in range(target)]
+
+
+def sparkline(values: Iterable[float], width: int) -> str:
+    """Return a Unicode sparkline for the given values at the desired width.
+
+    Uses an 8-level block set; returns an empty string when insufficient data.
+    """
+    blocks = "▁▂▃▄▅▆▇█"
+    values = list(values)
+    if not values or width <= 0:
+        return ""
+    vmin = min(values)
+    vmax = max(values)
+    if vmax == vmin:
+        return "─" * max(1, min(width, len(values)))
+    data = downsample(values, max(1, width))
+    out = []
+    rng = (vmax - vmin) or 1.0
+    for v in data:
+        idx = int((v - vmin) / rng * (len(blocks) - 1))
+        out.append(blocks[max(0, min(idx, len(blocks) - 1))])
+    return "".join(out)
+
 
 def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48, per_metric_cap: int = 2000):
     """Print an ASCII sparkline summary of recorded numeric metrics.
@@ -8,28 +44,9 @@ def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48
         per_metric_cap: Safety cap (ignored here but kept for future trimming consistency).
     """
 
-    def downsample(seq, target):
-        if len(seq) <= target:
-            return seq
-        # Uniform uniform sampling by index
-        step = len(seq) / float(target)
-        return [seq[int(i * step)] for i in range(target)]
-
+    # local aliases for backward-compat names
     def spark(values, w):
-        blocks = "▁▂▃▄▅▆▇█"
-        if not values:
-            return ""
-        vmin = min(values)
-        vmax = max(values)
-        if vmax == vmin:
-            return "─" * max(1, min(w, len(values)))
-        data = downsample(values, max(1, w))
-        out = []
-        rng = (vmax - vmin) or 1.0
-        for v in data:
-            idx = int((v - vmin) / rng * (len(blocks) - 1))
-            out.append(blocks[max(0, min(idx, len(blocks) - 1))])
-        return "".join(out)
+        return sparkline(values, w)
 
     # Prefer train/* then eval/* then others for readability
     keys = sorted(history.keys(), key=lambda k: (0 if k.startswith("train/") else 1 if k.startswith("val/") else 2, k))
@@ -47,7 +64,7 @@ def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48
             continue
         steps_sorted = sorted(by_step)
         values = [by_step[s] for s in steps_sorted]
-        chart = spark(values, width)
+        chart = sparkline(values, width)
         vmin = min(values)
         vmax = max(values)
         vmean = sum(values) / len(values)

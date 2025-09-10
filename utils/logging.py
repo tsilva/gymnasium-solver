@@ -65,6 +65,15 @@ class TeeStream:
         import re
         ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
         return ansi_escape.sub('', text)
+
+# --- Generic console formatting helpers (extracted for reuse) ---
+def strip_ansi_codes(text: str) -> str:
+    """Return text with ANSI escape sequences removed.
+
+    Kept as a standalone helper so non-stream callers can reuse it without
+    relying on TeeStream internals.
+    """
+    return TeeStream._strip_ansi_codes(text)
     
     def __getattr__(self, name):
         """Delegate other attributes to the original stream."""
@@ -259,6 +268,40 @@ def ansi(text: str, *styles: str, enable: bool | None = None) -> str:
         if not seq:
             return text
         return f"\x1b[{seq}m{text}\x1b[0m"
+    except Exception:
+        return text
+
+
+def apply_ansi_background(text: str, bg_style: str, *, enable: bool | None = None) -> str:
+    """Apply a background color to the entire text while preserving nested styles.
+
+    This wraps the string with the background style and re-applies it after any
+    reset sequences to ensure contiguous background across colored segments.
+
+    Example: apply_ansi_background("bold red", "bg_blue")
+    """
+    try:
+        if enable is None:
+            enable = _color_enabled()
+        if not enable or not bg_style:
+            return text
+        codes = {
+            "bg_black": "40",
+            "bg_red": "41",
+            "bg_green": "42",
+            "bg_yellow": "43",
+            "bg_blue": "44",
+            "bg_magenta": "45",
+            "bg_cyan": "46",
+            "bg_white": "47",
+        }
+        code = codes.get(bg_style)
+        if not code:
+            return text
+        start = f"\x1b[{code}m"
+        # Re-apply the background after any reset that appears in the body
+        body = text.replace("\x1b[0m", f"\x1b[0m{start}")
+        return f"{start}{body}\x1b[0m"
     except Exception:
         return text
 

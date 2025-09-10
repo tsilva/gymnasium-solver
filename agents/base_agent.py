@@ -249,61 +249,39 @@ class BaseAgent(pl.LightningModule):
             with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(final_metrics, f, ensure_ascii=False, indent=2)
     
-    # TODO: create _build_loggers method
     def learn(self):
         assert self.run_manager is None, "learn() should only be called once at the start of training"
 
         from utils.logging import stream_output_to_log
         from utils.run_manager import RunManager
-        
-        # Initialize W&B logger and create a run
-        wandb_logger = self._create_wandb_logger()
-        wandb_run = wandb_logger.experiment
-
-        # TODO: use run object instead?
+      
         # Initilize run manager (use W&B run ID as run_id)
-        self.run_manager = RunManager(wandb_run.id)
+        import wandb
+        wandb_run_id = wandb.run.id if wandb.run is not None else wandb.experiment.id
+        self.run_manager = RunManager(wandb_run_id)
         
         # Save configuration to run directory
-        # TODO: pass loggable data instead?
         config_path = self.run_manager.ensure_path("config.json")
         self.config.save_to_json(config_path)
         
         # Set up comprehensive logging using run-specific logs directory
         log_path = self.run_manager.ensure_path("run.log")
-        # Prepare a CSV Lightning logger writing to runs/<id>/metrics.csv
-        from loggers.csv_lightning_logger import CsvLightningLogger
-        csv_path = self.run_manager.ensure_path("metrics.csv")
-        csv_logger = CsvLightningLogger(csv_path=str(csv_path))
+        with stream_output_to_log(log_path): self._learn()
 
-        # Prepare a terminal print logger that formats metrics from the unified logging stream
-        from utils.metrics import metrics_config
-        from loggers.print_metrics_logger import PrintMetricsLogger
-        _metrics = metrics_config
-        # TODO: default to metrics config inside the logger
-        print_logger = PrintMetricsLogger(
-            metric_precision=_metrics.metric_precision_dict(),
-            metric_delta_rules=_metrics.metric_delta_rules(),
-            algorithm_metric_rules=_metrics.algorithm_metric_rules(self.config.algo_id),
-            key_priority=_metrics.key_priority(),
-        )
-
-        # Route all logs to W&B, CSV, and in-terminal table printer
-        lightning_loggers = [wandb_logger, csv_logger, print_logger]
-
-        with stream_output_to_log(log_path): self._learn(lightning_loggers)
-
-    def _learn(self, lightning_loggers):
+    def _learn(self):
         # Prompt user to start training, return if user declines
         if not self._prompt_user_start_training(): return
+
+        # Build trainer loggers
+        loggers = self._build_trainer_loggers()
 
         # Build trainer callbacks
         callbacks = self._build_trainer_callbacks()
 
         # Build the trainer
         from utils.trainer_factory import build_trainer
-        trainer = build_trainer(
-            logger=lightning_loggers,
+        trainer = build_trainer( # TODO: pass config object instead?
+            logger=loggers,
             callbacks=callbacks,
             max_epochs=self.config.max_epochs,
             accelerator=self.config.accelerator,
@@ -382,7 +360,7 @@ class BaseAgent(pl.LightningModule):
     # Pre-prompt guidance helpers
     # -------------------------
     
-    def _create_wandb_logger(self):
+    def _build_trainer_loggers__wandb(self):
         import wandb
         from dataclasses import asdict
         from pytorch_lightning.loggers import WandbLogger
@@ -403,6 +381,44 @@ class BaseAgent(pl.LightningModule):
 
         return wandb_logger
     
+    def _build_trainer_loggers__csv(self):
+        from loggers.csv_lightning_logger import CsvLightningLogger
+        csv_path = self.run_manager.ensure_path("metrics.csv")
+        csv_logger = CsvLightningLogger(csv_path=str(csv_path))
+        return csv_logger
+    
+    def _build_trainer_loggers__print(self): # Prepare a terminal print logger that formats metrics from the unified logging stream
+        from utils.metrics import metrics_config
+        from loggers.print_metrics_logger import PrintMetricsLogger
+        _metrics = metrics_config
+        # TODO: default to metrics config inside the logger
+        print_logger = PrintMetricsLogger(
+            metric_precision=_metrics.metric_precision_dict(),
+            metric_delta_rules=_metrics.metric_delta_rules(),
+            algorithm_metric_rules=_metrics.algorithm_metric_rules(self.config.algo_id),
+            key_priority=_metrics.key_priority(),
+        )
+        return print_logger
+        
+    def _build_trainer_loggers(self):
+        # Initialize list of loggers
+        loggers = []
+
+        # Prepare a wandb logger
+        wandb_logger = self._build_trainer_loggers__wandb()
+        loggers.append(wandb_logger)
+
+        # Prepare a CSV Lightning logger writing to runs/<id>/metrics.csv
+        csv_logger = self._build_trainer_loggers__csv()
+        loggers.append(csv_logger)
+
+        # Prepare a terminal print logger that formats metrics from the unified logging stream
+        print_logger = self._build_trainer_loggers__print()
+        loggers.append(print_logger)
+
+        # Return the loggers
+        return loggers
+
     def _build_trainer_callbacks(self):
         """Assemble trainer callbacks, with an optional end-of-training report."""
         # Lazy imports to avoid heavy deps at module import time

@@ -1,84 +1,14 @@
 """Checkpoint management utilities for model saving and resuming training."""
 
 from pathlib import Path
-import shutil
-import os
 import torch
 
 from utils.io import write_json
+from utils.scalars import only_scalar_values
+from utils.filesystem import update_symlink
 
 import pytorch_lightning as pl
-import numpy as np
-import numbers
 from typing import Any, Dict
-
-def _to_scalar(x: Any) -> Any:
-    """Return a Python scalar (int/float/bool) if x is scalar-like, else None."""
-    # Built-in numeric types are fine
-    if isinstance(x, numbers.Number) or isinstance(x, bool):
-        return x
-
-    # NumPy scalar (e.g., np.float32(3.14)) -> Python scalar
-    if isinstance(x, np.generic):
-        return x.item()
-
-    # NumPy array with exactly one element
-    if isinstance(x, np.ndarray):
-        if x.ndim == 0 or x.size == 1:
-            return x.reshape(()).item()
-        return None  # non-scalar -> skip
-
-    # PyTorch tensor with exactly one element
-    if isinstance(x, torch.Tensor):
-        if x.numel() == 1:
-            return x.item()
-        return None  # non-scalar -> skip
-
-    # Anything else: try a last-resort cast to float if it clearly acts scalar
-    # (avoid strings/containers). If it fails, skip.
-    try:
-        return float(x)
-    except Exception:
-        return None
-
-def _only_scalars(d: Dict[str, Any]) -> Dict[str, Any]:
-    cleaned = {}
-    skipped = []
-    for k, v in d.items():
-        sv = _to_scalar(v)
-        if sv is None:
-            skipped.append(k)
-        else:
-            cleaned[k] = sv
-    return cleaned
-
-
-# TODO: move to reusable util
-def update_symlink(link_path: Path, target_path: Path) -> None:
-    """Create or update a symlink at link_path pointing to target_path.
-
-    Uses a relative target path from the link's parent directory for portability.
-    Ensures parent directories exist. Falls back to copying on platforms that
-    do not support symlinks or when permissions are insufficient.
-    """
-    link_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Remove existing link/file if present
-    try:
-        if link_path.exists() or link_path.is_symlink():
-            link_path.unlink()
-    except FileNotFoundError:
-        pass
-
-    # Compute relative target from link directory for robustness
-    rel_target = os.path.relpath(str(target_path), start=str(link_path.parent))
-
-    try:
-        link_path.symlink_to(rel_target)
-    except (NotImplementedError, OSError, PermissionError):
-        # Symlinks not supported or blocked; copy file as a fallback.
-        # Ensure we copy the file contents rather than linking.
-        shutil.copy2(target_path, link_path)
         
 
 class ModelCheckpointCallback(pl.Callback):
@@ -166,7 +96,7 @@ class ModelCheckpointCallback(pl.Callback):
 
         # Always save a checkpoint for this eval epoch
         epoch = pl_module.current_epoch
-        metrics = _only_scalars(trainer.logged_metrics)
+        metrics = only_scalar_values(trainer.logged_metrics)
         self._save_checkpoint(pl_module, epoch, metrics)
 
         # Track "last" epoch seen with a checkpoint

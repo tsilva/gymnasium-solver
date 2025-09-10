@@ -376,9 +376,9 @@ class ModelCheckpointCallback(pl.Callback):
                                     metrics_to_print[k] = (v.item() if hasattr(v, 'item') else v)
                             except Exception:
                                 pass
-                        if metrics_to_print:
-                            from loggers.print_metrics_logger import print_namespaced_dict
-                            print_namespaced_dict(metrics_to_print)
+                        #if metrics_to_print:
+                        #    from loggers.print_metrics_logger import print_namespaced_dict
+                        #    print_namespaced_dict(metrics_to_print)
                 except Exception:
                     pass
 
@@ -487,9 +487,9 @@ class ModelCheckpointCallback(pl.Callback):
                                 metrics_to_print[k] = (v.item() if hasattr(v, 'item') else v)
                         except Exception:
                             pass
-                    if metrics_to_print:
-                        from loggers.print_metrics_logger import print_namespaced_dict
-                        print_namespaced_dict(metrics_to_print)
+                    #if metrics_to_print:
+                    #    from loggers.print_metrics_logger import print_namespaced_dict
+                    #    print_namespaced_dict(metrics_to_print)
             except Exception:
                 pass
 

@@ -254,11 +254,9 @@ class BaseAgent(pl.LightningModule):
 
         from utils.logging import stream_output_to_log
         from utils.run_manager import RunManager
-      
-        # Initilize run manager (use W&B run ID as run_id)
-        import wandb
-        wandb_run_id = wandb.run.id if wandb.run is not None else wandb.experiment.id
-        self.run_manager = RunManager(wandb_run_id)
+
+        wandb_run = self._ensure_wandb_run()
+        self.run_manager = RunManager(wandb_run.id)
         
         # Save configuration to run directory
         config_path = self.run_manager.ensure_path("config.json")
@@ -555,3 +553,12 @@ class BaseAgent(pl.LightningModule):
             "val": self.validation_collector,
             "test": self.test_collector,
         }[stage]
+
+    def _ensure_wandb_run(self):
+        import wandb
+        if hasattr(wandb, "run") and wandb.run is not None: return wandb.run
+        from dataclasses import asdict
+        project_name = self.config.project_id if self.config.project_id else BaseAgent._sanitize_name(self.config.env_id)
+        experiment_name = f"{self.config.algo_id}-{self.config.seed}"
+        wandb.init(project=project_name, name=experiment_name, config=asdict(self.config))
+        return wandb.run

@@ -8,8 +8,7 @@ def _init_wandb_sweep(config: Config):
     base = asdict(config)
     wandb.init(config=base)
     merged = dict(wandb.config)
-    algo_id = merged.get("algo_id", config.algo_id)
-    return Config.build_from_dict(algo_id, merged)
+    return Config.build_from_dict(merged)
 
 def main():
     # Parse command line arguments

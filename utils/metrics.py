@@ -121,27 +121,9 @@ class Metrics:
 
     def highlight_config(self) -> Dict[str, Any]:
         """Return highlight configuration for metrics table from metrics.yaml."""
-        hl = self._get_global_cfg()["highlight"]
-
-        default_row_metrics = {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "total_timesteps"}
-        default_value_bold_metrics = {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "epoch"}
-
-        def _as_set(x, default):
-            if isinstance(x, list):
-                return {str(v) for v in x}
-            return set(default)
-
-        row_metrics = _as_set(hl.get("row_metrics"), default_row_metrics)
-        value_bold_metrics = _as_set(hl.get("value_bold_metrics"), default_value_bold_metrics)
-        row_bg_color = str(hl.get("row_bg_color", "bg_blue"))
-        row_bold = bool(hl.get("row_bold", True))
-
-        return {
-            "row_metrics": row_metrics,
-            "value_bold_metrics": value_bold_metrics,
-            "row_bg_color": row_bg_color,
-            "row_bold": row_bold,
-        }
+        global_cfg = self._get_global_cfg() 
+        highlight_cfg = global_cfg["highlight"]
+        return highlight_cfg
 
     def metric_bounds(self) -> Dict[str, Dict[str, float]]:
         """Return min/max bounds per metric if defined in metrics.yaml.
@@ -150,17 +132,11 @@ class Metrics:
         Missing bounds are omitted per metric.
         """
         bounds: Dict[str, Dict[str, float]] = {}
-
         for metric_name, metric_cfg in self._config.items():
-            # Skip private metrics and non-dict entries
-            if metric_name.startswith("_") or not isinstance(metric_cfg, dict): continue
-
-            # Initialize bounds dict for the metric
             _bounds: Dict[str, float] = {}
             if "min" in metric_cfg: _bounds["min"] = float(metric_cfg["min"])
             if "max" in metric_cfg: _bounds["max"] = float(metric_cfg["max"])
             if _bounds: bounds[metric_name] = dict(_bounds)
-
         return bounds
 
 

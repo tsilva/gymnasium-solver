@@ -12,6 +12,7 @@ import json
 import time
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
+from string import Template
 from typing import Any, Dict, Tuple
 
 import pytorch_lightning as pl
@@ -189,84 +190,64 @@ class EndOfTrainingReportCallback(pl.Callback):
             "val/ep_len_mean": _lv("val/ep_len_mean"),
         }
 
-        # Compose Markdown
-        lines = []
-        lines.append(f"# Run Report: {env_id} · {algo_id}")
-        lines.append("")
+        # Prepare template variables and render via a Markdown template
         try:
             run_id = getattr(pl_module.run_manager, "run_id", None)
         except Exception:
             run_id = None
         date_str = time.strftime("%Y-%m-%d %H:%M:%S")
-        lines.append(f"- Date: {date_str}")
-        if run_id:
-            lines.append(f"- Run ID: {run_id}")
-        lines.append(f"- Run dir: {run_dir}")
-        if duration_sec is not None:
-            lines.append(f"- Training duration: {duration_sec:.2f}s ({duration_sec/60:.2f} min)")
-        lines.append("")
 
-        lines.append("## Summary")
-        lines.append("")
+        # Optional bullets assembled conditionally
+        run_id_bullet = f"- Run ID: {run_id}\n" if run_id else ""
+        duration_bullet = (
+            f"- Training duration: {duration_sec:.2f}s ({duration_sec/60:.2f} min)\n"
+            if duration_sec is not None else ""
+        )
+
+        # Summary bullets
+        summary_lines = []
         if key_last_values.get("train/total_timesteps") is not None:
-            lines.append(f"- Total timesteps: {int(float(key_last_values['train/total_timesteps']))}")
+            summary_lines.append(f"- Total timesteps: {int(float(key_last_values['train/total_timesteps']))}")
         if key_last_values.get("train/epoch") is not None:
-            lines.append(f"- Final epoch: {int(float(key_last_values['train/epoch']))}")
+            summary_lines.append(f"- Final epoch: {int(float(key_last_values['train/epoch']))}")
         if key_last_values.get("train/fps") is not None:
-            lines.append(f"- FPS (avg): {float(key_last_values['train/fps']):.1f}")
+            summary_lines.append(f"- FPS (avg): {float(key_last_values['train/fps']):.1f}")
         if key_last_values.get("train/fps_instant") is not None:
-            lines.append(f"- FPS (instant): {float(key_last_values['train/fps_instant']):.1f}")
+            summary_lines.append(f"- FPS (instant): {float(key_last_values['train/fps_instant']):.1f}")
         if key_last_values.get("train/ep_rew_mean") is not None:
-            lines.append(f"- Train ep_rew_mean (last): {float(key_last_values['train/ep_rew_mean']):.3f}")
+            summary_lines.append(f"- Train ep_rew_mean (last): {float(key_last_values['train/ep_rew_mean']):.3f}")
         if key_last_values.get("val/ep_rew_mean") is not None:
-            lines.append(f"- Eval ep_rew_mean (last): {float(key_last_values['val/ep_rew_mean']):.3f}")
+            summary_lines.append(f"- Eval ep_rew_mean (last): {float(key_last_values['val/ep_rew_mean']):.3f}")
         if best_eval is not None:
             be, step = best_eval
             step_str = f" at step {int(step)}" if step is not None else ""
-            lines.append(f"- Best eval ep_rew_mean: {be:.3f}{step_str}")
+            summary_lines.append(f"- Best eval ep_rew_mean: {be:.3f}{step_str}")
         if reward_thr is not None:
-            lines.append(f"- Reward threshold target: {reward_thr}")
+            summary_lines.append(f"- Reward threshold target: {reward_thr}")
             if reached_thr is not None:
-                lines.append(f"- Threshold reached: {'yes' if reached_thr else 'no'}")
-        if (ckpt_dir.exists()):
+                summary_lines.append(f"- Threshold reached: {'yes' if reached_thr else 'no'}")
+        if ckpt_dir.exists():
             if best_ckpt.exists():
-                lines.append(f"- Best checkpoint: {best_ckpt}")
+                summary_lines.append(f"- Best checkpoint: {best_ckpt}")
             if last_ckpt.exists():
-                lines.append(f"- Last checkpoint: {last_ckpt}")
+                summary_lines.append(f"- Last checkpoint: {last_ckpt}")
             if best_mp4.exists():
-                lines.append(f"- Best video: {best_mp4}")
+                summary_lines.append(f"- Best video: {best_mp4}")
             if last_mp4.exists():
-                lines.append(f"- Last video: {last_mp4}")
-        lines.append("")
+                summary_lines.append(f"- Last video: {last_mp4}")
+        summary_block = "\n".join(summary_lines)
 
-        lines.append("## Environment & Config")
-        lines.append("")
-        lines.append(f"- env_id: {env_id}")
-        lines.append(f"- algo_id: {algo_id}")
-        lines.append(f"- seed: {seed}")
-        lines.append(f"- n_envs: {n_envs}")
-        lines.append(f"- eval_freq_epochs: {eval_freq}")
-        lines.append("")
-        lines.append("### Full config (YAML)")
-        lines.append("")
+        # Config block (prefer YAML-like; fallback to JSON)
         try:
-            lines.append("```yaml")
-            lines.append(self._yaml_like(cfg_dict))
-            lines.append("```")
+            cfg_text = self._yaml_like(cfg_dict)
+            config_block = f"```yaml\n{cfg_text}\n```"
         except Exception:
-            # Fallback to JSON
-            lines.append("```json")
-            lines.append(json.dumps(cfg_dict, indent=2, default=str))
-            lines.append("```")
+            cfg_text = json.dumps(cfg_dict, indent=2, default=str)
+            config_block = f"```json\n{cfg_text}\n```"
 
-        # Metrics snapshot
-        lines.append("")
-        lines.append("## Metrics (last known values)")
-        lines.append("")
+        # Metrics block
         if last_vals:
-            # Keep a compact subset plus full JSON for the LLM
-            lines.append("Selected:")
-            for k in [
+            selected_keys = [
                 "train/total_timesteps",
                 "train/epoch",
                 "train/ep_rew_mean",
@@ -278,33 +259,76 @@ class EndOfTrainingReportCallback(pl.Callback):
                 "train/policy_loss",
                 "train/value_loss",
                 "train/entropy_loss",
-            ]:
+            ]
+            selected_lines = ["Selected:"]
+            for k in selected_keys:
                 if k in last_vals and last_vals[k] is not None:
                     try:
-                        lines.append(f"- {k}: {float(last_vals[k]):.6g}")
+                        selected_lines.append(f"- {k}: {float(last_vals[k]):.6g}")
                     except Exception:
-                        lines.append(f"- {k}: {last_vals[k]}")
-            lines.append("")
-            lines.append("All last values (JSON):")
-            lines.append("\n```json")
+                        selected_lines.append(f"- {k}: {last_vals[k]}")
+            # All values JSON
             try:
-                # Ensure plain types
                 sanitized = {str(k): (float(v) if self._is_number(v) else v) for k, v in last_vals.items()}
             except Exception:
                 sanitized = {str(k): str(v) for k, v in last_vals.items()}
-            lines.append(json.dumps(sanitized, indent=2, default=str))
-            lines.append("```")
+            all_values_json = json.dumps(sanitized, indent=2, default=str)
+            metrics_block = (
+                "\n".join(selected_lines)
+                + "\n\nAll last values (JSON):\n\n"
+                + f"```json\n{all_values_json}\n```"
+            )
         else:
-            lines.append("(No metrics.csv available)")
+            metrics_block = "(No metrics.csv available)"
 
-        # LLM prompt helper
-        lines.append("")
-        lines.append("## LLM prompt")
-        lines.append("")
-        lines.append(
-            "You are an RL training assistant. Based on the config and metrics above, suggest concrete hyperparameter adjustments to improve sample efficiency and/or final reward. Consider: learning rate scheduling, entropy coefficient, batch size, n_steps, clip range (for PPO), advantage normalization, evaluation cadence, and environment-specific wrappers. Prioritize changes likely to increase eval/ep_rew_mean sooner without destabilizing training. Return a short, actionable checklist with 3–7 items and brief justifications."
+        # Load template from file (fallback to built-in template if missing)
+        templates_dir = Path(__file__).parent / "templates"
+        template_path = templates_dir / "end_of_training_report.md.tmpl"
+        if template_path.exists():
+            template_text = template_path.read_text(encoding="utf-8")
+        else:
+            template_text = (
+                "# Run Report: ${title}\n\n"
+                "- Date: ${date}\n"
+                "${run_id_bullet}"
+                "- Run dir: ${run_dir}\n"
+                "${duration_bullet}"
+                "\n"
+                "## Summary\n\n"
+                "${summary_lines}\n\n"
+                "## Environment & Config\n\n"
+                "- env_id: ${env_id}\n"
+                "- algo_id: ${algo_id}\n"
+                "- seed: ${seed}\n"
+                "- n_envs: ${n_envs}\n"
+                "- eval_freq_epochs: ${eval_freq}\n\n"
+                "### Full config (YAML)\n\n"
+                "${config_block}\n\n"
+                "## Metrics (last known values)\n\n"
+                "${metrics_block}\n\n"
+                "## LLM prompt\n\n"
+                "You are an RL training assistant. Based on the config and metrics above, suggest concrete hyperparameter adjustments to improve sample efficiency and/or final reward. Consider: learning rate scheduling, entropy coefficient, batch size, n_steps, clip range (for PPO), advantage normalization, evaluation cadence, and environment-specific wrappers. Prioritize changes likely to increase eval/ep_rew_mean sooner without destabilizing training. Return a short, actionable checklist with 3–7 items and brief justifications.\n"
+            )
+
+        # Substitute variables
+        template = Template(template_text)
+        title = f"{env_id} · {algo_id}"
+        rendered = template.safe_substitute(
+            title=title or "",
+            date=date_str,
+            run_id_bullet=run_id_bullet,
+            run_dir=str(run_dir),
+            duration_bullet=duration_bullet,
+            summary_lines=summary_block,
+            env_id=env_id or "",
+            algo_id=algo_id or "",
+            seed=seed or "",
+            n_envs=n_envs or "",
+            eval_freq=eval_freq or "",
+            config_block=config_block,
+            metrics_block=metrics_block,
         )
 
         # Write file
-        report_path.write_text("\n".join(lines), encoding="utf-8")
+        report_path.write_text(rendered, encoding="utf-8")
         

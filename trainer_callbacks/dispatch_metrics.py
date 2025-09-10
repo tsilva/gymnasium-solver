@@ -30,17 +30,21 @@ class DispatchMetricsCallback(pl.Callback):
         total_episodes = rollout_metrics.get("total_episodes", 0)
         if total_episodes == 0: return
 
-        # Global & instant FPS from the same tracker
+        # Calculate timing metrics
         total_timesteps = int(rollout_metrics["total_timesteps"])
         time_elapsed = pl_module._timing_tracker.seconds_since("on_fit_start")
         fps_total = pl_module._timing_tracker.fps_since("on_fit_start", steps_now=total_timesteps)
         fps_instant = pl_module._timing_tracker.fps_since("on_train_epoch_start", steps_now=total_timesteps)
 
+        # Aggregate metrics for the this epoch
         epoch_metrics = pl_module.metrics.compute_epoch_means("train")
 
+        # Discard distribution metrics (not loggable)
+        filtered_rollout_metrics = {k:v for k, v in rollout_metrics.items() if not k.endswith("_dist")}
+
         # Prepare metrics to log
-        _metrics = {
-            **{k:v for k, v in rollout_metrics.items() if not k.endswith("_dist")},
+        loggable_metrics = {
+            **filtered_rollout_metrics,
             **epoch_metrics,
             "time_elapsed": time_elapsed,
             "epoch": pl_module.current_epoch,
@@ -50,13 +54,15 @@ class DispatchMetricsCallback(pl.Callback):
 
         # Derive ETA (seconds remaining) from FPS and max_timesteps if available
         if fps_total > 0.0 and pl_module.config.max_timesteps is not None:
-            _metrics["eta_s"] = float(pl_module.config.max_timesteps / float(fps_total))
+            loggable_metrics["eta_s"] = float(pl_module.config.max_timesteps / float(fps_total))
 
-        prefixed_metrics = {f"train/{k}": v for k, v in _metrics.items()}
+        # Prefix metrics with train/
+        prefixed_metrics = {f"train/{k}": v for k, v in loggable_metrics.items()}
 
         # Write to CSV asynchronously and to Lightning for any UI consumers
-        self._csv_logger.buffer_metrics(prefixed_metrics)
+        self._csv_logger.buffer_metrics(prefixed_metrics) # TODO: add csv logger to lightning instead?
         
+        # Flush metrics to Lightning
         pl_module.log_dict(prefixed_metrics)
 
         # Update step-aware history with aggregated snapshot
@@ -67,27 +73,33 @@ class DispatchMetricsCallback(pl.Callback):
 
         pl_module.metrics.reset_epoch("eval")
     
-
+    # TODO: isolate redundant code with on_train_epoch_end
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         if not pl_module._should_run_eval(pl_module.current_epoch): return
         
         # Prepare metrics to log
         rollout_metrics = pl_module.validation_collector.get_metrics()
+        # Discard distribution metrics (not loggable)
+        filtered_rollout_metrics = {k:v for k, v in rollout_metrics.items() if not k.endswith("_dist")}
 
+        # Aggregate metrics for the this epoch
         epoch_metrics = pl_module.metrics.compute_epoch_means("eval")
 
-        _metrics = {
-            **{k:v for k, v in rollout_metrics.items() if not k.endswith("_dist")},
+        loggable_metrics = {
+            **filtered_rollout_metrics,
             **epoch_metrics,
             "epoch": pl_module.current_epoch,
         }
 
-        prefixed_metrics = {f"eval/{k}": v for k, v in _metrics.items()}
+        prefixed_metrics = {f"eval/{k}": v for k, v in loggable_metrics.items()}
 
+        # Prefix metrics with eval/
         self._csv_logger.buffer_metrics(prefixed_metrics)
         
+        # Flush metrics to Lightning
         pl_module.log_dict(prefixed_metrics)
 
+        
         pl_module.metrics.update_history(prefixed_metrics)
         
     def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:

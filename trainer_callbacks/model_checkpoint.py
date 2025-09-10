@@ -3,18 +3,10 @@
 from pathlib import Path
 import json
 
-# Optional dependency shim for pytorch_lightning.Callback
-try:  # pragma: no cover
-    import pytorch_lightning as pl  # type: ignore
-    BaseCallback = getattr(pl, "Callback", object)
-except Exception:  # pragma: no cover
-    pl = None  # type: ignore
-    BaseCallback = object
-
-import torch
+import pytorch_lightning as pl
 
 
-class ModelCheckpointCallback(BaseCallback):
+class ModelCheckpointCallback(pl.Callback):
     """Custom checkpoint callback that handles all model checkpointing logic including resume."""
     
     def __init__(self, 
@@ -34,7 +26,6 @@ class ModelCheckpointCallback(BaseCallback):
             save_threshold_reached: Whether to save when reward threshold is reached
             resume: Whether to attempt to resume from existing checkpoint
         """
-        super().__init__()
         self.checkpoint_dir = Path(checkpoint_dir)
         self.monitor = monitor
         self.mode = mode
@@ -49,7 +40,7 @@ class ModelCheckpointCallback(BaseCallback):
         self.resume_checkpoint_path = None
         self.best_epoch_index = None
         
-    def setup(self, trainer, pl_module, stage):
+    def setup(self, trainer, pl_module, stage: str):
         """Setup callback - called before training starts."""
         # Initialize best model tracking attributes on the agent for compatibility
         if not hasattr(pl_module, 'best_eval_reward'):
@@ -60,7 +51,7 @@ class ModelCheckpointCallback(BaseCallback):
         if stage == "fit" and self.resume:
             self._handle_resume(pl_module)
     
-    def _handle_resume(self, agent):
+    def _handle_resume(self, agent: pl.LightningModule):
         """Handle resume logic - find and load checkpoint if available."""
         if getattr(agent.config, 'resume', False):
             from utils.checkpoint import find_latest_checkpoint, load_checkpoint
@@ -77,7 +68,7 @@ class ModelCheckpointCallback(BaseCallback):
             else:
                 print(f"Resume requested but no checkpoint found for {agent.config.algo_id}/{agent.config.env_id}")
     
-    def _get_checkpoint_dir(self, agent) -> Path:
+    def _get_checkpoint_dir(self, agent: pl.LightningModule) -> Path:
         """Get the checkpoint directory for this specific agent/env combination."""
         # If checkpoint_dir is already a run-specific directory, use it directly
         checkpoint_path = Path(self.checkpoint_dir)
@@ -134,7 +125,7 @@ class ModelCheckpointCallback(BaseCallback):
         files.sort(key=lambda p: p.stat().st_mtime)
         return files[-1]
     
-    def _save_checkpoint(self, agent, checkpoint_path: Path, is_best: bool = False, is_last: bool = False, is_threshold: bool = False, *, metrics: dict | None = None, current_eval_reward: float | None = None, threshold_value: float | None = None):
+    def _save_checkpoint(self, agent: pl.LightningModule, checkpoint_path: Path, is_best: bool = False, is_last: bool = False, is_threshold: bool = False, *, metrics: dict | None = None, current_eval_reward: float | None = None, threshold_value: float | None = None):
         """Save a checkpoint with all necessary information, including metrics snapshot.
 
         Args:
@@ -235,7 +226,7 @@ class ModelCheckpointCallback(BaseCallback):
         else:
             return current_value < self.best_metric_value
     
-    def on_validation_epoch_end(self, trainer, pl_module):
+    def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         """Save checkpoints on eval epochs and handle best/last/threshold logic.
 
         During warmup epochs (or when eval is skipped), the monitored metric may
@@ -393,7 +384,7 @@ class ModelCheckpointCallback(BaseCallback):
         # Delegate to legacy tracking (will early stop if missed above)
         self._handle_early_stopping_and_tracking(trainer, pl_module)
     
-    def _handle_early_stopping_and_tracking(self, trainer, pl_module):
+    def _handle_early_stopping_and_tracking(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         """Handle early stopping logic and best reward tracking that was previously in BaseAgent."""
         # Get reward threshold - use config if provided, otherwise use environment's reward threshold
         config_threshold = pl_module.config.reward_threshold
@@ -442,7 +433,7 @@ class ModelCheckpointCallback(BaseCallback):
                 env_threshold = pl_module.validation_env.get_reward_threshold()
                 print(f"No reward threshold available - config: {config_threshold}, env spec: {env_threshold} - skipping early stopping check")
     
-    def on_train_epoch_end(self, trainer, pl_module):
+    def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         """Maintain 'last' symlinks to the most recent epoch checkpoint/video after each training epoch."""
         # Train-side early stopping on threshold if enabled
         try:
@@ -519,7 +510,7 @@ class ModelCheckpointCallback(BaseCallback):
                 except Exception:
                     pass
     
-    def on_fit_end(self, trainer, pl_module):
+    def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         """Handle training completion summary and ensure symlinks are consistent."""
         # Ensure best/last symlinks are pointing to the latest epoch artifacts
         try:

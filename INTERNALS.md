@@ -67,8 +67,9 @@ Algo-specific config subclasses:
 
 ### Trainer and callbacks (`utils/trainer_factory.py`, `trainer_callbacks/*`)
 - `build_trainer` constructs a PL `Trainer` with validation cadence controlled externally; progress bar/checkpointing disabled in favor of custom callbacks.
+- Logging:
+  - `WandbLogger` plus `CsvLightningLogger` (writes `metrics.csv` under the run dir). Lightning dispatches `log_dict` to both.
 - Callbacks include:
-  - `CSVMetricsLoggerCallback`: writes `metrics.csv` under run dir.
   - `PrintMetricsCallback`: pretty prints metrics with precision/delta rules from `utils.metrics`. The underlying `utils.table_printer.NamespaceTablePrinter` maintains a short numeric history per metric and appends an inline ASCII sparkline to each value to visualize trends (width ~32 by default).
   - `HyperparamSyncCallback`: hot-reloads config changes from file; can enable manual control.
   - `ModelCheckpointCallback`: saves best/last; supports resume.

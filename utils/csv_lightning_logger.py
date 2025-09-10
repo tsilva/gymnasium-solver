@@ -1,0 +1,66 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, Optional
+
+# Optional dependency shim: allow import under tests without full Lightning
+try:  # pragma: no cover
+    from pytorch_lightning.loggers.logger import Logger as LightningLoggerBase  # type: ignore
+except Exception:  # pragma: no cover
+    class LightningLoggerBase:  # type: ignore
+        """Fallback base when Lightning isn't available (tests).
+
+        Accepts the Logger interface but does not enforce typing.
+        """
+        pass
+
+
+class CsvLightningLogger(LightningLoggerBase):
+    """
+    PyTorch Lightning logger that writes metrics to a wide-form CSV via
+    utils.csv_logger.CsvMetricsLogger. Accepts the same metrics dict that
+    pl_module.log_dict emits; non-numeric values are ignored.
+    """
+
+    def __init__(self, *, csv_path: str | Path, queue_size: int = 10000) -> None:
+        from utils.csv_logger import CsvMetricsLogger
+
+        self._name = "csv"
+        self._version = "0"
+        self._experiment = None
+        self._csv = CsvMetricsLogger(csv_path, queue_size=queue_size)
+
+    # --- Lightning Logger API ---
+    @property
+    def name(self) -> str:  # pragma: no cover - trivial
+        return self._name
+
+    @property
+    def version(self) -> str | int:  # pragma: no cover - trivial
+        return self._version
+
+    @property
+    def experiment(self):  # pragma: no cover - not used
+        return self._experiment
+
+    def log_hyperparams(self, params: Any) -> None:  # pragma: no cover - unused
+        # Hyperparams are already saved to config.json; no-op here
+        return None
+
+    def log_metrics(self, metrics: dict[str, Any], step: Optional[int] = None) -> None:
+        # Delegate to the async CSV writer; ignores non-numeric values internally
+        try:
+            self._csv.buffer_metrics(metrics)
+        except Exception:
+            # Never fail training due to logging errors
+            pass
+
+    def finalize(self, status: str) -> None:  # pragma: no cover - best-effort close
+        try:
+            self._csv.close()
+        except Exception:
+            pass
+
+    def after_save_checkpoint(self, checkpoint_callback: Any) -> None:  # pragma: no cover - unused
+        return None
+

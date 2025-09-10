@@ -11,6 +11,7 @@ class BaseAgent(pl.LightningModule):
     @staticmethod
     def _sanitize_name(name: str) -> str:
         return str(name).replace("/", "-").replace("\\", "-")
+        
     def __init__(self, config):
         super().__init__()
 
@@ -266,9 +267,17 @@ class BaseAgent(pl.LightningModule):
         
         # Set up comprehensive logging using run-specific logs directory
         log_path = self.run_manager.ensure_path("run.log")
-        with stream_output_to_log(log_path): self._learn(wandb_logger)
+        # Prepare a CSV Lightning logger writing to runs/<id>/metrics.csv
+        from utils.csv_lightning_logger import CsvLightningLogger
+        csv_path = self.run_manager.ensure_path("metrics.csv")
+        csv_logger = CsvLightningLogger(csv_path=str(csv_path))
 
-    def _learn(self, wandb_logger):
+        # Route all logs to both W&B and CSV loggers
+        lightning_loggers = [wandb_logger, csv_logger]
+
+        with stream_output_to_log(log_path): self._learn(lightning_loggers)
+
+    def _learn(self, lightning_loggers):
         # Prompt user to start training, return if user declines
         if not self._prompt_user_start_training(): return
 
@@ -278,7 +287,7 @@ class BaseAgent(pl.LightningModule):
         # Build the trainer
         from utils.trainer_factory import build_trainer
         trainer = build_trainer(
-            logger=wandb_logger,
+            logger=lightning_loggers,
             callbacks=callbacks,
             max_epochs=self.config.max_epochs,
             accelerator=self.config.accelerator,
@@ -389,9 +398,8 @@ class BaseAgent(pl.LightningModule):
         # Initialize callbacks list
         callbacks = []
 
-        # CSV Metrics Logger (writes metrics.csv under the run directory)
-        csv_path = self.run_manager.ensure_path("metrics.csv")
-        callbacks.append(DispatchMetricsCallback(csv_path=str(csv_path)))
+        # Metrics dispatcher: aggregates epoch metrics and logs to Lightning
+        callbacks.append(DispatchMetricsCallback())
 
         # Formatting/precision rules for pretty printing
         from utils.metrics import (

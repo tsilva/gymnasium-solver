@@ -1,11 +1,4 @@
 #!/usr/bin/env python3
-"""
-Alternate play script: minimal and reuse-first.
-
-- Loads a policy from a run's best/last checkpoint.
-- Builds a single-env environment with `render_mode='human'`.
-- Plays episodes by stepping via `utils.rollouts.RolloutCollector`.
-"""
 
 from __future__ import annotations
 
@@ -16,18 +9,24 @@ from pathlib import Path
 
 from utils.environment import build_env_from_config
 from utils.rollouts import RolloutCollector
-from typing import Any
 from utils.run import Run
 
-def load_model(ckpt_path: Path, env, config):
+def load_policy_model(ckpt_path: Path, env, config):
     import torch
     from utils.policy_factory import build_policy_from_env_and_config
-
+    
+    # Build policy model
     policy_model = build_policy_from_env_and_config(env, config)
+
+    # Load checkpoint into policy model
     ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
     state_dict = ckpt["model_state_dict"]
     policy_model.load_state_dict(state_dict)
+
+    # Set to evaluation mode
     policy_model.eval()
+
+    # Return policy model
     return policy_model
 
 def main():
@@ -57,7 +56,7 @@ def main():
     )
 
     # Load configuration 
-    policy_model = load_model(ckpt_path, env, config)    
+    policy_model = load_policy_model(ckpt_path, env, config)    
 
     # Initialize rollout collector with training-time hyperparams
     collector = RolloutCollector(
@@ -66,12 +65,14 @@ def main():
         n_steps=config.n_steps,
         **config.rollout_collector_hyperparams(),
     )
-
+    
+    # TODO: do we need this extra collect?
     # Initialize obs on first collect; keep collecting until target episodes reached
     target_eps = max(1, int(args.episodes))
     start_eps = collector.total_episodes
     print(f"Playing {target_eps} episode(s) with render_mode='human'...")
 
+    # Collect episodes until target episodes reached
     while (collector.total_episodes - start_eps) < target_eps:
         _ = collector.collect(deterministic=args.deterministic)
         m = collector.get_metrics()

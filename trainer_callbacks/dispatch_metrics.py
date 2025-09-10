@@ -1,24 +1,17 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
-
 import pytorch_lightning as pl
-
-from utils.csv_logger import CsvMetricsLogger
 
 class DispatchMetricsCallback(pl.Callback):
 
-    def __init__(self, *, csv_path: str | Path, queue_size: int = 10000) -> None:
+    def __init__(self) -> None:
         super().__init__()
-        self._path = Path(csv_path)
-        self._csv_logger: Optional[CsvMetricsLogger] = None
-        self._queue_size = int(queue_size)
 
     # ---- lifecycle hooks ----
     def on_fit_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._csv_logger = CsvMetricsLogger(self._path, queue_size=self._queue_size)
+        # No-op: CSV logging is handled by a Lightning logger
+        return None
 
     def on_train_epoch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         pl_module.metrics.reset_epoch("train")
@@ -59,10 +52,7 @@ class DispatchMetricsCallback(pl.Callback):
         # Prefix metrics with train/
         prefixed_metrics = {f"train/{k}": v for k, v in loggable_metrics.items()}
 
-        # Write to CSV asynchronously and to Lightning for any UI consumers
-        self._csv_logger.buffer_metrics(prefixed_metrics) # TODO: add csv logger to lightning instead?
-        
-        # Flush metrics to Lightning
+        # Flush metrics to Lightning (W&B, CSV logger, etc.)
         pl_module.log_dict(prefixed_metrics)
 
         # Update step-aware history with aggregated snapshot
@@ -94,8 +84,6 @@ class DispatchMetricsCallback(pl.Callback):
         prefixed_metrics = {f"eval/{k}": v for k, v in loggable_metrics.items()}
 
         # Prefix metrics with eval/
-        self._csv_logger.buffer_metrics(prefixed_metrics)
-        
         # Flush metrics to Lightning
         pl_module.log_dict(prefixed_metrics)
 
@@ -103,12 +91,7 @@ class DispatchMetricsCallback(pl.Callback):
         pl_module.metrics.update_history(prefixed_metrics)
         
     def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
-        self._close()
+        return None
 
     def teardown(self, trainer: pl.Trainer, pl_module: pl.LightningModule, stage: str | None = None) -> None:
-        self._close()
-
-    def _close(self) -> None:
-        if self._csv_logger is None: return
-        self._csv_logger.close()
-        self._csv_logger = None
+        return None

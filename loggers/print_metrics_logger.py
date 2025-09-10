@@ -117,6 +117,20 @@ class PrintMetricsLogger(LightningLoggerBase):
         # Convert values to basic Python scalars for rendering/validation
         simple: Dict[str, Any] = {k: _to_python_scalar(v) for k, v in dict(metrics).items()}
 
+        # Sanitize: drop bare keys (e.g., 'epoch') when a namespaced duplicate exists
+        # Root cause: some backends (e.g., Lightning) inject top-level 'epoch'
+        # which causes an extra 'epoch/' section in the table alongside 'train/epoch'.
+        namespaced = set(k for k in simple.keys() if "/" in k)
+        to_remove = []
+        for k in list(simple.keys()):
+            if "/" in k:
+                continue
+            # If a namespaced duplicate exists, prefer the namespaced one
+            if f"train/{k}" in namespaced or f"val/{k}" in namespaced or f"test/{k}" in namespaced:
+                to_remove.append(k)
+        for k in to_remove:
+            simple.pop(k, None)
+
         # Validate deltas and algorithm-specific rules using the latest snapshot
         self._validate_metric_deltas(simple)
         self._check_algorithm_metric_rules(simple)

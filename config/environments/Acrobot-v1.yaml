@@ -1,5 +1,4 @@
 # Acrobot standard challenge configurations
-
 env_id: Acrobot-v1
 max_timesteps: 1e6
 eval_freq_epochs: 10

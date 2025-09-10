@@ -68,11 +68,8 @@ def format_value(
 
 
 def _decimals_from_fmt(fmt: str) -> int:
-    try:
-        if fmt and fmt.startswith(".") and fmt.endswith("f"):
-            return int(fmt[1:-1])
-    except Exception:
-        pass
+    if fmt and fmt.startswith(".") and fmt.endswith("f"):
+        return int(fmt[1:-1])
     return 2
 
 

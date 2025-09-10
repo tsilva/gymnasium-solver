@@ -47,9 +47,6 @@ def main():
             time.sleep(0.02)  # ~50 FPS
     except KeyboardInterrupt:
         print("\n[INFO] Interrupted by user.")
-    except Exception as e:
-        print(f"[ERROR] An error occurred: {e}")
-        traceback.print_exc()
     finally:
         if env is not None:
             env.close()

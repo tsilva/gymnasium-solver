@@ -96,7 +96,7 @@ def main() -> None:
 
     try:
         import minari  # noqa: F401
-    except Exception as exc:
+    except ImportError:
         print(
             "Minari is required. Install with: pip install \"minari[all]\"",
             file=sys.stderr,
@@ -200,12 +200,8 @@ def main() -> None:
 
     # Save model next to script for quick reuse
     save_path = "scripts/minari_bc_example.pt"
-    try:
-        torch.save({"state_dict": policy.state_dict(), "is_discrete": is_discrete}, save_path)
-        print(f"Saved trained policy to: {save_path}")
-    except Exception:
-        # Non-fatal
-        pass
+    torch.save({"state_dict": policy.state_dict(), "is_discrete": is_discrete}, save_path)
+    print(f"Saved trained policy to: {save_path}")
 
     if not args.render:
         print("Skipping demo rollout (pass --render to show a window, if supported).")
@@ -218,17 +214,12 @@ def main() -> None:
     except TypeError:
         # Some Minari versions may not accept kwargs here.
         env = dataset.recover_environment()
-    except Exception:
-        env = None
 
     # Fallback: try gym.make using dataset metadata if recover_environment doesn't support human rendering
     if env is None or getattr(env, "render_mode", None) != "human":
         env_name = getattr(dataset, "environment_name", None)
         if env_name is not None:
-            try:
-                env = gym.make(env_name, render_mode="human")
-            except Exception:
-                pass
+            env = gym.make(env_name, render_mode="human")
     if env is None:
         print(
             "Could not create a human-rendering environment. Run without --render or try a different dataset.",
@@ -259,10 +250,7 @@ def main() -> None:
             else:
                 observation, reward, done, _ = step_out  # older API fallback
             # For human mode, some envs render automatically; keep explicit call for safety
-            try:
-                env.render()
-            except Exception:
-                pass
+            env.render()
             if done:
                 break
     env.close()
@@ -270,5 +258,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
 

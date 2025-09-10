@@ -323,13 +323,10 @@ def run_episode(
 
     # Load action labels from vec env wrapper if available
     action_labels: List[str] | None = None
-    try:
-        if hasattr(env, "get_action_labels"):
-            act_labels_raw = env.get_action_labels()
-            if isinstance(act_labels_raw, list):
-                action_labels = [str(x) for x in act_labels_raw]
-    except Exception:
-        action_labels = None
+    if hasattr(env, "get_action_labels"):
+        act_labels_raw = env.get_action_labels()
+        if isinstance(act_labels_raw, list):
+            action_labels = [str(x) for x in act_labels_raw]
 
     # Collect environment spec for summary tabs (VecInfoWrapper exposes safe helpers)
     env_spec_obj = env.get_spec() if hasattr(env, "get_spec") else None
@@ -352,16 +349,9 @@ def run_episode(
     }
 
     # Collect model spec for summary tabs
-    try:
-        num_params_total = int(sum(p.numel() for p in policy_model.parameters()))
-        num_params_trainable = int(sum(p.numel() for p in policy_model.parameters() if p.requires_grad))
-    except Exception:
-        num_params_total = None
-        num_params_trainable = None
-    try:
-        device = next(policy_model.parameters()).device.type
-    except Exception:
-        device = None
+    num_params_total = int(sum(p.numel() for p in policy_model.parameters()))
+    num_params_trainable = int(sum(p.numel() for p in policy_model.parameters() if p.requires_grad))
+    device = next(policy_model.parameters()).device.type
     model_spec_summary: Dict[str, Any] = {
         "algo_id": config.algo_id,
         "policy_class": type(policy_model).__name__,
@@ -375,70 +365,54 @@ def run_episode(
 
     # Collect checkpoint metrics (from sidecar json or checkpoint contents)
     checkpoint_metrics_summary: Dict[str, Any] = {}
-    try:
-        import json
-        ckpt_data = None
-        try:
-            ckpt_data = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-        except Exception:
-            ckpt_data = None
-        if isinstance(ckpt_data, dict):
-            for k in [
-                "epoch",
-                "global_step",
-                "total_timesteps",
-                "best_eval_reward",
-                "current_eval_reward",
-                "is_best",
-                "is_last",
-                "is_threshold",
-                "threshold_value",
-            ]:
-                if k in ckpt_data:
-                    checkpoint_metrics_summary[k] = ckpt_data.get(k)
-            # Merge metrics dict if present
-            if isinstance(ckpt_data.get("metrics"), dict):
-                checkpoint_metrics_summary["metrics"] = ckpt_data.get("metrics")
-        # Sidecar JSON
-        sidecar = ckpt_path.with_suffix(".json")
-        if sidecar.exists():
-            try:
-                with open(sidecar, "r", encoding="utf-8") as f:
-                    sidecar_metrics = json.load(f)
-                checkpoint_metrics_summary["sidecar_metrics"] = sidecar_metrics
-            except Exception:
-                pass
-    except Exception:
-        pass
+    import json
+    ckpt_data = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    if isinstance(ckpt_data, dict):
+        for k in [
+            "epoch",
+            "global_step",
+            "total_timesteps",
+            "best_eval_reward",
+            "current_eval_reward",
+            "is_best",
+            "is_last",
+            "is_threshold",
+            "threshold_value",
+        ]:
+            if k in ckpt_data:
+                checkpoint_metrics_summary[k] = ckpt_data.get(k)
+        # Merge metrics dict if present
+        if isinstance(ckpt_data.get("metrics"), dict):
+            checkpoint_metrics_summary["metrics"] = ckpt_data.get("metrics")
+    # Sidecar JSON
+    sidecar = ckpt_path.with_suffix(".json")
+    if sidecar.exists():
+        with open(sidecar, "r", encoding="utf-8") as f:
+            sidecar_metrics = json.load(f)
+        checkpoint_metrics_summary["sidecar_metrics"] = sidecar_metrics
 
     frames: List[np.ndarray] = []  # raw rendered frames for human monitoring
     stack_frames: List[np.ndarray] = []  # tiled frame-stack views (if applicable)
 
     # Heuristics and helpers to convert observations to displayable images
     def _to_uint8_img(arr: np.ndarray) -> np.ndarray:
-        try:
-            a = np.asarray(arr)
-            if a.dtype != np.uint8:
-                # Normalize floats
-                a = a.astype(np.float32)
-                maxv = float(np.nanmax(a)) if np.isfinite(a).any() else 0.0
-                if maxv <= 1.0:
-                    a = a * 255.0
-                a = np.clip(a, 0, 255).astype(np.uint8)
-            return a
-        except Exception:
-            return np.asarray(arr).astype(np.uint8, copy=False)
+        a = np.asarray(arr)
+        if a.dtype != np.uint8:
+            # Normalize floats
+            a = a.astype(np.float32)
+            maxv = float(np.nanmax(a)) if np.isfinite(a).any() else 0.0
+            if maxv <= 1.0:
+                a = a * 255.0
+            a = np.clip(a, 0, 255).astype(np.uint8)
+        return a
 
     def _obs_first_env(obs_any: Any) -> np.ndarray | None:
-        try:
-            arr = np.asarray(obs_any)
-            if arr.ndim == 0:
-                return None
-            if arr.ndim >= 4:
-                return arr[0]
-            return arr
-        except Exception:
+        arr = np.asarray(obs_any)
+        if arr.ndim == 0:
             return None
+        if arr.ndim >= 4:
+            return arr[0]
+        return arr
 
     def _chw_to_hwc(img: np.ndarray) -> np.ndarray:
         # Accepts (C,H,W) and returns (H,W,C)
@@ -466,57 +440,51 @@ def run_episode(
         - For HWC with C > 3: similar handling using last dimension.
         - For 2D grayscale with frame stacking that ended up as (H, W): cannot split; return [img].
         """
-        try:
-            x = np.asarray(img)
-            if x.ndim == 2:
-                return [x]
-            # Normalize to HWC for consistent slicing
-            if x.ndim == 3 and x.shape[0] <= 8 and x.shape[1] >= 16 and x.shape[2] >= 16:
-                x = _chw_to_hwc(x)
-            if x.ndim != 3:
-                return []
-            H, W, C = x.shape
-            frames: List[np.ndarray] = []
-            if assume_rgb_groups and C % 3 == 0:
-                n = C // 3
-                if n_stack_hint is not None and n_stack_hint > 0:
-                    n = min(n, int(n_stack_hint))
-                for i in range(n):
-                    frames.append(x[:, :, 3 * i: 3 * (i + 1)])
-            else:
-                # Treat as n grayscale channels
-                n = C
-                if n_stack_hint is not None and n_stack_hint > 0:
-                    n = min(n, int(n_stack_hint))
-                for i in range(n):
-                    frames.append(x[:, :, i:i + 1])
-            return frames
-        except Exception:
+        x = np.asarray(img)
+        if x.ndim == 2:
+            return [x]
+        # Normalize to HWC for consistent slicing
+        if x.ndim == 3 and x.shape[0] <= 8 and x.shape[1] >= 16 and x.shape[2] >= 16:
+            x = _chw_to_hwc(x)
+        if x.ndim != 3:
             return []
+        H, W, C = x.shape
+        frames: List[np.ndarray] = []
+        if assume_rgb_groups and C % 3 == 0:
+            n = C // 3
+            if n_stack_hint is not None and n_stack_hint > 0:
+                n = min(n, int(n_stack_hint))
+            for i in range(n):
+                frames.append(x[:, :, 3 * i: 3 * (i + 1)])
+        else:
+            # Treat as n grayscale channels
+            n = C
+            if n_stack_hint is not None and n_stack_hint > 0:
+                n = min(n, int(n_stack_hint))
+            for i in range(n):
+                frames.append(x[:, :, i:i + 1])
+        return frames
 
     def _make_grid(frames_hwc: List[np.ndarray], cols: int | None = None) -> np.ndarray | None:
-        try:
-            if not frames_hwc:
-                return None
-            imgs = [
-                (_to_uint8_img(np.repeat(f, 3, axis=2)) if (f.ndim == 3 and f.shape[2] == 1) else _to_uint8_img(f))
-                for f in frames_hwc
-            ]
-            H, W = imgs[0].shape[0], imgs[0].shape[1]
-            # Ensure same size
-            imgs = [img if (img.shape[0] == H and img.shape[1] == W) else np.resize(img, (H, W, 3)) for img in imgs]
-            n = len(imgs)
-            if cols is None:
-                cols = n if n <= 4 else 4
-            rows = int(np.ceil(n / float(cols)))
-            grid = np.zeros((rows * H, cols * W, 3), dtype=np.uint8)
-            for idx, img in enumerate(imgs):
-                r = idx // cols
-                c = idx % cols
-                grid[r * H:(r + 1) * H, c * W:(c + 1) * W, :] = img
-            return grid
-        except Exception:
+        if not frames_hwc:
             return None
+        imgs = [
+            (_to_uint8_img(np.repeat(f, 3, axis=2)) if (f.ndim == 3 and f.shape[2] == 1) else _to_uint8_img(f))
+            for f in frames_hwc
+        ]
+        H, W = imgs[0].shape[0], imgs[0].shape[1]
+        # Ensure same size
+        imgs = [img if (img.shape[0] == H and img.shape[1] == W) else np.resize(img, (H, W, 3)) for img in imgs]
+        n = len(imgs)
+        if cols is None:
+            cols = n if n <= 4 else 4
+        rows = int(np.ceil(n / float(cols)))
+        grid = np.zeros((rows * H, cols * W, 3), dtype=np.uint8)
+        for idx, img in enumerate(imgs):
+            r = idx // cols
+            c = idx % cols
+            grid[r * H:(r + 1) * H, c * W:(c + 1) * W, :] = img
+        return grid
 
     def _vector_stack_to_frames(vec: np.ndarray, n_stack_hint: int | None, row_height: int = 8) -> List[np.ndarray]:
         """Represent a stacked 1D observation as a list of grayscale bar images.
@@ -526,31 +494,28 @@ def run_episode(
         normalized per-chunk to [0, 1] for visibility. Falls back to a single
         bar if splitting is not possible or the hint is invalid.
         """
-        try:
-            v = np.asarray(vec).reshape(-1)
-            n = int(n_stack_hint) if (n_stack_hint is not None) else 1
-            if n <= 1:
-                n = 1
-            L = v.shape[0]
-            frames: List[np.ndarray] = []
-            if n > 1 and L % n == 0:
-                seg = L // n
-                chunks = [v[i * seg:(i + 1) * seg] for i in range(n)]
-            else:
-                chunks = [v]
-            for chunk in chunks:
-                c = np.asarray(chunk, dtype=np.float32)
-                c_min = float(np.nanmin(c)) if c.size > 0 else 0.0
-                c_max = float(np.nanmax(c)) if c.size > 0 else 1.0
-                # Normalize to [0,1] per-chunk; avoid div by zero
-                denom = (c_max - c_min) if (c_max - c_min) > 1e-9 else 1.0
-                c01 = (c - c_min) / denom
-                row = c01.reshape(1, -1, 1)  # (1, W, 1)
-                img = np.repeat(row, row_height, axis=0)  # (H, W, 1)
-                frames.append(img)
-            return frames
-        except Exception:
-            return []
+        v = np.asarray(vec).reshape(-1)
+        n = int(n_stack_hint) if (n_stack_hint is not None) else 1
+        if n <= 1:
+            n = 1
+        L = v.shape[0]
+        frames: List[np.ndarray] = []
+        if n > 1 and L % n == 0:
+            seg = L // n
+            chunks = [v[i * seg:(i + 1) * seg] for i in range(n)]
+        else:
+            chunks = [v]
+        for chunk in chunks:
+            c = np.asarray(chunk, dtype=np.float32)
+            c_min = float(np.nanmin(c)) if c.size > 0 else 0.0
+            c_max = float(np.nanmax(c)) if c.size > 0 else 1.0
+            # Normalize to [0,1] per-chunk; avoid div by zero
+            denom = (c_max - c_min) if (c_max - c_min) > 1e-9 else 1.0
+            c01 = (c - c_min) / denom
+            row = c01.reshape(1, -1, 1)  # (1, W, 1)
+            img = np.repeat(row, row_height, axis=0)  # (H, W, 1)
+            frames.append(img)
+        return frames
     steps: List[Dict[str, Any]] = []
 
     reset_result = env.reset()
@@ -573,60 +538,49 @@ def run_episode(
     # Used to decide how to visualize non-image observations
     obs_type_cfg = str(getattr(config, "obs_type", "")).lower()
     # Derive a fixed stacking hint once
-    try:
-        n_stack_hint = int(getattr(config, "frame_stack", None) or 0)
-    except Exception:
-        n_stack_hint = None
+    n_stack_hint = int(getattr(config, "frame_stack", None) or 0)
     has_stack_hint = bool(n_stack_hint is not None and int(n_stack_hint) > 1)
 
     try:
         while t < max_steps:
             # Capture current frame BEFORE stepping (VecEnv resets on done)
-            try:
-                frame = env.render()
-                if isinstance(frame, np.ndarray):
-                    if frame.dtype != np.uint8:
-                        frame = np.clip(frame, 0, 255).astype(np.uint8)
-                    frames.append(frame)
-            except Exception:
-                pass
+            frame = env.render()
+            if isinstance(frame, np.ndarray):
+                if frame.dtype != np.uint8:
+                    frame = np.clip(frame, 0, 255).astype(np.uint8)
+                frames.append(frame)
 
             # Build processed/stack views from current observation (pre-step)
-            try:
-                obs0 = _obs_first_env(obs)
-                stack_img = None
-                # n_stack_hint precomputed above
+            obs0 = _obs_first_env(obs)
+            stack_img = None
+            # Build a stack grid from the observation channels when frame stacking is enabled
+            if isinstance(obs0, np.ndarray) and obs0.ndim in (2, 3):
+                hwc = _ensure_hwc(obs0)
+                if has_stack_hint:
+                    split = _split_stack(hwc, assume_rgb_groups=True, n_stack_hint=n_stack_hint)
+                    if isinstance(split, list) and len(split) >= 2:
+                        grid = _make_grid(split, cols=None)
+                        if grid is not None:
+                            stack_img = grid
+            # Vector observation fallback
+            elif stack_img is None and isinstance(obs0, np.ndarray) and (obs0.ndim == 1 or (obs0.ndim == 2 and 1 in obs0.shape)) and obs_type_cfg not in {"ram", "objects"}:
+                if has_stack_hint:
+                    vec = obs0.reshape(-1)
+                    frames_vec = _vector_stack_to_frames(vec, n_stack_hint=n_stack_hint, row_height=8)
+                    if frames_vec:
+                        grid = _make_grid(frames_vec, cols=None)
+                        if grid is not None:
+                            stack_img = grid
 
-                # Build a stack grid from the observation channels when frame stacking is enabled
-                if isinstance(obs0, np.ndarray) and obs0.ndim in (2, 3):
-                    hwc = _ensure_hwc(obs0)
-                    if has_stack_hint:
-                        split = _split_stack(hwc, assume_rgb_groups=True, n_stack_hint=n_stack_hint)
-                        if isinstance(split, list) and len(split) >= 2:
-                            grid = _make_grid(split, cols=None)
-                            if grid is not None:
-                                stack_img = grid
-                # Vector observation fallback (only if we still don't have a frame-based stack)
-                elif stack_img is None and isinstance(obs0, np.ndarray) and (obs0.ndim == 1 or (obs0.ndim == 2 and 1 in obs0.shape)) and obs_type_cfg not in {"ram", "objects"}:
-                    if has_stack_hint:
-                        vec = obs0.reshape(-1)
-                        frames_vec = _vector_stack_to_frames(vec, n_stack_hint=n_stack_hint, row_height=8)
-                        if frames_vec:
-                            grid = _make_grid(frames_vec, cols=None)
-                            if grid is not None:
-                                stack_img = grid
+            # As a final fallback for non-image observations, build a grid from the last N rendered frames
+            if stack_img is None and has_stack_hint and isinstance(frames, list) and len(frames) >= 1:
+                last = frames[-int(n_stack_hint):]
+                grid_from_frames = _make_grid([_ensure_hwc(f) for f in last], cols=None)
+                if grid_from_frames is not None:
+                    stack_img = grid_from_frames
 
-                # As a final fallback for non-image observations, build a grid from the last N rendered frames
-                if stack_img is None and has_stack_hint and isinstance(frames, list) and len(frames) >= 1:
-                    last = frames[-int(n_stack_hint):]
-                    grid_from_frames = _make_grid([_ensure_hwc(f) for f in last], cols=None)
-                    if grid_from_frames is not None:
-                        stack_img = grid_from_frames
-
-                if stack_img is not None:
-                    stack_frames.append(stack_img)
-            except Exception:
-                pass
+            if stack_img is not None:
+                stack_frames.append(stack_img)
 
             # Compute action from current obs
             with torch.no_grad():
@@ -818,12 +772,9 @@ def build_ui(default_run_id: str = "@latest-run"):
 
         # Timer for autoplay (fallback if Timer doesn't exist in older Gradio)
         timer = None
-        try:
-            TimerCls = getattr(gr, "Timer", None)
-            if TimerCls is not None:
-                timer = TimerCls(1/30.0)  # default to 30 FPS
-        except Exception:
-            timer = None
+        TimerCls = getattr(gr, "Timer", None)
+        if TimerCls is not None:
+            timer = TimerCls(1/30.0)  # default to 30 FPS
         # Table headers are reused for CSV export and for the current-step vertical view
         table_headers = [
             "done",
@@ -871,23 +822,17 @@ def build_ui(default_run_id: str = "@latest-run"):
                     ckpt_metrics_json = gr.JSON(label="Checkpoint metrics")
 
         def _on_run_change(selected_run: str):
-            try:
-                labels, _, default_label = list_checkpoints_for_run(selected_run)
-            except Exception:
-                labels, default_label = [], None
+            labels, _, default_label = list_checkpoints_for_run(selected_run)
             return gr.Dropdown(choices=labels, value=default_label)
 
         run_id.change(_on_run_change, inputs=run_id, outputs=checkpoint)
 
         def _format_stat_value(v: Any) -> str:
-            try:
-                if isinstance(v, float):
-                    return f"{v:.3f}"
-                if isinstance(v, (list, tuple)):
-                    return "[" + ", ".join(_format_stat_value(x) for x in v) + "]"
-                return str(v) if v is not None else ""
-            except Exception:
-                return str(v)
+            if isinstance(v, float):
+                return f"{v:.3f}"
+            if isinstance(v, (list, tuple)):
+                return "[" + ", ".join(_format_stat_value(x) for x in v) + "]"
+            return str(v) if v is not None else ""
 
         def _verticalize_row(row: List[Any]) -> List[List[str]]:
             pairs: List[List[str]] = []
@@ -913,11 +858,8 @@ def build_ui(default_run_id: str = "@latest-run"):
             ]
 
         def _vertical_from_steps_index(steps: List[Dict[str, Any]] | None, idx: int) -> List[List[str]]:
-            try:
-                if steps and 0 <= int(idx) < len(steps):
-                    return _verticalize_row(_row_vals_from_step_dict(steps[int(idx)]))
-            except Exception:
-                pass
+            if steps and 0 <= int(idx) < len(steps):
+                return _verticalize_row(_row_vals_from_step_dict(steps[int(idx)]))
             return []
 
         def _initial_display_state(active_frames: List[np.ndarray] | None, frame_label: str, steps: List[Dict[str, Any]] | None):
@@ -937,16 +879,10 @@ def build_ui(default_run_id: str = "@latest-run"):
         def _inspect(rid: str, ckpt_label: str | None, det: bool, nsteps: int):
             frames_raw, _frames_proc_unused, frames_stack, steps, info = run_episode(rid, ckpt_label, det, int(nsteps))
             def _round3(x):
-                try:
-                    return round(float(x), 3)
-                except Exception:
-                    return x
+                return round(float(x), 3)
             def _format_probs(probs: Any) -> str | None:
-                try:
-                    if isinstance(probs, list):
-                        return "[" + ", ".join(f"{float(p):.3f}" for p in probs) + "]"
-                except Exception:
-                    pass
+                if isinstance(probs, list):
+                    return "[" + ", ".join(f"{float(p):.3f}" for p in probs) + "]"
                 return str(probs) if probs is not None else None
             def _table_row_from_step(s: Dict[str, Any]) -> List[Any]:
                 return [
@@ -1015,20 +951,17 @@ def build_ui(default_run_id: str = "@latest-run"):
             "index" field. The index is generally a (row, col) pair.
             """
             row_idx = 0
-            try:
-                idx = None
-                if isinstance(evt, dict):
-                    idx = evt.get("index")
-                else:
-                    idx = getattr(evt, "index", None)
+            idx = None
+            if isinstance(evt, dict):
+                idx = evt.get("index")
+            else:
+                idx = getattr(evt, "index", None)
 
-                if isinstance(idx, (list, tuple)) and len(idx) > 0:
-                    row_idx = int(idx[0])
-                elif isinstance(idx, int):
-                    row_idx = int(idx)
-                else:
-                    row_idx = 0
-            except Exception:
+            if isinstance(idx, (list, tuple)) and len(idx) > 0:
+                row_idx = int(idx[0])
+            elif isinstance(idx, int):
+                row_idx = int(idx)
+            else:
                 row_idx = 0
 
             # Update the displayed image and slider; also pause playback and sync index state
@@ -1117,26 +1050,20 @@ def build_ui(default_run_id: str = "@latest-run"):
             # Normalize possible pandas.DataFrame or None → list of lists
             if rows is None:
                 return None, gr.update(visible=False)
-            try:
-                # Detect DataFrame by attribute presence to avoid strict import dependency
-                if hasattr(rows, "empty") and hasattr(rows, "to_numpy"):
-                    try:
-                        import pandas as pd  # type: ignore
-                        rows = rows.where(pd.notnull(rows), None).to_numpy().tolist()
-                    except Exception:
-                        rows = rows.to_numpy().tolist()  # type: ignore[assignment]
-            except Exception:
-                pass
+            # Detect DataFrame by attribute presence to avoid strict import dependency
+            if hasattr(rows, "empty") and hasattr(rows, "to_numpy"):
+                try:
+                    import pandas as pd  # type: ignore
+                    rows = rows.where(pd.notnull(rows), None).to_numpy().tolist()
+                except ImportError:
+                    rows = rows.to_numpy().tolist()  # type: ignore[assignment]
 
             # Ensure rows is a list and check emptiness safely
             if isinstance(rows, list):
                 if len(rows) == 0:
                     return None, gr.update(visible=False)
             else:
-                try:
-                    rows = list(rows)  # type: ignore[arg-type]
-                except Exception:
-                    return None, gr.update(visible=False)
+                rows = list(rows)  # type: ignore[arg-type]
                 if len(rows) == 0:
                     return None, gr.update(visible=False)
 

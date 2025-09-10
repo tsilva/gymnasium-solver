@@ -296,10 +296,7 @@ def run_benchmark(cfg: BenchmarkConfig) -> Dict[str, Any]:
 
     # Silence Lightning info logs to avoid console overhead in timing
     logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
-    try:
-        logging.getLogger("lightning.pytorch").setLevel(logging.ERROR)
-    except Exception:
-        pass
+    logging.getLogger("lightning.pytorch").setLevel(logging.ERROR)
     warnings.filterwarnings("ignore", message=".*does not have many workers.*")
 
     # Pre-build model and trainer so the timer measures the epoch loop, not setup

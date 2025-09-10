@@ -10,7 +10,7 @@ try:
     import json
     from jsonschema import Draft202012Validator
     JSONSCHEMA_AVAILABLE = True
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     JSONSCHEMA_AVAILABLE = False
 
 

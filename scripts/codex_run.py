@@ -49,7 +49,7 @@ def main() -> int:
     elif args.file:
         try:
             prompt = args.file.read_text()
-        except Exception as e:
+        except (OSError, UnicodeError) as e:
             print(f"Failed to read {args.file}: {e}", file=sys.stderr)
             return 2
     else:
@@ -76,4 +76,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

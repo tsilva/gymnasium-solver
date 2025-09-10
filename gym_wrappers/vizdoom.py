@@ -171,15 +171,9 @@ class VizDoomEnv(gym.Env):
             obs = self._get_screen()
 
         info: Dict[str, Any] = {}
-        # Best effort: expose common game variables when available
-        try:
-            info["health"] = float(self._game.get_game_variable(self._vzd.GameVariable.HEALTH))
-        except Exception:
-            pass
-        try:
-            info["ammo"] = float(self._game.get_game_variable(self._vzd.GameVariable.AMMO2))
-        except Exception:
-            pass
+        # Expose common game variables (fail fast if unavailable)
+        info["health"] = float(self._game.get_game_variable(self._vzd.GameVariable.HEALTH))
+        info["ammo"] = float(self._game.get_game_variable(self._vzd.GameVariable.AMMO2))
         return obs, reward, terminated, truncated, info
 
     def render(self) -> Optional[np.ndarray]:

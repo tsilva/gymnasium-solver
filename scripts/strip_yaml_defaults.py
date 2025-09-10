@@ -48,7 +48,7 @@ def normalize_key_value(key: str, value: Any) -> Any:
     if key == "hidden_dims" and isinstance(value, list):
         try:
             return tuple(int(x) for x in value)
-        except Exception:
+        except (TypeError, ValueError):
             return tuple(value)
     return value
 

@@ -49,7 +49,7 @@ try:
     from stable_baselines3 import PPO
     from stable_baselines3.common.callbacks import BaseCallback
     _HAS_SB3 = True
-except Exception:
+except ImportError:
     PPO = None  # type: ignore
     BaseCallback = object  # type: ignore
     nn = None  # type: ignore

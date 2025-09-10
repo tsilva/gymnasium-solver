@@ -259,29 +259,25 @@ class VideoLoggerCallback(pl.Callback):
         fresh: list[Path] = []
 
         for p in paths:
-            try:
-                rp = p.resolve()
-                if str(rp) in self._seen:
-                    continue
-                if not rp.exists():
-                    continue
-                if not self._under_root(rp, current_root):
-                    continue
-                # age check to avoid reading partially-written files
-                st = rp.stat()
-                age = now - max(st.st_mtime, getattr(st, "st_ctime", st.st_mtime))
-                if age < self.min_age_sec:
-                    # Re-queue; next _process will pick it up
-                    with self._lock:
-                        if prefix == "train":
-                            self._pending_train.add(str(rp))
-                        else:
-                            self._pending_eval.add(str(rp))
-                    continue
-                fresh.append(rp)
-            except Exception:
-                # Ignore transient races (e.g., file moved between stat and read)
-                pass
+            rp = p.resolve()
+            if str(rp) in self._seen:
+                continue
+            if not rp.exists():
+                continue
+            if not self._under_root(rp, current_root):
+                continue
+            # age check to avoid reading partially-written files
+            st = rp.stat()
+            age = now - max(st.st_mtime, getattr(st, "st_ctime", st.st_mtime))
+            if age < self.min_age_sec:
+                # Re-queue; next _process will pick it up
+                with self._lock:
+                    if prefix == "train":
+                        self._pending_train.add(str(rp))
+                    else:
+                        self._pending_eval.add(str(rp))
+                continue
+            fresh.append(rp)
 
         if not fresh:
             return

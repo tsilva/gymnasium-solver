@@ -460,7 +460,7 @@ class RolloutCollector():
         def _to_str(x):
             try:
                 return str(x.value)  # Enum-like
-            except Exception:
+            except AttributeError:
                 return None if x is None else str(x)
 
         rtype = _to_str(returns_type)
@@ -563,24 +563,21 @@ class RolloutCollector():
         coerced_list = []
         for (_, _, obs) in self.terminal_obs_info:
             arr = np.asarray(obs)
-            try:
-                if len(exp) == 3:
-                    C, H, W = int(exp[0]), int(exp[1]), int(exp[2])
-                    if arr.ndim == 3:
-                        # HWC -> CHW
-                        if arr.shape == (H, W, C):
-                            arr = np.transpose(arr, (2, 0, 1))
-                        # Already CHW
-                        elif arr.shape == (C, H, W):
-                            pass
-                        # Grayscale H,W -> add channel
-                        elif arr.shape == (H, W) and C == 1:
-                            arr = arr[None, ...]
-                    elif arr.ndim == 2 and C == 1 and arr.shape == (H, W):
+            if len(exp) == 3:
+                C, H, W = int(exp[0]), int(exp[1]), int(exp[2])
+                if arr.ndim == 3:
+                    # HWC -> CHW
+                    if arr.shape == (H, W, C):
+                        arr = np.transpose(arr, (2, 0, 1))
+                    # Already CHW
+                    elif arr.shape == (C, H, W):
+                        pass
+                    # Grayscale H,W -> add channel
+                    elif arr.shape == (H, W) and C == 1:
                         arr = arr[None, ...]
-                # For non-image shapes, keep as-is
-            except Exception:
-                pass
+                elif arr.ndim == 2 and C == 1 and arr.shape == (H, W):
+                    arr = arr[None, ...]
+            # For non-image shapes, keep as-is
             coerced_list.append(arr)
         term_obs_batch = np.stack(coerced_list)
         batch_values = self._predict_values_np(term_obs_batch)

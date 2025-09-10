@@ -36,7 +36,7 @@ class EndOfTrainingReportCallback(pl.Callback):
                     # normalize to float when numeric
                     fv = float(v)
                     return fv
-                except Exception:
+                except (TypeError, ValueError):
                     return v
         return None
 
@@ -114,12 +114,9 @@ class EndOfTrainingReportCallback(pl.Callback):
             for a in dir(cfg):
                 if a.startswith("_"):
                     continue
-                try:
-                    v = getattr(cfg, a)
-                    if not callable(v):
-                        cfg_dict[a] = v
-                except Exception:
-                    continue
+                v = getattr(cfg, a)
+                if not callable(v):
+                    cfg_dict[a] = v
 
         # Metrics.csv
         metrics_csv = run_dir / "metrics.csv"
@@ -168,10 +165,7 @@ class EndOfTrainingReportCallback(pl.Callback):
         }
 
         # Prepare template variables and render via a Markdown template
-        try:
-            run_id = getattr(pl_module.run_manager, "run_id", None)
-        except Exception:
-            run_id = None
+        run_id = getattr(pl_module.run_manager, "run_id", None)
         date_str = time.strftime("%Y-%m-%d %H:%M:%S")
 
         # Optional bullets assembled conditionally

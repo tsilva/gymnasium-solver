@@ -435,10 +435,7 @@ class BaseAgent(pl.LightningModule):
         callbacks.append(ModelCheckpointCallback(
             checkpoint_dir=checkpoint_dir,
             monitor="val/ep_rew_mean",
-            mode="max",
-            save_last=True, 
-            save_threshold_reached=True,
-            resume=False
+            mode="max"
         ))
 
         # Video logger watches a run-specific media directory lazily (do not create it up-front)

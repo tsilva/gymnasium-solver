@@ -143,10 +143,7 @@ class PrintMetricsLogger(LightningLoggerBase):
                 prev = self.previous_metrics[metric_name]
                 if not (is_number(curr) and is_number(prev)):
                     continue
-                try:
-                    ok = bool(rule_lambda(prev, curr))
-                except Exception:
-                    ok = True
+                ok = bool(rule_lambda(prev, curr))
                 if ok:
                     continue
                 # Emit a clear violation message but do not raise
@@ -161,37 +158,30 @@ class PrintMetricsLogger(LightningLoggerBase):
             curr = current_metrics[metric_name]
             if not is_number(curr):
                 continue
-            try:
-                check_func = rule_config.get('check')
-                message_template = rule_config.get('message', f"Algorithm metric rule violated for '{metric_name}'")
-                level = rule_config.get('level', 'warning')
-                if check_func is None:
-                    continue
-                satisfied = False
-                if callable(check_func):
-                    try:
-                        if getattr(check_func, "__code__", None) and check_func.__code__.co_argcount == 1:
-                            satisfied = bool(check_func(curr))
-                        elif metric_name in self.previous_metrics:
-                            prev = self.previous_metrics.get(metric_name)
-                            if is_number(prev):
-                                satisfied = bool(check_func(prev, curr))
-                            else:
-                                satisfied = True
-                        else:
-                            satisfied = True
-                    except Exception:
-                        satisfied = True
-                if not satisfied:
-                    prev = self.previous_metrics.get(metric_name, 'N/A')
-                    msg = message_template.format(metric_name=metric_name, current_value=curr, previous_value=prev)
-                    if level == 'error':
-                        print(f"🚨 ALGORITHM ERROR: {msg}")
+            check_func = rule_config.get('check')
+            message_template = rule_config.get('message', f"Algorithm metric rule violated for '{metric_name}'")
+            level = rule_config.get('level', 'warning')
+            if check_func is None:
+                continue
+            satisfied = False
+            if callable(check_func):
+                if getattr(check_func, "__code__", None) and check_func.__code__.co_argcount == 1:
+                    satisfied = bool(check_func(curr))
+                elif metric_name in self.previous_metrics:
+                    prev = self.previous_metrics.get(metric_name)
+                    if is_number(prev):
+                        satisfied = bool(check_func(prev, curr))
                     else:
-                        print(f"⚠️  ALGORITHM WARNING: {msg}")
-            except Exception:
-                # Be resilient on logging
-                pass
+                        satisfied = True
+                else:
+                    satisfied = True
+            if not satisfied:
+                prev = self.previous_metrics.get(metric_name, 'N/A')
+                msg = message_template.format(metric_name=metric_name, current_value=curr, previous_value=prev)
+                if level == 'error':
+                    print(f"🚨 ALGORITHM ERROR: {msg}")
+                else:
+                    print(f"⚠️  ALGORITHM WARNING: {msg}")
 
     def _delta_for_key(self, namespace: str, key: str, value: Any):
         # In case we don't have a previous value, return empty string
@@ -290,24 +280,18 @@ class PrintMetricsLogger(LightningLoggerBase):
                     compact_numbers=self.compact_numbers,
                     float_fmt=self.float_fmt,
                 )
-                try:
-                    if sub in self.highlight_value_bold_for_set:
-                        val_str = _ansi(val_str, "bold", enable=self.color)
-                except Exception:
-                    pass
+                if sub in self.highlight_value_bold_for_set:
+                    val_str = _ansi(val_str, "bold", enable=self.color)
                 delta_str, color_name = self._delta_for_key(ns, sub, v)
                 if delta_str:
                     delta_disp = _ansi(delta_str, color_name, enable=self.color)
                     val_disp = f"{val_str} {delta_disp}"
                 else:
                     val_disp = val_str
-                try:
-                    if self.show_sparklines and is_number(v):
-                        chart = self._spark_for_key(full_key, self.sparkline_width)
-                        if chart:
-                            val_disp = f"{val_disp}  {chart}"
-                except Exception:
-                    pass
+                if self.show_sparklines and is_number(v):
+                    chart = self._spark_for_key(full_key, self.sparkline_width)
+                    if chart:
+                        val_disp = f"{val_disp}  {chart}"
                 f_sub[sub] = val_disp
                 val_candidates.append(_strip_ansi(val_disp))
             formatted[ns] = f_sub
@@ -332,27 +316,24 @@ class PrintMetricsLogger(LightningLoggerBase):
                 key_cell = f"{sub:<{key_width}}"
                 highlight = False
                 row_bg_color = None
-                try:
-                    full_key = f"{ns}/{sub}" if sub else ns
-                    # Priority 1: bounds-based highlight (yellow); allow bare-name lookup
-                    bounds = self.metric_bounds_map.get(full_key) or self.metric_bounds_map.get(sub)
-                    if bounds:
-                        raw_val = grouped.get(ns, {}).get(sub)
-                        if is_number(raw_val):
-                            vnum = float(raw_val)
-                            below = ("min" in bounds) and (vnum < float(bounds["min"]))
-                            above = ("max" in bounds) and (vnum > float(bounds["max"]))
-                            if below or above:
-                                highlight = True
-                                row_bg_color = self.highlight_bounds_bg_color
-                    # Priority 2: configured row highlight
-                    if not highlight and sub in self.highlight_row_for_set:
-                        if self.highlight_row_bold:
-                            key_cell = _ansi(key_cell, "bold", enable=self.color)
-                        highlight = True
-                        row_bg_color = self.highlight_row_bg_color
-                except Exception:
-                    pass
+                full_key = f"{ns}/{sub}" if sub else ns
+                # Priority 1: bounds-based highlight (yellow); allow bare-name lookup
+                bounds = self.metric_bounds_map.get(full_key) or self.metric_bounds_map.get(sub)
+                if bounds:
+                    raw_val = grouped.get(ns, {}).get(sub)
+                    if is_number(raw_val):
+                        vnum = float(raw_val)
+                        below = ("min" in bounds) and (vnum < float(bounds["min"]))
+                        above = ("max" in bounds) and (vnum > float(bounds["max"]))
+                        if below or above:
+                            highlight = True
+                            row_bg_color = self.highlight_bounds_bg_color
+                # Priority 2: configured row highlight
+                if not highlight and sub in self.highlight_row_for_set:
+                    if self.highlight_row_bold:
+                        key_cell = _ansi(key_cell, "bold", enable=self.color)
+                    highlight = True
+                    row_bg_color = self.highlight_row_bg_color
                 row = f"| {' ' * indent}{key_cell} | {val_padded} |"
                 if highlight:
                     row = _apply_bg(row, row_bg_color or self.highlight_row_bg_color, enable=self.color)

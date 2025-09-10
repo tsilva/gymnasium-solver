@@ -46,7 +46,7 @@ def resolve_run_dir(run_id: Optional[str]) -> Path:
         if latest.exists():
             try:
                 latest_target = latest.resolve()
-            except Exception:
+            except OSError:
                 latest_target = latest
         if latest_target is None:
             # Fallback to legacy name
@@ -54,7 +54,7 @@ def resolve_run_dir(run_id: Optional[str]) -> Path:
             if legacy.exists():
                 try:
                     latest_target = legacy.resolve()
-                except Exception:
+                except OSError:
                     latest_target = legacy
 
         # Collect candidate run dirs (exclude the latest-run entries themselves)
@@ -104,21 +104,15 @@ def _detect_config_id_from_run(run_dir: Path, cfg: dict) -> Optional[str]:
     """
     # 1) explicit text file written by training pipeline (optional)
     cfg_id_path = run_dir / "configs" / "config_id.txt"
-    try:
-        if cfg_id_path.exists():
-            text = cfg_id_path.read_text(encoding="utf-8").strip()
-            if text:
-                return text
-    except Exception:
-        pass
+    if cfg_id_path.exists():
+        text = cfg_id_path.read_text(encoding="utf-8").strip()
+        if text:
+            return text
 
     # 2) embedded in config.json (optional)
-    try:
-        v = cfg.get("config_id")
-        if isinstance(v, str) and v.strip():
-            return v.strip()
-    except Exception:
-        pass
+    v = cfg.get("config_id")
+    if isinstance(v, str) and v.strip():
+        return v.strip()
 
     # 3) fallback heuristic: env_id + '_' + algo_id
     env_id = cfg.get("env_id")
@@ -143,33 +137,30 @@ def _find_videos_for_run(run_dir: Path) -> List[Path]:
             return videos
 
     # Fallback: try within wandb run files mirrors
-    try:
-        repo_root = Path(__file__).parent
-        wandb_root = repo_root / "wandb"
-        if wandb_root.exists():
-            run_id = run_dir.name
-            pattern = f"run-*/files/runs/{run_id}/videos"
-            for path in sorted(wandb_root.glob(pattern)):
-                if path.is_dir():
-                    vids = sorted(Path(path).rglob("*.mp4"))
-                    videos.extend(vids)
-            # Also check wandb/@latest-run link if present (fallback to legacy)
-            latest = wandb_root / "@latest-run" / "files" / "runs" / run_id / "videos"
-            if latest.exists():
-                videos.extend(sorted(latest.rglob("*.mp4")))
-            else:
-                legacy = wandb_root / "latest-run" / "files" / "runs" / run_id / "videos"
-                if legacy.exists():
-                    videos.extend(sorted(legacy.rglob("*.mp4")))
-    except Exception:
-        pass
+    repo_root = Path(__file__).parent
+    wandb_root = repo_root / "wandb"
+    if wandb_root.exists():
+        run_id = run_dir.name
+        pattern = f"run-*/files/runs/{run_id}/videos"
+        for path in sorted(wandb_root.glob(pattern)):
+            if path.is_dir():
+                vids = sorted(Path(path).rglob("*.mp4"))
+                videos.extend(vids)
+        # Also check wandb/@latest-run link if present (fallback to legacy)
+        latest = wandb_root / "@latest-run" / "files" / "runs" / run_id / "videos"
+        if latest.exists():
+            videos.extend(sorted(latest.rglob("*.mp4")))
+        else:
+            legacy = wandb_root / "latest-run" / "files" / "runs" / run_id / "videos"
+            if legacy.exists():
+                videos.extend(sorted(legacy.rglob("*.mp4")))
     # Return unique, ordered
     seen = set()
     uniq: List[Path] = []
     for v in videos:
         try:
             rp = v.resolve()
-        except Exception:
+        except OSError:
             rp = v
         if rp not in seen:
             uniq.append(Path(rp))
@@ -201,7 +192,7 @@ def _find_best_video_for_run(run_dir: Path) -> Optional[Path]:
         if v.name in {"best.mp4", "best_checkpoint.mp4"}:
             try:
                 return v.resolve()
-            except Exception:
+            except OSError:
                 return v
     return None
 
@@ -213,10 +204,7 @@ def extract_run_metadata(run_dir: Path) -> dict:
         config_path = run_dir / "configs" / "config.json"
     cfg = {}
     if config_path.exists():
-        try:
-            cfg = read_json(config_path) or {}
-        except Exception:
-            pass
+        cfg = read_json(config_path) or {}
 
     # Try to detect a config_id to drive the repo naming
     config_id = _detect_config_id_from_run(run_dir, cfg or {})
@@ -252,14 +240,11 @@ def extract_run_metadata(run_dir: Path) -> dict:
     # Basic metrics from checkpoint (best/current eval reward, epoch, timesteps)
     metrics = {}
     if ckpt_file is not None:
-        try:
-            import torch  # optional; skip if not available
-            data = torch.load(ckpt_file, map_location="cpu", weights_only=False)
-            for k in ("best_eval_reward", "current_eval_reward", "epoch", "total_timesteps"):
-                if k in data:
-                    metrics[k] = float(data[k]) if isinstance(data[k], (int, float)) else data[k]
-        except Exception:
-            pass
+        import torch  # optional; skip if not available
+        data = torch.load(ckpt_file, map_location="cpu", weights_only=False)
+        for k in ("best_eval_reward", "current_eval_reward", "epoch", "total_timesteps"):
+            if k in data:
+                metrics[k] = float(data[k]) if isinstance(data[k], (int, float)) else data[k]
 
     return {
         "config": cfg,
@@ -277,45 +262,39 @@ def _guess_config_id_from_environments(env_id: str, algo_id: str) -> Optional[st
     Supports both legacy (mapping of ids) and new per-file style (base at root + variants).
     Skips files ending with .new.yaml.
     """
-    try:
-        root = Path(__file__).parent
-        env_dir = root / "config" / "environments"
-        candidates: List[str] = []
-        if env_dir.exists():
-            for yf in sorted(env_dir.glob("*.yaml")):
-                if yf.name.endswith(".new.yaml"):
-                    continue
-                try:
-                    doc = read_yaml(yf) or {}
-                except Exception:
-                    continue
-                if not isinstance(doc, dict):
-                    continue
-                # Detect new style
-                if "env_id" in doc and isinstance(doc.get("env_id"), str):
-                    # base at root, variants under keys that are dicts
-                    project = doc.get("project_id") or yf.stem.replace(".new", "")
-                    base_env = doc.get("env_id")
-                    for k, v in doc.items():
-                        if isinstance(v, dict):
-                            # algo_id may be inside the variant, else assume section name
-                            cand_algo = v.get("algo_id") or str(k)
-                            if base_env == env_id and cand_algo == algo_id:
-                                candidates.append(f"{project}_{k}")
-                else:
-                    # Legacy style: id -> mapping
-                    for k, v in doc.items():
-                        if not isinstance(v, dict):
-                            continue
-                        if v.get("env_id") == env_id and v.get("algo_id") == algo_id:
-                            candidates.append(str(k))
-        # Prefer non-hidden keys
-        visible = [c for c in candidates if not c.startswith("__")]
-        pool = visible or candidates
-        if pool:
-            return sorted(pool)[0]
-    except Exception:
-        pass
+    root = Path(__file__).parent
+    env_dir = root / "config" / "environments"
+    candidates: List[str] = []
+    if env_dir.exists():
+        for yf in sorted(env_dir.glob("*.yaml")):
+            if yf.name.endswith(".new.yaml"):
+                continue
+            doc = read_yaml(yf) or {}
+            if not isinstance(doc, dict):
+                continue
+            # Detect new style
+            if "env_id" in doc and isinstance(doc.get("env_id"), str):
+                # base at root, variants under keys that are dicts
+                project = doc.get("project_id") or yf.stem.replace(".new", "")
+                base_env = doc.get("env_id")
+                for k, v in doc.items():
+                    if isinstance(v, dict):
+                        # algo_id may be inside the variant, else assume section name
+                        cand_algo = v.get("algo_id") or str(k)
+                        if base_env == env_id and cand_algo == algo_id:
+                            candidates.append(f"{project}_{k}")
+            else:
+                # Legacy style: id -> mapping
+                for k, v in doc.items():
+                    if not isinstance(v, dict):
+                        continue
+                    if v.get("env_id") == env_id and v.get("algo_id") == algo_id:
+                        candidates.append(str(k))
+    # Prefer non-hidden keys
+    visible = [c for c in candidates if not c.startswith("__")]
+    pool = visible or candidates
+    if pool:
+        return sorted(pool)[0]
     return None
 
 
@@ -331,20 +310,17 @@ def infer_repo_name(meta: dict, run_dir: Path, explicit: Optional[str]) -> str:
         base_name = f"{env_id}_{algo}"
 
     user = None
-    try:
-        hub = importlib.import_module("huggingface_hub")
-        me = hub.whoami()
-        user = me.get("name")
-        if not user:
-            orgs = me.get("orgs", [])
-            if isinstance(orgs, list) and orgs:
-                first = orgs[0]
-                if isinstance(first, dict):
-                    user = first.get("name") or first.get("orgId")
-                else:
-                    user = str(first)
-    except Exception:
-        user = None
+    hub = importlib.import_module("huggingface_hub")
+    me = hub.whoami()
+    user = me.get("name")
+    if not user:
+        orgs = me.get("orgs", [])
+        if isinstance(orgs, list) and orgs:
+            first = orgs[0]
+            if isinstance(first, dict):
+                user = first.get("name") or first.get("orgId")
+            else:
+                user = str(first)
     # Sanitize: HF repo names allow letters, digits, - and _; avoid slashes/spaces
     base = str(base_name).strip().replace("/", "-").replace(" ", "_")
     return f"{user}/{base}" if user else base
@@ -377,7 +353,7 @@ def build_model_card(meta: dict, run_dir: Path) -> str:
     def _num(x):
         try:
             return float(x)
-        except Exception:
+        except (TypeError, ValueError):
             return None
     if isinstance(m, dict):
         if _num(m.get("best_eval_reward")) is not None:
@@ -471,22 +447,16 @@ def publish_run(
     card = build_model_card(meta, run_dir)
 
     # Make sure user is authenticated or token is set
-    try:
-        hub = importlib.import_module("huggingface_hub")
-        HfFolder = hub.HfFolder
-    except Exception as e:
-        raise RuntimeError("huggingface_hub is required. Please install it (e.g., `pip install huggingface_hub`).") from e
+    hub = importlib.import_module("huggingface_hub")
+    HfFolder = hub.HfFolder
 
     token = os.environ.get("HF_TOKEN") or HfFolder.get_token()
     if not token:
         raise RuntimeError("No Hugging Face token found. Run `huggingface-cli login` or set HF_TOKEN.")
-    try:
-        HfApi = hub.HfApi
-        create_repo = hub.create_repo
-        upload_file = hub.upload_file
-        upload_folder = hub.upload_folder
-    except Exception as e:
-        raise RuntimeError("Failed to import huggingface_hub functions. Please ensure it's installed.") from e
+    HfApi = hub.HfApi
+    create_repo = hub.create_repo
+    upload_file = hub.upload_file
+    upload_folder = hub.upload_folder
 
     api = HfApi()
 
@@ -494,13 +464,7 @@ def publish_run(
     final_repo_id = infer_repo_name(meta, run_dir, repo_id)
 
     # Create repo if needed
-    try:
-        create_repo(final_repo_id, exist_ok=True, private=private, repo_type="model")
-    except Exception as e:
-        if not allow_create:
-            raise
-        # If creation fails but repo exists, continue
-        pass
+    create_repo(final_repo_id, exist_ok=True, private=private, repo_type="model")
 
     # Upload README as model card
     upload_file(
@@ -535,52 +499,39 @@ def publish_run(
     # Also attach a few mp4s at repo root for preview (from whatever sources we detected)
     best_video = meta.get("best_video")
     if best_video:
-        try:
+        upload_file(
+            path_or_fileobj=str(best_video),
+            path_in_repo="preview.mp4",
+            repo_id=final_repo_id,
+            repo_type="model",
+        )
+        # Upload under additional common names recognized by the Hub UI
+        # (SB3 and others typically use replay.mp4).
+        for alt_name in ("replay.mp4", "video-preview.mp4"):
             upload_file(
                 path_or_fileobj=str(best_video),
-                path_in_repo="preview.mp4",
+                path_in_repo=alt_name,
                 repo_id=final_repo_id,
                 repo_type="model",
             )
-            # Upload under additional common names recognized by the Hub UI
-            # (SB3 and others typically use replay.mp4). Keep best-effort.
-            for alt_name in ("replay.mp4", "video-preview.mp4"):
-                try:
-                    upload_file(
-                        path_or_fileobj=str(best_video),
-                        path_in_repo=alt_name,
-                        repo_id=final_repo_id,
-                        repo_type="model",
-                    )
-                except Exception:
-                    pass
-        except Exception:
-            # Do not fail publishing if a preview upload fails
-            pass
 
     # If the best video lives outside the run_dir (e.g., W&B mirrors),
     # upload it explicitly under artifacts so it is preserved.
-    try:
-        if best_video:
-            run_dir_resolved = run_dir.resolve()
-            vpath = Path(best_video)
-            rel_ok = True
-            try:
-                vpath.resolve().relative_to(run_dir_resolved)
-            except Exception:
-                rel_ok = False
-            if not rel_ok:
-                try:
-                    upload_file(
-                        path_or_fileobj=str(vpath),
-                        path_in_repo=f"artifacts/videos/_external/{vpath.name}",
-                        repo_id=final_repo_id,
-                        repo_type="model",
-                    )
-                except Exception:
-                    pass
-    except Exception:
-        pass
+    if best_video:
+        run_dir_resolved = run_dir.resolve()
+        vpath = Path(best_video)
+        rel_ok = True
+        try:
+            vpath.resolve().relative_to(run_dir_resolved)
+        except ValueError:
+            rel_ok = False
+        if not rel_ok:
+            upload_file(
+                path_or_fileobj=str(vpath),
+                path_in_repo=f"artifacts/videos/_external/{vpath.name}",
+                repo_id=final_repo_id,
+                repo_type="model",
+            )
 
     # Save a small run-info.json
     run_info = {

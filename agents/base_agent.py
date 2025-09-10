@@ -248,7 +248,8 @@ class BaseAgent(pl.LightningModule):
             json_path = video_path.with_suffix(".json")
             with open(json_path, "w", encoding="utf-8") as f:
                 json.dump(final_metrics, f, ensure_ascii=False, indent=2)
-        
+    
+    # TODO: create _build_loggers method
     def learn(self):
         assert self.run_manager is None, "learn() should only be called once at the start of training"
 
@@ -307,6 +308,7 @@ class BaseAgent(pl.LightningModule):
             max_epochs=self.config.max_epochs,
             accelerator=self.config.accelerator,
             devices=self.config.devices,
+            # TODO: review these
             eval_freq_epochs=self.config.eval_freq_epochs,
             eval_warmup_epochs=self.config.eval_warmup_epochs or 0,
         )
@@ -434,7 +436,7 @@ class BaseAgent(pl.LightningModule):
         checkpoint_dir = self.run_manager.ensure_path("checkpoints/")
         callbacks.append(ModelCheckpointCallback(
             checkpoint_dir=checkpoint_dir,
-            monitor="val/ep_rew_mean",
+            metric="val/ep_rew_mean",
             mode="max"
         ))
 

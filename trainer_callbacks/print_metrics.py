@@ -51,14 +51,15 @@ class PrintMetricsCallback(pl.Callback):
         # Dedicated table printer to preserve state across prints (avoids global resets)
         from utils.table_printer import NamespaceTablePrinter
 
-        # Load highlight configuration from metrics.yaml if available
-        from utils.metrics import get_highlight_config, get_metric_bounds
-        _hl_cfg = get_highlight_config()
+        # Load highlight configuration and bounds from metrics.yaml via singleton
+        from utils.metrics import metrics_config
+        _m = metrics_config
+        _hl_cfg = _m.highlight_config()
         _hl_value_bold_for = _hl_cfg.get('value_bold_metrics', set())
         _hl_row_for = _hl_cfg.get('row_metrics', set())
         _hl_row_bg_color = _hl_cfg.get('row_bg_color', 'bg_blue')
         _hl_row_bold = bool(_hl_cfg.get('row_bold', True))
-        _metric_bounds = get_metric_bounds()
+        _metric_bounds = _m.metric_bounds()
         self._metric_bounds = dict(_metric_bounds)
 
         self._printer = NamespaceTablePrinter(
@@ -268,7 +269,7 @@ class PrintMetricsCallback(pl.Callback):
     def _warn_on_out_of_bounds(self, current_metrics: Dict[str, Any]) -> None:
         """Emit warnings for metrics outside configured min/max bounds.
 
-        Uses bounds loaded from metrics.yaml via utils.metrics.get_metric_bounds().
+        Uses bounds loaded from metrics.yaml via utils.metrics.metrics().metric_bounds().
         Checks namespaced keys (e.g., 'train/approx_kl').
         """
         bounds = self._metric_bounds

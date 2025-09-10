@@ -405,14 +405,11 @@ class BaseAgent(pl.LightningModule):
         callbacks.append(DispatchMetricsCallback())
 
         # Formatting/precision rules for pretty printing
-        from utils.metrics import (
-            get_algorithm_metric_rules,
-            get_metric_delta_rules,
-            get_metric_precision_dict,
-        )
-        metric_precision = get_metric_precision_dict()
-        metric_delta_rules = get_metric_delta_rules()
-        algo_metric_rules = get_algorithm_metric_rules(self.config.algo_id)
+        from utils.metrics import metrics_config
+        _metrics = metrics_config
+        metric_precision = _metrics.metric_precision_dict()
+        metric_delta_rules = _metrics.metric_delta_rules()
+        algo_metric_rules = _metrics.algorithm_metric_rules(self.config.algo_id)
 
         # Print metrics once per epoch to align deltas with rollout collection
         printer_cb = PrintMetricsCallback(

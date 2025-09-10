@@ -11,9 +11,7 @@ import torch.nn as nn
 
 from .models import (
     MLPActorCritic,
-    CNNActorCritic,
     MLPPolicy,
-    CNNPolicy,
 )
 
 def build_policy(
@@ -27,9 +25,7 @@ def build_policy(
 ):
     policy_cls = {
         "mlp": MLPPolicy,
-        "cnn": CNNPolicy,
         "mlp_actorcritic": MLPActorCritic,
-        "cnn_actorcritic": CNNActorCritic,
     }[policy_type]
     
     policy = policy_cls(

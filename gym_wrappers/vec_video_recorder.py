@@ -100,10 +100,7 @@ class VecVideoRecorder(VecEnvWrapper):
         self.step_id = 0
         self.video_length = video_length
         self.record_env_idx = record_env_idx
-        try:
-            self.num_envs = getattr(self.env, "num_envs", None)
-        except Exception:
-            self.num_envs = None
+        self.num_envs = self.env.num_envs   
 
         self.recording = False
         self.recorded_frames: list[np.ndarray] = []

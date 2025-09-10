@@ -203,10 +203,7 @@ def get_highlight_config(metrics_config: Optional[Dict[str, Any]] = None) -> Dic
       - row_bold: bool indicating whether to render key cell in bold for highlighted rows
     """
     if metrics_config is None:
-        try:
-            metrics_config = load_metrics_config()
-        except Exception:
-            metrics_config = {}
+        metrics_config = load_metrics_config()
 
     global_cfg = metrics_config.get('_global', {}) if isinstance(metrics_config, dict) else {}
     hl = global_cfg.get('highlight', {}) if isinstance(global_cfg, dict) else {}

@@ -273,18 +273,15 @@ class NamespaceTablePrinter:
         History is maintained across updates to render compact trends inline.
         """
         for k, v in data.items():
-            try:
-                if _is_number(v):
-                    val = float(v)
-                    hist = self._history.setdefault(k, [])
-                    hist.append(val)
-                    # Soft cap history to avoid unbounded growth
-                    if len(hist) > self.sparkline_history_cap:
-                        # Keep the most recent tail
-                        self._history[k] = hist[-self.sparkline_history_cap :]
-            except Exception:
-                # Ignore values that cannot be cast/recorded
-                pass
+            if not _is_number(v):
+                continue
+            val = float(v)
+            hist = self._history.setdefault(k, [])
+            hist.append(val)
+            # Soft cap history to avoid unbounded growth
+            if len(hist) > self.sparkline_history_cap:
+                # Keep the most recent tail
+                self._history[k] = hist[-self.sparkline_history_cap :]
 
     def _spark_for_key(self, full_key: str, width: int) -> str:
         """Return an ASCII sparkline for the given metric key.

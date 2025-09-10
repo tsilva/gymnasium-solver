@@ -3,17 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Optional
 
-# Optional dependency shim: allow import under tests without full Lightning
-try:  # pragma: no cover
-    from pytorch_lightning.loggers.logger import Logger as LightningLoggerBase  # type: ignore
-except Exception:  # pragma: no cover
-    class LightningLoggerBase:  # type: ignore
-        """Fallback base when Lightning isn't available (tests).
-
-        Accepts the Logger interface but does not enforce typing.
-        """
-        pass
-
+from pytorch_lightning.loggers.logger import Logger as LightningLoggerBase  # type: ignore
 
 class CsvLightningLogger(LightningLoggerBase):
     """

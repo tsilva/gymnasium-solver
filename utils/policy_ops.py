@@ -13,6 +13,7 @@ import torch
 from torch import Tensor
 from torch.distributions import Categorical, Distribution
 
+# TODO: review this code
 
 def policy_forward(model: torch.nn.Module, obs: Tensor) -> Tuple[Distribution, Optional[Tensor]]:
     """Call the model's forward and normalize the return.

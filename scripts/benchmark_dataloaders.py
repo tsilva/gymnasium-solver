@@ -357,10 +357,7 @@ def run_benchmark(cfg: BenchmarkConfig) -> Dict[str, Any]:
             "samples_per_sec": samples / seconds if seconds > 0 else float("inf"),
         }
 
-    try:
-        env.close()
-    except Exception:
-        pass
+    env.close()
 
     return results
 

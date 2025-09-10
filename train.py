@@ -14,15 +14,22 @@ def _init_wandb_sweep(config: Config):
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Train RL agent.")
-    parser.add_argument("--config_id", type=str, default="CartPole-v1:ppo", help="Config ID (e.g., CartPole-v1:ppo)")
+    # Optional positional config spec to allow: `python train.py CartPole-v1:ppo`
+    parser.add_argument("config", nargs="?", help="Config spec '<env>:<variant>' (e.g., CartPole-v1:ppo)")
+    # Backwards-compatible named flag
+    parser.add_argument("--config_id", type=str, default=None, help="Config ID '<env>:<variant>' (e.g., CartPole-v1:ppo)")
     parser.add_argument("--quiet", "-q", action="store_true", default=False, help="Run non-interactively: auto-accept prompts and defaults")
     parser.add_argument("--wandb_sweep", action="store_true", default=False, help="Enable W&B sweep mode: initialize wandb early and merge wandb.config into the main Config before training.")
     args = parser.parse_args()
 
+    # Resolve configuration spec from positional, then flag, then default
+    config_spec = args.config or args.config_id or "CartPole-v1:ppo"
+    if ":" not in config_spec:
+        raise SystemExit("Config spec must be '<env>:<variant>' (e.g., CartPole-v1:ppo)")
+
     # Load configuration
-    config_id = args.config_id
-    config_id, variant_id = config_id.split(":")
-    config = load_config(config_id, variant_id)
+    env_id, variant_id = config_spec.split(":", 1)
+    config = load_config(env_id, variant_id)
 
     # Apply args to config
     if args.quiet is True: config.quiet = True

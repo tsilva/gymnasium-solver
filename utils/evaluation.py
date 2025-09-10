@@ -104,14 +104,11 @@ def evaluate_policy(
                 cur_lengths[idx] = 0
 
             # Update running counters
-            try:
-                # rewards/dones may be scalars for non-vector envs (n_envs==1)
-                for i in range(n_envs):
-                    r = float(rewards if np.isscalar(rewards) else rewards[i])
-                    cur_rewards[i] += r
-                    cur_lengths[i] += 1
-            except Exception:
-                pass
+            # rewards/dones may be scalars for non-vector envs (n_envs==1)
+            for i in range(n_envs):
+                r = float(rewards if np.isscalar(rewards) else rewards[i])
+                cur_rewards[i] += r
+                cur_lengths[i] += 1
 
             # Enforce hard cap per episode when requested
             if max_steps_per_episode is not None and max_steps_per_episode > 0:
@@ -127,16 +124,11 @@ def evaluate_policy(
                         cur_rewards[i] = 0.0
                         cur_lengths[i] = 0
                         # Reset only this env when possible and patch next_obs
-                        try:
-                            ob = env.env_method("reset", indices=[i])[0]
-                            if np.isscalar(next_obs):
-                                next_obs = ob
-                            else:
-                                next_obs[i] = ob
-                        except Exception:
-                            # Fall back to full reset (may disrupt other envs); avoid when n_envs>1
-                            if n_envs == 1:
-                                next_obs = env.reset()
+                        ob = env.env_method("reset", indices=[i])[0]
+                        if np.isscalar(next_obs):
+                            next_obs = ob
+                        else:
+                            next_obs[i] = ob
 
             # Enforce wall-clock timeout if set
             if timeout_seconds is not None and (time.time() - start_time) >= float(timeout_seconds):

@@ -1,6 +1,5 @@
 """Configuration loading for environment YAML and legacy hyperparams."""
 
-import json
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path

@@ -19,62 +19,42 @@ def _to_path(p: PathLike) -> Path:
     return p if isinstance(p, Path) else Path(p)
 
 
-def read_text_utf8(path: PathLike) -> str:
+def read_json(path: PathLike, *, encoding: str = "utf-8") -> Any:
     p = _to_path(path)
-    return p.read_text(encoding="utf-8")
-
-
-def write_text_utf8(path: PathLike, text: str) -> None:
-    p = _to_path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(text, encoding="utf-8")
-
-
-def read_json(path: PathLike) -> Any:
-    p = _to_path(path)
-    with p.open("r", encoding="utf-8") as f:
-        return json.load(f)
+    with p.open("r", encoding=encoding) as f: data = json.load(f)
+    return data
 
 
 def write_json(
     path: PathLike,
     data: Any,
     *,
-    indent: int | None = 2,
-    ensure_ascii: bool = False,
-    sort_keys: bool | None = None,
-    default: Any | None = None,
+    encoding: str = "utf-8",
+    ensure_dirs: bool = True,
+    **kwargs,
 ) -> None:
     p = _to_path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    kw = {}
-    if indent is not None:
-        kw["indent"] = indent
-    if sort_keys is not None:
-        kw["sort_keys"] = sort_keys
-    if default is not None:
-        kw["default"] = default
-    with p.open("w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=ensure_ascii, **kw)
+    if ensure_dirs: p.parent.mkdir(parents=True, exist_ok=True)
+    with p.open("w", encoding=encoding) as f: json.dump(data, f, **kwargs)
 
 
-def read_yaml(path: PathLike) -> Any:
+def read_yaml(path: PathLike, *, encoding: str = "utf-8") -> Any:
     p = _to_path(path)
-    with p.open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    with p.open("r", encoding=encoding) as f: data = yaml.safe_load(f)
+    return data
 
 
 def write_yaml(
     path: PathLike,
     data: Any,
     *,
-    safe: bool = True,
-    sort_keys: bool = False,
-    indent: int = 2,
+    encoding: str = "utf-8",
+    ensure_dirs: bool = True,
+    **kwargs,
 ) -> None:
     p = _to_path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    dumper = yaml.safe_dump if safe else yaml.dump
-    text = dumper(data, sort_keys=sort_keys, indent=indent, allow_unicode=True)
-    p.write_text(text, encoding="utf-8")
+    if ensure_dirs: p.parent.mkdir(parents=True, exist_ok=True)
+    dumper = yaml.safe_dump if kwargs.get("safe", True) else yaml.dump
+    text = dumper(data, **kwargs)
+    p.write_text(text, encoding=encoding)
 

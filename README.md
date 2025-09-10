@@ -30,9 +30,13 @@ pip install -e .
 ```
 
 ### 🚀 Quickstart
-- **Train** 🏃 (uses `--config_id "<env>:<variant>"`; defaults to `CartPole-v1:ppo` when omitted):
+- **Train** 🏃 (pass config either positionally or via `--config_id`; defaults to `CartPole-v1:ppo` when omitted):
 ```bash
-# Explicit config (recommended)
+# Positional config (shorthand)
+python train.py CartPole-v1:ppo -q
+python train.py CartPole-v1:reinforce -q
+
+# Or with explicit flag
 python train.py --config_id "CartPole-v1:ppo" -q
 python train.py --config_id "CartPole-v1:reinforce" -q
 
@@ -71,7 +75,7 @@ ppo:
 
 Selection:
 - Programmatic (Python): `load_config("CartPole-v1_ppo")` or `load_config("CartPole-v1", "ppo")`; omitting a variant defaults to the first defined (prefers `ppo`, then `reinforce`).
-- CLI (train.py): pass `--config_id "<env>:<variant>"` (colon, not underscore), e.g., `--config_id "CartPole-v1:ppo"`.
+- CLI (train.py): pass config as positional `CartPole-v1:ppo` or flag `--config_id "CartPole-v1:ppo"` (colon, not underscore).
 The loader remains compatible with the legacy multi-block format for a transitional period. When `project_id` is omitted in environment YAMLs, it is inferred from the file name.
 
 Key fields: `env_id`, `algo_id`, `n_envs`, `n_steps`, `batch_size`, `max_timesteps`, `policy` (`mlp|cnn`), `hidden_dims`, `obs_type` (`rgb|ram|objects` for ALE), `optimizer` (`adamw` default; supports `adam|adamw|sgd`).

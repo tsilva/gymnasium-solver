@@ -118,27 +118,21 @@ class HyperparamSyncCallback(pl.Callback):
     def _monitor_files(self) -> None:
         """Background thread to monitor control file for changes."""
         while not self.stop_monitoring.is_set():
-            try:
-                # Check for file modification
-                if self.control_file.exists():
-                    current_mtime = self.control_file.stat().st_mtime
-                    
-                    if current_mtime > self.last_check_time:
-                        self.last_check_time = current_mtime
-                        try:
-                            data = read_json(self.control_file)
-                            self.adjustment_queue.put(data)
-                        except (json.JSONDecodeError, IOError) as e:
-                            if self.verbose:
-                                print(f"⚠️  Error reading {self.control_file.name}: {e}")
+            # Check for file modification
+            if self.control_file.exists():
+                current_mtime = self.control_file.stat().st_mtime
                 
-                # Sleep until next check
-                self.stop_monitoring.wait(self.check_interval)
-                
-            except Exception as e:
-                if self.verbose:
-                    print(f"⚠️  Error in file monitoring: {e}")
-                self.stop_monitoring.wait(self.check_interval)
+                if current_mtime > self.last_check_time:
+                    self.last_check_time = current_mtime
+                    try:
+                        data = read_json(self.control_file)
+                        self.adjustment_queue.put(data)
+                    except (json.JSONDecodeError, IOError) as e:
+                        if self.verbose:
+                            print(f"⚠️  Error reading {self.control_file.name}: {e}")
+            
+            # Sleep until next check
+            self.stop_monitoring.wait(self.check_interval)
     
     def on_train_epoch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         """Process any pending hyperparameter adjustments."""
@@ -146,12 +140,9 @@ class HyperparamSyncCallback(pl.Callback):
         while not self.adjustment_queue.empty():
             try:
                 data = self.adjustment_queue.get_nowait()
-                self._apply_adjustments(trainer, pl_module, data)
             except queue.Empty:
                 break
-            except Exception as e:
-                if self.verbose:
-                    print(f"⚠️  Error applying adjustment: {e}")
+            self._apply_adjustments(trainer, pl_module, data)
     
     def _apply_adjustments(self, trainer: pl.Trainer, pl_module: pl.LightningModule, data: Dict[str, Any]) -> None:
         """Apply hyperparameter adjustments from control file."""
@@ -205,10 +196,7 @@ class HyperparamSyncCallback(pl.Callback):
 
         # Emit W&B logs for changed hyperparameters under train namespace
         if changed_for_log:
-            try:
-                pl_module.metrics.record_train(changed_for_log)
-            except Exception:
-                pass
+            pl_module.metrics.record_train(changed_for_log)
 
         if changes and self.verbose:
             print(f"🎛️  Hyperparameters updated (epoch {trainer.current_epoch}): {', '.join(changes)}")
@@ -234,16 +222,10 @@ class HyperparamSyncCallback(pl.Callback):
     def _log_hyperparams(self, pl_module: pl.LightningModule) -> None:
         """Helper to log current hyperparameters under train namespace."""
         hp: Dict[str, float] = {}
-        try:
-            hp["policy_lr"] = float(pl_module.config.policy_lr)
-        except Exception:
-            pass
+        hp["policy_lr"] = float(pl_module.config.policy_lr)
         for key in ("ent_coef", "vf_coef", "clip_range", "max_grad_norm"):
             if hasattr(pl_module.config, key) and getattr(pl_module.config, key) is not None:
-                try:
-                    hp[key] = float(getattr(pl_module.config, key))
-                except Exception:
-                    continue
+                hp[key] = float(getattr(pl_module.config, key))
         if hp:
             pl_module.metrics.record_train(hp)
     

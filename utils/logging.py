@@ -217,12 +217,9 @@ _log_manager = None
 
 def _color_enabled(stream=None) -> bool:
     """Return True if ANSI colors should be enabled for the given stream."""
-    try:
-        import os, sys
-        s = stream or sys.stdout
-        return bool(getattr(s, "isatty", lambda: False)() and os.environ.get("NO_COLOR") is None)
-    except Exception:
-        return False
+    import os, sys
+    s = stream or sys.stdout
+    return bool(getattr(s, "isatty", lambda: False)() and os.environ.get("NO_COLOR") is None)
 
 
 def ansi(text: str, *styles: str, enable: bool | None = None) -> str:
@@ -231,45 +228,42 @@ def ansi(text: str, *styles: str, enable: bool | None = None) -> str:
     Styles: red, green, yellow, blue, magenta, cyan, gray, bold, bg_*
     If enable is None, auto-detect using stdout; when False, returns text untouched.
     """
-    try:
-        if enable is None:
-            enable = _color_enabled()
-        if not enable or not styles:
-            return text
-        codes = {
-            "red": "31",
-            "green": "32",
-            "yellow": "33",
-            "blue": "34",
-            "magenta": "35",
-            "cyan": "36",
-            "white": "37",
-            "gray": "90",
-            "bright_red": "91",
-            "bright_green": "92",
-            "bright_yellow": "93",
-            "bright_blue": "94",
-            "bright_magenta": "95",
-            "bright_cyan": "96",
-            "bright_white": "97",
-            "bold": "1",
-            "dim": "2",
-            # Backgrounds
-            "bg_black": "40",
-            "bg_red": "41",
-            "bg_green": "42",
-            "bg_yellow": "43",
-            "bg_blue": "44",
-            "bg_magenta": "45",
-            "bg_cyan": "46",
-            "bg_white": "47",
-        }
-        seq = ";".join(codes[s] for s in styles if s in codes)
-        if not seq:
-            return text
-        return f"\x1b[{seq}m{text}\x1b[0m"
-    except Exception:
+    if enable is None:
+        enable = _color_enabled()
+    if not enable or not styles:
         return text
+    codes = {
+        "red": "31",
+        "green": "32",
+        "yellow": "33",
+        "blue": "34",
+        "magenta": "35",
+        "cyan": "36",
+        "white": "37",
+        "gray": "90",
+        "bright_red": "91",
+        "bright_green": "92",
+        "bright_yellow": "93",
+        "bright_blue": "94",
+        "bright_magenta": "95",
+        "bright_cyan": "96",
+        "bright_white": "97",
+        "bold": "1",
+        "dim": "2",
+        # Backgrounds
+        "bg_black": "40",
+        "bg_red": "41",
+        "bg_green": "42",
+        "bg_yellow": "43",
+        "bg_blue": "44",
+        "bg_magenta": "45",
+        "bg_cyan": "46",
+        "bg_white": "47",
+    }
+    seq = ";".join(codes[s] for s in styles if s in codes)
+    if not seq:
+        return text
+    return f"\x1b[{seq}m{text}\x1b[0m"
 
 
 def apply_ansi_background(text: str, bg_style: str, *, enable: bool | None = None) -> str:
@@ -280,30 +274,27 @@ def apply_ansi_background(text: str, bg_style: str, *, enable: bool | None = Non
 
     Example: apply_ansi_background("bold red", "bg_blue")
     """
-    try:
-        if enable is None:
-            enable = _color_enabled()
-        if not enable or not bg_style:
-            return text
-        codes = {
-            "bg_black": "40",
-            "bg_red": "41",
-            "bg_green": "42",
-            "bg_yellow": "43",
-            "bg_blue": "44",
-            "bg_magenta": "45",
-            "bg_cyan": "46",
-            "bg_white": "47",
-        }
-        code = codes.get(bg_style)
-        if not code:
-            return text
-        start = f"\x1b[{code}m"
-        # Re-apply the background after any reset that appears in the body
-        body = text.replace("\x1b[0m", f"\x1b[0m{start}")
-        return f"{start}{body}\x1b[0m"
-    except Exception:
+    if enable is None:
+        enable = _color_enabled()
+    if not enable or not bg_style:
         return text
+    codes = {
+        "bg_black": "40",
+        "bg_red": "41",
+        "bg_green": "42",
+        "bg_yellow": "43",
+        "bg_blue": "44",
+        "bg_magenta": "45",
+        "bg_cyan": "46",
+        "bg_white": "47",
+    }
+    code = codes.get(bg_style)
+    if not code:
+        return text
+    start = f"\x1b[{code}m"
+    # Re-apply the background after any reset that appears in the body
+    body = text.replace("\x1b[0m", f"\x1b[0m{start}")
+    return f"{start}{body}\x1b[0m"
 
 
 def format_kv_line(
@@ -320,13 +311,10 @@ def format_kv_line(
 
     Example: "-   Key name ..........: Value"
     """
-    try:
-        s_key = f"{key}:"
-        if key_width and key_width > 0:
-            s_key = f"{s_key:<{key_width+1}}"  # +1 to include colon in width
-        return f"{bullet}{ansi(s_key, key_color, 'bold', enable=enable_color)} {ansi(str(value), val_color, enable=enable_color)}"
-    except Exception:
-        return f"{bullet}{key}: {value}"
+    s_key = f"{key}:"
+    if key_width and key_width > 0:
+        s_key = f"{s_key:<{key_width+1}}"  # +1 to include colon in width
+    return f"{bullet}{ansi(s_key, key_color, 'bold', enable=enable_color)} {ansi(str(value), val_color, enable=enable_color)}"
 
 
 def format_banner(title: str, *, width: int = 60, char: str = "=") -> str:
@@ -335,18 +323,14 @@ def format_banner(title: str, *, width: int = 60, char: str = "=") -> str:
     - Keeps ASCII by default for broad terminal compatibility.
     - If the title is longer than width, returns the raw title padded with spaces.
     """
-    try:
-        text = f" {title} "
-        if width <= 0:
-            return text.strip()
-        if len(text) >= width:
-            return text
-        left = (width - len(text)) // 2
-        right = width - len(text) - left
-        return f"{char * left}{text}{char * right}"
-    except Exception:
-        # Be fail-safe — never crash due to formatting
-        return f"=== {title} ==="
+    text = f" {title} "
+    if width <= 0:
+        return text.strip()
+    if len(text) >= width:
+        return text
+    left = (width - len(text)) // 2
+    right = width - len(text) - left
+    return f"{char * left}{text}{char * right}"
 
 def get_log_manager() -> Optional[LogFileManager]:
     """Get the global log manager instance."""

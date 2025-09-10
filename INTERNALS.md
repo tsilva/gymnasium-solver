@@ -9,7 +9,7 @@ High-signal reference for maintainers and agents. Read this before making change
   - All functions use UTF-8 encoding by default for both reads and writes.
 
 ### Top-level flow
-- **Entry point**: `train.py` expects `--config_id "<env>:<variant>"` (e.g., `CartPole-v1:ppo`) and optional `-q/--quiet`; it splits env/variant, loads `Config` via `utils.config.load_config(config_id, variant_id)`, sets the global seed via `stable_baselines3.common.utils.set_random_seed`, creates the agent (`agents.create_agent`), and calls `agent.learn()`.
+- **Entry point**: `train.py` accepts a positional config spec `"<env>:<variant>"` (e.g., `CartPole-v1:ppo`) or `--config_id` plus optional `-q/--quiet`; it splits env/variant, loads `Config` via `utils.config.load_config(env_id, variant_id)`, sets the global seed via `stable_baselines3.common.utils.set_random_seed`, creates the agent (`agents.create_agent`), and calls `agent.learn()`.
 - **W&B sweeps**: When launched by a W&B Agent (auto-detected via `WANDB_SWEEP_ID`) or with `--wandb_sweep`, `train.py` calls `wandb.init(config=asdict(config))` early and merges `wandb.config` into the main `Config` before creating the agent. Schedule strings like `lin_0.001` are parsed, and fractional `batch_size` in (0, 1] is resolved against `n_envs * n_steps` post-override.
 - **Agent lifecycle**: `agents/base_agent.BaseAgent` constructs envs, models, collectors, and the PyTorch Lightning Trainer; subclasses implement `build_models`, `losses_for_batch`, and optimizer.
 - **Training loop**: `BaseAgent.train_dataloader()` collects a rollout with `utils.rollouts.RolloutCollector`, builds an index-collate `DataLoader` (`utils.dataloaders`), and Lightning calls `training_step()` which delegates to `losses_for_batch()`; optim is manual (`automatic_optimization=False`).
@@ -21,7 +21,7 @@ High-signal reference for maintainers and agents. Read this before making change
 ### Configuration model (`utils/config.py`)
 - `Config` dataclass aggregates env, algo, rollout, model, optimization, eval, logging, and runtime settings. The loader instantiates an algo-specific subclass based on `algo_id`.
 - `load_from_yaml(config_id, variant_id)`: loads from `config/environments/*.yaml` using the new per-file format (base fields at the root + per-variant sections like `ppo:`). Schedules like `lin_0.001` are parsed into `*_schedule='linear'` and the numeric base. For new-style environment files, when `project_id` is not specified, it defaults to the YAML filename (stem).
-- Variant selection: when `variant_id` is omitted, the loader auto-selects a default variant for the given project. Preference order is `ppo`, then `reinforce`,; otherwise the first variant in lexical order is chosen. Note: the current CLI (`train.py`) still requires `env:variant` and does not exercise this default.
+- Variant selection: when `variant_id` is omitted, the loader auto-selects a default variant for the given project. Preference order is `ppo`, then `reinforce`,; otherwise the first variant in lexical order is chosen. The CLI (`train.py`) requires the `env:variant` form when a config is provided; when no config is given, it defaults to `CartPole-v1:ppo`.
 - Fractional batch size: when `batch_size` is a float in (0, 1], it is interpreted as a fraction of the rollout size (`n_envs * n_steps`). The loader computes `floor(rollout_size * fraction)` with a minimum of 1; no divisibility assertion is enforced.
 
 Algo-specific config subclasses:

@@ -60,10 +60,7 @@ def format_value(
     p = precision_for(full_key, precision_map) if is_number(v) else None
     if p is not None and is_number(v):
         if p == 0:
-            try:
-                return str(int(round(float(v))))
-            except Exception:
-                return str(v)
+            return str(int(round(float(v))))
         return f"{float(v):.{p}f}"
     if compact_numbers and is_number(v):
         return humanize_num(v, float_fmt)
@@ -128,4 +125,3 @@ def get_sort_key(namespace: str, subkey: str, key_priority: Iterable[str]) -> Tu
         return (0, priority_index)
     except ValueError:
         return (1, subkey.lower())
-

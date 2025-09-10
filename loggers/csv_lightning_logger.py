@@ -39,11 +39,7 @@ class CsvLightningLogger(LightningLoggerBase):
 
     def log_metrics(self, metrics: dict[str, Any], step: Optional[int] = None) -> None:
         # Delegate to the async CSV writer; ignores non-numeric values internally
-        try:
-            self._csv.buffer_metrics(metrics)
-        except Exception:
-            # Never fail training due to logging errors
-            pass
+        self._csv.buffer_metrics(metrics)
 
     def finalize(self, status: str) -> None:  # pragma: no cover - best-effort close
         try:

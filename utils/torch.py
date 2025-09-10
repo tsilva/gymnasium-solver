@@ -149,16 +149,13 @@ def to_python_scalar(x: Any) -> Any:
     - objects with .item() -> item()
     - otherwise returns the input unchanged
     """
-    try:
-        if isinstance(x, torch.Tensor):
-            if x.numel() == 1:
-                return x.detach().item()
-            return x.detach().float().mean().item()
-        if hasattr(x, "item") and callable(getattr(x, "item")):
-            return x.item()
-        return x
-    except Exception:
-        return x
+    if isinstance(x, torch.Tensor):
+        if x.numel() == 1:
+            return x.detach().item()
+        return x.detach().float().mean().item()
+    if hasattr(x, "item") and callable(getattr(x, "item")):
+        return x.item()
+    return x
 
 
 def init_model_weights(

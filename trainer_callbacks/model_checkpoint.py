@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import json
+import numpy as np
 import torch
 
 import pytorch_lightning as pl
@@ -86,37 +87,28 @@ class ModelCheckpointCallback(pl.Callback):
         Ensures parent directories exist. Falls back to copying on platforms that
         do not support symlinks.
         """
+        # Ensure the link directory exists
+        link_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Remove existing link/file if present
+        if link_path.exists() or link_path.is_symlink():
+            link_path.unlink()
+
+        # Compute relative target from link directory for robustness
+        import os
         try:
-            # Ensure the link directory exists
-            link_path.parent.mkdir(parents=True, exist_ok=True)
+            rel_target = os.path.relpath(str(target_path), start=str(link_path.parent))
+        except (ValueError, OSError):
+            # Fallback to basename if relpath fails
+            rel_target = target_path.name
 
-            # Remove existing link/file if present
-            if link_path.exists() or link_path.is_symlink():
-                try:
-                    link_path.unlink()
-                except Exception:
-                    pass
-
-            # Compute relative target from link directory for robustness
-            try:
-                import os
-                rel_target = os.path.relpath(str(target_path), start=str(link_path.parent))
-            except Exception:
-                # Fallback to basename if relpath fails
-                rel_target = target_path.name
-
-            try:
-                link_path.symlink_to(rel_target)
-            except Exception as e:
-                # As a last resort, copy the file (maintains correctness over portability)
-                try:
-                    import shutil
-                    shutil.copy2(str(target_path), str(link_path))
-                    print(f"Info: symlink unsupported; copied {target_path} -> {link_path} ({e})")
-                except Exception as e2:
-                    print(f"Warning: failed to create symlink or copy {link_path} -> {target_path}: {e2}")
-        except Exception as e:
-            print(f"Warning: failed to create symlink {link_path} -> {target_path}: {e}")
+        try:
+            link_path.symlink_to(rel_target)
+        except OSError as e:
+            # As a last resort, copy the file (maintains correctness over portability)
+            import shutil
+            shutil.copy2(str(target_path), str(link_path))
+            print(f"Info: symlink unsupported; copied {target_path} -> {link_path} ({e})")
 
     @staticmethod
     def _find_latest_epoch_ckpt(checkpoint_dir: Path) -> Path | None:
@@ -143,17 +135,13 @@ class ModelCheckpointCallback(pl.Callback):
         
         # Helper to serialize metric values to plain Python types
         def _to_py(val):
-            try:
-                import torch
-                import numpy as np
-                if isinstance(val, torch.Tensor):
-                    if val.ndim == 0:
-                        return val.item()
-                    return val.detach().cpu().tolist()
-                if isinstance(val, (np.floating, np.integer)):
+            import torch
+            if isinstance(val, torch.Tensor):
+                if val.ndim == 0:
                     return val.item()
-            except Exception:
-                pass
+                return val.detach().cpu().tolist()
+            if isinstance(val, (np.floating, np.integer)):
+                return val.item()
             # Plain numbers or strings pass through; others fallback to str
             if isinstance(val, (int, float, bool)):
                 return val
@@ -162,14 +150,7 @@ class ModelCheckpointCallback(pl.Callback):
         def _serialize_metrics(m):
             if m is None:
                 return None
-            try:
-                return {str(k): _to_py(v) for k, v in dict(m).items()}
-            except Exception:
-                # Best-effort fallback
-                try:
-                    return {str(k): str(v) for k, v in dict(m).items()}
-                except Exception:
-                    return None
+            return {str(k): _to_py(v) for k, v in dict(m).items()}
 
         # Prepare checkpoint data
         # Serialize config robustly (works with dataclass and simple objects)
@@ -209,15 +190,11 @@ class ModelCheckpointCallback(pl.Callback):
         torch.save(checkpoint_data, checkpoint_path)
 
         # Save metrics snapshot as a sidecar JSON with the same basename
-        try:
-            serialized_metrics = _serialize_metrics(metrics)
-            if serialized_metrics is not None:
-                json_path = checkpoint_path.with_suffix(".json")
-                with open(json_path, "w", encoding="utf-8") as f:
-                    json.dump(serialized_metrics, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            # Don't fail training if metrics JSON can't be written
-            print(f"Warning: failed to write metrics JSON for {checkpoint_path.name}: {e}")
+        serialized_metrics = _serialize_metrics(metrics)
+        if serialized_metrics is not None:
+            json_path = checkpoint_path.with_suffix(".json")
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump(serialized_metrics, f, ensure_ascii=False, indent=2)
         return checkpoint_path
     
     def _should_save_best(self, current_value: float) -> bool:
@@ -237,17 +214,12 @@ class ModelCheckpointCallback(pl.Callback):
 
         # If the module exposes eval scheduling, respect it to avoid attempting
         # to save checkpoints on epochs where evaluation was intentionally skipped
-        try:
-            should_eval_fn = getattr(pl_module, "_should_run_eval", None)
-            if callable(should_eval_fn):
-                if not bool(should_eval_fn(pl_module.current_epoch)):
-                    # Still run legacy tracking so train-threshold early stopping can fire
-                    self._handle_early_stopping_and_tracking(trainer, pl_module)
-                    return
-        except Exception:
-            # Be robust: if the helper isn't available or fails, fall through and
-            # rely on the presence of the monitor metric below
-            pass
+        should_eval_fn = getattr(pl_module, "_should_run_eval", None)
+        if callable(should_eval_fn):
+            if not bool(should_eval_fn(pl_module.current_epoch)):
+                # Still run legacy tracking so train-threshold early stopping can fire
+                self._handle_early_stopping_and_tracking(trainer, pl_module)
+                return
 
         logged_metrics = getattr(trainer, "logged_metrics", {})
 
@@ -257,11 +229,7 @@ class ModelCheckpointCallback(pl.Callback):
             return
 
         # Convert to float defensively
-        try:
-            current_metric_value = float(logged_metrics[self.monitor])
-        except Exception:
-            self._handle_early_stopping_and_tracking(trainer, pl_module)
-            return
+        current_metric_value = float(logged_metrics[self.monitor])
 
         checkpoint_dir = self._get_checkpoint_dir(pl_module)
 
@@ -274,18 +242,12 @@ class ModelCheckpointCallback(pl.Callback):
         cfg_thr = getattr(pl_module.config, 'reward_threshold', None)
         effective_threshold = cfg_thr
         if effective_threshold is None:
-            try:
-                effective_threshold = pl_module.validation_env.get_reward_threshold()
-            except Exception:
-                effective_threshold = None
+            effective_threshold = pl_module.validation_env.get_reward_threshold()
         if effective_threshold is None:
-            try:
-                import gymnasium as gym
-                spec = gym.spec(pl_module.config.env_id)
-                if spec and hasattr(spec, 'reward_threshold'):
-                    effective_threshold = getattr(spec, 'reward_threshold')
-            except Exception:
-                effective_threshold = None
+            import gymnasium as gym
+            spec = gym.spec(pl_module.config.env_id)
+            if spec and hasattr(spec, 'reward_threshold'):
+                effective_threshold = getattr(spec, 'reward_threshold')
 
         is_best = self._should_save_best(current_metric_value)
         is_threshold = (
@@ -354,33 +316,15 @@ class ModelCheckpointCallback(pl.Callback):
                 trainer.should_stop = True
                 # Proactively print the final metrics table so the last epoch is visible
                 # even when early stopping interrupts the normal print cadence.
-                try:
-                    # Prefer the existing PrintMetricsCallback for consistent formatting
-                    pm = None
-                    try:
-                        from trainer_callbacks.print_metrics import PrintMetricsCallback as _PM
-                        for cb in getattr(trainer, 'callbacks', []) or []:
-                            if isinstance(cb, _PM):
-                                pm = cb
-                                break
-                    except Exception:
-                        pm = None
-                    if pm is not None:
-                        pm._maybe_print(trainer, stage="val-epoch")
-                    else:
-                        # Fallback to a simple one-off print using the current logged metrics
-                        metrics_to_print = {}
-                        for d in (getattr(trainer, "logged_metrics", {}), getattr(trainer, "callback_metrics", {}), getattr(trainer, "progress_bar_metrics", {})):
-                            try:
-                                for k, v in dict(d).items():
-                                    metrics_to_print[k] = (v.item() if hasattr(v, 'item') else v)
-                            except Exception:
-                                pass
-                        #if metrics_to_print:
-                        #    from loggers.print_metrics_logger import print_namespaced_dict
-                        #    print_namespaced_dict(metrics_to_print)
-                except Exception:
-                    pass
+                # Prefer the existing PrintMetricsCallback for consistent formatting
+                #pm = None
+                #from trainer_callbacks.print_metrics import PrintMetricsCallback as _PM
+                #for cb in getattr(trainer, 'callbacks', []) or []:
+                #    if isinstance(cb, _PM):
+                #        pm = cb
+                #        break
+                #if pm is not None:
+                #    pm._maybe_print(trainer, stage="val-epoch")
 
         # Delegate to legacy tracking (will early stop if missed above)
         self._handle_early_stopping_and_tracking(trainer, pl_module)
@@ -466,32 +410,15 @@ class ModelCheckpointCallback(pl.Callback):
             print(f"Early stopping at epoch {pl_module.current_epoch} with train mean reward {train_ep_rew_mean:.2f} >= threshold {threshold}")
             trainer.should_stop = True
             # Ensure the final epoch metrics table is printed before exiting
-            try:
-                # Prefer the existing PrintMetricsCallback for consistent formatting
-                pm = None
-                try:
-                    from trainer_callbacks.print_metrics import PrintMetricsCallback as _PM
-                    for cb in getattr(trainer, 'callbacks', []) or []:
-                        if isinstance(cb, _PM):
-                            pm = cb
-                            break
-                except Exception:
-                    pm = None
-                if pm is not None:
-                    pm._maybe_print(trainer, stage="train-epoch")
-                else:
-                    metrics_to_print = {}
-                    for d in (getattr(trainer, "logged_metrics", {}), getattr(trainer, "callback_metrics", {}), getattr(trainer, "progress_bar_metrics", {})):
-                        try:
-                            for k, v in dict(d).items():
-                                metrics_to_print[k] = (v.item() if hasattr(v, 'item') else v)
-                        except Exception:
-                            pass
-                    #if metrics_to_print:
-                    #    from loggers.print_metrics_logger import print_namespaced_dict
-                    #    print_namespaced_dict(metrics_to_print)
-            except Exception:
-                pass
+            # Prefer the existing PrintMetricsCallback for consistent formatting
+            pm = None
+            from trainer_callbacks.print_metrics import PrintMetricsCallback as _PM
+            for cb in getattr(trainer, 'callbacks', []) or []:
+                if isinstance(cb, _PM):
+                    pm = cb
+                    break
+            if pm is not None:
+                pm._maybe_print(trainer, stage="train-epoch")
 
         if self.save_last:
             checkpoint_dir = self._get_checkpoint_dir(pl_module)
@@ -500,48 +427,39 @@ class ModelCheckpointCallback(pl.Callback):
                 self._update_symlink(checkpoint_dir / "last.ckpt", latest)
                 self.last_checkpoint_path = str(checkpoint_dir / "last.ckpt")
                 # Mirror last.json/mp4 if available
-                try:
-                    epoch_str = latest.stem.split("=")[-1]
-                    jpath = checkpoint_dir / f"epoch={epoch_str}.json"
-                    if jpath.exists():
-                        self._update_symlink(checkpoint_dir / "last.json", jpath)
-                    vid = checkpoint_dir / f"epoch={epoch_str}.mp4"
-                    if vid.exists():
-                        self._update_symlink(checkpoint_dir / "last.mp4", vid)
-                except Exception:
-                    pass
+                epoch_str = latest.stem.split("=")[-1]
+                jpath = checkpoint_dir / f"epoch={epoch_str}.json"
+                if jpath.exists():
+                    self._update_symlink(checkpoint_dir / "last.json", jpath)
+                vid = checkpoint_dir / f"epoch={epoch_str}.mp4"
+                if vid.exists():
+                    self._update_symlink(checkpoint_dir / "last.mp4", vid)
     
     def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         """Handle training completion summary and ensure symlinks are consistent."""
         # Ensure best/last symlinks are pointing to the latest epoch artifacts
-        try:
-            ckpt_dir = pl_module.run_manager.ensure_path("checkpoints/")
-            latest = self._find_latest_epoch_ckpt(ckpt_dir)
-            if latest is not None:
-                self._update_symlink(ckpt_dir / "last.ckpt", latest)
-                # Update last.json/mp4 if available
-                try:
-                    epoch_str = latest.stem.split("=")[-1]
-                    jpath = ckpt_dir / f"epoch={epoch_str}.json"
-                    if jpath.exists():
-                        self._update_symlink(ckpt_dir / "last.json", jpath)
-                    vid = ckpt_dir / f"epoch={epoch_str}.mp4"
-                    if vid.exists():
-                        self._update_symlink(ckpt_dir / "last.mp4", vid)
-                except Exception:
-                    pass
+        ckpt_dir = pl_module.run_manager.ensure_path("checkpoints/")
+        latest = self._find_latest_epoch_ckpt(ckpt_dir)
+        if latest is not None:
+            self._update_symlink(ckpt_dir / "last.ckpt", latest)
+            # Update last.json/mp4 if available
+            epoch_str = latest.stem.split("=")[-1]
+            jpath = ckpt_dir / f"epoch={epoch_str}.json"
+            if jpath.exists():
+                self._update_symlink(ckpt_dir / "last.json", jpath)
+            vid = ckpt_dir / f"epoch={epoch_str}.mp4"
+            if vid.exists():
+                self._update_symlink(ckpt_dir / "last.mp4", vid)
 
-            # If we tracked a best epoch, ensure best symlinks exist
-            if self.best_epoch_index is not None:
-                best_epoch = int(self.best_epoch_index)
-                best_epoch_ckpt = ckpt_dir / f"epoch={best_epoch:02d}.ckpt"
-                if best_epoch_ckpt.exists():
-                    self._update_symlink(ckpt_dir / "best.ckpt", best_epoch_ckpt)
-                    best_json = ckpt_dir / f"epoch={best_epoch:02d}.json"
-                    if best_json.exists():
-                        self._update_symlink(ckpt_dir / "best.json", best_json)
-                    best_vid = ckpt_dir / f"epoch={best_epoch:02d}.mp4"
-                    if best_vid.exists():
-                        self._update_symlink(ckpt_dir / "best.mp4", best_vid)
-        except Exception as e:
-            print(f"Warning: final symlink reconciliation failed: {e}")
+        # If we tracked a best epoch, ensure best symlinks exist
+        if self.best_epoch_index is not None:
+            best_epoch = int(self.best_epoch_index)
+            best_epoch_ckpt = ckpt_dir / f"epoch={best_epoch:02d}.ckpt"
+            if best_epoch_ckpt.exists():
+                self._update_symlink(ckpt_dir / "best.ckpt", best_epoch_ckpt)
+                best_json = ckpt_dir / f"epoch={best_epoch:02d}.json"
+                if best_json.exists():
+                    self._update_symlink(ckpt_dir / "best.json", best_json)
+                best_vid = ckpt_dir / f"epoch={best_epoch:02d}.mp4"
+                if best_vid.exists():
+                    self._update_symlink(ckpt_dir / "best.mp4", best_vid)

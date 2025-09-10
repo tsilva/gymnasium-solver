@@ -11,6 +11,7 @@ import csv
 import json
 import time
 from dataclasses import asdict, is_dataclass
+import numbers
 from pathlib import Path
 from string import Template
 from typing import Any, Dict, Tuple
@@ -25,11 +26,7 @@ class EndOfTrainingReportCallback(pl.Callback):
     # Helper: safe numeric conversion
     @staticmethod
     def _is_number(x: Any) -> bool:
-        try:
-            import numbers
-            return isinstance(x, numbers.Number)
-        except Exception:
-            return False
+        return isinstance(x, numbers.Number)
 
     @staticmethod
     def _last_non_null(values):
@@ -55,43 +52,33 @@ class EndOfTrainingReportCallback(pl.Callback):
         if not path.exists() or path.stat().st_size == 0:
             return last_values, best_map
 
-        try:
-            with open(path, newline="", encoding="utf-8") as fh:
-                reader = csv.DictReader(fh)
-                rows = list(reader)
-                if not rows:
-                    return last_values, best_map
+        with open(path, newline="", encoding="utf-8") as fh:
+            reader = csv.DictReader(fh)
+            rows = list(reader)
+            if not rows:
+                return last_values, best_map
 
-                # Collect last non-null per field
-                for field in reader.fieldnames or []:
-                    vals = [r.get(field) for r in rows]
-                    last_values[field] = EndOfTrainingReportCallback._last_non_null(vals)
+            # Collect last non-null per field
+            for field in reader.fieldnames or []:
+                vals = [r.get(field) for r in rows]
+                last_values[field] = EndOfTrainingReportCallback._last_non_null(vals)
 
-                # Track best eval/ep_rew_mean and train/ep_rew_mean
-                for metric in ("val/ep_rew_mean", "train/ep_rew_mean"):
-                    if metric in (reader.fieldnames or []):
-                        best_val = None
-                        best_step = None
-                        for r in rows:
-                            raw = r.get(metric)
-                            try:
-                                val = float(raw) if raw not in (None, "") else None
-                            except Exception:
-                                val = None
-                            if val is None:
-                                continue
-                            if best_val is None or val > best_val:
-                                best_val = val
-                                best_step = r.get("total_timesteps") or r.get("train/total_timesteps")
-                                try:
-                                    best_step = float(best_step) if best_step is not None else None
-                                except Exception:
-                                    pass
-                        if best_val is not None:
-                            best_map[metric] = (best_val, best_step)
-        except Exception:
-            # Best-effort; return what we have
-            pass
+            # Track best eval/ep_rew_mean and train/ep_rew_mean
+            for metric in ("val/ep_rew_mean", "train/ep_rew_mean"):
+                if metric in (reader.fieldnames or []):
+                    best_val = None
+                    best_step = None
+                    for r in rows:
+                        raw = r.get(metric)
+                        val = float(raw) if raw not in (None, "") else None
+                        if val is None:
+                            continue
+                        if best_val is None or val > best_val:
+                            best_val = val
+                            best_step = r.get("total_timesteps") or r.get("train/total_timesteps")
+                            best_step = float(best_step) if best_step is not None else None
+                    if best_val is not None:
+                        best_map[metric] = (best_val, best_step)
         return last_values, best_map
 
     @staticmethod
@@ -110,11 +97,7 @@ class EndOfTrainingReportCallback(pl.Callback):
 
     def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         # Resolve run directory
-        try:
-            run_dir = Path(pl_module.run_manager.run_dir)
-        except Exception:
-            # Fallback to local runs/@latest-run if available
-            run_dir = Path("runs/@latest-run")
+        run_dir = Path(pl_module.run_manager._run_dir)
         run_dir.mkdir(parents=True, exist_ok=True)
 
         report_path = run_dir / self.filename
@@ -150,14 +133,11 @@ class EndOfTrainingReportCallback(pl.Callback):
         last_mp4 = ckpt_dir / "last.mp4"
 
         # Duration
-        try:
-            fit_start_ns = getattr(pl_module, "fit_start_time", None)
-            duration_sec = None
-            if fit_start_ns is not None:
-                # Use monotonic clock for consistency with BaseAgent timing
-                duration_sec = max((time.perf_counter_ns() - float(fit_start_ns)) / 1e9, 0.0)
-        except Exception:
-            duration_sec = None
+        fit_start_ns = getattr(pl_module, "fit_start_time", None)
+        duration_sec = None
+        if fit_start_ns is not None:
+            # Use monotonic clock for consistency with BaseAgent timing
+            duration_sec = max((time.perf_counter_ns() - float(fit_start_ns)) / 1e9, 0.0)
 
         # Determinations
         env_id = cfg_dict.get("env_id")
@@ -169,11 +149,8 @@ class EndOfTrainingReportCallback(pl.Callback):
         best_eval = best_map.get("val/ep_rew_mean")
         best_train = best_map.get("train/ep_rew_mean")
         reached_thr = None
-        try:
-            if reward_thr is not None and best_eval is not None:
-                reached_thr = bool(float(best_eval[0]) >= float(reward_thr))
-        except Exception:
-            reached_thr = None
+        if reward_thr is not None and best_eval is not None:
+            reached_thr = bool(float(best_eval[0]) >= float(reward_thr))
 
         # Select a few last values of interest
         def _lv(name, default=None):
@@ -238,12 +215,8 @@ class EndOfTrainingReportCallback(pl.Callback):
         summary_block = "\n".join(summary_lines)
 
         # Config block (prefer YAML-like; fallback to JSON)
-        try:
-            cfg_text = self._yaml_like(cfg_dict)
-            config_block = f"```yaml\n{cfg_text}\n```"
-        except Exception:
-            cfg_text = json.dumps(cfg_dict, indent=2, default=str)
-            config_block = f"```json\n{cfg_text}\n```"
+        cfg_text = self._yaml_like(cfg_dict)
+        config_block = f"```yaml\n{cfg_text}\n```"
 
         # Metrics block
         if last_vals:
@@ -263,15 +236,9 @@ class EndOfTrainingReportCallback(pl.Callback):
             selected_lines = ["Selected:"]
             for k in selected_keys:
                 if k in last_vals and last_vals[k] is not None:
-                    try:
-                        selected_lines.append(f"- {k}: {float(last_vals[k]):.6g}")
-                    except Exception:
-                        selected_lines.append(f"- {k}: {last_vals[k]}")
+                    selected_lines.append(f"- {k}: {float(last_vals[k]):.6g}")
             # All values JSON
-            try:
-                sanitized = {str(k): (float(v) if self._is_number(v) else v) for k, v in last_vals.items()}
-            except Exception:
-                sanitized = {str(k): str(v) for k, v in last_vals.items()}
+            sanitized = {str(k): (float(v) if self._is_number(v) else v) for k, v in last_vals.items()}
             all_values_json = json.dumps(sanitized, indent=2, default=str)
             metrics_block = (
                 "\n".join(selected_lines)

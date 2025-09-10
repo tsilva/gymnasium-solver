@@ -26,9 +26,6 @@ class PrintMetricsCallback(pl.Callback):
     def __init__(
         self,
         every_n_epochs: int | None = 1,     # print each epoch by default
-        include: Iterable[str] | None = None,  # regex patterns to keep
-        exclude: Iterable[str] | None = None,  # regex patterns to drop
-        digits: int = 4,                          # rounding for floats
         metric_precision: Dict[str, int] | None = None,  # precision per metric
         metric_delta_rules: Dict[str, callable] | None = None,  # delta validation rules per metric
         algorithm_metric_rules: Dict[str, dict] | None = None,  # algorithm-specific warning rules
@@ -37,9 +34,6 @@ class PrintMetricsCallback(pl.Callback):
     ):
         super().__init__()
         self.every_n_epochs = every_n_epochs
-        self.include = [re.compile(p) for p in (include or [])]
-        self.exclude = [re.compile(p) for p in (exclude or [])]
-        self.digits = digits
         self.metric_precision = metric_precision or {}
         self.metric_delta_rules = metric_delta_rules or {}
         self.algorithm_metric_rules = algorithm_metric_rules or {}
@@ -87,39 +81,24 @@ class PrintMetricsCallback(pl.Callback):
         )
 
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
-        if self.every_n_epochs is not None and (trainer.current_epoch + 1) % self.every_n_epochs == 0:
+        if (trainer.current_epoch + 1) % self.every_n_epochs == 0:
             self._maybe_print(trainer, stage="val")
 
     def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
-        if self.every_n_epochs is not None and (trainer.current_epoch + 1) % self.every_n_epochs == 0:
+        if (trainer.current_epoch + 1) % self.every_n_epochs == 0:
             self._maybe_print(trainer, stage="train")
 
     def on_test_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
-        # Always print at test end if enabled by epoch cadence
-        if self.every_n_epochs is not None:
-            self._maybe_print(trainer, stage="test")
+        self._maybe_print(trainer, stage="test")
 
     # ---------- internals ----------
     def _maybe_print(self, trainer: pl.Trainer, stage: str):
-        # Only the main process prints
-        if hasattr(trainer, "is_global_zero") and not trainer.is_global_zero:
-            return
+        # When running multiple processes, ensure only the main process prints
+        if not trainer.is_global_zero: return
 
         metrics = self._collect_metrics(trainer)
-        metrics = self._filter_metrics(metrics)
         if not metrics:
             return
-
-        # Skip if nothing changed materially since last print, unless we are about to stop.
-        # When early stopping triggers, force a final print of the most recent metrics table
-        # so the last epoch is visible in the console output.
-        try:
-            should_force = bool(getattr(trainer, "should_stop", False))
-        except Exception:
-            should_force = False
-        if not should_force:
-            if not self._metrics_changed(metrics):
-                return
 
         # Validate metric delta rules before printing
         self._validate_metric_deltas(metrics)
@@ -130,16 +109,6 @@ class PrintMetricsCallback(pl.Callback):
         step = getattr(trainer, "global_step", None)
         epoch = getattr(trainer, "current_epoch", None)
         header = f"[{stage}] epoch={epoch} step={step}"
-
-        # Print the W&B run URL above the table (epoch-end prints only)
-        try:
-            if isinstance(stage, str) and stage.endswith("epoch"):
-                url = self._get_wandb_run_url(trainer)
-                if url:
-                    print(self._format_wandb_url_line(url))
-        except Exception:
-            # Never break training output due to URL printing issues
-            pass
 
         self._print_table(metrics, header)
 
@@ -256,38 +225,16 @@ class PrintMetricsCallback(pl.Callback):
 
         # Merge, with later sources taking precedence
         dicts = []
-        if hasattr(trainer, "logged_metrics"):
-            dicts.append(trainer.logged_metrics)
-        if hasattr(trainer, "callback_metrics"):
-            dicts.append(trainer.callback_metrics)
-        if hasattr(trainer, "progress_bar_metrics"):  # not always present
-            dicts.append(trainer.progress_bar_metrics)
+        dicts.append(trainer.logged_metrics)
+        dicts.append(trainer.callback_metrics)
+        dicts.append(trainer.progress_bar_metrics)
 
+        # Merge the dictionaries
         for d in dicts:
             for k, v in d.items():
                 combo[k] = self._to_python_scalar(v)
 
-        # Opportunistically refresh canonical step metric from the module's collector
-        try:
-            pl_module = getattr(trainer, "lightning_module", None)
-            tc = getattr(pl_module, "train_collector", None) if pl_module is not None else None
-            if tc is not None and hasattr(tc, "total_steps"):
-                combo["train/total_timesteps"] = int(getattr(tc, "total_steps", 0))
-        except Exception:
-            # Never break printing due to instrumentation
-            pass
-
-        # Drop common housekeeping keys if present
-        for k in ["epoch", "step", "global_step"]:
-            combo.pop(k, None)
         return combo
-
-    def _filter_metrics(self, metrics: Dict[str, Any]) -> Dict[str, Any]:
-        if self.include:
-            metrics = {k: v for k, v in metrics.items() if any(p.search(k) for p in self.include)}
-        if self.exclude:
-            metrics = {k: v for k, v in metrics.items() if not any(p.search(k) for p in self.exclude)}
-        return metrics
 
     def _to_python_scalar(self, x: Any) -> Any:
         # Convert tensors and numpy scalars to plain Python types when possible
@@ -309,75 +256,9 @@ class PrintMetricsCallback(pl.Callback):
         _ = header  # currently unused in rendering
         self._printer.update(metrics)
 
-    def _get_wandb_run_url(self, trainer: pl.Trainer) -> str | None:
-        """Return the W&B run URL from the trainer's logger.
-
-        Falls back to constructing the URL from run attributes if needed.
-        """
-        def _from_exp(exp) -> str | None:
-            if exp is None:
-                return None
-            # Preferred: SDK-provided URL
-            url = getattr(exp, "url", None)
-            if url:
-                return str(url)
-            # Fallback: build from known attributes
-            try:
-                run_id = getattr(exp, "id", None) or getattr(exp, "name", None)
-                entity = getattr(exp, "entity", None)
-                project = getattr(exp, "project", None)
-                if run_id and entity and project:
-                    return f"https://wandb.ai/{entity}/{project}/runs/{run_id}"
-            except Exception:
-                pass
-            return None
-
-        try:
-            logger = getattr(trainer, "logger", None)
-            if logger is None:
-                return None
-
-            # Single logger case (WandbLogger)
-            url = _from_exp(getattr(logger, "experiment", None))
-            if url:
-                return url
-
-            # Logger collection case
-            loggers = getattr(logger, "loggers", None)
-            if isinstance(loggers, (list, tuple)):
-                for lg in loggers:
-                    url = _from_exp(getattr(lg, "experiment", None))
-                    if url:
-                        return url
-        except Exception:
-            return None
-        return None
-
-    def _format_wandb_url_line(self, url: str) -> str:
-        """Return just the plain W&B run URL (no prefixes/parentheses)."""
-        return url
-
-    def _metrics_changed(self, metrics: Dict[str, Any]) -> bool:
-        """Return True if any metric changed beyond tolerance or new keys appeared."""
-        prev = self._last_printed_metrics
-        if prev is None:
-            return True
-        # If key sets differ, consider it changed
-        if set(metrics.keys()) != set(prev.keys()):
-            return True
-        for k, v in metrics.items():
-            pv = prev.get(k)
-            if self._is_number(v) and self._is_number(pv):
-                if abs(float(v) - float(pv)) > self._change_tol:
-                    return True
-            else:
-                if v != pv:
-                    return True
-        return False
-
     def _format_val(self, v: Any) -> str:
         if isinstance(v, float):
-            return f"{v:.{self.digits}f}"
+            return f"{v:.4f}"
         return str(v)
 
     def _is_number(self, x: Any) -> bool:

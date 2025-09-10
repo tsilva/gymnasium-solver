@@ -417,7 +417,6 @@ class BaseAgent(pl.LightningModule):
         # Print metrics once per epoch to align deltas with rollout collection
         printer_cb = PrintMetricsCallback(
             every_n_epochs=1,
-            digits=4, # TODO: should this be configurable?
             metric_precision=metric_precision,
             metric_delta_rules=metric_delta_rules,
             algorithm_metric_rules=algo_metric_rules,

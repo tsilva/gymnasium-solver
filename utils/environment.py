@@ -1,5 +1,4 @@
 from gym_wrappers.env_wrapper_registry import EnvWrapperRegistry
-from dataclasses import asdict
 
 def is_alepy_env_id(env_id: str) -> bool:
     return env_id.lower().startswith("ale/")
@@ -137,7 +136,6 @@ def build_env(
         elif _is_vizdoom_env: env = _build_env_vizdoom(env_id, obs_type, render_mode, **env_kwargs)
         elif _is_stable_retro_env: env = _build_env_stable_retro(env_id, obs_type, render_mode, **env_kwargs)            
         else: env = _build_env_gymnasium(env_id, obs_type, render_mode, **env_kwargs)
-
 
         # Optional image preprocessing on the base env (before vectorization)
         # - grayscale_obs: convert to single-channel grayscale

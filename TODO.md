@@ -1,7 +1,4 @@
-- BUG: ep_rew_mean not logged (taxi-v3)
 - FEAT: hp vs pf metrics
-- BUG: some metrics are not being logged
-- BUG: metrics not making it to wandb
 
 - FEAT: add normalization support 
 - FEAT: add discrete env support (solve taxi-v3, embeddings probably not sized correctly)
@@ -22,7 +19,6 @@
 
 - TODO: how is pongv5 determinism enforce
 - TODO: run pongv5 sweep
-- REFACTOR: simplify envinfo/vecenvinfo wrappers (connect vecenvinfo to envinfo)
 - REFACTOR: simplify CNN policy creation, test manually first
 - BUG: restore grayscaling / resizing logic; think how to unify with atari preprocessing (probably just inspect internals and extract)
 - FEAT: add kl early stopping to PPO

@@ -12,14 +12,6 @@ from typing import Any, Dict, Optional, Callable
 
 import yaml
 
-
-# ------------------------------
-# Singleton implementation
-# ------------------------------
-
-_METRICS_SINGLETON: "Metrics | None" = None
-
-
 @dataclass
 class Metrics:
     """Singleton-style accessor for metrics.yaml-derived data.
@@ -42,28 +34,21 @@ class Metrics:
     def _load(self) -> None:
         project_root = Path(__file__).parent.parent
         metrics_config_path = project_root / self.config_dir / "metrics.yaml"
-        if not metrics_config_path.exists():
-            raise FileNotFoundError(
-                f"Metrics config file not found: {metrics_config_path}"
-            )
-        with open(metrics_config_path, "r") as f:
-            data = yaml.safe_load(f)
-        # Ensure a dict even if file is empty
-        self._config = data if isinstance(data, dict) else {}
+        with open(metrics_config_path, "r") as f: data = yaml.safe_load(f)
+        self._config = data
+
+    def _get_global_cfg(self) -> Dict[str, Any]:
+        return self._config["_global"]
 
     # --------- Query helpers (instance methods) ---------
     def metric_precision_dict(self) -> Dict[str, int]:
         """Convert metrics config to precision dict keyed by metric name.
-
-        Expands bare metric names across common namespaces
-        (train/, eval/, rollout/, time/).
         """
-        metrics_config = self._config
-        default_precision = metrics_config.get("_global", {}).get("default_precision", 4)
-        namespaces = ["train", "eval", "rollout", "time"]
+        global_cfg = self._get_global_cfg()
+        default_precision = global_cfg.get("default_precision", 4)
 
         precision_dict: Dict[str, int] = {}
-        for metric_name, metric_config in metrics_config.items():
+        for metric_name, metric_config in global_cfg.items():
             if metric_name.startswith("_") or not isinstance(metric_config, dict):
                 continue
 
@@ -72,21 +57,16 @@ class Metrics:
                 precision = 0
 
             precision_dict[metric_name] = precision
-            for namespace in namespaces:
-                full_metric_name = f"{namespace}/{metric_name}"
-                precision_dict[full_metric_name] = precision
 
         return precision_dict
 
     def metric_delta_rules(self) -> Dict[str, Callable]:
         """Return delta validation rules per metric (as callables)."""
-        metrics_config = self._config
-        namespaces = ["train", "eval", "rollout", "time"]
+        global_cfg = self._get_global_cfg()
         delta_rules: Dict[str, Callable] = {}
 
-        for metric_name, metric_config in metrics_config.items():
-            if metric_name.startswith("_") or not isinstance(metric_config, dict):
-                continue
+        for metric_name, metric_config in global_cfg.items():
+            if metric_name.startswith("_") or not isinstance(metric_config, dict): continue
 
             delta_rule = metric_config.get("delta_rule")
             if not delta_rule:
@@ -99,29 +79,23 @@ class Metrics:
                 continue
 
             delta_rules[metric_name] = rule_fn
-            for namespace in namespaces:
-                full_metric_name = f"{namespace}/{metric_name}"
-                delta_rules[full_metric_name] = rule_fn
 
         return delta_rules
 
     def algorithm_metric_rules(self, algo_id: str) -> Dict[str, dict]:
         """Return algorithm-specific metric validation rules."""
-        metrics_config = self._config
+        global_cfg = self._get_global_cfg()
         rules: Dict[str, dict] = {}
         namespaces = ["train", "eval", "rollout", "time"]
 
-        for metric_name, metric_config in metrics_config.items():
+        for metric_name, metric_config in global_cfg.items():
             if metric_name.startswith("_") or not isinstance(metric_config, dict):
                 continue
-
+            
+            # If no algorithm rules are defined, skip
             algorithm_rules = metric_config.get("algorithm_rules", {})
-            if not algorithm_rules:
-                continue
-
             rule_config = algorithm_rules.get(algo_id.lower())
-            if not rule_config:
-                continue
+            if not rule_config: continue
 
             threshold = rule_config.get("threshold")
             condition = rule_config.get("condition")
@@ -148,18 +122,13 @@ class Metrics:
 
     def key_priority(self) -> Optional[list]:
         """Preferred key ordering from metrics config (_global.key_priority)."""
-        metrics_config = self._config
-        global_cfg = metrics_config.get("_global", {}) if isinstance(metrics_config, dict) else {}
-        kp = global_cfg.get("key_priority")
-        if isinstance(kp, list) and all(isinstance(x, str) for x in kp):
-            return kp
-        return None
+        global_cfg = self._get_global_cfg()
+        key_priority = global_cfg["key_priority"]
+        return key_priority
 
     def highlight_config(self) -> Dict[str, Any]:
         """Return highlight configuration for metrics table from metrics.yaml."""
-        metrics_config = self._config
-        global_cfg = metrics_config.get("_global", {}) if isinstance(metrics_config, dict) else {}
-        hl = global_cfg.get("highlight", {}) if isinstance(global_cfg, dict) else {}
+        hl = self._get_global_cfg()["highlight"]
 
         default_row_metrics = {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "total_timesteps"}
         default_value_bold_metrics = {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "epoch"}
@@ -184,39 +153,20 @@ class Metrics:
     def metric_bounds(self) -> Dict[str, Dict[str, float]]:
         """Return min/max bounds per metric if defined in metrics.yaml.
 
-        Expands into common namespaces (train/, val/, rollout/, time/).
         Shape: {metric_name or namespaced: {"min": float, "max": float}}
         Missing bounds are omitted per metric.
         """
-        metrics_config = self._config
-        namespaces = ["train", "val", "rollout", "time"]
         bounds: Dict[str, Dict[str, float]] = {}
 
-        for metric_name, metric_cfg in metrics_config.items():
-            if metric_name.startswith("_") or not isinstance(metric_cfg, dict):
-                continue
-            has_min = "min" in metric_cfg
-            has_max = "max" in metric_cfg
-            if not (has_min or has_max):
-                continue
+        for metric_name, metric_cfg in self._config.items():
+            # Skip private metrics and non-dict entries
+            if metric_name.startswith("_") or not isinstance(metric_cfg, dict): continue
 
-            b: Dict[str, float] = {}
-            if has_min:
-                try:
-                    b["min"] = float(metric_cfg["min"])
-                except Exception:
-                    pass
-            if has_max:
-                try:
-                    b["max"] = float(metric_cfg["max"])
-                except Exception:
-                    pass
-            if not b:
-                continue
-
-            bounds[metric_name] = dict(b)
-            for ns in namespaces:
-                bounds[f"{ns}/{metric_name}"] = dict(b)
+            # Initialize bounds dict for the metric
+            metric_bounds: Dict[str, float] = {}
+            if "min" in metric_cfg: metric_bounds["min"] = float(metric_cfg["min"])
+            if "max" in metric_cfg: metric_bounds["max"] = float(metric_cfg["max"])
+            if metric_bounds: bounds[metric_name] = dict(metric_bounds)
 
         return bounds
 

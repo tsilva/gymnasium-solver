@@ -32,7 +32,7 @@ def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48
         return "".join(out)
 
     # Prefer train/* then eval/* then others for readability
-    keys = sorted(history.keys(), key=lambda k: (0 if k.startswith("train/") else 1 if k.startswith("eval/") else 2, k))
+    keys = sorted(history.keys(), key=lambda k: (0 if k.startswith("train/") else 1 if k.startswith("val/") else 2, k))
     shown = 0
     printed_header = False
     for k in keys:

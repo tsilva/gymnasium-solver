@@ -54,7 +54,7 @@ class _Agent:
 
 class _Trainer:
     def __init__(self):
-        self.logged_metrics = {"eval/ep_rew_mean": 1.0}
+        self.logged_metrics = {"val/ep_rew_mean": 1.0}
         self.global_step = 10
         self.should_stop = False
 

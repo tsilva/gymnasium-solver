@@ -65,8 +65,8 @@ class CsvMetricsLogger:
             return
 
         # Extract canonical step and epoch if available
-        step = self._first_number(metrics.get("train/total_timesteps"), metrics.get("eval/total_timesteps"))
-        epoch = self._first_number(metrics.get("train/epoch"), metrics.get("eval/epoch"))
+        step = self._first_number(metrics.get("train/total_timesteps"), metrics.get("val/total_timesteps"))
+        epoch = self._first_number(metrics.get("train/epoch"), metrics.get("val/epoch"))
         t = time.time()
 
         row = {

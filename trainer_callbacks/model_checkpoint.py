@@ -11,7 +11,7 @@ class ModelCheckpointCallback(pl.Callback):
     
     def __init__(self, 
                  checkpoint_dir: str = "checkpoints",
-                 monitor: str = "eval/ep_rew_mean",
+                 monitor: str = "val/ep_rew_mean",
                  mode: str = "max",
                  save_last: bool = False,
                  save_threshold_reached: bool = True,
@@ -410,8 +410,8 @@ class ModelCheckpointCallback(pl.Callback):
                     reward_threshold = None
 
         # Get current eval metrics
-        if hasattr(trainer, 'logged_metrics') and "eval/ep_rew_mean" in trainer.logged_metrics:
-            ep_rew_mean = float(trainer.logged_metrics["eval/ep_rew_mean"])
+        if hasattr(trainer, 'logged_metrics') and "val/ep_rew_mean" in trainer.logged_metrics:
+            ep_rew_mean = float(trainer.logged_metrics["val/ep_rew_mean"])
             
             # Check for early stopping based on reward threshold (only if threshold is available)
             if reward_threshold is not None:

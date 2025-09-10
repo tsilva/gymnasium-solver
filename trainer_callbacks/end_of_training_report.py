@@ -67,7 +67,7 @@ class EndOfTrainingReportCallback(pl.Callback):
                     last_values[field] = EndOfTrainingReportCallback._last_non_null(vals)
 
                 # Track best eval/ep_rew_mean and train/ep_rew_mean
-                for metric in ("eval/ep_rew_mean", "train/ep_rew_mean"):
+                for metric in ("val/ep_rew_mean", "train/ep_rew_mean"):
                     if metric in (reader.fieldnames or []):
                         best_val = None
                         best_step = None
@@ -165,7 +165,7 @@ class EndOfTrainingReportCallback(pl.Callback):
         n_envs = cfg_dict.get("n_envs")
         eval_freq = cfg_dict.get("eval_freq_epochs")
         reward_thr = cfg_dict.get("reward_threshold")
-        best_eval = best_map.get("eval/ep_rew_mean")
+        best_eval = best_map.get("val/ep_rew_mean")
         best_train = best_map.get("train/ep_rew_mean")
         reached_thr = None
         try:
@@ -185,8 +185,8 @@ class EndOfTrainingReportCallback(pl.Callback):
             "train/fps": _lv("train/fps"),
             "train/fps_instant": _lv("train/fps_instant"),
             "train/ep_rew_mean": _lv("train/ep_rew_mean"),
-            "eval/ep_rew_mean": _lv("eval/ep_rew_mean"),
-            "eval/ep_len_mean": _lv("eval/ep_len_mean"),
+            "val/ep_rew_mean": _lv("val/ep_rew_mean"),
+            "val/ep_len_mean": _lv("val/ep_len_mean"),
         }
 
         # Compose Markdown
@@ -218,7 +218,7 @@ class EndOfTrainingReportCallback(pl.Callback):
             lines.append(f"- FPS (instant): {float(key_last_values['train/fps_instant']):.1f}")
         if key_last_values.get("train/ep_rew_mean") is not None:
             lines.append(f"- Train ep_rew_mean (last): {float(key_last_values['train/ep_rew_mean']):.3f}")
-        if key_last_values.get("eval/ep_rew_mean") is not None:
+        if key_last_values.get("val/ep_rew_mean") is not None:
             lines.append(f"- Eval ep_rew_mean (last): {float(key_last_values['eval/ep_rew_mean']):.3f}")
         if best_eval is not None:
             be, step = best_eval
@@ -270,8 +270,8 @@ class EndOfTrainingReportCallback(pl.Callback):
                 "train/total_timesteps",
                 "train/epoch",
                 "train/ep_rew_mean",
-                "eval/ep_rew_mean",
-                "eval/ep_len_mean",
+                "val/ep_rew_mean",
+                "val/ep_len_mean",
                 "train/fps",
                 "train/fps_instant",
                 "train/loss",

@@ -437,7 +437,7 @@ class BaseAgent(pl.LightningModule):
         checkpoint_dir = self.run_manager.ensure_path("checkpoints/")
         checkpoint_cb = ModelCheckpointCallback(
             checkpoint_dir=checkpoint_dir,
-            monitor="eval/ep_rew_mean",
+            monitor="val/ep_rew_mean",
             mode="max",
             save_last=True, 
             save_threshold_reached=True,
@@ -480,7 +480,7 @@ class BaseAgent(pl.LightningModule):
         reward_threshold = self.validation_env.get_reward_threshold()
         earlystop_eval_reward_cb = (
             EarlyStoppingCallback(
-                "eval/ep_rew_mean",
+                "val/ep_rew_mean",
                 reward_threshold,
                 mode="max",
                 verbose=False,

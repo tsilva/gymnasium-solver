@@ -139,5 +139,4 @@ class Metrics:
             if _bounds: bounds[metric_name] = dict(_bounds)
         return bounds
 
-
 metrics_config = Metrics()

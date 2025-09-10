@@ -126,45 +126,25 @@ class PrintMetricsCallback(pl.Callback):
             if metric_name in current_metrics and metric_name in self.previous_metrics:
                 current_value = self._to_python_scalar(current_metrics[metric_name])
                 previous_value = self._to_python_scalar(self.previous_metrics[metric_name])
+                assert self._is_number(current_value) and self._is_number(previous_value)
                 
-                # Skip validation if either value is not a number
-                if not (self._is_number(current_value) and self._is_number(previous_value)):
-                    continue
+                # Check if the rule is satisfied
+                rule_satisfied = rule_lambda(previous_value, current_value)
+                if rule_satisfied: continue
 
-                # Allow small backward drift for time_elapsed-like metrics to handle
-                # clock jitter or differing sources (e.g., step vs epoch timers)
-                try:
-                    if str(metric_name).endswith("time_elapsed"):
-                        if float(previous_value) - float(current_value) <= self._delta_soft_tolerance_sec:
-                            # Treat as valid within tolerance
-                            continue
-                except Exception:
-                    # Fall back to strict rule if casting fails
-                    pass
-                
-                try:
-                    # Call the lambda with (previous, current) values
-                    rule_satisfied = rule_lambda(previous_value, current_value)
-                    if not rule_satisfied:
-                        raise ValueError(
-                            f"Metric delta rule violation for '{metric_name}': "
-                            f"previous={previous_value}, current={current_value}. "
-                            f"Rule: {rule_lambda.__name__ if hasattr(rule_lambda, '__name__') else 'lambda'}"
-                        )
-                except Exception as e:
-                    if isinstance(e, ValueError) and "Metric delta rule violation" in str(e):
-                        raise  # Re-raise our validation errors
-                    # For other exceptions (e.g., in lambda evaluation), wrap them
-                    raise ValueError(
-                        f"Error evaluating metric delta rule for '{metric_name}': {str(e)}"
-                    ) from e
+                # Raise an error if the rule is not satisfied
+                raise ValueError(
+                    f"Metric delta rule violation for '{metric_name}': "
+                    f"previous={previous_value}, current={current_value}. "
+                    f"Rule: {rule_lambda.__name__ if hasattr(rule_lambda, '__name__') else 'lambda'}"
+                )
 
     def _check_algorithm_metric_rules(self, current_metrics: Dict[str, Any]) -> None:
         """Check algorithm-specific metric rules and log warnings when violated."""
         
         for metric_name, rule_config in self.algorithm_metric_rules.items():
             if metric_name in current_metrics:
-                current_value = self._to_python_scalar(current_metrics[metric_name])
+                current_value = self._to_python_scalar(current_metrics[metric_name]) # TODO: all should be scalars by default
                 
                 # Skip validation if value is not a number
                 if not self._is_number(current_value):

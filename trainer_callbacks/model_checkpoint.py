@@ -2,7 +2,6 @@
 
 from pathlib import Path
 import json
-import numpy as np
 import torch
 
 import pytorch_lightning as pl
@@ -23,16 +22,18 @@ class ModelCheckpointCallback(pl.Callback):
             mode: 'max' or 'min' for the monitored metric
             save_last: Whether to save the last checkpoint
         """
+
+        # Store atributes
         self.checkpoint_dir = Path(checkpoint_dir)
         self.metric = metric
         self.mode = mode
         self.best_value = float('-inf') if mode == 'max' else float('inf')
         self.best_epoch = None
-        self.best_checkpoint_path = None
-        self.last_checkpoint_path = None
 
+        # Ensure the checkpoint directory exists
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
+    # TODO: move to resuable util
     @staticmethod
     def _update_symlink(link_path: Path, target_path: Path) -> None:
         """Create or update a symlink at link_path pointing to target_path.
@@ -57,69 +58,21 @@ class ModelCheckpointCallback(pl.Callback):
     def _save_checkpoint(
         self, 
         agent: pl.LightningModule, 
-        checkpoint_path: Path, 
+        epoch: int, 
         *, 
         metrics: dict | None = None, 
-        current_eval_reward: float | None = None
     ):
-        """Save a checkpoint with all necessary information, including metrics snapshot,
-        and the current evaluation reward.
+        """Save a checkpoint with all necessary information, including metrics snapshot."""
 
-        Args:   
-            agent: LightningModule/Agent instance
-            checkpoint_path: destination file path
-            is_best: flag if this is best checkpoint
-            is_last: flag if this is last checkpoint
-            metrics: optional metrics dict (already serialized to JSON-serializable types)
-            current_eval_reward: optional explicit eval reward value to store
-        """
-        from dataclasses import asdict, is_dataclass
-        
-        # Helper to serialize metric values to plain Python types
-        def _to_py(val):
-            import torch
-            if isinstance(val, torch.Tensor):
-                if val.ndim == 0:
-                    return val.item()
-                return val.detach().cpu().tolist()
-            if isinstance(val, (np.floating, np.integer)):
-                return val.item()
-            # Plain numbers or strings pass through; others fallback to str
-            if isinstance(val, (int, float, bool)):
-                return val
-            return str(val)
-
-        def _serialize_metrics(m):
-            if m is None:
-                return None
-            return {str(k): _to_py(v) for k, v in dict(m).items()}
-
-
-        checkpoint_data = {
-            'model_state_dict': agent.policy_model.state_dict(),
-            'optimizer_state_dict': agent.optimizers().state_dict() if hasattr(agent.optimizers(), 'state_dict') else None,
-            'config_dict': asdict(agent.config),
-            'epoch': agent.current_epoch,
-            'global_step': agent.global_step,
-            'total_timesteps': getattr(agent, 'total_timesteps', 0),
-            'best_eval_reward': getattr(agent, 'best_eval_reward', float('-inf')),
-            'current_eval_reward': current_eval_reward,
-            'metrics': _serialize_metrics(metrics),
-            'rng_states': {
-                'torch': torch.get_rng_state(),
-                'torch_cuda': torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
-            }
-        }
-        
-        # Save checkpoint
+        # Save the model checkpoint
+        checkpoint_path = self.checkpoint_dir / f"epoch={epoch:02d}.ckpt"
+        checkpoint_data = {'model_state_dict': agent.policy_model.state_dict()}
         torch.save(checkpoint_data, checkpoint_path)
 
-        # Save metrics snapshot as a sidecar JSON with the same basename
-        serialized_metrics = _serialize_metrics(metrics)
-        if serialized_metrics is not None:
-            json_path = checkpoint_path.with_suffix(".json")
-            with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(serialized_metrics, f, ensure_ascii=False, indent=2)
+        # TODO: use io util
+        # Save the metrics snapshot at this epoch
+        json_path = checkpoint_path.with_suffix(".json")
+        with open(json_path, "w", encoding="utf-8") as f: json.dump(metrics, f, ensure_ascii=False, indent=2)
         return checkpoint_path
     
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
@@ -130,39 +83,31 @@ class ModelCheckpointCallback(pl.Callback):
         return without asserting, keeping early-stopping/tracking logic intact.
         """
 
+        # If eval shouldn't be run this epoch, skip the step (eg: warmup epochs)
         if not pl_module.should_run_validation_epoch(): return
 
         # If the monitored metric wasn't logged this epoch (e.g., warmup), skip
-        if self.metric not in trainer.logged_metrics:
-            self._handle_early_stopping_and_tracking(trainer, pl_module)
-            return
-
-        # Convert to float defensively
-        current_metric_value = trainer.logged_metrics[self.metric]
+        if self.metric not in trainer.logged_metrics: return
 
         # Always save a timestamped checkpoint for this eval epoch
         epoch = pl_module.current_epoch
-        timestamped_path = self.checkpoint_dir / f"epoch={epoch:02d}.ckpt"
-
-        """Check if current metric value is better than the best seen so far."""
-        is_best = False   
-        if self.mode == 'max': is_best = current_metric_value > self.best_value
-        else: is_best = current_metric_value < self.best_value
-
-        # Save timestamped checkpoint marked with flags
         self._save_checkpoint(
             pl_module,
-            timestamped_path,
-            is_best=is_best,
+            epoch,
             metrics=trainer.logged_metrics,
-            current_eval_reward=current_metric_value,
         )
 
-        # If this is a new best, update best metric and best symlinks
-        if is_best:
-            self.best_value = current_metric_value
-            self.best_epoch = epoch
-            print(f"New best model: {self.metric}={current_metric_value:.4f}\n  -> {timestamped_path.name}")
+        # If not best, return
+        is_best = False   
+        metric_value = trainer.logged_metrics[self.metric]
+        if self.mode == 'max': is_best = metric_value > self.best_value
+        else: is_best = metric_value < self.best_value
+        if not is_best: return
+
+        # Update best values
+        self.best_value = metric_value
+        self.best_epoch = epoch
+        print(f"New best model: epoch={epoch}; {self.metric}={metric_value:.4f}")
 
     def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         """Handle training completion summary and ensure symlinks are consistent."""

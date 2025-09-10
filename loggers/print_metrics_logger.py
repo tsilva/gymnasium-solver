@@ -117,6 +117,7 @@ class PrintMetricsLogger(LightningLoggerBase):
         # Convert values to basic Python scalars for rendering/validation
         simple: Dict[str, Any] = {k: _to_python_scalar(v) for k, v in dict(metrics).items()}
 
+        # TODO: review this, works but SUS
         # Sanitize: drop bare keys (e.g., 'epoch') when a namespaced duplicate exists
         # Root cause: some backends (e.g., Lightning) inject top-level 'epoch'
         # which causes an extra 'epoch/' section in the table alongside 'train/epoch'.

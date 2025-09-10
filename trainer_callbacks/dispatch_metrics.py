@@ -1,8 +1,24 @@
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Optional
+
 import pytorch_lightning as pl
 
-class AggregateMetricsCallback(pl.Callback):
+from utils.csv_logger import CsvMetricsLogger
+
+class DispatchMetricsCallback(pl.Callback):
+
+    def __init__(self, *, csv_path: str | Path, queue_size: int = 10000) -> None:
+        super().__init__()
+        self._path = Path(csv_path)
+        self._csv_logger: Optional[CsvMetricsLogger] = None
+        self._queue_size = int(queue_size)
+
+    # ---- lifecycle hooks ----
+    def on_fit_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._csv_logger = CsvMetricsLogger(self._path, queue_size=self._queue_size)
 
     def on_train_epoch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         pl_module._epoch_metrics_buffer.clear()
@@ -36,15 +52,20 @@ class AggregateMetricsCallback(pl.Callback):
         if fps_total > 0.0 and pl_module.config.max_timesteps is not None:
             _metrics["eta_s"] = float(pl_module.config.max_timesteps / float(fps_total))
 
-        prefixed = {f"train/{k}": v for k, v in _metrics.items()}
-        
-        # Store aggregated metrics for dispatchers to use
-        pl_module._last_epoch_metrics = prefixed
+        prefixed_metrics = {f"train/{k}": v for k, v in _metrics.items()}
+
+        #elf._csv_logger.log_metrics(prefixed_metrics)
+
+        pl_module.log_dict(prefixed_metrics)
 
     def on_validation_epoch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+        if not pl_module._should_run_eval(pl_module.current_epoch): return
+
         pl_module._epoch_metrics_buffer.clear()
 
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+        if not pl_module._should_run_eval(pl_module.current_epoch): return
+        
         # Prepare metrics to log
         rollout_metrics = pl_module.validation_collector.get_metrics()
 
@@ -56,7 +77,19 @@ class AggregateMetricsCallback(pl.Callback):
             "epoch": pl_module.current_epoch,
         }
 
-        prefixed = {f"eval/{k}": v for k, v in _metrics.items()}
+        prefixed_metrics = {f"eval/{k}": v for k, v in _metrics.items()}
 
-        # Store aggregated metrics for dispatchers to use
-        pl_module._last_epoch_metrics = prefixed
+        #self._csv_logger.log_metrics(prefixed_metrics)
+        
+        pl_module.log_dict(prefixed_metrics)
+
+    def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+        self._close()
+
+    def teardown(self, trainer: pl.Trainer, pl_module: pl.LightningModule, stage: str | None = None) -> None:
+        self._close()
+
+    def _close(self) -> None:
+        if self._csv_logger is None: return
+        self._csv_logger.close()
+        self._csv_logger = None

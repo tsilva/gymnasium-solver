@@ -383,11 +383,8 @@ class BaseAgent(pl.LightningModule):
         """Assemble trainer callbacks, with an optional end-of-training report."""
         # Lazy imports to avoid heavy deps at module import time
         from trainer_callbacks import (
-            AggregateMetricsCallback,
-            WandbMetricsLoggerCallback,
-            CSVMetricsLoggerCallback,
+            DispatchMetricsCallback,
             PrintMetricsCallback,
-            HyperparamSyncCallback,
             ModelCheckpointCallback,
             VideoLoggerCallback,
             EndOfTrainingReportCallback,
@@ -397,17 +394,9 @@ class BaseAgent(pl.LightningModule):
         # Initialize callbacks list
         callbacks = []
 
-        # At the end of each epoch log metrics to buffer
-        # (do this before other loggers to make metrics available; 
-        # can't do this in module because callbacks are called first)
-        callbacks.append(AggregateMetricsCallback())
-
         # CSV Metrics Logger (writes metrics.csv under the run directory)
         csv_path = self.run_manager.ensure_path("metrics.csv")
-        callbacks.append(CSVMetricsLoggerCallback(csv_path=str(csv_path)))
-
-        # W&B Logger (logs metrics to W&B)
-        callbacks.append(WandbMetricsLoggerCallback())
+        callbacks.append(DispatchMetricsCallback(csv_path=str(csv_path)))
 
         # Formatting/precision rules for pretty printing
         from utils.metrics import (
@@ -431,14 +420,14 @@ class BaseAgent(pl.LightningModule):
         callbacks.append(printer_cb)
 
         # Read hyperparamters from config file (eg: user modified during training)
-        hyperparam_sync_cb = HyperparamSyncCallback(
-            control_dir=None,
-            check_interval=2.0,
-            enable_lr_scheduling=False,
-            enable_manual_control=True,
-            verbose=True,
-        )
-        callbacks.append(hyperparam_sync_cb)
+        #hyperparam_sync_cb = HyperparamSyncCallback(
+        #    control_dir=None,
+        #    check_interval=2.0,
+        #    enable_lr_scheduling=False,
+        #    enable_manual_control=True,
+        #    verbose=True,
+        #)
+        #callbacks.append(hyperparam_sync_cb)
 
         # Checkpointing 
         checkpoint_dir = self.run_manager.ensure_path("checkpoints/")

@@ -5,15 +5,11 @@ when to stop training based on a simple threshold rule. By default, it stops
 when the cumulative timesteps reach a configured limit.
 """
 
-# Optional dependency shim for pytorch_lightning
-try:  # pragma: no cover
-    import pytorch_lightning as pl  # type: ignore
-    BaseCallback = getattr(pl, "Callback", object)
-except Exception:  # pragma: no cover
-    pl = None  # type: ignore
-    BaseCallback = object
+from __future__ import annotations
 
-class EarlyStoppingCallback(BaseCallback):
+import pytorch_lightning as pl
+
+class EarlyStoppingCallback(pl.Callback):
     """Generic early-stopping via metric threshold.
 
     Args:

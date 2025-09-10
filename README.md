@@ -115,7 +115,8 @@ Uploads run artifacts under `artifacts/` and attaches a preview video when found
 ### 🗂️ Project layout
 ```
 agents/            # PPO, REINFORCE
-utils/             # config, env, logging, models, rollouts, etc.
+loggers/           # custom Lightning/CSV/console loggers
+utils/             # config, env, models, rollouts, helpers
 gym_wrappers/      # registry + wrappers (feature extractors, reward shaping, pixels)
 trainer_callbacks/ # logging, early stopping, checkpointing, hyperparam sync, videos
 config/            # environment YAML configs

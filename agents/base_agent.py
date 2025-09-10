@@ -269,13 +269,13 @@ class BaseAgent(pl.LightningModule):
         # Set up comprehensive logging using run-specific logs directory
         log_path = self.run_manager.ensure_path("run.log")
         # Prepare a CSV Lightning logger writing to runs/<id>/metrics.csv
-        from utils.csv_lightning_logger import CsvLightningLogger
+        from loggers.csv_lightning_logger import CsvLightningLogger
         csv_path = self.run_manager.ensure_path("metrics.csv")
         csv_logger = CsvLightningLogger(csv_path=str(csv_path))
 
         # Prepare a terminal print logger that formats metrics from the unified logging stream
         from utils.metrics import metrics_config
-        from utils.print_metrics_logger import PrintMetricsLogger
+        from loggers.print_metrics_logger import PrintMetricsLogger
         _metrics = metrics_config
         print_logger = PrintMetricsLogger(
             metric_precision=_metrics.metric_precision_dict(),

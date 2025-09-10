@@ -303,3 +303,4 @@ class CsvMetricsLogger:
                 self._fh.flush()
             except Exception:
                 pass
+

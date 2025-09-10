@@ -38,7 +38,7 @@ Algo-specific config subclasses:
 ### Agents
 - `BaseAgent` (LightningModule):
   - Creates `train_env`, `validation_env`, `test_env` with different seeds and video settings; builds `RolloutCollector`s for each.
-  - Manual optimization in `training_step`; metrics are buffered and logged once per epoch, then printed by the `utils.print_metrics_logger.PrintMetricsLogger` (a Lightning logger) using `utils.metrics` rules.
+- Manual optimization in `training_step`; metrics are buffered and logged once per epoch, then printed by the `loggers.print_metrics_logger.PrintMetricsLogger` (a Lightning logger) using `utils.metrics` rules.
   - Tracks best episode rewards: exposes `train/ep_rew_best` and `eval/ep_rew_best` computed from the running best of `*/ep_rew_mean` across epochs. These appear in `metrics.csv` and the console table, highlighted in blue (rules configurable via `config/metrics.yaml` under `_global.highlight`). Additionally, any metric value outside its configured `min`/`max` bounds is highlighted in yellow and emits a console warning for quick visibility.
   - Evaluation cadence controlled by `Config.eval_freq_epochs` and `eval_warmup_epochs`; `on_validation_epoch_start/validation_step` drive `evaluate_policy` and video recording.
   - Schedules: learning rate and PPO clip range with linear decay based on progress `total_steps / max_timesteps`.
@@ -106,7 +106,8 @@ Algo-specific config subclasses:
 ### Directory layout
 ```
 agents/           # PPO, REINFORCE, base
-utils/            # config, env, rollout, dataloaders, models, logging, metrics, etc.
+loggers/          # custom Lightning/CSV/console loggers
+utils/            # config, env, rollout, dataloaders, models, metrics, helpers
 gym_wrappers/     # registry + wrappers (feature extractors, reward shaping, pixels)
 trainer_callbacks/# logging, early stopping, checkpointing, hyperparam sync, videos
 config/           # environment YAML configs

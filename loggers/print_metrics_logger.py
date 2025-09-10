@@ -183,4 +183,3 @@ class PrintMetricsLogger(LightningLoggerBase):
             except Exception:
                 # Be resilient on logging
                 pass
-

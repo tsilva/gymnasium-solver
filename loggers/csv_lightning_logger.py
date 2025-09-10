@@ -8,12 +8,12 @@ from pytorch_lightning.loggers.logger import Logger as LightningLoggerBase  # ty
 class CsvLightningLogger(LightningLoggerBase):
     """
     PyTorch Lightning logger that writes metrics to a wide-form CSV via
-    utils.csv_logger.CsvMetricsLogger. Accepts the same metrics dict that
+    loggers.csv_logger.CsvMetricsLogger. Accepts the same metrics dict that
     pl_module.log_dict emits; non-numeric values are ignored.
     """
 
     def __init__(self, *, csv_path: str | Path, queue_size: int = 10000) -> None:
-        from utils.csv_logger import CsvMetricsLogger
+        from loggers.csv_logger import CsvMetricsLogger
 
         self._name = "csv"
         self._version = "0"
@@ -53,4 +53,3 @@ class CsvLightningLogger(LightningLoggerBase):
 
     def after_save_checkpoint(self, checkpoint_callback: Any) -> None:  # pragma: no cover - unused
         return None
-

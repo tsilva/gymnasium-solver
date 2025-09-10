@@ -377,7 +377,7 @@ class ModelCheckpointCallback(pl.Callback):
                             except Exception:
                                 pass
                         if metrics_to_print:
-                            from utils.table_printer import print_namespaced_dict
+                            from loggers.print_metrics_logger import print_namespaced_dict
                             print_namespaced_dict(metrics_to_print)
                 except Exception:
                     pass
@@ -488,7 +488,7 @@ class ModelCheckpointCallback(pl.Callback):
                         except Exception:
                             pass
                     if metrics_to_print:
-                        from utils.table_printer import print_namespaced_dict
+                        from loggers.print_metrics_logger import print_namespaced_dict
                         print_namespaced_dict(metrics_to_print)
             except Exception:
                 pass

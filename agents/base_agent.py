@@ -3,12 +3,14 @@ import pytorch_lightning as pl
 import json
 
 from utils.timing import TimingTracker
-from utils.metrics_buffer import MetricsBuffer
-from utils.metrics_history import MetricsHistory
+from utils.metrics_recorder import InMemoryMetricsRecorder
 from utils.decorators import must_implement
 from utils.reports import print_terminal_ascii_summary
 
 class BaseAgent(pl.LightningModule):
+    @staticmethod
+    def _sanitize_name(name: str) -> str:
+        return str(name).replace("/", "-").replace("\\", "-")
     def __init__(self, config):
         super().__init__()
 
@@ -22,13 +24,9 @@ class BaseAgent(pl.LightningModule):
         # (this is needed for multi-model training, eg: policy + value models without shared backbone)
         self.automatic_optimization = False
 
-        # Buffer used to aggregate per-epoch metrics 
-        # (eg: calculate to metric means for logging)
-        self._epoch_metrics_buffer = MetricsBuffer()
-
-        # Lightweight history to render ASCII summary at training end
-        # Encapsulated in MetricsHistory for clarity and reuse
-        self._train_metrics_history = MetricsHistory()
+        # Metrics recorder aggregates per-epoch metrics (train/eval) and maintains
+        # a step-aware numeric history for terminal summaries.
+        self.metrics = InMemoryMetricsRecorder(step_key="train/total_timesteps")
 
         # Initialize timing tracker for training 
         # loop performance measurements
@@ -215,10 +213,10 @@ class BaseAgent(pl.LightningModule):
         # Log eval metrics
         total_timesteps = int(eval_metrics.get("total_timesteps", 0))
         epoch_fps = self._timing_tracker.fps_since("on_validation_epoch_start", steps_now=total_timesteps)
-        self.buffer_metrics({
+        self.metrics.record_eval({
             **{k: v for k, v in eval_metrics.items() if not k.startswith("per_env/")},
-            "epoch": int(self.current_epoch), 
-            "epoch_fps": epoch_fps, 
+            "epoch": int(self.current_epoch),
+            "epoch_fps": epoch_fps,
         })
 
     def on_validation_epoch_end(self):
@@ -230,7 +228,7 @@ class BaseAgent(pl.LightningModule):
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
 
         # TODO: encapsulate in callback
-        print_terminal_ascii_summary(self._train_metrics_history.as_dict())
+        print_terminal_ascii_summary(self.metrics.history())
 
         # Record final evaluation video and save associated metrics JSON next to it
         checkpoint_dir = self.run_manager.ensure_path("checkpoints/")
@@ -360,11 +358,8 @@ class BaseAgent(pl.LightningModule):
         from dataclasses import asdict
         from pytorch_lightning.loggers import WandbLogger
 
-        def _sanitize_name(name: str) -> str:
-            return name.replace("/", "-").replace("\\", "-")
-
         # Create the wandb logger, attach to the existing run if present
-        project_name = self.config.project_id if self.config.project_id else _sanitize_name(self.config.env_id)
+        project_name = self.config.project_id if self.config.project_id else BaseAgent._sanitize_name(self.config.env_id)
         experiment_name = f"{self.config.algo_id}-{self.config.seed}"
         wandb_logger = WandbLogger(
             project=project_name,
@@ -510,7 +505,7 @@ class BaseAgent(pl.LightningModule):
             # Compute model gradient norms and log them
             # (do this before any gradient clipping)
             metrics = model.compute_grad_norms()
-            self.buffer_metrics(metrics)
+            self.metrics.record_train(metrics)
 
             # In case a maximum gradient norm is set, 
             # clips gradients so that norm isn't exceeded
@@ -539,27 +534,13 @@ class BaseAgent(pl.LightningModule):
         self._change_optimizers_policy_lr(new_policy_lr)
         # TODO: should I do this here or every epoch?
         # Log scheduled LR under train namespace
-        self.buffer_metrics({"policy_lr": new_policy_lr})
+        self.metrics.record_train({"policy_lr": new_policy_lr})
 
     def _change_optimizers_policy_lr(self, policy_lr):
         optimizers = self.optimizers()
         if not isinstance(optimizers, (list, tuple)): optimizers = [optimizers]
         for opt in optimizers:
             for pg in opt.param_groups: pg["lr"] = policy_lr
-
-    # TODO: fix this
-    def buffer_metrics(self, metrics):#, *, prefix=None):
-        """
-        Lightning logger caused significant performance drops, as much as 2x slower train/fps.
-        Using custom metric collection / flushing logic to avoid this issue.
-        """
-        # Build a single prefixed mapping and feed both sinks to avoid duplication
-        #prefixed = {f"{prefix}/{k}": v for k, v in metrics.items()} if prefix else dict(metrics)
-
-        # Add to epoch aggregation buffer and terminal history
-        self._epoch_metrics_buffer.log(metrics)
-        self._train_metrics_history.update(metrics)
-
     # TODO: review this method
     def configure_optimizers(self):
         from utils.optimizer_factory import build_optimizer

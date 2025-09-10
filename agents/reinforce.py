@@ -88,7 +88,7 @@ class REINFORCE(BaseAgent):
         loss = policy_loss + (ent_coef * entropy_loss)
         
         # Log the metrics for monitoring training progress
-        self.buffer_metrics({
+        self.metrics.record_train({
             'loss' : loss.detach(),
             'policy_loss': policy_loss.detach(),
             'entropy_loss': entropy_loss.detach(),

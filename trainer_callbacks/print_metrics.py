@@ -52,66 +52,24 @@ class PrintMetricsCallback(pl.Callback):
         # between step and epoch prints. Applied to metrics whose key ends with 'time_elapsed'.
         self._delta_soft_tolerance_sec = 1.0
         # Load key priority from config unless explicitly provided
-        if key_priority is not None:
-            self.key_priority = key_priority
-        else:
-            try:
-                from utils.metrics import get_key_priority
-                cfg_key_priority = get_key_priority()
-            except Exception:
-                cfg_key_priority = None
-            # Fallback to previous hardcoded defaults if config not present
-            self.key_priority = cfg_key_priority or [
-                "train/ep_rew_mean",
-                "train/ep_rew_best",
-                "train/ep_len_mean",
-                "train/epoch",
-                "train/total_timesteps",
-                "train/total_episodes",
-                "train/total_rollouts",
-                "train/rollout_timesteps",
-                "train/rollout_episodes",
-                "train/epoch_fps",
-                "train/rollout_fps",
-                "train/loss",
-                "train/policy_loss",
-                "train/value_loss",
-                "train/entropy_loss",
-                "eval/ep_rew_mean",
-                "eval/ep_rew_best",
-                "eval/ep_len_mean",
-                "eval/epoch",
-                "eval/total_timesteps",
-                "eval/total_episodes",
-                "eval/total_rollouts",
-                "eval/rollout_timesteps",
-                "eval/rollout_episodes",
-                "eval/epoch_fps",
-                "eval/rollout_fps",
-            ]
+        self.key_priority = key_priority
         self.previous_metrics = {}  # Store previous values for delta validation
         self._last_printed_metrics = None  # For change detection
         self._change_tol = 1e-12
 
         # Dedicated table printer to preserve state across prints (avoids global resets)
         from utils.table_printer import NamespaceTablePrinter
+        
         # Load highlight configuration from metrics.yaml if available
-        try:
-            from utils.metrics import get_highlight_config, get_metric_bounds
-            _hl_cfg = get_highlight_config()
-            _hl_value_bold_for = _hl_cfg.get('value_bold_metrics', set())
-            _hl_row_for = _hl_cfg.get('row_metrics', set())
-            _hl_row_bg_color = _hl_cfg.get('row_bg_color', 'bg_blue')
-            _hl_row_bold = bool(_hl_cfg.get('row_bold', True))
-            _metric_bounds = get_metric_bounds()
-            self._metric_bounds = dict(_metric_bounds)
-        except Exception:
-            _hl_value_bold_for = {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "epoch"}
-            _hl_row_for = {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "total_timesteps"}
-            _hl_row_bg_color = 'bg_blue'
-            _hl_row_bold = True
-            _metric_bounds = {}
-            self._metric_bounds = {}
+        from utils.metrics import get_highlight_config, get_metric_bounds
+        _hl_cfg = get_highlight_config()
+        _hl_value_bold_for = _hl_cfg.get('value_bold_metrics', set())
+        _hl_row_for = _hl_cfg.get('row_metrics', set())
+        _hl_row_bg_color = _hl_cfg.get('row_bg_color', 'bg_blue')
+        _hl_row_bold = bool(_hl_cfg.get('row_bold', True))
+        _metric_bounds = get_metric_bounds()
+        self._metric_bounds = dict(_metric_bounds)
+
 
         self._printer = NamespaceTablePrinter(
             # Keep numbers compact and colored like before

@@ -11,7 +11,7 @@ class BaseAgent(pl.LightningModule):
     @staticmethod
     def _sanitize_name(name: str) -> str:
         return str(name).replace("/", "-").replace("\\", "-")
-        
+
     def __init__(self, config):
         super().__init__()
 
@@ -557,3 +557,10 @@ class BaseAgent(pl.LightningModule):
             optimizer=self.config.optimizer,
             lr=self.config.policy_lr, # TODO: is this taking annealing into account?
         )
+
+    def get_rollout_collector(self, stage: str):
+        return {
+            "train": self.train_collector,
+            "eval": self.validation_collector,
+            "test": self.test_collector,
+        }[stage]

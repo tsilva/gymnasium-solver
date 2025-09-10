@@ -73,7 +73,7 @@ class VideoLoggerCallback(pl.Callback):
         )
         
         train_root = (base_root / "train").resolve()
-        eval_root = (base_root / "eval").resolve()
+        eval_root = (base_root / "val").resolve()
         
         return train_root, eval_root
 
@@ -197,18 +197,18 @@ class VideoLoggerCallback(pl.Callback):
         self._process(trainer, "train")
 
     def on_validation_epoch_end(self, trainer, *_):
-        self._process(self._trainer, "eval")
+        self._process(self._trainer, "val")
 
     def on_fit_end(self, trainer, *_):
         # Process any remaining videos before training ends
         self._process(trainer, "train")
-        self._process(trainer, "eval")
+        self._process(trainer, "val")
 
     def teardown(self, *a, **k):
         # Process any remaining videos one last time before shutdown
         if self._trainer:
             self._process(self._trainer, "train")
-            self._process(self._trainer, "eval")
+            self._process(self._trainer, "val")
         self._stop_watch()
 
     # --------- core ----------------------------------------------------------

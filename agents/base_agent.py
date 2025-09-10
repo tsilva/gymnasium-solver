@@ -564,6 +564,6 @@ class BaseAgent(pl.LightningModule):
     def get_rollout_collector(self, stage: str):
         return {
             "train": self.train_collector,
-            "eval": self.validation_collector,
+            "val": self.validation_collector,
             "test": self.test_collector,
         }[stage]

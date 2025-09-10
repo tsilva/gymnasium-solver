@@ -61,7 +61,7 @@ class InMemoryMetricsRecorder(MetricsRecorder):
         s = str(stage).lower()
         if s == "train":
             self._train_buf.clear()
-        elif s == "eval":
+        elif s == "val":
             self._eval_buf.clear()
         else:
             raise ValueError(f"Unknown stage for reset_epoch: {stage}")
@@ -70,7 +70,7 @@ class InMemoryMetricsRecorder(MetricsRecorder):
         s = str(stage).lower()
         if s == "train":
             return dict(self._train_buf.means())
-        if s == "eval":
+        if s == "val":
             return dict(self._eval_buf.means())
         raise ValueError(f"Unknown stage for compute_epoch_means: {stage}")
 

@@ -243,7 +243,7 @@ def get_metric_bounds(metrics_config: Optional[Dict[str, Any]] = None) -> Dict[s
     if metrics_config is None:
         metrics_config = load_metrics_config()
 
-    namespaces = ["train", "eval", "rollout", "time"]
+    namespaces = ["train", "val", "rollout", "time"]
     bounds: Dict[str, Dict[str, float]] = {}
 
     for metric_name, metric_cfg in metrics_config.items():

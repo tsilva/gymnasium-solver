@@ -101,7 +101,7 @@ class NamespaceTablePrinter:
         compact_numbers: bool = True,
         color: bool = True,
         better_when_increasing: Optional[Dict[str, bool]] = None,
-        fixed_section_order: Optional[Iterable[str]] = ("train", "eval"),
+        fixed_section_order: Optional[Iterable[str]] = ("train", "val"),
         sort_keys_within_section: bool = True,
         use_ansi_inplace: bool = True,
         stream=None,

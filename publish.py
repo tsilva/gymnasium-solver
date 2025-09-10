@@ -187,12 +187,12 @@ def _find_best_video_for_run(run_dir: Path) -> Optional[Path]:
     Returns the path if found, else None.
     """
     # Prefer the canonical new location under the run directory first
-    canonical_new = run_dir / "videos" / "eval" / "best.mp4"
+    canonical_new = run_dir / "videos" / "val" / "best.mp4"
     if canonical_new.exists():
         return canonical_new.resolve()
 
     # Fallback to legacy canonical location
-    canonical_legacy = run_dir / "videos" / "eval" / "episodes" / "best_checkpoint.mp4"
+    canonical_legacy = run_dir / "videos" / "val" / "episodes" / "best_checkpoint.mp4"
     if canonical_legacy.exists():
         return canonical_legacy.resolve()
 

@@ -16,13 +16,13 @@ class DispatchMetricsCallback(pl.Callback):
         if not pl_module.should_run_validation_epoch(): return # TODO: should_run_validation_epoch()?
 
         # Reset epoch metrics
-        pl_module.metrics.reset_epoch("eval")
+        pl_module.metrics.reset_epoch("val")
 
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         if not pl_module.should_run_validation_epoch(): return
         
         # Dispatch metrics
-        self._dispatch_metrics(pl_module, "eval")
+        self._dispatch_metrics(pl_module, "val")
     
     def _dispatch_metrics(self, pl_module: pl.LightningModule, stage: str):
         # Don't log until we have at least one episode completed 

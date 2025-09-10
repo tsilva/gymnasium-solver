@@ -1,7 +1,7 @@
 import os
-import yaml
 import gymnasium as gym
 from dataclasses import asdict
+from utils.io import read_yaml
 
 class EnvInfoWrapper(gym.ObservationWrapper):
 
@@ -16,7 +16,10 @@ class EnvInfoWrapper(gym.ObservationWrapper):
         env_id = self.get_id()
         spec_path = f"config/environments/{env_id}.spec.yaml"
         if not os.path.exists(spec_path): return {}
-        with open(spec_path, "r") as f: spec = yaml.safe_load(f)
+        try:
+            spec = read_yaml(spec_path) or {}
+        except Exception:
+            spec = {}
         return spec
 
     def _get_spec__env(self):

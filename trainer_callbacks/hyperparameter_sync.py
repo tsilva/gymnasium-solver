@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 import pytorch_lightning as pl
+from utils.io import read_json
 
 class HyperparamSyncCallback(pl.Callback):
     """
@@ -125,8 +126,7 @@ class HyperparamSyncCallback(pl.Callback):
                     if current_mtime > self.last_check_time:
                         self.last_check_time = current_mtime
                         try:
-                            with open(self.control_file, 'r') as f:
-                                data = json.load(f)
+                            data = read_json(self.control_file)
                             self.adjustment_queue.put(data)
                         except (json.JSONDecodeError, IOError) as e:
                             if self.verbose:

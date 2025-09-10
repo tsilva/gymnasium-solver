@@ -9,8 +9,7 @@ singleton so callers don't repeatedly read the file.
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional, Callable
-
-import yaml
+from utils.io import read_yaml
 
 @dataclass
 class Metrics:
@@ -34,7 +33,7 @@ class Metrics:
     def _load(self) -> None:
         project_root = Path(__file__).parent.parent
         metrics_config_path = project_root / self.config_dir / "metrics.yaml"
-        with open(metrics_config_path, "r") as f: data = yaml.safe_load(f)
+        data = read_yaml(metrics_config_path) or {}
         self._config = data
 
     def _get_global_cfg(self) -> Dict[str, Any]:

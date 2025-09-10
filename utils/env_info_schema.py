@@ -80,9 +80,8 @@ class EnvInfo:
 
     @classmethod
     def load_yaml(cls, path: Path) -> "EnvInfo":
-        import yaml
-        with path.open("r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
+        from utils.io import read_yaml
+        data = read_yaml(path)
         if not isinstance(data, Mapping):
             # Store raw in extras to preserve context; validation will report
             return cls(extras={"raw": data})

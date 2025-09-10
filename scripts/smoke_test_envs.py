@@ -2,8 +2,7 @@ import argparse
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
-
-import yaml
+from utils.io import read_yaml
 
 # Ensure project root is on sys.path so `utils` and other local modules import
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -23,8 +22,7 @@ def _collect_env_config_map(config_dir: Path) -> Dict[str, Dict[str, Any]]:
         if path.name.endswith(".new.yaml"):
             continue
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                doc = yaml.safe_load(f) or {}
+            doc = read_yaml(path) or {}
             if not isinstance(doc, dict):
                 continue
         except Exception:
@@ -215,4 +213,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

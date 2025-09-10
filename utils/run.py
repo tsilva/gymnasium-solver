@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional
+from utils.io import read_json
 
 @dataclass(frozen=True)
 class Run:
@@ -43,9 +44,8 @@ class Run:
 
     def load_config(self):
         """Load the run's config into a utils.config.Config instance."""
-        import json
         from utils.config import Config
-        with open(self.config_path, "r", encoding="utf-8") as f: data: Dict = json.load(f)
+        data: Dict = read_json(self.config_path)
         return Config.build_from_dict(data)
 
     @property

@@ -123,22 +123,18 @@ class PrintMetricsLogger(LightningLoggerBase):
         return None
 
     def log_metrics(self, metrics: dict[str, Any], step: Optional[int] = None) -> None:
-        try:
-            # Convert values to basic Python scalars for rendering/validation
-            simple: Dict[str, Any] = {k: self._to_python_scalar(v) for k, v in dict(metrics).items()}
+        # Convert values to basic Python scalars for rendering/validation
+        simple: Dict[str, Any] = {k: self._to_python_scalar(v) for k, v in dict(metrics).items()}
 
-            # Validate deltas and algorithm-specific rules using the latest snapshot
-            self._validate_metric_deltas(simple)
-            self._check_algorithm_metric_rules(simple)
+        # Validate deltas and algorithm-specific rules using the latest snapshot
+        self._validate_metric_deltas(simple)
+        self._check_algorithm_metric_rules(simple)
 
-            # Render the metrics table
-            self._render_table(simple)
+        # Render the metrics table
+        self._render_table(simple)
 
-            # Track across calls
-            self.previous_metrics.update(simple)
-        except Exception:
-            # Never block training on printing issues
-            pass
+        # Track across calls
+        self.previous_metrics.update(simple)
 
     def finalize(self, status: str) -> None:  # pragma: no cover - best-effort noop
         return None

@@ -28,7 +28,7 @@ import os
 from pathlib import Path
 from typing import Optional, List, Tuple
 import importlib
-import yaml
+from utils.io import read_json, read_yaml
 
 
 RUNS_DIR = Path("runs")
@@ -214,7 +214,7 @@ def extract_run_metadata(run_dir: Path) -> dict:
     cfg = {}
     if config_path.exists():
         try:
-            cfg = json.loads(config_path.read_text())
+            cfg = read_json(config_path) or {}
         except Exception:
             pass
 
@@ -286,7 +286,7 @@ def _guess_config_id_from_environments(env_id: str, algo_id: str) -> Optional[st
                 if yf.name.endswith(".new.yaml"):
                     continue
                 try:
-                    doc = yaml.safe_load(yf.read_text()) or {}
+                    doc = read_yaml(yf) or {}
                 except Exception:
                     continue
                 if not isinstance(doc, dict):

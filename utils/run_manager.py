@@ -52,8 +52,7 @@ class RunManager:
 
     def save_config(self, data: dict, filename: str = "config.json") -> Path:
         """Save a JSON config file under the run directory."""
-        import json
+        from utils.io import write_json
         path = self.ensure_path(filename)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f)
+        write_json(path, data)
         return path

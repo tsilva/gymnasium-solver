@@ -3,9 +3,8 @@ import sys
 from pathlib import Path
 from typing import List, Tuple
 
-import yaml
-
 from utils.env_info_schema import validate_env_info
+from utils.io import read_yaml, read_json
 
 try:
     import json
@@ -32,18 +31,15 @@ def find_yaml_files(root: Path) -> List[Path]:
 
 
 def validate_file_python(path: Path) -> List[Tuple[str, str]]:
-    with path.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
+    data = read_yaml(path)
     if not isinstance(data, dict):
         return [("root", "YAML must load to a mapping")] 
     return validate_env_info(data)
 
 
 def validate_file_jsonschema(path: Path, schema_path: Path) -> List[Tuple[str, str]]:
-    with schema_path.open("r", encoding="utf-8") as sf:
-        schema = json.load(sf)
-    with path.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
+    schema = read_json(schema_path)
+    data = read_yaml(path)
     if not isinstance(data, dict):
         return [("root", "YAML must load to a mapping")] 
     validator = Draft202012Validator(schema)

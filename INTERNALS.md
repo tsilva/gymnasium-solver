@@ -2,6 +2,12 @@
 
 High-signal reference for maintainers and agents. Read this before making changes.
 
+### IO Helpers
+- JSON and YAML file IO is centralized in `utils/io.py`.
+  - Use `read_json(path)` / `write_json(path, data, indent=2, ensure_ascii=False, ...)`.
+  - Use `read_yaml(path)` / `write_yaml(path, data)`.
+  - All functions use UTF-8 encoding by default for both reads and writes.
+
 ### Top-level flow
 - **Entry point**: `train.py` expects `--config_id "<env>:<variant>"` (e.g., `CartPole-v1:ppo`) and optional `-q/--quiet`; it splits env/variant, loads `Config` via `utils.config.load_config(config_id, variant_id)`, sets the global seed via `stable_baselines3.common.utils.set_random_seed`, creates the agent (`agents.create_agent`), and calls `agent.learn()`.
 - **W&B sweeps**: When launched by a W&B Agent (auto-detected via `WANDB_SWEEP_ID`) or with `--wandb_sweep`, `train.py` calls `wandb.init(config=asdict(config))` early and merges `wandb.config` into the main `Config` before creating the agent. Schedule strings like `lin_0.001` are parsed, and fractional `batch_size` in (0, 1] is resolved against `n_envs * n_steps` post-override.

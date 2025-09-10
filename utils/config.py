@@ -6,7 +6,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
 
-import yaml
+from utils.io import read_yaml, write_json
 
 @dataclass
 class Config:
@@ -238,7 +238,7 @@ class Config:
 
         def _collect_from_file(path: Path) -> None:
             # Load the YAML file
-            with open(path, "r", encoding="utf-8") as f: doc = yaml.safe_load(f) or {}
+            doc = read_yaml(path) or {}
 
             # Load the base config from the YAML file
             config_field_names = set(cls.__dataclass_fields__.keys())
@@ -351,7 +351,7 @@ class Config:
         """Save configuration to a JSON file."""
         data = asdict(self)
         data["algo_id"] = self.algo_id # TODO: do this in serializer method instead
-        with open(path, "w") as f: json.dump(data, f, indent=2, default=str)
+        write_json(path, data, indent=2, ensure_ascii=False, default=str)
     
     # TODO: figure out a way to softcode this
     def validate(self):

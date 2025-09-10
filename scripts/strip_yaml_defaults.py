@@ -79,7 +79,7 @@ def main() -> int:
 
     changed_files = []
     for p in sorted(ENV_DIR.glob("*.yaml")):
-        data = yaml.load(p.read_text())
+        data = yaml.load(p.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             continue
         before = yaml.dump(data, sys.stdout.__class__()) if False else None  # no-op
@@ -92,9 +92,9 @@ def main() -> int:
         s = StringIO()
         yaml.dump(data, s)
         new_text = s.getvalue()
-        old_text = p.read_text()
+        old_text = p.read_text(encoding="utf-8")
         if new_text != old_text:
-            p.write_text(new_text)
+            p.write_text(new_text, encoding="utf-8")
             changed_files.append(p.name)
     print(f"Stripped defaults from {len(changed_files)} files: {', '.join(changed_files)}")
     return 0

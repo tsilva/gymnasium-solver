@@ -25,14 +25,12 @@ class EarlyStoppingCallback(pl.Callback):
         metric_key: str,
         threshold: float,
         mode: str = "max",
-        verbose: bool = True,
     ) -> None:
         super().__init__()
         assert mode in {"max", "min"}, "mode must be 'max' or 'min'"
         self.metric_key = metric_key
         self.mode = mode
         self.threshold = threshold
-        self.verbose = verbose
 
     def on_train_epoch_end(self, trainer, pl_module) -> None:
         # If value is not available yet, do nothing
@@ -49,6 +47,5 @@ class EarlyStoppingCallback(pl.Callback):
         trainer.should_stop = True
         
         # Print reason if verbose
-        if self.verbose: print(
-            f"Early stopping: '{self.metric_key}' reached {value} (threshold={self.threshold}, mode={self.mode})."
-        )
+        comp_op = ">=" if self.mode == "max" else "<="
+        print(f"Early stopping! '{self.metric_key}': {value} {comp_op} {self.threshold}.")

@@ -27,11 +27,8 @@ class PixelObservationWrapper(gym.ObservationWrapper):
         frame = self._render_frame()
         if frame is None:
             # Try resetting the environment once to allow rendering
-            try:
-                self.env.reset()
-                frame = self._render_frame()
-            except Exception:
-                frame = None
+            self.env.reset()
+            frame = self._render_frame()
         if frame is None:
             raise RuntimeError("PixelObservationWrapper could not obtain a rendered frame from the environment.")
 
@@ -40,11 +37,8 @@ class PixelObservationWrapper(gym.ObservationWrapper):
         self.observation_space = gym.spaces.Box(low=0, high=255, shape=self._frame_shape, dtype=np.uint8)
 
     def _render_frame(self) -> Optional[np.ndarray]:
-        try:
-            frame = self.env.render(**self.render_kwargs)
-            return frame
-        except Exception:
-            return None
+        frame = self.env.render(**self.render_kwargs)
+        return frame
 
     @staticmethod
     def _format_frame(frame: Any) -> np.ndarray:
@@ -64,6 +58,5 @@ class PixelObservationWrapper(gym.ObservationWrapper):
     def observation(self, observation):  # type: ignore[override]
         frame = self._render_frame()
         if frame is None:
-            # As a fallback, return zeros with the right shape
-            return np.zeros(self._frame_shape, dtype=np.uint8)
+            raise RuntimeError("PixelObservationWrapper failed to render a frame during observation()")
         return self._format_frame(frame)

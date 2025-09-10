@@ -38,7 +38,7 @@ class VizDoomEnv(gym.Env):
 
         try:
             import vizdoom as vzd
-        except Exception as exc:  # pragma: no cover - import-time dependency
+        except ImportError as exc:  # pragma: no cover - import-time dependency
             raise ImportError(
                 "vizdoom package is required for VizDoomEnv. Install with: pip install vizdoom"
             ) from exc
@@ -63,16 +63,10 @@ class VizDoomEnv(gym.Env):
         self._game.set_window_visible(self._render_mode == "human")
 
         if seed is not None:
-            try:
-                self._game.set_seed(int(seed))
-            except Exception:
-                pass
+            self._game.set_seed(int(seed))
 
         # Ensure RGB24 for predictable observations (cfg typically sets it already)
-        try:
-            self._game.set_screen_format(vzd.ScreenFormat.RGB24)
-        except Exception:
-            pass
+        self._game.set_screen_format(vzd.ScreenFormat.RGB24)
 
         self._game.init()
 
@@ -142,25 +136,19 @@ class VizDoomEnv(gym.Env):
                     return p
 
         # Try to locate scenarios folder inside the installed vizdoom package
-        try:
-            import vizdoom as vzd  # type: ignore
-            pkg_dir = Path(vzd.__file__).parent
-            scenarios_dir = pkg_dir / "scenarios"
-            if cfg_name:
-                p = scenarios_dir / cfg_name
-                if p.is_file():
-                    return p
-        except Exception:
-            pass
+        # Use the already-imported vizdoom module
+        pkg_dir = Path(self._vzd.__file__).parent
+        scenarios_dir = pkg_dir / "scenarios"
+        if cfg_name:
+            p = scenarios_dir / cfg_name
+            if p.is_file():
+                return p
 
         return None
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None) -> Tuple[np.ndarray, Dict[str, Any]]:
         if seed is not None:
-            try:
-                self._game.set_seed(int(seed))
-            except Exception:
-                pass
+            self._game.set_seed(int(seed))
         self._game.new_episode()
         obs = self._get_screen()
         info: Dict[str, Any] = {}
@@ -168,10 +156,7 @@ class VizDoomEnv(gym.Env):
 
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
         # Map Discrete action index to a vizdoom button vector
-        try:
-            idx = int(action) if not isinstance(action, (list, tuple, np.ndarray)) else int(np.asarray(action).item())
-        except Exception:
-            idx = int(action)
+        idx = int(action) if not isinstance(action, (list, tuple, np.ndarray)) else int(np.asarray(action).item())
         idx = max(0, min(idx, len(self._discrete_actions) - 1))
         action_list = self._discrete_actions[idx]
 
@@ -207,10 +192,7 @@ class VizDoomEnv(gym.Env):
         return self._render_mode
 
     def close(self) -> None:
-        try:
-            self._game.close()
-        except Exception:
-            pass
+        self._game.close()
 
     # Helpers
     def _get_screen(self) -> np.ndarray:
@@ -225,5 +207,3 @@ class VizDoomEnv(gym.Env):
         screen = np.ascontiguousarray(screen)
         self._last_obs = screen
         return screen
-
-

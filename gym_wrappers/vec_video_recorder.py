@@ -80,19 +80,13 @@ class VecVideoRecorder(VecEnvWrapper):
 
         # Try env metadata, then fall back to VecInfoWrapper helper if present
         fps = None
-        try:
-            fps = self.env.metadata.get("render_fps")
-        except Exception:
-            fps = None
-        if not isinstance(fps, (int, float)):
-            try:
-                # Some stacks will have VecInfoWrapper above or below us; try to access helper
-                if hasattr(venv, "get_render_fps"):
-                    inferred = venv.get_render_fps()
-                    if isinstance(inferred, int) and inferred > 0:
-                        fps = inferred
-            except Exception:
-                fps = None
+        md = getattr(self.env, "metadata", None)
+        if isinstance(md, dict):
+            fps = md.get("render_fps")
+        if not isinstance(fps, (int, float)) and hasattr(venv, "get_render_fps"):
+            inferred = venv.get_render_fps()
+            if isinstance(inferred, int) and inferred > 0:
+                fps = inferred
         if not isinstance(fps, (int, float)):
             fps = 30
         self.frames_per_sec = int(fps)
@@ -180,7 +174,7 @@ class VecVideoRecorder(VecEnvWrapper):
                     bboxes = [draw.textbbox((0, 0), t, font=font) for t in lines]
                     line_heights = [(b[3] - b[1]) for b in bboxes]
                     line_widths = [(b[2] - b[0]) for b in bboxes]
-                except Exception:
+                except (AttributeError, TypeError):
                     # Fallback sizing if textbbox is not available
                     line_widths, line_heights = [], []
                     for t in lines:
@@ -222,10 +216,6 @@ class VecVideoRecorder(VecEnvWrapper):
         except ImportError:
             # PIL not available, return original frame
             self.enable_overlay = False
-            return frame
-        except Exception as e:
-            # If any error occurs, just return the original frame
-            logger.warn(f"Error adding overlay to frame: {e}")
             return frame
 
     def reset(self) -> VecEnvObs:
@@ -284,18 +274,14 @@ class VecVideoRecorder(VecEnvWrapper):
 
         # Prefer capturing a single env image if requested and available
         if self.record_env_idx is not None:
-            try:
-                images = self.env.get_images()
-                if isinstance(images, (list, tuple)) and len(images) > 0:
-                    idx = int(self.record_env_idx)
-                    # Clamp index to valid range
-                    idx = max(0, min(idx, len(images) - 1))
-                    img = images[idx]
-                    if isinstance(img, np.ndarray):
-                        frame = img
-            except Exception:
-                # Fall back to tiled render below
-                frame = None
+            images = self.env.get_images()
+            if isinstance(images, (list, tuple)) and len(images) > 0:
+                idx = int(self.record_env_idx)
+                # Clamp index to valid range
+                idx = max(0, min(idx, len(images) - 1))
+                img = images[idx]
+                if isinstance(img, np.ndarray):
+                    frame = img
 
         # Fallback: use the VecEnv tiled render (all envs)
         if frame is None:
@@ -333,7 +319,7 @@ class VecVideoRecorder(VecEnvWrapper):
         # Normalize to string in case a PathLike was provided
         try:
             video_path = os.fspath(video_path)
-        except Exception:
+        except TypeError:
             # Fallback: ensure it's a string for downstream APIs
             video_path = str(video_path)
 
@@ -348,18 +334,11 @@ class VecVideoRecorder(VecEnvWrapper):
         try:
             yield self
         finally:
-            # Always stop and save, even if an exception/early stop occurs
-            try:
-                self.stop_recording()
-            except Exception:
-                pass
-            try:
-                # Only save if we have at least one frame
-                if len(self.recorded_frames) > 0:
-                    self.save_recording(video_path)
-            except Exception:
-                # Avoid crashing the training due to video save failures
-                pass
+            # Always stop and save
+            self.stop_recording()
+            # Only save if we have at least one frame
+            if len(self.recorded_frames) > 0:
+                self.save_recording(video_path)
 
     def save_recording(self, video_path: str) -> None:
         assert len(self.recorded_frames) > 0, "No frames recorded to save."
@@ -367,7 +346,7 @@ class VecVideoRecorder(VecEnvWrapper):
         # Normalize potential PathLike to str for safety
         try:
             path_str = os.fspath(video_path)
-        except Exception:
+        except TypeError:
             path_str = str(video_path)
 
         assert path_str.endswith(".mp4"), "Video file must have .mp4 extension"

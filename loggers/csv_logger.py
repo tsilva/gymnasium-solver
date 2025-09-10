@@ -4,7 +4,7 @@ import csv
 import threading
 import time
 from pathlib import Path
-from queue import Queue, Empty
+from queue import Queue, Empty, Full
 from typing import Any, Dict, Optional, List
 
 
@@ -86,9 +86,9 @@ class CsvMetricsLogger:
         # Non-blocking put with drop-on-full to avoid stalling training
         try:
             self._q.put_nowait([row])
-        except Exception:
-            # Queue full; drop this row silently to preserve throughput
-            pass
+        except Full:
+            # Queue full; drop this row to preserve throughput
+            return
 
     def close(self, timeout: float = 2.0) -> None:
         """Signal writer to stop and close file."""
@@ -303,4 +303,3 @@ class CsvMetricsLogger:
                 self._fh.flush()
             except Exception:
                 pass
-

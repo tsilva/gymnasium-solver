@@ -193,13 +193,6 @@ class PrintMetricsLogger(LightningLoggerBase):
                 # Be resilient on logging
                 pass
 
-    # ------------- Rendering helpers (merged from NamespaceTablePrinter) -------------
-    # ANSI helpers are centralized in utils.logging (ansi, apply_ansi_background)
-
-    # Namespacing helper is shared via utils.dict_utils.group_by_namespace
-
-    # Value formatting delegated to utils.formatting.format_value
-
     def _delta_for_key(self, namespace: str, key: str, value: Any):
         # In case we don't have a previous value, return empty string
         if self._prev is None: return ("", None)
@@ -261,10 +254,13 @@ class PrintMetricsLogger(LightningLoggerBase):
             print(text, file=self.stream)
 
     def _render_table(self, data: Dict[str, Any]) -> None:
-        if not data:
-            return
+        # In case we don't have any data, return
+        if not data: return
+
         self._update_history(data)
+
         grouped = _group_by_namespace(data)
+
         ns_names = list(grouped.keys())
         if self.fixed_section_order:
             pref = [ns for ns in self.fixed_section_order if ns in grouped]
@@ -277,6 +273,7 @@ class PrintMetricsLogger(LightningLoggerBase):
                 grouped[ns] = dict(
                     sorted(grouped[ns].items(), key=lambda kv: _get_sort_key(ns, kv[0], self.key_priority))
                 )
+                
         formatted: Dict[str, Dict[str, str]] = {}
         val_candidates: List[str] = []
         key_candidates: List[str] = [ns + "/" for ns in ns_order]
@@ -364,51 +361,3 @@ class PrintMetricsLogger(LightningLoggerBase):
         self._render_lines(lines)
         self._prev = dict(data)
         self._last_height = len(lines)
-
-    # ------------- One-off rendering entrypoint for external callers -------------
-    @classmethod
-    def render_namespaced_dict(
-        cls,
-        data: Dict[str, Any],
-        *,
-        inplace: bool = False,
-        float_fmt: str = ".2f",
-        compact_numbers: bool = True,
-        color: bool = True,
-        metric_precision: Optional[Dict[str, int]] = None,
-        min_val_width: int = 15,
-        key_priority: Optional[List[str]] = None,
-        highlight_value_bold_for: Optional[Iterable[str]] = None,
-        highlight_row_for: Optional[Iterable[str]] = None,
-        highlight_row_bg_color: str = "bg_blue",
-        highlight_row_bold: bool = True,
-        metric_bounds: Optional[Dict[str, Dict[str, float]]] = None,
-        highlight_bounds_bg_color: str = "bg_yellow",
-    ) -> None:
-        # Create a temporary instance for stateless, one-off printing
-        inst = cls(
-            metric_precision=metric_precision or {},
-            metric_delta_rules={},
-            algorithm_metric_rules={},
-            min_val_width=min_val_width,
-            key_priority=key_priority or [],
-        )
-        inst.float_fmt = float_fmt
-        inst.compact_numbers = compact_numbers
-        inst.use_ansi_inplace = bool(inplace and sys.stdout.isatty())
-        inst.color = bool(color and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None)
-        # Override highlights if provided
-        if highlight_value_bold_for is not None:
-            inst.highlight_value_bold_for_set = set(highlight_value_bold_for)
-        if highlight_row_for is not None:
-            inst.highlight_row_for_set = set(highlight_row_for)
-        if highlight_row_bg_color:
-            inst.highlight_row_bg_color = highlight_row_bg_color
-        inst.highlight_row_bold = bool(highlight_row_bold)
-        # Bounds
-        if metric_bounds is not None:
-            inst.metric_bounds_map = dict(metric_bounds)
-        if highlight_bounds_bg_color:
-            inst.highlight_bounds_bg_color = highlight_bounds_bg_color
-        # Render once (no history/deltas across calls)
-        inst._render_table(data)

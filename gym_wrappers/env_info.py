@@ -15,11 +15,9 @@ class EnvInfoWrapper(gym.ObservationWrapper):
     def _get_spec__file(self):
         env_id = self.get_id()
         spec_path = f"config/environments/{env_id}.spec.yaml"
-        if not os.path.exists(spec_path): return {}
-        try:
-            spec = read_yaml(spec_path) or {}
-        except Exception:
-            spec = {}
+        if not os.path.exists(spec_path):
+            return {}
+        spec = read_yaml(spec_path) or {}
         return spec
 
     def _get_spec__env(self):

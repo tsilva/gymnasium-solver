@@ -8,6 +8,8 @@ from utils.decorators import must_implement
 from utils.reports import print_terminal_ascii_summary
 
 class BaseAgent(pl.LightningModule):
+
+    # TODO: extract to util
     @staticmethod
     def _sanitize_name(name: str) -> str:
         return str(name).replace("/", "-").replace("\\", "-")
@@ -430,65 +432,42 @@ class BaseAgent(pl.LightningModule):
 
         # Checkpointing 
         checkpoint_dir = self.run_manager.ensure_path("checkpoints/")
-        checkpoint_cb = ModelCheckpointCallback(
+        callbacks.append(ModelCheckpointCallback(
             checkpoint_dir=checkpoint_dir,
             monitor="val/ep_rew_mean",
             mode="max",
             save_last=True, 
             save_threshold_reached=True,
             resume=False
-        )
-        callbacks.append(checkpoint_cb)
+        ))
 
         # Video logger watches a run-specific media directory lazily (do not create it up-front)
         video_dir = self.run_manager.get_run_dir() / "videos"
-        video_logger_cb = VideoLoggerCallback(
+        callbacks.append(VideoLoggerCallback(
             media_root=str(video_dir),
             namespace_depth=1,
-        )
-        callbacks.append(video_logger_cb)
+        ))
 
         # TODO: add multi-metric support to EarlyStoppingCallback
         # Early stop after reaching a certain number of timesteps
-        earlystop_timesteps_cb = EarlyStoppingCallback(
-            "train/total_timesteps",
-            self.config.max_timesteps,
-            mode="max",
-            verbose=True,
-        ) if self.config.max_timesteps else None
-        if earlystop_timesteps_cb: callbacks.append(earlystop_timesteps_cb)
+        if self.config.max_timesteps: callbacks.append(
+            EarlyStoppingCallback("train/total_timesteps", self.config.max_timesteps)
+        )
 
         # Early stop when mean training reward reaches a threshold
         reward_threshold = self.train_env.get_reward_threshold()
-        earlystop_train_reward_cb = (
-            EarlyStoppingCallback(
-                "train/ep_rew_mean",
-                reward_threshold,
-                mode="max",
-                verbose=False,
-            )
-            if self.config.early_stop_on_train_threshold else None
+        if self.config.early_stop_on_train_threshold: callbacks.append(
+            EarlyStoppingCallback("train/ep_rew_mean", reward_threshold)
         )
-        if earlystop_train_reward_cb: callbacks.append(earlystop_train_reward_cb)
 
         # Early stop when mean validation reward reaches a threshold
         reward_threshold = self.validation_env.get_reward_threshold()
-        earlystop_eval_reward_cb = (
-            EarlyStoppingCallback(
-                "val/ep_rew_mean",
-                reward_threshold,
-                mode="max",
-                verbose=False,
-            )
-            if self.config.early_stop_on_eval_threshold else None
+        if self.config.early_stop_on_eval_threshold: callbacks.append(
+            EarlyStoppingCallback("val/ep_rew_mean", reward_threshold)
         )
-        if earlystop_eval_reward_cb: callbacks.append(earlystop_eval_reward_cb)
 
         # When training ends, write a report describing on the training went
-        report_cb = EndOfTrainingReportCallback(
-            filename="report.md"
-        )
-        callbacks.append(report_cb)
+        callbacks.append(EndOfTrainingReportCallback(filename="report.md"))
 
         return callbacks
 

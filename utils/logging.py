@@ -391,47 +391,43 @@ def log_config_details(config, file: Optional[TextIO] = None) -> None:
     Ensures a recognizable header so tests can assert its presence.
     """
     out: TextIO = file or sys.stdout
+    color = _color_enabled(out if file is not None else None)
+    # Fancy banner using heavier char when coloring
+    banner_char = "━" if color else "="
+    banner = format_banner("Configuration Details", char=banner_char)
+    out.write("\n")
+    out.write(ansi(banner, "bright_magenta", "bold", enable=color) + "\n")
+    # Prefer dataclass asdict, fall back to attribute introspection
+    items = None
     try:
-        color = _color_enabled(out if file is not None else None)
-        # Fancy banner using heavier char when coloring
-        banner_char = "━" if color else "="
-        banner = format_banner("Configuration Details", char=banner_char)
-        out.write("\n")
-        out.write(ansi(banner, "bright_magenta", "bold", enable=color) + "\n")
-        # Prefer dataclass asdict, fall back to attribute introspection
-        items = None
-        try:
-            from dataclasses import asdict, is_dataclass
-            if config is not None and is_dataclass(config):
-                items = asdict(config).items()
-        except Exception:
-            items = None
-        if items is None:
-            # Collect public, non-callable attributes
-            attrs = {}
-            if config is not None:
-                for name in dir(config):
-                    if name.startswith("_"):
-                        continue
-                    try:
-                        value = getattr(config, name)
-                    except Exception:
-                        continue
-                    if callable(value):
-                        continue
-                    attrs[name] = value
-            items = attrs.items()
-        items = list(sorted(items))
-        # Align keys by longest length
-        max_k = max((len(k) for k, _ in items), default=0)
-        for k, v in items:
-            line = format_kv_line(k, v, key_width=max_k, key_color="bright_blue", val_color="bright_white", enable_color=color)
-            out.write(line + "\n")
-        out.write(ansi(("━" if color else "=") * 60, "bright_magenta", enable=color) + "\n")
-        out.flush()
+        from dataclasses import asdict, is_dataclass
+        if config is not None and is_dataclass(config):
+            items = asdict(config).items()
     except Exception:
-        # Do not let logging issues crash the program
-        pass
+        items = None
+    if items is None:
+        # Collect public, non-callable attributes
+        attrs = {}
+        if config is not None:
+            for name in dir(config):
+                if name.startswith("_"):
+                    continue
+                try:
+                    value = getattr(config, name)
+                except Exception:
+                    continue
+                if callable(value):
+                    continue
+                attrs[name] = value
+        items = attrs.items()
+    items = list(sorted(items))
+    # Align keys by longest length
+    max_k = max((len(k) for k, _ in items), default=0)
+    for k, v in items:
+        line = format_kv_line(k, v, key_width=max_k, key_color="bright_blue", val_color="bright_white", enable_color=color)
+        out.write(line + "\n")
+    out.write(ansi(("━" if color else "=") * 60, "bright_magenta", enable=color) + "\n")
+    out.flush()
 
 
 def display_config_summary(data_json: dict, *, width: int = 60) -> None:

@@ -47,6 +47,16 @@ This repository allows autonomous and assisted agents to make changes and answer
 - Add short docstrings for non-trivial functions; explain "why" when intent isn’t obvious.
 - Match the repository’s existing module layout and patterns (e.g., `utils/`, `agents/`, `gym_wrappers/`).
 
+### Exception handling
+- Fail fast by default: do not silence unexpected errors. Let exceptions propagate so failures are visible and attributable.
+- Avoid broad catches (`except Exception:`) and bare `except:`. Do not use `pass`, sentinel returns, or silent fallbacks that mask bugs.
+- Only catch specific, expected exceptions in these cases:
+  - Optional/soft dependencies (e.g., guarding imports); raise a clear `ImportError` with guidance.
+  - Cleanup/finalizers where raising would mask the primary error; prefer logging context and preserving the original exception.
+  - Expected control flow where the exception is part of the API contract; catch narrowly and re-raise with added context if not handled.
+- Never use `contextlib.suppress` for broad error hiding.
+- When catching, keep scope minimal, match exact exception types, and re-raise after enriching context where appropriate.
+
 ### Commands and environment
 - Assume non-interactive shells. Use `--yes`/`--non-interactive` flags where applicable.
 - If a command would use a pager, append `| cat`.

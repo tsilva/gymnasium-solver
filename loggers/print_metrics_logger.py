@@ -16,7 +16,7 @@ from utils.reports import sparkline as _sparkline
 from utils.dict_utils import group_by_namespace as _group_by_namespace
 from utils.torch import to_python_scalar as _to_python_scalar
 from utils.formatting import (
-    is_number as _is_number,
+    is_number,
     format_value as _format_value,
     format_delta_magnitude as _fmt_delta_mag,
     get_sort_key as _get_sort_key,
@@ -141,7 +141,7 @@ class PrintMetricsLogger(LightningLoggerBase):
             if metric_name in current_metrics and metric_name in self.previous_metrics:
                 curr = current_metrics[metric_name]
                 prev = self.previous_metrics[metric_name]
-                if not (_is_number(curr) and _is_number(prev)):
+                if not (is_number(curr) and is_number(prev)):
                     continue
                 try:
                     ok = bool(rule_lambda(prev, curr))
@@ -159,7 +159,7 @@ class PrintMetricsLogger(LightningLoggerBase):
             if metric_name not in current_metrics:
                 continue
             curr = current_metrics[metric_name]
-            if not _is_number(curr):
+            if not is_number(curr):
                 continue
             try:
                 check_func = rule_config.get('check')
@@ -174,7 +174,7 @@ class PrintMetricsLogger(LightningLoggerBase):
                             satisfied = bool(check_func(curr))
                         elif metric_name in self.previous_metrics:
                             prev = self.previous_metrics.get(metric_name)
-                            if _is_number(prev):
+                            if is_number(prev):
                                 satisfied = bool(check_func(prev, curr))
                             else:
                                 satisfied = True
@@ -210,7 +210,7 @@ class PrintMetricsLogger(LightningLoggerBase):
 
         # In case the delta is less than the tolerance, return 0 delta
         prev_value = self._prev[full_key]
-        assert _is_number(value) and _is_number(prev_value), f"Value and previous value must be numbers: {value} and {prev_value}"
+        assert is_number(value) and is_number(prev_value), f"Value and previous value must be numbers: {value} and {prev_value}"
         delta = float(value) - float(prev_value)
         if abs(delta) <= self.delta_tol: return ("→0", "gray")
 
@@ -231,7 +231,7 @@ class PrintMetricsLogger(LightningLoggerBase):
             float_fmt=self.float_fmt,
         )
         return (f"{arrow}{mag}", color)
-        
+
     def _spark_for_key(self, full_key: str, width: int) -> str:
         values = self._history.get(full_key)
         if not values or len(values) < 2 or width <= 0:
@@ -240,7 +240,7 @@ class PrintMetricsLogger(LightningLoggerBase):
 
     def _update_history(self, data: Dict[str, Any]) -> None:
         for k, v in data.items():
-            if not _is_number(v):
+            if not is_number(v):
                 continue
             val = float(v)
             hist = self._history.setdefault(k, [])
@@ -305,7 +305,7 @@ class PrintMetricsLogger(LightningLoggerBase):
                 else:
                     val_disp = val_str
                 try:
-                    if self.show_sparklines and _is_number(v):
+                    if self.show_sparklines and is_number(v):
                         chart = self._spark_for_key(full_key, self.sparkline_width)
                         if chart:
                             val_disp = f"{val_disp}  {chart}"
@@ -341,7 +341,7 @@ class PrintMetricsLogger(LightningLoggerBase):
                     bounds = self.metric_bounds_map.get(full_key) or self.metric_bounds_map.get(sub)
                     if bounds:
                         raw_val = grouped.get(ns, {}).get(sub)
-                        if _is_number(raw_val):
+                        if is_number(raw_val):
                             vnum = float(raw_val)
                             below = ("min" in bounds) and (vnum < float(bounds["min"]))
                             above = ("max" in bounds) and (vnum > float(bounds["max"]))

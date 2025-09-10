@@ -1,7 +1,7 @@
 - FEAT: hp vs pf metrics
+- FEAT: add discrete env support (solve taxi-v3, embeddings probably not sized correctly)
 
 - FEAT: add normalization support 
-- FEAT: add discrete env support (solve taxi-v3, embeddings probably not sized correctly)
 - FEAT: add sweeping support
   
   Optionally:

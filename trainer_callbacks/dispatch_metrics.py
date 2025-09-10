@@ -13,13 +13,13 @@ class DispatchMetricsCallback(pl.Callback):
         self._dispatch_metrics(pl_module, "train")
 
     def on_validation_epoch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
-        if not pl_module._should_run_eval(pl_module.current_epoch): return # TODO: should_run_validation_epoch()?
+        if not pl_module.should_run_validation_epoch(): return # TODO: should_run_validation_epoch()?
 
         # Reset epoch metrics
         pl_module.metrics.reset_epoch("eval")
 
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
-        if not pl_module._should_run_eval(pl_module.current_epoch): return
+        if not pl_module.should_run_validation_epoch(): return
         
         # Dispatch metrics
         self._dispatch_metrics(pl_module, "eval")

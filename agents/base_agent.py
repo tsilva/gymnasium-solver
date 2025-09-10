@@ -180,7 +180,7 @@ class BaseAgent(pl.LightningModule):
     def on_validation_epoch_start(self):
         # TODO: why is this being called during warmup epochs?
         # Skip validation entirely during warmup epochs to avoid evaluation overhead
-        if not self._should_run_eval(self.current_epoch):
+        if not self.should_run_validation_epoch():
             return
 
         self._timing_tracker.restart("on_validation_epoch_start", steps=0)
@@ -190,7 +190,7 @@ class BaseAgent(pl.LightningModule):
     # TODO: there are train/fps drops caused by running the collector N times (its not only the video recording); cause currently unknown
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         # If eval shouldn't be run this epoch, skip the step (eg: warmup epochs)
-        if not self._should_run_eval(self.current_epoch): # TODO: can this be done in the trainer itself?
+        if not self.should_run_validation_epoch(): # TODO: can this be done in the trainer itself?
             return None
 
         # Decide if we record a video this eval epoch
@@ -345,6 +345,9 @@ class BaseAgent(pl.LightningModule):
                 "For non-image inputs, consider using MLP for better performance."
             )
     
+    def should_run_validation_epoch(self) -> bool:
+        return self._should_run_eval(self.current_epoch)
+
     def _should_run_eval(self, epoch_idx: int) -> bool:
         # If freq is None, never evaluate
         freq = self.config.eval_freq_epochs

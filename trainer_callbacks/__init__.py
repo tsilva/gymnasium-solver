@@ -7,6 +7,7 @@ from .csv_metrics_logger import CSVMetricsLoggerCallback
 from .video_logger import VideoLoggerCallback
 from .end_of_training_report import EndOfTrainingReportCallback
 from .early_stopping import EarlyStoppingCallback
+from .epoch_metrics_logger import EpochMetricsLoggerCallback
 from .wandb_metrics_logger import WandbMetricsLoggerCallback
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "EarlyStoppingCallback",
     "CSVMetricsLoggerCallback",
     "WandbMetricsLoggerCallback",
+    "EpochMetricsLoggerCallback",
 ]

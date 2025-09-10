@@ -170,43 +170,11 @@ class BaseAgent(pl.LightningModule):
         return None
 
     def on_train_epoch_end(self):
-        # Log end of epoch metrics
-        self._on_train_epoch_end__log_metrics()
-
         # Clear the metrics buffer (all callbacks will have logged by now)
         self._epoch_metrics_buffer.clear()
 
         # Update schedules
         self._update_schedules()
-
-    def _on_train_epoch_end__log_metrics(self):
-        # Don't log until we have at least one episode completed 
-        # (otherwise we won't be able to get reliable metrics)
-        rollout_metrics = self.train_collector.get_metrics()
-        total_episodes = rollout_metrics.get("total_episodes", 0)
-        if total_episodes == 0: return
-
-        # Global & instant FPS from the same tracker
-        total_timesteps = int(rollout_metrics["total_timesteps"])
-        time_elapsed = self._timing_tracker.seconds_since("on_fit_start")
-        fps_total = self._timing_tracker.fps_since("on_fit_start", steps_now=total_timesteps)
-        fps_instant = self._timing_tracker.fps_since("on_train_epoch_start", steps_now=total_timesteps)
-
-        # Prepare metrics to log
-        _metrics = {
-            **{k:v for k, v in rollout_metrics.items() if not k.endswith("_dist")},
-            "time_elapsed": time_elapsed,
-            "epoch": self.current_epoch,
-            "fps": fps_total,
-            "fps_instant": fps_instant,
-        }
-
-        # Derive ETA (seconds remaining) from FPS and max_timesteps if available
-        if fps_total > 0.0 and self.config.max_timesteps is not None:
-            _metrics["eta_s"] = float(self.config.max_timesteps / float(fps_total))
-    
-        # Log metrics to the buffer
-        self.log_metrics(_metrics, prefix="train")
 
     def val_dataloader(self):
         # TODO: should I just do rollouts here?
@@ -293,6 +261,7 @@ class BaseAgent(pl.LightningModule):
         wandb_logger = self._create_wandb_logger()
         wandb_run = wandb_logger.experiment
 
+        # TODO: use run object instead?
         # Initilize run manager (use W&B run ID as run_id)
         self.run_manager = RunManager(wandb_run.id)
         
@@ -418,6 +387,7 @@ class BaseAgent(pl.LightningModule):
         """Assemble trainer callbacks, with an optional end-of-training report."""
         # Lazy imports to avoid heavy deps at module import time
         from trainer_callbacks import (
+            EpochMetricsLoggerCallback,
             WandbMetricsLoggerCallback,
             CSVMetricsLoggerCallback,
             PrintMetricsCallback,
@@ -430,6 +400,11 @@ class BaseAgent(pl.LightningModule):
 
         # Initialize callbacks list
         callbacks = []
+
+        # At the end of each epoch log metrics to buffer
+        # (do this before other loggers to make metrics available; 
+        # can't do this in module because callbacks are called first)
+        callbacks.append(EpochMetricsLoggerCallback())
 
         # CSV Metrics Logger (writes metrics.csv under the run directory)
         csv_path = self.run_manager.ensure_path("metrics.csv")

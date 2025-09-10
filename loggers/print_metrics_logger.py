@@ -200,25 +200,29 @@ class PrintMetricsLogger(LightningLoggerBase):
 
     # Value formatting delegated to utils.formatting.format_value
 
-    def _delta_for_key(self, ns: str, sub: str, v: Any):
-        if self._prev is None:
-            return ("", None)
-        full_key = f"{ns}/{sub}" if sub else ns
-        if full_key not in self._prev:
-            return ("", None)
-        prev_v = self._prev[full_key]
-        if not (_is_number(v) and _is_number(prev_v)):
-            return ("", None)
-        delta = float(v) - float(prev_v)
-        if abs(delta) <= self.delta_tol:
-            return ("→0", "gray")
+    def _delta_for_key(self, namespace: str, key: str, value: Any):
+        # In case we don't have a previous value, return empty string
+        if self._prev is None: return ("", None)
+
+        # In case we don't have a previous value for the key, return empty string
+        full_key = f"{namespace}/{key}" if key else namespace
+        if full_key not in self._prev: return ("", None)
+
+        # In case the delta is less than the tolerance, return 0 delta
+        prev_value = self._prev[full_key]
+        assert _is_number(value) and _is_number(prev_value), f"Value and previous value must be numbers: {value} and {prev_value}"
+        delta = float(value) - float(prev_value)
+        if abs(delta) <= self.delta_tol: return ("→0", "gray")
+
+        # Determine arrow to represent the delta direction
         arrow = "↑" if delta > 0 else "↓"
-        if full_key in self.better_when_increasing:
-            inc_better = self.better_when_increasing[full_key]
-            improved = (delta > 0) if inc_better else (delta < 0)
-            color = "green" if improved else "red"
-        else:
-            color = "green" if delta > 0 else "red"
+
+        # Determine color to represent if delta direction 
+        # is better or worse (depends on metric delta rule)
+        inc_better = self.better_when_increasing.get(full_key, True)
+        improved = (delta > 0) if inc_better else (delta < 0)
+        color = "green" if improved else "red"
+
         mag = _fmt_delta_mag(
             abs(delta),
             full_key,
@@ -227,11 +231,7 @@ class PrintMetricsLogger(LightningLoggerBase):
             float_fmt=self.float_fmt,
         )
         return (f"{arrow}{mag}", color)
-    # Delta magnitude formatting delegated to utils.formatting.format_delta_magnitude
-    # Sorting delegated to utils.formatting.get_sort_key
-
-    # ANSI stripping is provided by utils.logging.strip_ansi_codes
-
+        
     def _spark_for_key(self, full_key: str, width: int) -> str:
         values = self._history.get(full_key)
         if not values or len(values) < 2 or width <= 0:

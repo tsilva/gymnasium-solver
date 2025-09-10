@@ -277,6 +277,7 @@ class BaseAgent(pl.LightningModule):
         from utils.metrics import metrics_config
         from loggers.print_metrics_logger import PrintMetricsLogger
         _metrics = metrics_config
+        # TODO: default to metrics config inside the logger
         print_logger = PrintMetricsLogger(
             metric_precision=_metrics.metric_precision_dict(),
             metric_delta_rules=_metrics.metric_delta_rules(),

@@ -18,24 +18,12 @@ def is_number(x: Any) -> bool:
     return isinstance(x, numbers.Number)
 
 
-def humanize_num(v: numbers.Number, float_fmt: str = ".2f") -> str:
-    """Compact numeric formatter (1.2k, 3.4M, 5.6B, scientific for tiny floats)."""
-    if isinstance(v, bool):
-        return "1" if v else "0"
+def humanize_num(v, float_fmt=".2f") -> str:
+    if isinstance(v, bool): return "1" if v else "0"
     if isinstance(v, int):
-        n = abs(v)
-        sign = "-" if v < 0 else ""
-        if n >= 1_000_000_000:
-            return f"{sign}{n/1_000_000_000:.2f}B"
-        if n >= 1_000_000:
-            return f"{sign}{n/1_000_000:.2f}M"
-        if n >= 1_000:
-            return f"{sign}{n/1_000:.2f}k"
-        return str(v)
-    if isinstance(v, float):
-        if 0 < abs(v) < 1e-6:
-            return f"{v:.2e}"
-        return format(v, float_fmt)
+        n, s = abs(v), "-"*(v < 0)
+        return next((f"{s}{n/d:.2f}{u}" for d,u in ((1_000_000_000,"B"),(1_000_000,"M"),(1_000,"k")) if n >= d), str(v))
+    if isinstance(v, float): return f"{v:.2e}" if 0 < abs(v) < 1e-6 else format(v, float_fmt)
     return str(v)
 
 
@@ -106,12 +94,6 @@ def format_delta_magnitude(
     precision_map = precision_map or {}
     if isinstance(delta, int):
         return humanize_num(delta, float_fmt) if compact_numbers else fmt_plain(delta, float_fmt)
-    try:
-        import numpy as _np  # type: ignore
-        if isinstance(delta, (_np.generic,)):
-            delta = delta.item()
-    except Exception:
-        pass
     if isinstance(delta, float):
         p = precision_for(full_key, precision_map)
         default_decimals = _decimals_from_fmt(float_fmt)
@@ -133,6 +115,7 @@ def format_delta_magnitude(
     return fmt_plain(delta, float_fmt)
 
 
+# TODO: not reusable
 def get_sort_key(namespace: str, subkey: str, key_priority: Iterable[str]) -> Tuple[int, object]:
     """Compute a stable sort key honoring an explicit key priority list.
 

@@ -6,7 +6,6 @@ import os
 import sys
 import numbers
 
-import pytorch_lightning as pl
 from pytorch_lightning.loggers.logger import Logger as LightningLoggerBase  # type: ignore
 
 import torch
@@ -15,6 +14,28 @@ import torch
 ############################
 # Inlined table printer
 ############################
+ANSI_CODES = {
+    # Foreground
+    "black": "30",
+    "red": "31",
+    "green": "32",
+    "yellow": "33",
+    "blue": "34",
+    "magenta": "35",
+    "cyan": "36",
+    "gray": "90",
+    # Styles
+    "bold": "1",
+    # Background
+    "bg_black": "40",
+    "bg_red": "41",
+    "bg_green": "42",
+    "bg_yellow": "43",
+    "bg_blue": "44",
+    "bg_magenta": "45",
+    "bg_cyan": "46",
+    "bg_white": "47",
+}
 
 def _is_number(x: Any) -> bool:
     return isinstance(x, numbers.Number)
@@ -49,28 +70,10 @@ def _fmt_plain(v: Any, float_fmt: str = ".2f") -> str:
 def _ansi(color: Optional[str], s: str, enable: bool) -> str:
     if not enable or not color:
         return s
-    codes = {
-        "red": "31",
-        "green": "32",
-        "yellow": "33",
-        "blue": "34",
-        "magenta": "35",
-        "cyan": "36",
-        "gray": "90",
-        "bold": "1",
-        # Background colors
-        "bg_black": "40",
-        "bg_red": "41",
-        "bg_green": "42",
-        "bg_yellow": "43",
-        "bg_blue": "44",
-        "bg_magenta": "45",
-        "bg_cyan": "46",
-        "bg_white": "47",
-    }
-    if color == "bold":
-        return f"\x1b[{codes['bold']}m{s}\x1b[0m"
-    return f"\x1b[{codes[color]}m{s}\x1b[0m"
+    code = ANSI_CODES.get(color)
+    if not code:
+        return s
+    return f"\x1b[{code}m{s}\x1b[0m"
 
 
 def _apply_row_background(text: str, bg_color: str, enable: bool) -> str:
@@ -81,17 +84,7 @@ def _apply_row_background(text: str, bg_color: str, enable: bool) -> str:
     """
     if not enable or not bg_color:
         return text
-    bg_map = {
-        "bg_black": "40",
-        "bg_red": "41",
-        "bg_green": "42",
-        "bg_yellow": "43",
-        "bg_blue": "44",
-        "bg_magenta": "45",
-        "bg_cyan": "46",
-        "bg_white": "47",
-    }
-    code = bg_map.get(bg_color)
+    code = ANSI_CODES.get(bg_color)
     if not code:
         return text
     start = f"\x1b[{code}m"
@@ -444,9 +437,6 @@ class NamespaceTablePrinter:
         return "".join(out)
 
 
-_default_printer = NamespaceTablePrinter()
-
-
 def print_namespaced_dict(
     data: Dict[str, Any],
     *,
@@ -464,38 +454,22 @@ def print_namespaced_dict(
     metric_bounds: Optional[Dict[str, Dict[str, float]]] = None,
     highlight_bounds_bg_color: str = "bg_yellow",
 ):
-    global _default_printer
-    if (
-        _default_printer.float_fmt != float_fmt
-        or _default_printer.compact_numbers != compact_numbers
-        or (_default_printer.use_ansi_inplace != bool(inplace and sys.stdout.isatty()))
-        or _default_printer.color != bool(color and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None)
-        or _default_printer.metric_precision != (metric_precision or {})
-        or _default_printer.min_val_width != min_val_width
-        or _default_printer.key_priority != (key_priority or [])
-        or _default_printer.highlight_value_bold_for != set(highlight_value_bold_for or {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "epoch"})
-        or _default_printer.highlight_row_for != set(highlight_row_for or {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "total_timesteps"})
-        or _default_printer.highlight_row_bg_color != (highlight_row_bg_color or "bg_blue")
-        or _default_printer.highlight_row_bold != bool(highlight_row_bold)
-        or _default_printer.metric_bounds != (metric_bounds or {})
-        or _default_printer.highlight_bounds_bg_color != (highlight_bounds_bg_color or "bg_yellow")
-    ):
-        _default_printer = NamespaceTablePrinter(
-            float_fmt=float_fmt,
-            compact_numbers=compact_numbers,
-            use_ansi_inplace=bool(inplace and sys.stdout.isatty()),
-            color=bool(color and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None),
-            metric_precision=metric_precision,
-            min_val_width=min_val_width,
-            key_priority=key_priority,
-            highlight_value_bold_for=highlight_value_bold_for,
-            highlight_row_for=highlight_row_for,
-            highlight_row_bg_color=highlight_row_bg_color,
-            highlight_row_bold=highlight_row_bold,
-            metric_bounds=metric_bounds,
-            highlight_bounds_bg_color=highlight_bounds_bg_color,
-        )
-    _default_printer.update(data)
+    printer = NamespaceTablePrinter(
+        float_fmt=float_fmt,
+        compact_numbers=compact_numbers,
+        use_ansi_inplace=bool(inplace and sys.stdout.isatty()),
+        color=bool(color and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None),
+        metric_precision=metric_precision,
+        min_val_width=min_val_width,
+        key_priority=key_priority,
+        highlight_value_bold_for=highlight_value_bold_for,
+        highlight_row_for=highlight_row_for,
+        highlight_row_bg_color=highlight_row_bg_color,
+        highlight_row_bold=highlight_row_bold,
+        metric_bounds=metric_bounds,
+        highlight_bounds_bg_color=highlight_bounds_bg_color,
+    )
+    printer.update(data)
 
 
 ############################
@@ -617,8 +591,8 @@ class PrintMetricsLogger(LightningLoggerBase):
             return x
 
     def _is_number(self, x: Any) -> bool:
-        import numbers
-        return isinstance(x, numbers.Number)
+        # Deprecated in favor of module-level helper; kept for compatibility
+        return _is_number(x)
 
     def _validate_metric_deltas(self, current_metrics: Dict[str, Any]) -> None:
         for metric_name, rule_lambda in self.metric_delta_rules.items():

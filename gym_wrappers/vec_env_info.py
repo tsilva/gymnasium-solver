@@ -45,6 +45,10 @@ class VecEnvInfoWrapper(VecEnvWrapper):
         base = self._get_env_info_wrapper()
         return base.get_render_fps()
 
+    def get_time_limit(self) -> Optional[int]:
+        base = self._get_env_info_wrapper()
+        return base.get_time_limit()
+
     def get_obs_type(self):
         base = self._get_env_info_wrapper()
         return base.get_obs_type()

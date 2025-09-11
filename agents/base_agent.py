@@ -295,6 +295,7 @@ class BaseAgent(pl.LightningModule):
                 "Observation space": self.train_env.observation_space,
                 "Action space": self.train_env.action_space,
                 "Reward threshold": self.train_env.get_reward_threshold(),
+                "Time limit": self.train_env.get_time_limit(),
             }
         })
 

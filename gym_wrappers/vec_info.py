@@ -60,6 +60,14 @@ class VecInfoWrapper(VecEnvWrapper):
             else None
         )
 
+    def get_time_limit(self) -> Optional[int]:
+        info = self._first_env_info()
+        return (
+            info.get_time_limit()
+            if info and hasattr(info, "get_time_limit")
+            else None
+        )
+
     # Keep backward compatibility with typo 'treshold' if present on EnvInfoWrapper
     def get_reward_threshold(self) -> Optional[float]:
         info = self._first_env_info()
@@ -72,4 +80,3 @@ class VecInfoWrapper(VecEnvWrapper):
         return None
 
 __all__ = ["VecInfoWrapper"]
-

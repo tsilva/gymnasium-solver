@@ -54,9 +54,55 @@ class EnvInfoWrapper(gym.ObservationWrapper):
         reward_threshold = spec['reward_threshold']
         return reward_threshold
 
+    def get_time_limit(self):
+        # If the time limit wrapper is found, return the max episode steps
+        from gymnasium.wrappers import TimeLimit
+        wrapper = self._find_wrapper(TimeLimit)
+        if wrapper: 
+            value = getattr(wrapper, "max_episode_steps", None)
+            if not value: value = getattr(wrapper, "_max_episode_steps", None)
+            if value: return value
+
+        # Otherwise, return the max episode steps from the spec (if available)
+        spec = self.get_spec()
+        value = spec.get("max_episode_steps", None)
+        return value
+    
+    # TODO: clean this up
+    def get_render_fps(self):
+        """Best-effort retrieval of render FPS from env metadata.
+
+        Walks the wrapper chain to find a metadata dict exposing `render_fps`.
+        Returns an integer FPS when available, otherwise None.
+        """
+        current = self
+        while isinstance(current, gym.Env):
+            md = getattr(current, "metadata", None)
+            if isinstance(md, dict):
+                fps = md.get("render_fps")
+                if isinstance(fps, (int, float)) and fps > 0:
+                    return int(fps)
+            if not hasattr(current, "env"):
+                break
+            current = getattr(current, "env")
+        return None
+
     # NOTE: required by ObservationWrapper
     def observation(self, observation): 
         return observation
+
+    def _find_wrapper(self, wrapper_class):
+        """Return the first wrapper instance matching `wrapper_class` in the chain.
+
+        Traverses inward via successive `.env` attributes until it finds an
+        instance of `wrapper_class` or reaches the base env. Returns None when
+        not found.
+        """
+        current = self
+        while True:
+            if isinstance(current, wrapper_class): return current
+            if not hasattr(current, "env"): return None
+            current = getattr(current, "env")
 
 if __name__ == "__main__":
     env = gym.make("CartPole-v1")

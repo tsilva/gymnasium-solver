@@ -455,18 +455,18 @@ class BaseAgent(pl.LightningModule):
         ))
 
         # TODO: add multi-metric support to EarlyStoppingCallback
-        # Early stop after reaching a certain number of timesteps
+        # If defined in config, early stop after reaching a certain number of timesteps
         if self.config.max_timesteps: callbacks.append(
             EarlyStoppingCallback("train/total_timesteps", self.config.max_timesteps)
         )
 
-        # Early stop when mean training reward reaches a threshold
+        # If defined in config, early stop when mean training reward reaches a threshold
         reward_threshold = self.train_env.get_reward_threshold()
         if self.config.early_stop_on_train_threshold: callbacks.append(
             EarlyStoppingCallback("train/ep_rew_mean", reward_threshold)
         )
 
-        # Early stop when mean validation reward reaches a threshold
+        # If defined in config, early stop when mean validation reward reaches a threshold
         reward_threshold = self.validation_env.get_reward_threshold()
         if self.config.early_stop_on_eval_threshold: callbacks.append(
             EarlyStoppingCallback("val/ep_rew_mean", reward_threshold)

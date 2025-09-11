@@ -213,63 +213,36 @@ class EndOfTrainingReportCallback(pl.Callback):
         config_block = f"```yaml\n{cfg_text}\n```"
 
         # Metrics block
-        if last_vals:
-            selected_keys = [
-                "train/total_timesteps",
-                "train/epoch",
-                "train/ep_rew_mean",
-                "val/ep_rew_mean",
-                "val/ep_len_mean",
-                "train/fps",
-                "train/fps_instant",
-                "train/loss",
-                "train/policy_loss",
-                "train/value_loss",
-                "train/entropy_loss",
-            ]
-            selected_lines = ["Selected:"]
-            for k in selected_keys:
-                if k in last_vals and last_vals[k] is not None:
-                    selected_lines.append(f"- {k}: {float(last_vals[k]):.6g}")
-            # All values JSON
-            sanitized = {str(k): (float(v) if self._is_number(v) else v) for k, v in last_vals.items()}
-            all_values_json = json.dumps(sanitized, indent=2, default=str)
-            metrics_block = (
-                "\n".join(selected_lines)
-                + "\n\nAll last values (JSON):\n\n"
-                + f"```json\n{all_values_json}\n```"
-            )
-        else:
-            metrics_block = "(No metrics.csv available)"
+        selected_keys = [
+            "train/total_timesteps",
+            "train/epoch",
+            "train/ep_rew_mean",
+            "val/ep_rew_mean",
+            "val/ep_len_mean",
+            "train/fps",
+            "train/fps_instant",
+            "train/loss",
+            "train/policy_loss",
+            "train/value_loss",
+            "train/entropy_loss",
+        ]
+        selected_lines = ["Selected:"]
+        for k in selected_keys:
+            if k in last_vals and last_vals[k] is not None:
+                selected_lines.append(f"- {k}: {float(last_vals[k]):.6g}")
+        # All values JSON
+        sanitized = {str(k): (float(v) if self._is_number(v) else v) for k, v in last_vals.items()}
+        all_values_json = json.dumps(sanitized, indent=2, default=str)
+        metrics_block = (
+            "\n".join(selected_lines)
+            + "\n\nAll last values (JSON):\n\n"
+            + f"```json\n{all_values_json}\n```"
+        )
 
         # Load template from file (fallback to built-in template if missing)
         templates_dir = Path(__file__).parent / "templates"
         template_path = templates_dir / "end_of_training_report.md.tmpl"
-        if template_path.exists():
-            template_text = template_path.read_text(encoding="utf-8")
-        else:
-            template_text = (
-                "# Run Report: ${title}\n\n"
-                "- Date: ${date}\n"
-                "${run_id_bullet}"
-                "- Run dir: ${run_dir}\n"
-                "${duration_bullet}"
-                "\n"
-                "## Summary\n\n"
-                "${summary_lines}\n\n"
-                "## Environment & Config\n\n"
-                "- env_id: ${env_id}\n"
-                "- algo_id: ${algo_id}\n"
-                "- seed: ${seed}\n"
-                "- n_envs: ${n_envs}\n"
-                "- eval_freq_epochs: ${eval_freq}\n\n"
-                "### Full config (YAML)\n\n"
-                "${config_block}\n\n"
-                "## Metrics (last known values)\n\n"
-                "${metrics_block}\n\n"
-                "## LLM prompt\n\n"
-                "You are an RL training assistant. Based on the config and metrics above, suggest concrete hyperparameter adjustments to improve sample efficiency and/or final reward. Consider: learning rate scheduling, entropy coefficient, batch size, n_steps, clip range (for PPO), advantage normalization, evaluation cadence, and environment-specific wrappers. Prioritize changes likely to increase eval/ep_rew_mean sooner without destabilizing training. Return a short, actionable checklist with 3–7 items and brief justifications.\n"
-            )
+        template_text = template_path.read_text(encoding="utf-8")
 
         # Substitute variables
         template = Template(template_text)

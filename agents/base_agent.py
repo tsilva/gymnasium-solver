@@ -380,8 +380,7 @@ class BaseAgent(pl.LightningModule):
     def _build_trainer_loggers__print(self): # Prepare a terminal print logger that formats metrics from the unified logging stream
         from loggers.print_metrics_logger import PrintMetricsLogger
         # Rely on PrintMetricsLogger defaults sourced from utils.metrics_config
-        # Provide algo_id so algorithm-specific rules can be applied.
-        print_logger = PrintMetricsLogger(algo_id=self.config.algo_id)
+        print_logger = PrintMetricsLogger()
         return print_logger
         
     def _build_trainer_loggers(self):

@@ -85,12 +85,6 @@ clip_range:
   precision: 4
   min: 0.0
   max: 1.0
-  algorithm_rules:
-    ppo:
-      threshold: 0.2
-      condition: "<"
-      message: "High clip range ({current_value:.4f}) may lead to unstable training. Consider reducing."
-      level: "warning"
   tips: "Typical 0.1-0.2. Too high → aggressive updates/instability; too low → weak learning."
       
 # Episode and timestep counts (integers)
@@ -231,12 +225,6 @@ epoch_fps:
 policy_loss:
   description: "Policy network loss from gradient ascent on expected returns"
   precision: 4
-  algorithm_rules:
-    reinforce:
-      threshold: 1000.0
-      condition: "<"
-      message: "Very high policy loss ({current_value:.3f}) may indicate training instability."
-      level: "warning"
   tips: "Magnitude depends on scaling; look for smooth trends. Wild oscillations indicate instability or too-high LR."
 
 value_loss:
@@ -265,23 +253,11 @@ approx_kl:
   precision: 4
   min: 0.0
   max: 0.1
-  algorithm_rules:
-    ppo:
-      threshold: 0.1
-      condition: "<"
-      message: "High approximate KL divergence ({current_value:.4f}) indicates large policy changes. Consider reducing learning rate."
-      level: "warning"
   tips: "Healthy ~0.01-0.02. Near 0 → under-updating; >0.05-0.1 → overly aggressive updates."
 
 kl_div:
   description: "KL divergence between old and new policy log probabilities"
   precision: 4
-  algorithm_rules:
-    ppo:
-      threshold: 0.1
-      condition: "<"
-      message: "High KL divergence ({current_value:.4f}) indicates large policy changes. Consider reducing learning rate."
-      level: "warning"
   tips: "Should broadly track approx_kl. Persistent growth signals instability."
 
 clip_fraction:
@@ -289,12 +265,6 @@ clip_fraction:
   precision: 3
   min: 0.0
   max: 1.0
-  algorithm_rules:
-    ppo:
-      threshold: 0.2
-      condition: "<"
-      message: "High clip fraction ({current_value:.3f}) indicates policy is changing too rapidly. Consider reducing learning rate or clip_range."
-      level: "warning"
   tips: "Healthy ~0.1-0.3. Near 0 → weak updates; very high → too many samples are clipped."
 
 explained_variance:
@@ -302,29 +272,12 @@ explained_variance:
   precision: 3
   min: -1.0
   max: 1.0
-  algorithm_rules:
-    ppo:
-      threshold: -0.5
-      condition: ">"
-      message: "Very negative explained variance ({current_value:.3f}) indicates value function is performing poorly. Check value function architecture or learning rate."
-      level: "warning"
   tips: "Aim to rise >0.5 mid-run and >0.8 later. Negative/flat → critic failing or returns scaling issues."
 
 entropy:
   description: "Policy entropy measuring exploration vs exploitation trade-off"
   precision: 4
   min: 0.0
-  algorithm_rules:
-    ppo:
-      threshold: 0.1
-      condition: ">"
-      message: "Low entropy ({current_value:.3f}) indicates policy is becoming too deterministic. Consider increasing entropy coefficient."
-      level: "warning"
-    reinforce:
-      threshold: 0.05
-      condition: ">"
-      message: "Low entropy ({current_value:.3f}) in REINFORCE indicates policy is becoming too deterministic. Consider increasing entropy coefficient."
-      level: "warning"
   tips: "Gradual decay is healthy. Early collapse → increase ent_coef; flat high → underfitting/weak learning."
 
 entropy: early phase alert if it drops to near 0 within first 10% of steps.

@@ -1,6 +1,5 @@
 - FEAT: Set alerts for metrics as code (allows different algos to set different alerts)
   - Remove from metrics.yaml
-  - Remove algorithm_rules from metrics.yaml
   - Ensure alerts are propagated to the logger and persist until disabled
   - approx_kl: warn if > 0.05 or < 0.001 for >3 updates.
   - clip_fraction: warn if < 0.05 or > 0.4 for >3 updates.
@@ -14,20 +13,6 @@
 
 - FEAT: add normalization support 
 - FEAT: add sweeping support
-  
-  Optionally:
-  
-  - Add - { id: PongV5_RewardShaper } to env_wrappers for a shaped variant.
-  
-  Would you like me to:
-  
-  - Patch the YAML to add ppo_tuned2 with the above, and set up a quick run?
-  - Also fix the get_reward_treshold typo (safe, unrelated to learning)?
-  
-  If you prefer minimal change first, I’ll only bump clip_range to 0.2 and policy_lr to 5e-4 and rerun to verify approx_kl moves into the
-  0.01–0.02 band.
-
-
 - TODO: how is pongv5 determinism enforce
 - TODO: run pongv5 sweep
 - REFACTOR: simplify CNN policy creation, test manually first

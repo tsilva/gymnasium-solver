@@ -34,10 +34,8 @@ class PrintMetricsLogger(LightningLoggerBase):
         *,
         metric_precision: Dict[str, int] | None = None,
         metric_delta_rules: Dict[str, Callable] | None = None,
-        algorithm_metric_rules: Dict[str, dict] | None = None,
         min_val_width: int = 15,
         key_priority: List[str] | None = None,
-        algo_id: Optional[str] = None,
     ) -> None:
         """Create a pretty-print logger with sensible defaults.
 
@@ -45,8 +43,7 @@ class PrintMetricsLogger(LightningLoggerBase):
         sourced from `utils.metrics_config.metrics_config` so callers can simply
         instantiate `PrintMetricsLogger()` without wiring config plumbing.
 
-        The optional `algo_id` enables algorithm-specific metric checks; when
-        omitted, no algorithm-specific rules are enforced by default.
+        Algorithm-specific metric checks have been removed.
         """
         from utils.metrics_config import metrics_config
 
@@ -58,16 +55,10 @@ class PrintMetricsLogger(LightningLoggerBase):
         # Rules/config (populate from metrics_config when not provided)
         default_precision = metrics_config.metric_precision_dict()
         default_delta_rules = metrics_config.metric_delta_rules()
-        default_algo_rules = (
-            metrics_config.algorithm_metric_rules(algo_id)
-            if (algo_id is not None)
-            else {}
-        )
         default_key_priority = metrics_config.key_priority() or []
 
         self.metric_precision = dict(metric_precision or default_precision)
         self.metric_delta_rules = dict(metric_delta_rules or default_delta_rules)
-        self.algorithm_metric_rules = dict(algorithm_metric_rules or default_algo_rules)
         self.min_val_width = int(min_val_width)
         self.key_priority = list(key_priority or list(default_key_priority))
         self.previous_metrics: Dict[str, Any] = {}
@@ -135,9 +126,8 @@ class PrintMetricsLogger(LightningLoggerBase):
         merged: Dict[str, Any] = dict(self.previous_metrics)
         merged.update(simple)
 
-        # Validate deltas and algorithm-specific rules using the latest snapshot
+        # Validate deltas using the latest snapshot
         self._validate_metric_deltas(simple)
-        self._check_algorithm_metric_rules(simple)
 
         # Render the metrics table
         self._render_table(merged)
@@ -172,38 +162,7 @@ class PrintMetricsLogger(LightningLoggerBase):
                     f"⚠️  Metric delta rule violation for '{metric_name}': previous={prev}, current={curr}."
                 )
 
-    def _check_algorithm_metric_rules(self, current_metrics: Dict[str, Any]) -> None:
-        for metric_name, rule_config in self.algorithm_metric_rules.items():
-            # If the metric name is not in the current metrics, continue
-            if metric_name not in current_metrics: continue
-
-            # If the value is not a number, continue
-            curr = current_metrics[metric_name]
-            if not is_number(curr): continue
-
-            # If the check function is not callable, continue
-            check_func = rule_config.get('check')
-            message_template = rule_config.get('message', f"Algorithm metric rule violated for '{metric_name}'")
-            level = rule_config.get('level', 'warning')
-            if check_func is None: continue
-
-            # If the check function is not callable, continue
-            satisfied = False
-            if callable(check_func):
-                if getattr(check_func, "__code__", None) and check_func.__code__.co_argcount == 1:
-                    satisfied = bool(check_func(curr))
-                elif metric_name in self.previous_metrics:
-                    prev = self.previous_metrics.get(metric_name)
-                    satisfied = bool(check_func(prev, curr)) if satisfied else True
-                else:
-                    satisfied = True
-
-            # If the check function is not satisfied, print a message
-            if not satisfied:
-                prev = self.previous_metrics.get(metric_name, 'N/A')
-                msg = message_template.format(metric_name=metric_name, current_value=curr, previous_value=prev)
-                if level == 'error': print(f"🚨 ALGORITHM ERROR: {msg}")
-                else: print(f"⚠️  ALGORITHM WARNING: {msg}")
+    # Algorithm-specific metric rules removed.
 
     def _delta_for_key(self, namespace: str, key: str, value: Any):
         # In case we don't have a previous value, return empty string

@@ -71,39 +71,7 @@ class MetricsConfig:
         # Return the delta rules dictionary
         return delta_rules
 
-    def algorithm_metric_rules(self, algo_id: str) -> Dict[str, dict]:
-        """Return algorithm-specific metric validation rules."""
-        rules: Dict[str, dict] = {}
-        namespaces = ["train", "eval", "rollout", "time"]
-
-        for metric_name, metric_config in self._get_metrics():
-            # If no algorithm rules are defined, skip
-            algorithm_rules = metric_config.get("algorithm_rules", {})
-            rule_config = algorithm_rules.get(algo_id.lower())
-            if not rule_config: continue
-
-            threshold = rule_config.get("threshold")
-            condition = rule_config.get("condition")
-            message = rule_config.get("message", "Metric validation failed")
-            level = rule_config.get("level", "warning")
-
-            if condition == "<":
-                check_fn = lambda value: value < threshold
-            elif condition == ">":
-                check_fn = lambda value: value > threshold
-            elif condition == "><":
-                min_val = rule_config.get("min", float("-inf"))
-                max_val = rule_config.get("max", float("inf"))
-                check_fn = lambda value: min_val <= value <= max_val
-            else:
-                continue
-
-            rule_dict = {"check": check_fn, "message": message, "level": level}
-            for namespace in namespaces:
-                full_metric_name = f"{namespace}/{metric_name}"
-                rules[full_metric_name] = rule_dict
-
-        return rules
+    # Note: algorithm-specific metric rules were removed.
 
     def key_priority(self) -> Optional[list]:
         """Preferred key ordering from metrics config (_global.key_priority)."""

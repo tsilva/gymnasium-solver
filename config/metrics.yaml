@@ -25,9 +25,9 @@ _global:
     - "train/entropy_loss" # (mirrors entropy; catch coef mistakes)
     - "train/value_loss_scaled" # (watch scaling/normalization effects vs unscaled)
     - "train/loss" # (aggregate: spikes = step-size or data issues)
-    - "train/grad_norm/backbone" # (grad health: drift/spikes => lr/clip or bug)
-    - "train/grad_norm/policy_head"
-    - "train/grad_norm/value_head"
+    - "train/gradnorm/backbone" # (grad health: drift/spikes => lr/clip or bug)
+    - "train/gradnorm/policy_head"
+    - "train/gradnorm/value_head"
     - "train/obs_mean" # (norm/whitening sanity; sudden shifts = pipeline bugs)
     - "train/obs_std" # (should stabilize; zero/NaN = broken obs)
     - "train/reward_mean" # (only meaningful if not normalized; otherwise de-prioritize)
@@ -49,19 +49,48 @@ _global:
     - "train/baseline_mean" # (used for returns normalization)
     - "train/baseline_std" # (used for returns normalization)
     - "train/entropy_loss_scaled" # (used for entropy regularization)
-    - "val/ep_rew_best"
+
     - "val/ep_rew_mean"
-    - "val/ep_len_mean"
+    - "val/ep_rew_best"
     - "val/ep_rew_last"
+    - "val/ep_len_mean"
     - "val/ep_len_last"
-    - "val/epoch"
-    - "val/total_timesteps"
-    - "val/total_episodes"
-    - "val/total_rollouts"
-    - "val/rollout_timesteps"
-    - "val/rollout_episodes"
-    - "val/epoch_fps"
-    - "val/rollout_fps"
+    - "val/approx_kl" # (PPO stability: aim ~0.01–0.02/update; alert if >0.05 or <0.001)
+    - "val/clip_fraction" # (healthy ~0.1–0.3; too low = under-updating, too high = over-clipping)
+    - "val/entropy" # (should decay gradually; flat-low early = collapse)
+    - "val/action_std" # (tracks exploration in continuous control; “breathing” but not collapsing)
+    - "val/policy_loss" # (directional sanity check; big swings = instability)
+    - "val/value_loss" #(critic health; falling over time is good)
+    - "val/explained_variance" # (critic R²-ish; target >0.5 mid-run, >0.8 late)
+    - "val/kl_div" # (secondary to approx_kl; still useful cross-check)
+    - "val/entropy_loss" # (mirrors entropy; catch coef mistakes)
+    - "val/value_loss_scaled" # (watch scaling/normalization effects vs unscaled)
+    - "val/loss" # (aggregate: spikes = step-size or data issues)
+    - "val/gradnorm/backbone" # (grad health: drift/spikes => lr/clip or bug)
+    - "val/gradnorm/policy_head"
+    - "val/gradnorm/value_head"
+    - "val/obs_mean" # (norm/whitening sanity; sudden shifts = pipeline bugs)
+    - "val/obs_std" # (should stabilize; zero/NaN = broken obs)
+    - "val/reward_mean" # (only meaningful if not normalized; otherwise de-prioritize)
+    - "val/reward_std" # (variance can explain noisy learning curves)
+    - "val/total_timesteps" # (training progress metric)
+    - "val/epoch" # (training progress metric)
+    - "val/time_elapsed" # (training progress metric)
+    - "val/total_episodes" # (training progress metric)
+    - "val/total_rollouts" # (training progress metric)
+    - "val/rollout_timesteps" # (fixed in PPO usually; verify config matches reality)
+    - "val/rollout_episodes" # (detect pathologies: too few/too many per batch)
+    - "val/fps" # (end-to-end throughput; use to spot stalls)
+    - "val/rollout_fps" # (collector throughput; CPU/env bottlenecks)
+    - "val/fps_instant" # (spiky; good for hiccup forensics, not trend)
+    - "val/eta_s" # (eta: total expected training time; good for end-to-end planning)
+    - "val/hp/policy_lr" # (constant unless policy_lr_schedule is set)
+    - "val/hp/clip_range" # (constant unless clip_range_schedule is set)
+    - "val/hp/ent_coef" # (constant unless ent_coef_schedule is set)
+    - "val/baseline_mean" # (used for returns normalization)
+    - "val/baseline_std" # (used for returns normalization)
+    - "val/entropy_loss_scaled" # (used for entropy regularization)
+    
   # Console highlight configuration
   highlight:
     # Rows to highlight across namespaces (blue background + bold key)
@@ -310,19 +339,19 @@ max_grad_norm:
   tips: "If many steps hit the cap, reduce LR or revisit networks; if never used, consider if clipping is needed."
 
 # Granular gradient norms
-grad_norm/backbone:
+gradnorm/backbone:
   description: "Gradient L2 norm for shared backbone parameters"
   precision: 4
   min: 0.0
   tips: "Large divergence vs heads can signal imbalance in losses."
 
-grad_norm/policy_head:
+gradnorm/policy_head:
   description: "Gradient L2 norm for policy head"
   precision: 4
   min: 0.0
   tips: "Persistent spikes often correlate with high approx_kl/clip_fraction."
 
-grad_norm/value_head:
+gradnorm/value_head:
   description: "Gradient L2 norm for value head"
   precision: 4
   min: 0.0

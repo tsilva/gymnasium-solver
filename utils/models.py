@@ -42,7 +42,7 @@ class GradientNormMixin:
         """
         all_params = list(self.parameters())
         return {
-            "grad_norm/all": compute_param_group_grad_norm(all_params)
+            "gradnorm/all": compute_param_group_grad_norm(all_params)
         }
 
 
@@ -129,8 +129,8 @@ class MLPPolicy(nn.Module, GradientNormMixin):
         policy_head_params = list(self.policy_head.parameters())
         
         return {
-            "grad_norm/backbone": compute_param_group_grad_norm(backbone_params),
-            "grad_norm/policy_head": compute_param_group_grad_norm(policy_head_params),
+            "gradnorm/backbone": compute_param_group_grad_norm(backbone_params),
+            "gradnorm/policy_head": compute_param_group_grad_norm(policy_head_params),
         }
 
 class MLPActorCritic(nn.Module, GradientNormMixin):
@@ -197,7 +197,7 @@ class MLPActorCritic(nn.Module, GradientNormMixin):
         value_head_params = list(self.value_head.parameters())
         
         return {
-            "grad_norm/backbone": compute_param_group_grad_norm(backbone_params),
-            "grad_norm/policy_head": compute_param_group_grad_norm(policy_head_params),
-            "grad_norm/value_head": compute_param_group_grad_norm(value_head_params),
+            "gradnorm/backbone": compute_param_group_grad_norm(backbone_params),
+            "gradnorm/policy_head": compute_param_group_grad_norm(policy_head_params),
+            "gradnorm/value_head": compute_param_group_grad_norm(value_head_params),
         }

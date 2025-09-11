@@ -5,7 +5,7 @@
   - clip_fraction: warn if < 0.05 or > 0.4 for >3 updates.
   - entropy: early phase alert if it drops to near 0 within first 10% of steps.
   - explained_variance: alert if < 0.2 after 30% of budget on dense-reward tasks.
-  - gradnorm/*: alert on 2× median spike or NaN/Inf.
+  - grad_norm/*: alert on 2× median spike or NaN/Inf.
   - obs_std: alert if ≈0 or NaN in any dimension.
 
 - wandb dash

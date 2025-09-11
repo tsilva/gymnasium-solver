@@ -25,9 +25,10 @@ _global:
     - "train/entropy_loss" # (mirrors entropy; catch coef mistakes)
     - "train/value_loss_scaled" # (watch scaling/normalization effects vs unscaled)
     - "train/loss" # (aggregate: spikes = step-size or data issues)
-    - "train/gradnorm/backbone" # (grad health: drift/spikes => lr/clip or bug)
-    - "train/gradnorm/policy_head"
-    - "train/gradnorm/value_head"
+    - "train/grad_norm/all" # (grad health: drift/spikes => lr/clip or bug)
+    - "train/grad_norm/backbone" # (grad health: drift/spikes => lr/clip or bug)
+    - "train/grad_norm/policy_head"
+    - "train/grad_norm/value_head"
     - "train/obs_mean" # (norm/whitening sanity; sudden shifts = pipeline bugs)
     - "train/obs_std" # (should stabilize; zero/NaN = broken obs)
     - "train/reward_mean" # (only meaningful if not normalized; otherwise de-prioritize)
@@ -66,9 +67,10 @@ _global:
     - "val/entropy_loss" # (mirrors entropy; catch coef mistakes)
     - "val/value_loss_scaled" # (watch scaling/normalization effects vs unscaled)
     - "val/loss" # (aggregate: spikes = step-size or data issues)
-    - "val/gradnorm/backbone" # (grad health: drift/spikes => lr/clip or bug)
-    - "val/gradnorm/policy_head"
-    - "val/gradnorm/value_head"
+    - "val/grad_norm/all" # (grad health: drift/spikes => lr/clip or bug)
+    - "val/grad_norm/backbone" # (grad health: drift/spikes => lr/clip or bug)
+    - "val/grad_norm/policy_head"
+    - "val/grad_norm/value_head"
     - "val/obs_mean" # (norm/whitening sanity; sudden shifts = pipeline bugs)
     - "val/obs_std" # (should stabilize; zero/NaN = broken obs)
     - "val/reward_mean" # (only meaningful if not normalized; otherwise de-prioritize)
@@ -339,19 +341,19 @@ max_grad_norm:
   tips: "If many steps hit the cap, reduce LR or revisit networks; if never used, consider if clipping is needed."
 
 # Granular gradient norms
-gradnorm/backbone:
+grad_norm/backbone:
   description: "Gradient L2 norm for shared backbone parameters"
   precision: 4
   min: 0.0
   tips: "Large divergence vs heads can signal imbalance in losses."
 
-gradnorm/policy_head:
+grad_norm/policy_head:
   description: "Gradient L2 norm for policy head"
   precision: 4
   min: 0.0
   tips: "Persistent spikes often correlate with high approx_kl/clip_fraction."
 
-gradnorm/value_head:
+grad_norm/value_head:
   description: "Gradient L2 norm for value head"
   precision: 4
   min: 0.0

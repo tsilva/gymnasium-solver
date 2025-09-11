@@ -26,26 +26,6 @@ def resolve_activation(activation_id: str) -> type[nn.Module]:
     return mapping[key]
 
 
-class GradientNormMixin:
-    """Mixin for models that can compute gradient norms for different parameter groups.
-    
-    Provides a default implementation that computes gradient norms for all parameters
-    and allows subclasses to override for more specific groupings.
-    """
-    
-    def compute_grad_norms(self) -> Dict[str, float]:
-        """Compute gradient norms for different parameter groups.
-        
-        Returns:
-            Dictionary mapping group names to their gradient norms.
-            Default implementation returns a single 'all' group.
-        """
-        all_params = list(self.parameters())
-        return {
-            "gradnorm/all": compute_param_group_grad_norm(all_params)
-        }
-
-
 def build_mlp(input_shape: Union[tuple[int, ...], int], hidden_dims: tuple[int, ...], activation:str):
     """ Create a stack of sequential linear layers with the given activation function. """
     import numpy as np
@@ -84,7 +64,24 @@ def build_mlp(input_shape: Union[tuple[int, ...], int], hidden_dims: tuple[int, 
     return model
 
 
-class MLPPolicy(nn.Module, GradientNormMixin):
+class BaseModel(nn.Module):
+    """Base module with gradient-norm reporting.
+
+    Default implementation computes a single group over all parameters.
+    Subclasses can override to expose finer-grained groups.
+    """
+
+    def compute_grad_norms(self) -> Dict[str, float]:
+        """Compute gradient norms for different parameter groups.
+
+        Returns:
+            Dict mapping group names to their gradient norms. Default: 'all'.
+        """
+        all_params = list(self.parameters())
+        return {"grad_norm/all": compute_param_group_grad_norm(all_params)}
+
+
+class MLPPolicy(BaseModel):
     def __init__(
         self,
         input_dim: int | None = None,
@@ -125,15 +122,19 @@ class MLPPolicy(nn.Module, GradientNormMixin):
 
     def compute_grad_norms(self) -> Dict[str, float]:
         """Compute gradient norms for MLP policy components."""
+        
+        grad_norms = super().compute_grad_norms()
+
         backbone_params = list(self.backbone.parameters())
         policy_head_params = list(self.policy_head.parameters())
         
         return {
-            "gradnorm/backbone": compute_param_group_grad_norm(backbone_params),
-            "gradnorm/policy_head": compute_param_group_grad_norm(policy_head_params),
+            **grad_norms,
+            "grad_norm/backbone": compute_param_group_grad_norm(backbone_params),
+            "grad_norm/policy_head": compute_param_group_grad_norm(policy_head_params),
         }
 
-class MLPActorCritic(nn.Module, GradientNormMixin):
+class MLPActorCritic(BaseModel):
     def __init__(
         self, 
         *,
@@ -190,14 +191,19 @@ class MLPActorCritic(nn.Module, GradientNormMixin):
         # Return policy distribution and value prediction
         return policy_dist, value_pred
 
+    # TODO: generalize to get_metrics
     def compute_grad_norms(self) -> Dict[str, float]:
         """Compute gradient norms for MLP actor-critic components."""
+
+        grad_norms = super().compute_grad_norms()
+
         backbone_params = list(self.backbone.parameters())
         policy_head_params = list(self.policy_head.parameters())
         value_head_params = list(self.value_head.parameters())
         
         return {
-            "gradnorm/backbone": compute_param_group_grad_norm(backbone_params),
-            "gradnorm/policy_head": compute_param_group_grad_norm(policy_head_params),
-            "gradnorm/value_head": compute_param_group_grad_norm(value_head_params),
+            **grad_norms,
+            "grad_norm/backbone": compute_param_group_grad_norm(backbone_params),
+            "grad_norm/policy_head": compute_param_group_grad_norm(policy_head_params),
+            "grad_norm/value_head": compute_param_group_grad_norm(value_head_params),
         }

@@ -1,20 +1,17 @@
-import torch
 import pytorch_lightning as pl
+
+from torch.nn.utils import clip_grad_norm_
 
 from utils.io import write_json
 from utils.timing import TimingTracker
 from utils.metrics_recorder import MetricsRecorder
 from utils.decorators import must_implement
 from utils.reports import print_terminal_ascii_summary
+from utils.formatting import sanitize_name
 
 CHECKPOINT_PATH = "checkpoints/"
 
 class BaseAgent(pl.LightningModule):
-
-    # TODO: extract to util
-    @staticmethod
-    def _sanitize_name(name: str) -> str:
-        return str(name).replace("/", "-").replace("\\", "-")
 
     def __init__(self, config):
         super().__init__()
@@ -428,19 +425,7 @@ class BaseAgent(pl.LightningModule):
         # Metrics dispatcher: aggregates epoch metrics and logs to Lightning
         callbacks.append(DispatchMetricsCallback())
 
-        # Printing is now handled by a Logger (PrintMetricsLogger) wired via the Trainer's loggers
-
-        # Read hyperparamters from config file (eg: user modified during training)
-        #hyperparam_sync_cb = HyperparamSyncCallback(
-        #    control_dir=None,
-        #    check_interval=2.0,
-        #    enable_lr_scheduling=False,
-        #    enable_manual_control=True,
-        #    verbose=True,
-        #)
-        #callbacks.append(hyperparam_sync_cb)
-
-        # Checkpointing 
+        # Checkpointing: save best/last models and metrics
         checkpoint_dir = self.run_manager.ensure_path(CHECKPOINT_PATH)
         callbacks.append(ModelCheckpointCallback(
             checkpoint_dir=checkpoint_dir,
@@ -455,7 +440,6 @@ class BaseAgent(pl.LightningModule):
             namespace_depth=1,
         ))
 
-        # TODO: add multi-metric support to EarlyStoppingCallback
         # If defined in config, early stop after reaching a certain number of timesteps
         if self.config.max_timesteps: callbacks.append(
             EarlyStoppingCallback("train/total_timesteps", self.config.max_timesteps)
@@ -499,8 +483,7 @@ class BaseAgent(pl.LightningModule):
 
             # In case a maximum gradient norm is set, 
             # clips gradients so that norm isn't exceeded
-            if self.config.max_grad_norm is not None: 
-                torch.nn.utils.clip_grad_norm_(model.parameters(), self.config.max_grad_norm)
+            if self.config.max_grad_norm is not None: clip_grad_norm_(model.parameters(), self.config.max_grad_norm)
 
             # Perform an optimization step 
             # using the computed gradients
@@ -552,7 +535,7 @@ class BaseAgent(pl.LightningModule):
         import wandb
         if hasattr(wandb, "run") and wandb.run is not None: return wandb.run
         from dataclasses import asdict
-        project_name = self.config.project_id if self.config.project_id else BaseAgent._sanitize_name(self.config.env_id)
+        project_name = self.config.project_id if self.config.project_id else sanitize_name(self.config.env_id)
         experiment_name = f"{self.config.algo_id}-{self.config.seed}"
         wandb.init(project=project_name, name=experiment_name, config=asdict(self.config))
         return wandb.run

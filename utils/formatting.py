@@ -39,3 +39,12 @@ def number_to_string(
     else: value_str = f"{float(value):.{precision}f}" + unit
 
     return value_str
+
+
+def sanitize_name(name: str) -> str:
+    """Return a path-/project-safe name by replacing separators.
+
+    Replaces forward and back slashes with dashes to avoid unintended
+    directory structures in IDs or project names.
+    """
+    return str(name).replace("/", "-").replace("\\", "-")

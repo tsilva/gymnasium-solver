@@ -29,8 +29,6 @@ class PrintMetricsLogger(LightningLoggerBase):
     CsvLightningLogger) so all receive the same metrics payload.
     """
 
-    # ANSI codes and helpers are provided by utils.logging
-
     def __init__(
         self,
         *,
@@ -307,6 +305,7 @@ class PrintMetricsLogger(LightningLoggerBase):
                 f_sub[sub] = val_disp
                 val_candidates.append(_strip_ansi(val_disp))
             formatted[ns] = f_sub
+            
         indent = self.indent
         key_width = max((len(k) for k in key_candidates), default=0)
         val_width = max((len(v) for v in val_candidates), default=0)

@@ -117,34 +117,10 @@ class PrintMetricsLogger(LightningLoggerBase):
         # Convert values to basic Python scalars for rendering/validation
         simple: Dict[str, Any] = {k: _to_python_scalar(v) for k, v in dict(metrics).items()}
 
-        # Sanitize current payload: drop bare keys (e.g., 'epoch') when a namespaced duplicate exists
-        namespaced = set(k for k in simple.keys() if "/" in k)
-        to_remove = []
-        for k in list(simple.keys()):
-            if "/" in k:
-                continue
-            # If a namespaced duplicate exists, prefer the namespaced one
-            if f"train/{k}" in namespaced or f"val/{k}" in namespaced or f"test/{k}" in namespaced:
-                to_remove.append(k)
-        for k in to_remove:
-            simple.pop(k, None)
-
         # Sticky display: merge with previous known metrics so missing keys
         # keep their last values when printing.
         merged: Dict[str, Any] = dict(self.previous_metrics)
         merged.update(simple)
-
-        # Re-sanitize after merging to avoid reintroducing bare duplicates
-        # when a namespaced key is present in the union.
-        merged_namespaced = set(k for k in merged.keys() if "/" in k)
-        merged_to_remove = []
-        for k in list(merged.keys()):
-            if "/" in k:
-                continue
-            if f"train/{k}" in merged_namespaced or f"val/{k}" in merged_namespaced or f"test/{k}" in merged_namespaced:
-                merged_to_remove.append(k)
-        for k in merged_to_remove:
-            merged.pop(k, None)
 
         # Validate deltas and algorithm-specific rules using the latest snapshot
         self._validate_metric_deltas(simple)

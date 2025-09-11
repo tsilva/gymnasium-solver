@@ -49,11 +49,13 @@ class InMemoryMetricsRecorder(MetricsRecorder):
     def record_train(self, metrics: Mapping[str, Any]) -> None:
         if not metrics:
             return
+
         self._train_buf.log(metrics)
 
     def record_eval(self, metrics: Mapping[str, Any]) -> None:
         if not metrics:
             return
+
         self._eval_buf.log(metrics)
 
     # ---- epoch lifecycle ----

@@ -40,8 +40,7 @@ class MetricsConfig:
         return self._config["_global"]
 
     def _get_metrics(self) -> Dict[str, Any]:
-        global_cfg = self._get_global_cfg()
-        metrics = [(name, value) for name, value in global_cfg.items() if not name.startswith("_") and isinstance(value, dict)]
+        metrics = [(name, value) for name, value in self._config.items() if not name.startswith("_") and isinstance(value, dict)]
         return metrics
 
     def get_default_precision(self) -> int:

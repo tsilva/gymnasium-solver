@@ -1,4 +1,3 @@
-- BUG: epoch is not int
 - wandb dash
 - FEAT: hp vs pf metrics
 - FEAT: add discrete env support (solve taxi-v3, embeddings probably not sized correctly)

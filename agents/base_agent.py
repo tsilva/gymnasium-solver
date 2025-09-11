@@ -383,11 +383,15 @@ class BaseAgent(pl.LightningModule):
         from utils.metrics_config import metrics_config
         from loggers.print_metrics_logger import PrintMetricsLogger
         # TODO: default to metrics config inside the logger
+        metric_precision = metrics_config.metric_precision_dict()
+        metric_delta_rules = metrics_config.metric_delta_rules()
+        algorithm_metric_rules = metrics_config.algorithm_metric_rules(self.config.algo_id)
+        key_priority = metrics_config.key_priority()
         print_logger = PrintMetricsLogger(
-            metric_precision=metrics_config.metric_precision_dict(),
-            metric_delta_rules=metrics_config.metric_delta_rules(),
-            algorithm_metric_rules=metrics_config.algorithm_metric_rules(self.config.algo_id),
-            key_priority=metrics_config.key_priority(),
+            metric_precision=metric_precision,
+            metric_delta_rules=metric_delta_rules,
+            algorithm_metric_rules=algorithm_metric_rules,
+            key_priority=key_priority,
         )
         return print_logger
         

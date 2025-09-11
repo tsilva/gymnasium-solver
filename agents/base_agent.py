@@ -149,6 +149,9 @@ class BaseAgent(pl.LightningModule):
         total_timesteps = self.train_collector.get_metrics()["total_timesteps"]
         self.timings.restart("on_train_epoch_start", steps=total_timesteps)
 
+        # Log hyperparameters that are tunable in real-time
+        self._log_hyperparameters()
+
         # Collect fresh trajectories at the start of each training epoch
         # Avoid double-collect on the first epoch: train_dataloader() already
         # collected an initial rollout to bootstrap the dataloader. From epoch 1
@@ -173,9 +176,6 @@ class BaseAgent(pl.LightningModule):
     def on_train_epoch_end(self):
         # Update schedules
         self._update_schedules()
-
-        # Log hyperparameters that are tunable in real-time
-        self._log_hyperparameters()
 
     def val_dataloader(self):
         # TODO: should I just do rollouts here?

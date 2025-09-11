@@ -3,32 +3,53 @@
 # Metric names should be without namespace prefixes since the same metric
 # can appear across different namespaces (train/, eval/, rollout/, etc.)
 
+
 # Global configuration
 _global:
   default_precision: 4  # Default precision for metrics not explicitly configured
   # Preferred display order for key metrics in the stdout table
   # Keys not listed here will follow alphabetically within their section
   key_priority:
-    - "train/ep_rew_best"
     - "train/ep_rew_mean"
+    - "train/ep_rew_best"
     - "train/ep_rew_last"
     - "train/ep_len_mean"
     - "train/ep_len_last"
-    - "train/epoch"
-    - "train/total_timesteps"
-    - "train/eta_s"
-    - "train/total_episodes"
-    - "train/total_rollouts"
-    - "train/rollout_timesteps"
-    - "train/rollout_episodes"
-    - "train/fps"
-    - "train/fps_instant"
-    - "train/epoch_fps"
-    - "train/rollout_fps"
-    - "train/loss"
-    - "train/policy_loss"
-    - "train/value_loss"
-    - "train/entropy_loss"
+    - "train/approx_kl" # (PPO stability: aim ~0.01–0.02/update; alert if >0.05 or <0.001)
+    - "train/clip_fraction" # (healthy ~0.1–0.3; too low = under-updating, too high = over-clipping)
+    - "train/entropy" # (should decay gradually; flat-low early = collapse)
+    - "train/action_std" # (tracks exploration in continuous control; “breathing” but not collapsing)
+    - "train/policy_loss" # (directional sanity check; big swings = instability)
+    - "train/value_loss" #(critic health; falling over time is good)
+    - "train/explained_variance" # (critic R²-ish; target >0.5 mid-run, >0.8 late)
+    - "train/kl_div" # (secondary to approx_kl; still useful cross-check)
+    - "train/entropy_loss" # (mirrors entropy; catch coef mistakes)
+    - "train/value_loss_scaled" # (watch scaling/normalization effects vs unscaled)
+    - "train/loss" # (aggregate: spikes = step-size or data issues)
+    - "train/grad_norm/backbone" # (grad health: drift/spikes => lr/clip or bug)
+    - "train/grad_norm/actor_head" 
+    - "train/grad_norm/critic_head"
+    - "train/obs_mean" # (norm/whitening sanity; sudden shifts = pipeline bugs)
+    - "train/obs_std" # (should stabilize; zero/NaN = broken obs)
+    - "train/reward_mean" # (only meaningful if not normalized; otherwise de-prioritize)
+    - "train/reward_std" # (variance can explain noisy learning curves)
+    - "train/total_timesteps" # (training progress metric)
+    - "train/epoch" # (training progress metric)
+    - "train/time_elapsed" # (training progress metric)
+    - "train/total_episodes" # (training progress metric)
+    - "train/total_rollouts" # (training progress metric)
+    - "train/rollout_timesteps" # (fixed in PPO usually; verify config matches reality)
+    - "train/rollout_episodes" # (detect pathologies: too few/too many per batch)
+    - "train/fps" # (end-to-end throughput; use to spot stalls)
+    - "train/rollout_fps" # (collector throughput; CPU/env bottlenecks)
+    - "train/fps_instant" # (spiky; good for hiccup forensics, not trend)
+    - "train/eta_s" # (eta: total expected training time; good for end-to-end planning)
+    - "train/hp/policy_lr" # (constant unless policy_lr_schedule is set)
+    - "train/hp/clip_range" # (constant unless clip_range_schedule is set)
+    - "train/hp/ent_coef" # (constant unless ent_coef_schedule is set)
+    - "train/baseline_mean" # (used for returns normalization)
+    - "train/baseline_std" # (used for returns normalization)
+    - "train/entropy_loss_scaled" # (used for entropy regularization)
     - "val/ep_rew_best"
     - "val/ep_rew_mean"
     - "val/ep_len_mean"

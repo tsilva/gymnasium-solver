@@ -862,15 +862,11 @@ class RolloutCollector():
         max_steps_per_episode: Optional[int] = None,
         timeout_seconds: Optional[float] = None,
     ) -> dict:
-        """Evaluate the current policy on this collector's env for exactly N episodes.
+        """Evaluate policy for exactly N episodes using this collector's env.
 
-        Uses the collector's env and
-        policy model. Distributes the requested number of episodes across env
-        ranks as evenly as possible to avoid biasing any specific env index.
-
-        Returns a metrics dict with keys compatible with evaluate_policy:
-        - total_episodes, total_timesteps, ep_rew_mean, ep_len_mean
-        - per_env/episodes_{i}, per_env/ep_rew_mean_{i}, per_env/ep_len_mean_{i}
+        Distributes the requested episodes evenly across env ranks to avoid
+        index skew, and returns aggregate metrics only (no per-env fields):
+        - total_episodes, total_timesteps, ep_rew_mean, ep_len_mean.
         """
         assert hasattr(self.env, "num_envs"), "Environment must be vectorized (have num_envs)"
 
@@ -889,8 +885,9 @@ class RolloutCollector():
         obs = self.env.reset()
         per_env_targets = _balanced_targets(n_envs, int(n_episodes))
         per_env_counts = [0] * n_envs
-        per_env_rewards = [[] for _ in range(n_envs)]  # type: ignore[var-annotated]
-        per_env_lengths = [[] for _ in range(n_envs)]  # type: ignore[var-annotated]
+        # Running aggregates only; avoid per-env collections
+        total_reward_sum = 0.0
+        total_length_sum = 0
         cur_rewards = [0.0] * n_envs
         cur_lengths = [0] * n_envs
 
@@ -920,11 +917,11 @@ class RolloutCollector():
                     ep = info.get("episode")
                     if ep is None:
                         # Fallback: accumulate from arrays if monitor info missing
-                        per_env_rewards[idx].append(float(cur_rewards[idx]))
-                        per_env_lengths[idx].append(int(cur_lengths[idx]))
+                        total_reward_sum += float(cur_rewards[idx])
+                        total_length_sum += int(cur_lengths[idx])
                     else:
-                        per_env_rewards[idx].append(float(ep.get("r", 0.0)))
-                        per_env_lengths[idx].append(int(ep.get("l", 0)))
+                        total_reward_sum += float(ep.get("r", 0.0))
+                        total_length_sum += int(ep.get("l", 0))
                     per_env_counts[idx] += 1
                     # Reset trackers for that env
                     cur_rewards[idx] = 0.0
@@ -944,8 +941,8 @@ class RolloutCollector():
                             and cur_lengths[i] >= int(max_steps_per_episode)
                         ):
                             # Finalize truncated episode with running counters
-                            per_env_rewards[i].append(float(cur_rewards[i]))
-                            per_env_lengths[i].append(int(cur_lengths[i]))
+                            total_reward_sum += float(cur_rewards[i])
+                            total_length_sum += int(cur_lengths[i])
                             per_env_counts[i] += 1
                             cur_rewards[i] = 0.0
                             cur_lengths[i] = 0
@@ -963,16 +960,9 @@ class RolloutCollector():
                 obs = next_obs
 
         # Aggregate metrics
-        all_rewards = [r for env_rs in per_env_rewards for r in env_rs]
-        all_lengths = [l for env_ls in per_env_lengths for l in env_ls]
-
         total_episodes_collected = int(sum(per_env_counts))
-        ep_rew_mean = float(np.mean(all_rewards)) if all_rewards else 0.0
-        ep_len_mean = float(np.mean(all_lengths)) if all_lengths else 0.0
-
-        # Per-env summaries
-        per_env_reward_means = [float(np.mean(rs)) if rs else 0.0 for rs in per_env_rewards]
-        per_env_length_means = [float(np.mean(ls)) if ls else 0.0 for ls in per_env_lengths]
+        ep_rew_mean = float(total_reward_sum / total_episodes_collected) if total_episodes_collected > 0 else 0.0
+        ep_len_mean = float(total_length_sum / total_episodes_collected) if total_episodes_collected > 0 else 0.0
 
         metrics = {
             "total_episodes": total_episodes_collected,
@@ -980,11 +970,6 @@ class RolloutCollector():
             "ep_rew_mean": ep_rew_mean,
             "ep_len_mean": float(ep_len_mean),
         }
-        for i in range(n_envs):
-            metrics[f"per_env/episodes_{i}"] = int(per_env_counts[i])
-            metrics[f"per_env/ep_rew_mean_{i}"] = per_env_reward_means[i]
-            metrics[f"per_env/ep_len_mean_{i}"] = per_env_length_means[i]
-
         return metrics
 
     def slice_trajectories(self, trajectories, idxs):

@@ -140,11 +140,14 @@ class PrintMetricsLogger(LightningLoggerBase):
             if metric_name in current_metrics and metric_name in self.previous_metrics:
                 curr = current_metrics[metric_name]
                 prev = self.previous_metrics[metric_name]
-                if not (is_number(curr) and is_number(prev)):
-                    continue
+
+                # Assert that the value and previous value are numbers
+                assert is_number(curr) and is_number(prev), f"Value and previous value must be numbers: {curr} and {prev}"
+
+                # If the delta rule is satisfied, continue
                 ok = bool(rule_lambda(prev, curr))
-                if ok:
-                    continue
+                if ok: continue
+
                 # Emit a clear violation message but do not raise
                 print(
                     f"⚠️  Metric delta rule violation for '{metric_name}': previous={prev}, current={curr}."
@@ -152,35 +155,36 @@ class PrintMetricsLogger(LightningLoggerBase):
 
     def _check_algorithm_metric_rules(self, current_metrics: Dict[str, Any]) -> None:
         for metric_name, rule_config in self.algorithm_metric_rules.items():
-            if metric_name not in current_metrics:
-                continue
+            # If the metric name is not in the current metrics, continue
+            if metric_name not in current_metrics: continue
+
+            # If the value is not a number, continue
             curr = current_metrics[metric_name]
-            if not is_number(curr):
-                continue
+            if not is_number(curr): continue
+
+            # If the check function is not callable, continue
             check_func = rule_config.get('check')
             message_template = rule_config.get('message', f"Algorithm metric rule violated for '{metric_name}'")
             level = rule_config.get('level', 'warning')
-            if check_func is None:
-                continue
+            if check_func is None: continue
+
+            # If the check function is not callable, continue
             satisfied = False
             if callable(check_func):
                 if getattr(check_func, "__code__", None) and check_func.__code__.co_argcount == 1:
                     satisfied = bool(check_func(curr))
                 elif metric_name in self.previous_metrics:
                     prev = self.previous_metrics.get(metric_name)
-                    if is_number(prev):
-                        satisfied = bool(check_func(prev, curr))
-                    else:
-                        satisfied = True
+                    satisfied = bool(check_func(prev, curr)) if satisfied else True
                 else:
                     satisfied = True
+
+            # If the check function is not satisfied, print a message
             if not satisfied:
                 prev = self.previous_metrics.get(metric_name, 'N/A')
                 msg = message_template.format(metric_name=metric_name, current_value=curr, previous_value=prev)
-                if level == 'error':
-                    print(f"🚨 ALGORITHM ERROR: {msg}")
-                else:
-                    print(f"⚠️  ALGORITHM WARNING: {msg}")
+                if level == 'error': print(f"🚨 ALGORITHM ERROR: {msg}")
+                else: print(f"⚠️  ALGORITHM WARNING: {msg}")
 
     def _delta_for_key(self, namespace: str, key: str, value: Any):
         # In case we don't have a previous value, return empty string
@@ -215,19 +219,24 @@ class PrintMetricsLogger(LightningLoggerBase):
 
     def _spark_for_key(self, full_key: str, width: int) -> str:
         values = self._history.get(full_key)
-        if not values or len(values) < 2 or width <= 0:
-            return ""
+        if not values or len(values) < 2 or width <= 0: return ""
         return _sparkline(values, width)
 
     def _update_history(self, data: Dict[str, Any]) -> None:
         for k, v in data.items():
-            if not is_number(v):
-                continue
+            # Skip if the value is not a number
+            if not is_number(v): continue
+
+            # Add the value to the history
             val = float(v)
             hist = self._history.setdefault(k, [])
             hist.append(val)
-            if len(hist) > self.sparkline_history_cap:
-                self._history[k] = hist[-self.sparkline_history_cap :]
+
+            # Skip if the history is less than the capacity
+            if len(hist) <= self.sparkline_history_cap: continue
+
+            # Set the history for the key
+            self._history[k] = hist[-self.sparkline_history_cap :]
 
     def _render_lines(self, lines: List[str]) -> None:
         text = "\n".join(lines)
@@ -282,30 +291,42 @@ class PrintMetricsLogger(LightningLoggerBase):
             subdict = grouped[ns]
             f_sub: Dict[str, str] = {}
             for sub, v in subdict.items():
+                # Add the subkey to the key candidates
                 key_candidates.append(sub)
                 full_key = f"{ns}/{sub}" if sub else ns
                 precision = self.metric_precision_map.get(sub, 2)
+
+                # Format the value
                 val_str = number_to_string(
                     v,
                     precision=precision,
                     humanize=True,
                 )
+
+                # Add the highlight to the value
                 if sub in self.highlight_value_bold_for_set:
                     val_str = _ansi(val_str, "bold", enable=self.color)
+
+                # Add the delta to the value
                 delta_str, color_name = self._delta_for_key(ns, sub, v)
                 if delta_str:
                     delta_disp = _ansi(delta_str, color_name, enable=self.color)
                     val_disp = f"{val_str} {delta_disp}"
                 else:
                     val_disp = val_str
+
+                # Add the sparkline to the value
                 if self.show_sparklines and is_number(v):
                     chart = self._spark_for_key(full_key, self.sparkline_width)
                     if chart:
                         val_disp = f"{val_disp}  {chart}"
+
+                # Add the subkey to the formatted data
                 f_sub[sub] = val_disp
                 val_candidates.append(_strip_ansi(val_disp))
             formatted[ns] = f_sub
-            
+
+        # Add the border to the lines
         indent = self.indent
         key_width = max((len(k) for k in key_candidates), default=0)
         val_width = max((len(v) for v in val_candidates), default=0)
@@ -315,15 +336,21 @@ class PrintMetricsLogger(LightningLoggerBase):
         lines: List[str] = []
         lines.append(border)
         for ns in ns_order:
-            if not formatted.get(ns):
-                continue
+            # Skip if the namespace is not in the formatted data
+            if not formatted.get(ns): continue
+
+            # Add the header to the lines
             header = ns + "/"
             header_line = f"| {header:<{indent + key_width}} | {'':>{val_width}} |"
             lines.append(_ansi(header_line, "bold", enable=self.color))
+
+            # Add the subkeys to the lines
             for sub, val in formatted[ns].items():
                 val_display_len = len(_strip_ansi(val))
                 val_padding = val_width - val_display_len
                 val_padded = (" " * val_padding + val) if val_padding > 0 else val
+
+                # Add the key to the lines
                 key_cell = f"{sub:<{key_width}}"
                 highlight = False
                 row_bg_color = None
@@ -332,24 +359,42 @@ class PrintMetricsLogger(LightningLoggerBase):
                 bounds = self.metric_bounds_map.get(full_key) or self.metric_bounds_map.get(sub)
                 if bounds:
                     raw_val = grouped.get(ns, {}).get(sub)
+
+                    # Skip if the value is not a number
                     if is_number(raw_val):
                         vnum = float(raw_val)
+
+                        # Check if the value is below or above the bounds
                         below = ("min" in bounds) and (vnum < float(bounds["min"]))
                         above = ("max" in bounds) and (vnum > float(bounds["max"]))
                         if below or above:
+                            # Set the highlight to true
                             highlight = True
                             row_bg_color = self.highlight_bounds_bg_color
+                            
                 # Priority 2: configured row highlight
+                # Set the highlight to true if the subkey is in the highlight row for set
                 if not highlight and sub in self.highlight_row_for_set:
                     if self.highlight_row_bold:
                         key_cell = _ansi(key_cell, "bold", enable=self.color)
+
+                    # Set the highlight to true
                     highlight = True
                     row_bg_color = self.highlight_row_bg_color
+
+                # Add the row to the lines
                 row = f"| {' ' * indent}{key_cell} | {val_padded} |"
+
+                # Add the highlight to the row
                 if highlight:
                     row = _apply_bg(row, row_bg_color or self.highlight_row_bg_color, enable=self.color)
                 lines.append(row)
+
+        # Add the border to the lines
         lines.append(border)
         self._render_lines(lines)
+
+        # Set the previous metrics
         self._prev = dict(data)
         self._last_height = len(lines)
+

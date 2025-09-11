@@ -38,7 +38,6 @@ class ModelCheckpointCallback(pl.Callback):
         # Ensure the checkpoint directory exists
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-
     def _save_checkpoint(
         self,
         agent: pl.LightningModule,

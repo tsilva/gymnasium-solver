@@ -386,15 +386,14 @@ class BaseAgent(pl.LightningModule):
         return csv_logger
     
     def _build_trainer_loggers__print(self): # Prepare a terminal print logger that formats metrics from the unified logging stream
-        from utils.metrics import metrics_config
+        from utils.metrics_config import metrics_config
         from loggers.print_metrics_logger import PrintMetricsLogger
-        _metrics = metrics_config
         # TODO: default to metrics config inside the logger
         print_logger = PrintMetricsLogger(
-            metric_precision=_metrics.metric_precision_dict(),
-            metric_delta_rules=_metrics.metric_delta_rules(),
-            algorithm_metric_rules=_metrics.algorithm_metric_rules(self.config.algo_id),
-            key_priority=_metrics.key_priority(),
+            metric_precision=metrics_config.metric_precision_dict(),
+            metric_delta_rules=metrics_config.metric_delta_rules(),
+            algorithm_metric_rules=metrics_config.algorithm_metric_rules(self.config.algo_id),
+            key_priority=metrics_config.key_priority(),
         )
         return print_logger
         

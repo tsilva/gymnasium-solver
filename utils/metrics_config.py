@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional, Callable
 from utils.io import read_yaml
 
 @dataclass
-class Metrics:
+class MetricsConfig:
     """Singleton-style accessor for metrics.yaml-derived data.
 
     The underlying YAML file is loaded once at initialization. All query
@@ -138,4 +138,4 @@ class Metrics:
             if _bounds: bounds[metric_name] = dict(_bounds)
         return bounds
 
-metrics_config = Metrics()
+metrics_config = MetricsConfig()

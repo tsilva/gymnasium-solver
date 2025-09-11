@@ -44,7 +44,7 @@ class PrintMetricsLogger(LightningLoggerBase):
         min_val_width: int = 15,
         key_priority: List[str] | None = None,
     ) -> None:
-        from utils.metrics import metrics_config
+        from utils.metrics_config import metrics_config
 
         # Display config
         self._name = "print"

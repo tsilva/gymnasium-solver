@@ -23,7 +23,7 @@ class MetricsRecorder:
         rec.update_history({"train/total_timesteps": 1024, "train/loss": 0.2})
     """
 
-    def __init__(self, *, step_key: str = "train/total_timesteps") -> None:
+    def __init__(self, *, step_key:str) -> None:
         self._buffers: MutableMapping[str, MetricsBuffer] = {}
         self._history = MetricsHistory(step_key=step_key)
 
@@ -33,37 +33,27 @@ class MetricsRecorder:
         Log a metrics mapping into the buffer for `namespace`. The buffer is
         allocated automatically if it doesn't yet exist.
         """
-        if not namespace or not metrics:
-            return
-        buf = self._buffers.get(namespace)
-        if buf is None:
-            buf = self._buffers[namespace] = MetricsBuffer()
-        buf.log(metrics)
+        assert len(metrics) > 0, "metrics cannot be empty"
+        buffer = self._ensure_buffer(namespace)
+        buffer.log(metrics)
 
     # ---- epoch lifecycle ----
-    def reset_epoch(self, namespace: str | None = None) -> None:
+    def reset_epoch(self, namespace: str) -> None:
         """
-        Clear the buffer for `namespace`. If `namespace` is None, clear all buffers.
+        Clear the buffer for `namespace`.
         If the namespace doesn't exist yet, this is a no-op.
         """
-        if namespace is None:
-            for buf in self._buffers.values():
-                buf.clear()
-            return
-
-        buf = self._buffers.get(namespace)
-        if buf is not None:
-            buf.clear()
+        buffer = self._ensure_buffer(namespace)
+        buffer.clear()
 
     def compute_epoch_means(self, namespace: str) -> Dict[str, float]:
         """
         Compute mean values for the given `namespace`. If the namespace doesn't
         exist or has no data, an empty dict is returned.
         """
-        buf = self._buffers.get(namespace)
-        if buf is None:
-            return {}
-        return dict(buf.means())
+        buffer = self._ensure_buffer(namespace)
+        means = dict(buffer.means())
+        return means
 
     # ---- history ----
     def update_history(self, snapshot: Mapping[str, Any]) -> None:
@@ -72,8 +62,8 @@ class MetricsRecorder:
         Example:
             {"train/total_timesteps": 2048, "train/loss": 0.15, "val/acc": 0.84}
         """
-        if not snapshot:
-            return
+        assert len(snapshot) > 0, "snapshot cannot be empty"
+
         self._history.update(snapshot)
 
     def history(self) -> Dict[str, Any]:
@@ -85,7 +75,10 @@ class MetricsRecorder:
         """Return the currently allocated namespaces (sorted)."""
         return sorted(self._buffers.keys())
 
-    def ensure_namespace(self, namespace: str) -> None:
+    def _ensure_buffer(self, namespace: str) -> None:
         """Ensure a buffer exists for `namespace` (allocated if missing)."""
-        if namespace not in self._buffers:
-            self._buffers[namespace] = MetricsBuffer()
+        assert len(namespace) > 0, "namespace cannot be empty"
+        if namespace in self._buffers: return self._buffers[namespace]
+        buffer = MetricsBuffer()
+        self._buffers[namespace] = buffer
+        return buffer

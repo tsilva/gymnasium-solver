@@ -332,6 +332,26 @@ def format_banner(title: str, *, width: int = 60, char: str = "=") -> str:
     right = width - len(text) - left
     return f"{char * left}{text}{char * right}"
 
+def format_section_header(title: str, *, width: int = 60, use_color: bool | None = None) -> str:
+    """Return a colored, centered header line for a section.
+
+    Chooses a heavier banner character when color is enabled for better visuals.
+    """
+    if use_color is None:
+        use_color = _color_enabled()
+    banner_char = "━" if use_color else "="
+    return ansi(format_banner(title, width=width, char=banner_char), "bright_magenta", "bold", enable=use_color)
+
+def format_section_footer(*, width: int = 60, use_color: bool | None = None) -> str:
+    """Return a colored footer line matching the section header style.
+
+    Uses the same banner character selection as the header for consistency.
+    """
+    if use_color is None:
+        use_color = _color_enabled()
+    banner_char = "━" if use_color else "="
+    return ansi(banner_char * width, "bright_magenta", enable=use_color)
+
 def get_log_manager() -> Optional[LogFileManager]:
     """Get the global log manager instance."""
     return _log_manager

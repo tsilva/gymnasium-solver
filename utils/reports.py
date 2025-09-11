@@ -1,4 +1,5 @@
 from typing import Iterable, List
+from utils.logging import format_section_header, format_section_footer
 
 
 def downsample(seq: Iterable[float], target: int) -> List[float]:
@@ -92,7 +93,8 @@ def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48
         # Get the last value
         vlast = values[-1]
         if not printed_header:
-            print("\n=== Metrics Summary (ASCII) ===")
+            # Use shared header/footer formatting for consistency
+            print("\n" + format_section_header("Metrics Summary (ASCII)", width=width))
             printed_header = True
         
         # Pipe-separated stats for easier parsing/reading
@@ -108,4 +110,4 @@ def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48
     if printed_header:
         if shown == 0:
             print("(no numeric metrics to summarize)")
-        print("=" * 30)
+        print(format_section_footer(width=width))

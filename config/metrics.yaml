@@ -327,6 +327,9 @@ entropy:
       level: "warning"
   tips: "Gradual decay is healthy. Early collapse → increase ent_coef; flat high → underfitting/weak learning."
 
+entropy: early phase alert if it drops to near 0 within first 10% of steps.
+
+
 # Learning rates
 policy_lr:
   description: "Current learning rate for policy network optimizer"

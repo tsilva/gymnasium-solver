@@ -37,7 +37,17 @@ class PrintMetricsLogger(LightningLoggerBase):
         algorithm_metric_rules: Dict[str, dict] | None = None,
         min_val_width: int = 15,
         key_priority: List[str] | None = None,
+        algo_id: Optional[str] = None,
     ) -> None:
+        """Create a pretty-print logger with sensible defaults.
+
+        When explicit rule/formatting dicts are not provided, defaults are
+        sourced from `utils.metrics_config.metrics_config` so callers can simply
+        instantiate `PrintMetricsLogger()` without wiring config plumbing.
+
+        The optional `algo_id` enables algorithm-specific metric checks; when
+        omitted, no algorithm-specific rules are enforced by default.
+        """
         from utils.metrics_config import metrics_config
 
         # Display config
@@ -45,12 +55,21 @@ class PrintMetricsLogger(LightningLoggerBase):
         self._version: str | int = "0"
         self._experiment = None
 
-        # Rules/config
-        self.metric_precision = dict(metric_precision or {})
-        self.metric_delta_rules = dict(metric_delta_rules or {})
-        self.algorithm_metric_rules = dict(algorithm_metric_rules or {})
+        # Rules/config (populate from metrics_config when not provided)
+        default_precision = metrics_config.metric_precision_dict()
+        default_delta_rules = metrics_config.metric_delta_rules()
+        default_algo_rules = (
+            metrics_config.algorithm_metric_rules(algo_id)
+            if (algo_id is not None)
+            else {}
+        )
+        default_key_priority = metrics_config.key_priority() or []
+
+        self.metric_precision = dict(metric_precision or default_precision)
+        self.metric_delta_rules = dict(metric_delta_rules or default_delta_rules)
+        self.algorithm_metric_rules = dict(algorithm_metric_rules or default_algo_rules)
         self.min_val_width = int(min_val_width)
-        self.key_priority = list(key_priority or [])
+        self.key_priority = list(key_priority or list(default_key_priority))
         self.previous_metrics: Dict[str, Any] = {}
 
         # Highlight/bounds from metrics.yaml
@@ -397,4 +416,3 @@ class PrintMetricsLogger(LightningLoggerBase):
         # Set the previous metrics
         self._prev = dict(data)
         self._last_height = len(lines)
-

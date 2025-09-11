@@ -1,6 +1,5 @@
 - wandb dash
 - FEAT: hp vs pf metrics
-- TODO: make sure max timelimit is logged at training start
 - FEAT: add discrete env support (solve taxi-v3, embeddings probably not sized correctly)
 
 - FEAT: add normalization support 

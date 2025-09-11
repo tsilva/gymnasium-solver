@@ -13,7 +13,7 @@ class CsvLightningLogger(LightningLoggerBase):
     """
 
     def __init__(self, *, csv_path: str | Path, queue_size: int = 10000) -> None:
-        from loggers.csv_logger import CsvMetricsLogger
+        from loggers.csv_metrics_logger import CsvMetricsLogger
 
         self._name = "csv"
         self._version = "0"
@@ -42,10 +42,7 @@ class CsvLightningLogger(LightningLoggerBase):
         self._csv.buffer_metrics(metrics)
 
     def finalize(self, status: str) -> None:  # pragma: no cover - best-effort close
-        try:
-            self._csv.close()
-        except Exception:
-            pass
+        self._csv.close()
 
     def after_save_checkpoint(self, checkpoint_callback: Any) -> None:  # pragma: no cover - unused
         return None

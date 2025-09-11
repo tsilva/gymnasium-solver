@@ -206,16 +206,16 @@ class BaseAgent(pl.LightningModule):
         video_path = str(checkpoint_dir / f"epoch={self.current_epoch:02d}.mp4")
         with self.validation_env.recorder(video_path, record_video=record_video):
             # Evaluate using the validation rollout collector to avoid redundant helpers
-            eval_metrics = self.validation_collector.evaluate_episodes(
+            val_metrics = self.validation_collector.evaluate_episodes(
                 n_episodes=self.config.eval_episodes,
                 deterministic=self.config.eval_deterministic,
             )
         
         # Log eval metrics
-        total_timesteps = int(eval_metrics.get("total_timesteps", 0))
+        total_timesteps = int(val_metrics.get("total_timesteps", 0))
         epoch_fps = self.timings.fps_since("on_validation_epoch_start", steps_now=total_timesteps)
         self.metrics.record("val", {
-            **{k: v for k, v in eval_metrics.items() if not k.startswith("per_env/")},
+            **val_metrics,
             "epoch": int(self.current_epoch),
             "epoch_fps": epoch_fps,
         })
@@ -375,19 +375,10 @@ class BaseAgent(pl.LightningModule):
         return csv_logger
     
     def _build_trainer_loggers__print(self): # Prepare a terminal print logger that formats metrics from the unified logging stream
-        from utils.metrics_config import metrics_config
         from loggers.print_metrics_logger import PrintMetricsLogger
-        # TODO: default to metrics config inside the logger
-        metric_precision = metrics_config.metric_precision_dict()
-        metric_delta_rules = metrics_config.metric_delta_rules()
-        algorithm_metric_rules = metrics_config.algorithm_metric_rules(self.config.algo_id)
-        key_priority = metrics_config.key_priority()
-        print_logger = PrintMetricsLogger(
-            metric_precision=metric_precision,
-            metric_delta_rules=metric_delta_rules,
-            algorithm_metric_rules=algorithm_metric_rules,
-            key_priority=key_priority,
-        )
+        # Rely on PrintMetricsLogger defaults sourced from utils.metrics_config
+        # Provide algo_id so algorithm-specific rules can be applied.
+        print_logger = PrintMetricsLogger(algo_id=self.config.algo_id)
         return print_logger
         
     def _build_trainer_loggers(self):

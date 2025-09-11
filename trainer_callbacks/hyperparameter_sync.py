@@ -196,7 +196,7 @@ class HyperparamSyncCallback(pl.Callback):
 
         # Emit W&B logs for changed hyperparameters under train namespace
         if changed_for_log:
-            pl_module.metrics.record_train(changed_for_log)
+            pl_module.metrics.record("train", changed_for_log)
 
         if changes and self.verbose:
             print(f"🎛️  Hyperparameters updated (epoch {trainer.current_epoch}): {', '.join(changes)}")

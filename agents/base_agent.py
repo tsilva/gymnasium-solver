@@ -3,7 +3,7 @@ import pytorch_lightning as pl
 import json
 
 from utils.timing import TimingTracker
-from utils.metrics_recorder import InMemoryMetricsRecorder
+from utils.metrics_recorder import MetricsRecorder
 from utils.decorators import must_implement
 from utils.reports import print_terminal_ascii_summary
 
@@ -29,7 +29,7 @@ class BaseAgent(pl.LightningModule):
 
         # Metrics recorder aggregates per-epoch metrics (train/eval) and maintains
         # a step-aware numeric history for terminal summaries.
-        self.metrics = InMemoryMetricsRecorder(step_key="train/total_timesteps")
+        self.metrics = MetricsRecorder(step_key="train/total_timesteps")
 
         # Initialize timing tracker for training 
         # loop performance measurements
@@ -217,7 +217,7 @@ class BaseAgent(pl.LightningModule):
         # Log eval metrics
         total_timesteps = int(eval_metrics.get("total_timesteps", 0))
         epoch_fps = self._timing_tracker.fps_since("on_validation_epoch_start", steps_now=total_timesteps)
-        self.metrics.record_eval({
+        self.metrics.record("val", {
             **{k: v for k, v in eval_metrics.items() if not k.startswith("per_env/")},
             "epoch": int(self.current_epoch),
             "epoch_fps": epoch_fps,
@@ -501,7 +501,7 @@ class BaseAgent(pl.LightningModule):
             # Compute model gradient norms and log them
             # (do this before any gradient clipping)
             metrics = model.compute_grad_norms()
-            self.metrics.record_train(metrics)
+            self.metrics.record("train", metrics)
 
             # In case a maximum gradient norm is set, 
             # clips gradients so that norm isn't exceeded
@@ -530,7 +530,7 @@ class BaseAgent(pl.LightningModule):
         self._change_optimizers_policy_lr(new_policy_lr)
         # TODO: should I do this here or every epoch?
         # Log scheduled LR under train namespace
-        self.metrics.record_train({"policy_lr": new_policy_lr})
+        self.metrics.record("train", {"policy_lr": new_policy_lr})
 
     def _change_optimizers_policy_lr(self, policy_lr):
         optimizers = self.optimizers()

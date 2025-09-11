@@ -1,6 +1,5 @@
-- BUG: table not printed when training ends
+- BUG: stop reason is not shown at end of training
 - BUG: epoch is not int
-- BUG: 
 - FEAT: hp vs pf metrics
 - FEAT: add discrete env support (solve taxi-v3, embeddings probably not sized correctly)
 

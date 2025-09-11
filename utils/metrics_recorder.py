@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping
+from typing import Any, Dict, Mapping, MutableMapping, List
 
 from .metrics_buffer import MetricsBuffer
 from .metrics_history import MetricsHistory
@@ -8,79 +8,84 @@ from .metrics_history import MetricsHistory
 
 class MetricsRecorder:
     """
-    Interface for recording training/eval metrics with stage-scoped aggregation
-    and a shared step-aware history.
-    """
+    General-purpose, in-memory metrics recorder with dynamic namespaces.
 
-    def record_train(self, metrics: Mapping[str, Any]) -> None:  # pragma: no cover - interface
-        raise NotImplementedError
+    - Buffers are created lazily per namespace (e.g., "train", "val", "eval", "test", "foo").
+    - A single `MetricsHistory` is shared across all namespaces and keyed by `step_key`.
+    - `update_history` expects fully-prefixed snapshots (e.g., "train/*", "val/*", ...).
 
-    def record_eval(self, metrics: Mapping[str, Any]) -> None:  # pragma: no cover - interface
-        raise NotImplementedError
-
-    def reset_epoch(self, stage: str) -> None:  # pragma: no cover - interface
-        raise NotImplementedError
-
-    def compute_epoch_means(self, stage: str) -> Dict[str, float]:  # pragma: no cover - interface
-        raise NotImplementedError
-
-    def update_history(self, snapshot: Mapping[str, Any]) -> None:  # pragma: no cover - interface
-        raise NotImplementedError
-
-    def history(self) -> Dict[str, Any]:  # pragma: no cover - interface
-        raise NotImplementedError
-
-
-class InMemoryMetricsRecorder(MetricsRecorder):
-    """
-    In-memory implementation backed by per-stage buffers and a shared numeric history.
-
-    - Two independent stage buffers: 'train' and 'eval'.
-    - A single `MetricsHistory` keyed by a canonical step key (default: train/total_timesteps).
-    - History is updated by passing fully-prefixed snapshots (e.g., train/*, eval/*) at flush time.
+    Typical usage:
+        rec = MetricsRecorder(step_key="train/total_timesteps")
+        rec.record("train", {"loss": 0.2, "lr": 3e-4})
+        rec.record("val", {"acc": 0.83})
+        epoch_train_means = rec.compute_epoch_means("train")
+        rec.reset_epoch("train")
+        rec.update_history({"train/total_timesteps": 1024, "train/loss": 0.2})
     """
 
     def __init__(self, *, step_key: str = "train/total_timesteps") -> None:
-        self._train_buf = MetricsBuffer()
-        self._eval_buf = MetricsBuffer()
+        self._buffers: MutableMapping[str, MetricsBuffer] = {}
         self._history = MetricsHistory(step_key=step_key)
 
-    # ---- hot-path recorders ----
-    def record_train(self, metrics: Mapping[str, Any]) -> None:
-        if not metrics:
+    # ---- hot-path recorder ----
+    def record(self, namespace: str, metrics: Mapping[str, Any]) -> None:
+        """
+        Log a metrics mapping into the buffer for `namespace`. The buffer is
+        allocated automatically if it doesn't yet exist.
+        """
+        if not namespace or not metrics:
             return
-
-        self._train_buf.log(metrics)
-
-    def record_eval(self, metrics: Mapping[str, Any]) -> None:
-        if not metrics:
-            return
-
-        self._eval_buf.log(metrics)
+        buf = self._buffers.get(namespace)
+        if buf is None:
+            buf = self._buffers[namespace] = MetricsBuffer()
+        buf.log(metrics)
 
     # ---- epoch lifecycle ----
-    def reset_epoch(self, stage: str) -> None:
-        s = str(stage).lower()
-        if s == "train":
-            self._train_buf.clear()
-        elif s == "val":
-            self._eval_buf.clear()
-        else:
-            raise ValueError(f"Unknown stage for reset_epoch: {stage}")
+    def reset_epoch(self, namespace: str | None = None) -> None:
+        """
+        Clear the buffer for `namespace`. If `namespace` is None, clear all buffers.
+        If the namespace doesn't exist yet, this is a no-op.
+        """
+        if namespace is None:
+            for buf in self._buffers.values():
+                buf.clear()
+            return
 
-    def compute_epoch_means(self, stage: str) -> Dict[str, float]:
-        s = str(stage).lower()
-        if s == "train":
-            return dict(self._train_buf.means())
-        if s == "val":
-            return dict(self._eval_buf.means())
-        raise ValueError(f"Unknown stage for compute_epoch_means: {stage}")
+        buf = self._buffers.get(namespace)
+        if buf is not None:
+            buf.clear()
+
+    def compute_epoch_means(self, namespace: str) -> Dict[str, float]:
+        """
+        Compute mean values for the given `namespace`. If the namespace doesn't
+        exist or has no data, an empty dict is returned.
+        """
+        buf = self._buffers.get(namespace)
+        if buf is None:
+            return {}
+        return dict(buf.means())
 
     # ---- history ----
     def update_history(self, snapshot: Mapping[str, Any]) -> None:
-        # Expect fully-prefixed namespaced keys (e.g., train/* or eval/*)
+        """
+        Update the shared step-aware history from a fully-prefixed snapshot.
+        Example:
+            {"train/total_timesteps": 2048, "train/loss": 0.15, "val/acc": 0.84}
+        """
+        if not snapshot:
+            return
         self._history.update(snapshot)
 
     def history(self) -> Dict[str, Any]:
+        """Return the history as a plain dict."""
         return self._history.as_dict()
 
+    # ---- introspection helpers ----
+    def namespaces(self) -> List[str]:
+        """Return the currently allocated namespaces (sorted)."""
+        return sorted(self._buffers.keys())
+
+    def ensure_namespace(self, namespace: str) -> None:
+        """Ensure a buffer exists for `namespace` (allocated if missing)."""
+        if namespace not in self._buffers:
+            self._buffers[namespace] = MetricsBuffer()

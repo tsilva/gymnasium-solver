@@ -114,8 +114,9 @@ class PrintMetricsLogger(LightningLoggerBase):
         return None
 
     def log_metrics(self, metrics: dict[str, Any], step: Optional[int] = None) -> None:
-        # Convert values to basic Python scalars for rendering/validation
-        simple: Dict[str, Any] = {k: _to_python_scalar(v) for k, v in dict(metrics).items()}
+        # Convert values to basic Python scalars for rendering/validation 
+        # and discard non-namespace keys (eg: epoch injected by Lightning)
+        simple: Dict[str, Any] = {k: _to_python_scalar(v) for k, v in dict(metrics).items() if "/" in k}
 
         # Sticky display: merge with previous known metrics so missing keys
         # keep their last values when printing.

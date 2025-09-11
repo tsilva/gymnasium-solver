@@ -853,6 +853,140 @@ class RolloutCollector():
 
         return trajectories
 
+    @torch.inference_mode()
+    def evaluate_episodes(
+        self,
+        *,
+        n_episodes: int,
+        deterministic: bool = True,
+        max_steps_per_episode: Optional[int] = None,
+        timeout_seconds: Optional[float] = None,
+    ) -> dict:
+        """Evaluate the current policy on this collector's env for exactly N episodes.
+
+        Uses the collector's env and
+        policy model. Distributes the requested number of episodes across env
+        ranks as evenly as possible to avoid biasing any specific env index.
+
+        Returns a metrics dict with keys compatible with evaluate_policy:
+        - total_episodes, total_timesteps, ep_rew_mean, ep_len_mean
+        - per_env/episodes_{i}, per_env/ep_rew_mean_{i}, per_env/ep_len_mean_{i}
+        """
+        assert hasattr(self.env, "num_envs"), "Environment must be vectorized (have num_envs)"
+
+        def _balanced_targets(n_envs: int, total_episodes: int):
+            if total_episodes <= 0:
+                return [0] * n_envs
+            base = int(total_episodes) // int(n_envs)
+            rem = int(total_episodes) % int(n_envs)
+            return [base + (1 if i < rem else 0) for i in range(int(n_envs))]
+
+        n_envs = int(self.env.num_envs)
+        device = _device_of(self.policy_model)
+
+        # Reset env and set up counters
+        import time
+        obs = self.env.reset()
+        per_env_targets = _balanced_targets(n_envs, int(n_episodes))
+        per_env_counts = [0] * n_envs
+        per_env_rewards = [[] for _ in range(n_envs)]  # type: ignore[var-annotated]
+        per_env_lengths = [[] for _ in range(n_envs)]  # type: ignore[var-annotated]
+        cur_rewards = [0.0] * n_envs
+        cur_lengths = [0] * n_envs
+
+        total_timesteps = 0
+        start_time = time.time()
+
+        with inference_ctx(self.policy_model):
+            while True:
+                # Stop when all envs reached their target
+                if all(count >= tgt for count, tgt in zip(per_env_counts, per_env_targets)):
+                    break
+
+                obs_t = torch.as_tensor(obs, device=device)
+                actions_t, _, _ = policy_act(self.policy_model, obs_t, deterministic=deterministic)
+                actions = actions_t.detach().cpu().numpy()
+
+                next_obs, rewards, dones, infos = self.env.step(actions)
+                total_timesteps += n_envs
+
+                # Process completed episodes using info['episode']
+                done_idxs = np.where(dones)[0]
+                for idx in done_idxs:
+                    if per_env_counts[idx] >= per_env_targets[idx]:
+                        # Ignore extra episodes for envs that already reached target
+                        continue
+                    info = infos[idx]
+                    ep = info.get("episode")
+                    if ep is None:
+                        # Fallback: accumulate from arrays if monitor info missing
+                        per_env_rewards[idx].append(float(cur_rewards[idx]))
+                        per_env_lengths[idx].append(int(cur_lengths[idx]))
+                    else:
+                        per_env_rewards[idx].append(float(ep.get("r", 0.0)))
+                        per_env_lengths[idx].append(int(ep.get("l", 0)))
+                    per_env_counts[idx] += 1
+                    # Reset trackers for that env
+                    cur_rewards[idx] = 0.0
+                    cur_lengths[idx] = 0
+
+                # Update running counters
+                for i in range(n_envs):
+                    r = float(rewards if np.isscalar(rewards) else rewards[i])
+                    cur_rewards[i] += r
+                    cur_lengths[i] += 1
+
+                # Enforce hard cap per episode when requested
+                if max_steps_per_episode is not None and max_steps_per_episode > 0:
+                    for i in range(n_envs):
+                        if (
+                            per_env_counts[i] < per_env_targets[i]
+                            and cur_lengths[i] >= int(max_steps_per_episode)
+                        ):
+                            # Finalize truncated episode with running counters
+                            per_env_rewards[i].append(float(cur_rewards[i]))
+                            per_env_lengths[i].append(int(cur_lengths[i]))
+                            per_env_counts[i] += 1
+                            cur_rewards[i] = 0.0
+                            cur_lengths[i] = 0
+                            # Reset only this env when possible and patch next_obs
+                            ob = self.env.env_method("reset", indices=[i])[0]
+                            if np.isscalar(next_obs):
+                                next_obs = ob
+                            else:
+                                next_obs[i] = ob
+
+                # Enforce wall-clock timeout if set
+                if timeout_seconds is not None and (time.time() - start_time) >= float(timeout_seconds):
+                    break
+
+                obs = next_obs
+
+        # Aggregate metrics
+        all_rewards = [r for env_rs in per_env_rewards for r in env_rs]
+        all_lengths = [l for env_ls in per_env_lengths for l in env_ls]
+
+        total_episodes_collected = int(sum(per_env_counts))
+        ep_rew_mean = float(np.mean(all_rewards)) if all_rewards else 0.0
+        ep_len_mean = float(np.mean(all_lengths)) if all_lengths else 0.0
+
+        # Per-env summaries
+        per_env_reward_means = [float(np.mean(rs)) if rs else 0.0 for rs in per_env_rewards]
+        per_env_length_means = [float(np.mean(ls)) if ls else 0.0 for ls in per_env_lengths]
+
+        metrics = {
+            "total_episodes": total_episodes_collected,
+            "total_timesteps": int(total_timesteps),
+            "ep_rew_mean": ep_rew_mean,
+            "ep_len_mean": float(ep_len_mean),
+        }
+        for i in range(n_envs):
+            metrics[f"per_env/episodes_{i}"] = int(per_env_counts[i])
+            metrics[f"per_env/ep_rew_mean_{i}"] = per_env_reward_means[i]
+            metrics[f"per_env/ep_len_mean_{i}"] = per_env_length_means[i]
+
+        return metrics
+
     def slice_trajectories(self, trajectories, idxs):
         """Return a view of the rollout trajectory at the given indices.
 

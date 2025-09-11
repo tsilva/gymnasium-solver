@@ -1,7 +1,7 @@
 import torch
 import pytorch_lightning as pl
-import json
 
+from utils.io import write_json
 from utils.timing import TimingTracker
 from utils.metrics_recorder import MetricsRecorder
 from utils.decorators import must_implement
@@ -206,10 +206,8 @@ class BaseAgent(pl.LightningModule):
         checkpoint_dir = self.run_manager.ensure_path("checkpoints/")
         video_path = str(checkpoint_dir / f"epoch={self.current_epoch:02d}.mp4")
         with self.validation_env.recorder(video_path, record_video=record_video):
-            from utils.evaluation import evaluate_policy
-            eval_metrics = evaluate_policy(
-                self.validation_env,
-                self.policy_model,
+            # Evaluate using the validation rollout collector to avoid redundant helpers
+            eval_metrics = self.validation_collector.evaluate_episodes(
                 n_episodes=int(self.config.eval_episodes),
                 deterministic=self.config.eval_deterministic,
             )
@@ -238,16 +236,12 @@ class BaseAgent(pl.LightningModule):
         checkpoint_dir = self.run_manager.ensure_path("checkpoints/")
         video_path = checkpoint_dir / "final.mp4"
         with self.test_env.recorder(str(video_path), record_video=True):
-            from utils.evaluation import evaluate_policy
-            final_metrics = evaluate_policy(
-                self.test_env,
-                self.policy_model,
+            final_metrics = self.test_collector.evaluate_episodes(
                 n_episodes=1,
                 deterministic=self.config.eval_deterministic,
             )
             json_path = video_path.with_suffix(".json")
-            with open(json_path, "w", encoding="utf-8") as f:
-                json.dump(final_metrics, f, ensure_ascii=False, indent=2)
+            write_json(json_path, final_metrics)
     
     def learn(self):
         assert self.run_manager is None, "learn() should only be called once at the start of training"

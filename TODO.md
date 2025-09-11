@@ -1,4 +1,5 @@
 - BUG: ep_rew_best is zero at end of training
+- BUG: final val print has a lot of zeros
 - BUG: stop reason is not shown at end of training
 - BUG: epoch is not int
 - FEAT: hp vs pf metrics

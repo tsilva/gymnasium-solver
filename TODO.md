@@ -1,3 +1,5 @@
+- Ensure metrics summary is sorted with metrics.yaml priorities
+
 - FEAT: Set alerts for metrics as code (allows different algos to set different alerts)
   - Remove from metrics.yaml
   - Ensure alerts are propagated to the logger and persist until disabled

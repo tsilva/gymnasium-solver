@@ -59,8 +59,9 @@ def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48
     for k in keys:
         pts = history.get(k) or []
 
-        # If there are less than 2 points, skip
-        if len(pts) < 2: continue
+        # Show metrics even with a single point (e.g., val/* at end-of-run)
+        if len(pts) < 1: 
+            continue
 
         # Collapse duplicate steps (keep last)
         by_step = {}

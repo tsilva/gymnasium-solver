@@ -174,6 +174,9 @@ class BaseAgent(pl.LightningModule):
         # Update schedules
         self._update_schedules()
 
+        # Log hyperparameters that are tunable in real-time
+        self._log_hyperparameters()
+
     def val_dataloader(self):
         # TODO: should I just do rollouts here?
         from utils.dataloaders import build_dummy_loader
@@ -531,3 +534,12 @@ class BaseAgent(pl.LightningModule):
         experiment_name = f"{self.config.algo_id}-{self.config.seed}"
         wandb.init(project=project_name, name=experiment_name, config=asdict(self.config))
         return wandb.run
+
+    def _log_hyperparameters(self):
+        metrics = {
+            "ent_coef": self.config.ent_coef,
+            "clip_range": self.config.clip_range,
+            "policy_lr": self.config.policy_lr,
+        }
+        prefixed = {f"hp/{k}": v for k, v in metrics.items()}
+        self.metrics.record("train", prefixed)

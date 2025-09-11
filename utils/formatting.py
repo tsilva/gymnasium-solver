@@ -34,6 +34,7 @@ def number_to_string(
             if value < _magnitude: continue
             value /= _magnitude
             unit = _unit
+            precision = 2
             break
         
     if precision == 0: value_str = str(int(round(value))) + unit

@@ -62,7 +62,7 @@ class MetricsConfig:
             if not delta_rule: continue
 
             # If delta rule is non-decreasing, set the rule function
-            if delta_rule == "non_decreasing": rule_fn = lambda prev, curr: curr >= prev
+            if delta_rule == ">=": rule_fn = lambda prev, curr: curr >= prev
             else: continue
 
             # Add the rule function to the delta rules dictionary
@@ -87,11 +87,11 @@ class MetricsConfig:
             message = rule_config.get("message", "Metric validation failed")
             level = rule_config.get("level", "warning")
 
-            if condition == "less_than":
+            if condition == "<":
                 check_fn = lambda value: value < threshold
-            elif condition == "greater_than":
+            elif condition == ">":
                 check_fn = lambda value: value > threshold
-            elif condition == "between":
+            elif condition == "><":
                 min_val = rule_config.get("min", float("-inf"))
                 max_val = rule_config.get("max", float("inf"))
                 check_fn = lambda value: min_val <= value <= max_val

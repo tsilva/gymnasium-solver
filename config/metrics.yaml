@@ -26,8 +26,8 @@ _global:
     - "train/value_loss_scaled" # (watch scaling/normalization effects vs unscaled)
     - "train/loss" # (aggregate: spikes = step-size or data issues)
     - "train/grad_norm/backbone" # (grad health: drift/spikes => lr/clip or bug)
-    - "train/grad_norm/actor_head" 
-    - "train/grad_norm/critic_head"
+    - "train/grad_norm/policy_head"
+    - "train/grad_norm/value_head"
     - "train/obs_mean" # (norm/whitening sanity; sudden shifts = pipeline bugs)
     - "train/obs_std" # (should stabilize; zero/NaN = broken obs)
     - "train/reward_mean" # (only meaningful if not normalized; otherwise de-prioritize)
@@ -81,108 +81,151 @@ _global:
     row_bold: true
 
 clip_range:
-  description: "PPO clip range for policy updates"
+  description: "PPO clip range for policy updates (ratio clamp around 1.0)"
   precision: 4
   min: 0.0
   max: 1.0
   algorithm_rules:
     ppo:
       threshold: 0.2
-      condition: "greater_than"
+      condition: "<"
       message: "High clip range ({current_value:.4f}) may lead to unstable training. Consider reducing."
       level: "warning"
+  tips: "Typical 0.1-0.2. Too high → aggressive updates/instability; too low → weak learning."
       
 # Episode and timestep counts (integers)
 total_episodes:
   precision: 0
-  delta_rule: "non_decreasing"  # Should always increase
   description: "Cumulative number of episodes completed across all training"
+  delta_rule: ">="  # Should always increase
+  tips: "Should monotonically increase. Stalling can indicate env stuck, timeouts, or crashes."
 
 total_timesteps:
   # Note: delta_rule removed because eval/total_timesteps can legitimately decrease
   # between evaluation runs when using different eval strategies or env resets
   description: "Cumulative number of environment steps taken across all training"
   precision: 0
+  tips: "Monotonic during training. If not increasing, the loop may be paused or crashing."
 
 rollout_timesteps:
   description: "Number of timesteps collected in the current rollout buffer"
   precision: 0
-  delta_rule: "non_decreasing"  # Should always increase
+  delta_rule: ">="  # Should always increase
+  tips: "Stable per-epoch for fixed n_envs * n_steps. Unexpected drops → early terminations/timeouts."
+
+# Additional counters
+total_rollouts:
+  description: "Cumulative number of completed rollouts (batches) collected"
+  precision: 0
+  delta_rule: ">="
+  tips: "Monotonic. Useful to measure update cadence alongside n_updates."
+
+rollout_episodes:
+  description: "Number of episodes finished within the current rollout"
+  precision: 0
+  tips: "Very low values can indicate very long episodes; very high values can indicate many short/terminated episodes."
 
 # Episode statistics
 ep_rew_mean:
   description: "Average episode reward over recent episodes window"
   precision: 2
+  tips: "Healthy: smooth upward trend. Flat/volatile → tune LR, entropy, batch size, or reward shaping."
 
 ep_len_mean:
   description: "Average episode length over recent episodes window"
   precision: 0
+  tips: "Depends on env. Collapsing to 1 often means early termination; unbounded growth can signal exploration without success."
 
 # Immediate episode stats
 ep_rew_last:
   description: "Reward of the most recent completed episode"
   precision: 2
+  tips: "Noisy point value; rely on mean/best for trends. Large swings can indicate high variance environments."
 
 ep_len_last:
   description: "Length of the most recent completed episode"
   precision: 0
+  tips: "Watch for pathological 1-step episodes or very long stalls vs typical env behavior."
+
+ep_rew_best:
+  description: "Running best of ep_rew_mean across epochs"
+  precision: 2
+  tips: "Should improve then plateau. Stagnation early in training suggests optimization or exploration issues."
 
 ep_rew_min:
   description: "Minimum episode reward observed in recent episodes window"
   precision: 2
+  tips: "Very low outliers suggest instability or brittle policies; consider more entropy or better value fit."
 
 ep_rew_max:
   description: "Maximum episode reward observed in recent episodes window"
   precision: 2
+  tips: "Growing maxima are promising, but prefer consistent mean improvements."
 
 ep_len_min:
   precision: 0
   description: "Minimum episode length observed in recent episodes window"
+  tips: "Near 1 consistently can indicate immediate failure/termination dynamics."
 
 ep_len_max: 
   description: "Maximum episode length observed in recent episodes window"
   precision: 0
+  tips: "Very large outliers can skew means; check for time-limit truncations vs solved behavior."
 
 ep_rew_std:
   description: "Standard deviation of episode rewards in recent episodes window"
   precision: 2
+  tips: "High variance makes learning harder; aim to reduce via better baselines, shaping, or larger batches."
 
 ep_len_std:
   description: "Standard deviation of episode lengths in recent episodes window"
   precision: 2
+  tips: "High variance often correlates with unstable policies or non-stationary dynamics."
 
 # Training metrics
 epoch:
   description: "Current training epoch number"
   precision: 0
-  delta_rule: "non_decreasing"  # Should always increase
+  delta_rule: ">="  # Should always increase
+  tips: "Monotonic counter; useful as x-axis for logs when steps vary."
 
 n_updates:
   description: "Total number of parameter updates (gradient steps) performed"
   precision: 0
-  delta_rule: "non_decreasing"  # Should always increase
+  delta_rule: ">="  # Should always increase
+  tips: "Should scale with total_rollouts. If not increasing, optimizer step is not being called."
 
 # Time metrics
 time_elapsed:
   description: "Total elapsed training time in seconds"
   precision: 2
-  delta_rule: "non_decreasing"  # Time should always increase
+  delta_rule: ">="  # Time should always increase
   min: 0.0
+  tips: "Monotonic wall time; combine with fps to gauge throughput."
 
 fps:
   description: "Training throughput in frames (environment steps) per second"
   precision: 0
   min: 0.0
+  tips: "Stable/high is good. Drops suggest env bottlenecks, logging overhead, or CPU contention."
 
-eta:
+eta_s:
   description: "Estimated seconds remaining to reach max_timesteps"
   precision: 0
   min: 0.0
+  tips: "Should decline over time. Stalling/rising indicates fps degradation or pauses."
 
 fps_instant:
   description: "Instant training throughput in frames per second measured within the current epoch"
   precision: 0
   min: 0.0
+  tips: "Spiky by nature; sustained drops vs fps suggest intermittent stalls or I/O hiccups."
+
+epoch_fps:
+  description: "Throughput (steps/s) computed over the last validation epoch"
+  precision: 0
+  min: 0.0
+  tips: "Helps compare eval overhead vs train; large gap hints heavy rendering or eval wrappers."
 
 # Loss metrics
 policy_loss:
@@ -191,21 +234,30 @@ policy_loss:
   algorithm_rules:
     reinforce:
       threshold: 1000.0
-      condition: "less_than"
+      condition: "<"
       message: "Very high policy loss ({current_value:.3f}) may indicate training instability."
       level: "warning"
+  tips: "Magnitude depends on scaling; look for smooth trends. Wild oscillations indicate instability or too-high LR."
 
 value_loss:
   description: "Value function loss measuring prediction accuracy of state values"
   precision: 4
+  tips: "Should trend down as critic learns. Rising/flat with poor returns → value underfitting/mismatch."
+
+loss:
+  description: "Total loss used for backprop (policy + value + entropy terms)"
+  precision: 4
+  tips: "Spikes often correlate with bad batches or too-high LR; check approx_kl/clip_fraction at spikes."
 
 entropy_loss:
   description: "Negative policy entropy used as regularization term"
   precision: 4
+  tips: "Tracks exploration penalty. If dominating total loss, ent_coef may be too high."
 
 total_loss:
   description: "Combined total loss including policy, value and entropy components"
   precision: 4
+  tips: "Alias for aggregate loss; prefer monitoring 'loss' if both exist."
 
 # Algorithm-specific metrics
 approx_kl:
@@ -216,9 +268,10 @@ approx_kl:
   algorithm_rules:
     ppo:
       threshold: 0.1
-      condition: "less_than"
+      condition: "<"
       message: "High approximate KL divergence ({current_value:.4f}) indicates large policy changes. Consider reducing learning rate."
       level: "warning"
+  tips: "Healthy ~0.01-0.02. Near 0 → under-updating; >0.05-0.1 → overly aggressive updates."
 
 kl_div:
   description: "KL divergence between old and new policy log probabilities"
@@ -226,9 +279,10 @@ kl_div:
   algorithm_rules:
     ppo:
       threshold: 0.1
-      condition: "less_than"
+      condition: "<"
       message: "High KL divergence ({current_value:.4f}) indicates large policy changes. Consider reducing learning rate."
       level: "warning"
+  tips: "Should broadly track approx_kl. Persistent growth signals instability."
 
 clip_fraction:
   description: "Fraction of probability ratios that were clipped in PPO objective"
@@ -238,9 +292,10 @@ clip_fraction:
   algorithm_rules:
     ppo:
       threshold: 0.2
-      condition: "less_than"
+      condition: "<"
       message: "High clip fraction ({current_value:.3f}) indicates policy is changing too rapidly. Consider reducing learning rate or clip_range."
       level: "warning"
+  tips: "Healthy ~0.1-0.3. Near 0 → weak updates; very high → too many samples are clipped."
 
 explained_variance:
   description: "How well the value function predicts returns (1.0 = perfect, 0.0 = no better than mean)"
@@ -250,9 +305,10 @@ explained_variance:
   algorithm_rules:
     ppo:
       threshold: -0.5
-      condition: "greater_than"
+      condition: ">"
       message: "Very negative explained variance ({current_value:.3f}) indicates value function is performing poorly. Check value function architecture or learning rate."
       level: "warning"
+  tips: "Aim to rise >0.5 mid-run and >0.8 later. Negative/flat → critic failing or returns scaling issues."
 
 entropy:
   description: "Policy entropy measuring exploration vs exploitation trade-off"
@@ -261,57 +317,150 @@ entropy:
   algorithm_rules:
     ppo:
       threshold: 0.1
-      condition: "greater_than"
+      condition: ">"
       message: "Low entropy ({current_value:.3f}) indicates policy is becoming too deterministic. Consider increasing entropy coefficient."
       level: "warning"
     reinforce:
       threshold: 0.05
-      condition: "greater_than"
+      condition: ">"
       message: "Low entropy ({current_value:.3f}) in REINFORCE indicates policy is becoming too deterministic. Consider increasing entropy coefficient."
       level: "warning"
+  tips: "Gradual decay is healthy. Early collapse → increase ent_coef; flat high → underfitting/weak learning."
 
 # Learning rates
 policy_lr:
   description: "Current learning rate for policy network optimizer"
   precision: 6
   min: 0.0
+  tips: "Constant unless scheduled. Too high → instability (KL spikes); too low → slow learning."
 
 value_lr:
   description: "Current learning rate for value network optimizer"
   precision: 6
   min: 0.0
-
-policy_lr:
-  description: "General learning rate for optimizer"
-  precision: 6
-  min: 0.0
+  tips: "Only used when value head has a separate optimizer."
 
 # Gradient metrics
 grad_norm:
   description: "L2 norm of policy network gradients before clipping"
   precision: 4
   min: 0.0
+  tips: "Track for exploding/vanishing gradients. Sudden spikes → reduce LR or add/adjust clipping. Near 0 → underflow/vanishing."
 
 max_grad_norm:
   description: "Maximum allowed gradient norm for gradient clipping"
   precision: 4
   min: 0.0
+  tips: "If many steps hit the cap, reduce LR or revisit networks; if never used, consider if clipping is needed."
+
+# Granular gradient norms
+grad_norm/backbone:
+  description: "Gradient L2 norm for shared backbone parameters"
+  precision: 4
+  min: 0.0
+  tips: "Large divergence vs heads can signal imbalance in losses."
+
+grad_norm/policy_head:
+  description: "Gradient L2 norm for policy head"
+  precision: 4
+  min: 0.0
+  tips: "Persistent spikes often correlate with high approx_kl/clip_fraction."
+
+grad_norm/value_head:
+  description: "Gradient L2 norm for value head"
+  precision: 4
+  min: 0.0
+  tips: "If much lower than backbone, critic may underfit; if much higher, value loss may dominate."
 
 # Algorithm-specific metrics
 advantage_mean:
   description: "Mean advantage estimate across batch (should be near zero when normalized)"
   precision: 4
+  tips: "With normalization, expect ~0. Non-zero drift hints a bug in advantage calc or normalization."
 
 advantage_std:
   description: "Standard deviation of advantage estimates across batch"
   precision: 4
   min: 0.0
+  tips: "Too small → weak learning signal; too large → high-variance updates."
 
 value_mean:
   description: "Mean value function estimate across states in batch"
   precision: 4
+  tips: "Scale should broadly match returns. Large drifts → scaling/normalization mismatch."
 
 value_std:
   description: "Standard deviation of value function estimates across states in batch"
   precision: 4
   min: 0.0
+  tips: "Very low std can indicate saturation; very high std may reflect noisy targets or poor fit."
+
+# Observations and rewards statistics (from collectors)
+obs_mean:
+  description: "Running mean of observations after preprocessing/normalization"
+  precision: 3
+  tips: "Stable over time. Large shifts point to env resets or preprocessing issues. NaNs → bug."
+
+obs_std:
+  description: "Running standard deviation of observations after preprocessing/normalization"
+  precision: 3
+  min: 0.0
+  tips: "Should stabilize. Near 0 or NaN suggests broken observations or over-normalization."
+
+reward_mean:
+  description: "Running mean of raw rewards (pre-normalization)"
+  precision: 3
+  tips: "Only meaningful if rewards are not heavily normalized. Drifts correlate with reward shaping changes."
+
+reward_std:
+  description: "Running standard deviation of raw rewards (pre-normalization)"
+  precision: 3
+  min: 0.0
+  tips: "High variance can explain noisy learning curves; consider larger batches or baselines."
+
+action_mean:
+  description: "Mean of actions taken (discrete: mean index; continuous: mean magnitude)"
+  precision: 3
+  tips: "Discrete: avoid getting stuck on a single action too early. Continuous: look for sensible drift, not collapse."
+
+action_std:
+  description: "Standard deviation of actions (proxy for exploration for continuous control)"
+  precision: 3
+  min: 0.0
+  tips: "Healthy 'breathing' over time. Collapse to ~0 indicates premature determinism."
+
+rollout_fps:
+  description: "Collector throughput in frames per second (rollout only)"
+  precision: 0
+  min: 0.0
+  tips: "Low values signal env/CPU bottlenecks. Compare with overall fps to isolate overheads."
+
+baseline_mean:
+  description: "Running mean of the baseline used for returns normalization"
+  precision: 3
+  tips: "If using returns normalization, expect ~0 mean. Large drift suggests mismatch or leakage."
+
+baseline_std:
+  description: "Running std of the baseline used for returns normalization"
+  precision: 3
+  min: 0.0
+  tips: "If using returns normalization, expect ~1 std. Near 0 leads to weak signal; exploding suggests instability."
+
+# Hyperparameter mirrors logged under hp/*
+hp/policy_lr:
+  description: "Policy learning rate at start (static reference)"
+  precision: 6
+  min: 0.0
+  tips: "Reference value. If scheduled, compare with train/policy_lr over time."
+
+hp/clip_range:
+  description: "Clip range at start (static reference)"
+  precision: 4
+  min: 0.0
+  tips: "Reference value. Use alongside train/clip_range schedule to detect misconfigurations."
+
+hp/ent_coef:
+  description: "Entropy coefficient at start (static reference)"
+  precision: 6
+  min: 0.0
+  tips: "Reference value. Too high → exploration dominates; too low → early collapse."

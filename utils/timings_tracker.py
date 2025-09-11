@@ -12,7 +12,7 @@ class Marker:
     started_value: float
 
 @dataclass
-class TimingTracker:
+class TimingsTracker:
     """Utility to track elapsed time and compute throughput of arbitrary counters.
 
     Backwards compatible with the previous step-only API via `steps`/`steps_now`

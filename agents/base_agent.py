@@ -3,7 +3,7 @@ import pytorch_lightning as pl
 from torch.nn.utils import clip_grad_norm_
 
 from utils.io import write_json
-from utils.timing import TimingTracker
+from utils.timings_tracker import TimingsTracker
 from utils.metrics_recorder import MetricsRecorder
 from utils.decorators import must_implement
 from utils.reports import print_terminal_ascii_summary
@@ -32,7 +32,7 @@ class BaseAgent(pl.LightningModule):
 
         # Initialize timing tracker for training 
         # loop performance measurements
-        self._timing_tracker = TimingTracker()
+        self.timings = TimingsTracker()
 
         # TODO: take another look at RunManager vs Run concerns
         self.run_manager = None
@@ -116,7 +116,7 @@ class BaseAgent(pl.LightningModule):
 
     def on_fit_start(self):
         # Start the timing tracker for the entire training run
-        self._timing_tracker.restart("on_fit_start", steps=0) # TODO: allow tracking arbitrary associated values
+        self.timings.restart("on_fit_start", steps=0) # TODO: allow tracking arbitrary associated values
 
     def train_dataloader(self):
         # Some lightweight Trainer stubs used in tests don't manage current_epoch on the module.
@@ -147,7 +147,7 @@ class BaseAgent(pl.LightningModule):
     def on_train_epoch_start(self):
         # Start epoch timer
         total_timesteps = self.train_collector.get_metrics()["total_timesteps"]
-        self._timing_tracker.restart("on_train_epoch_start", steps=total_timesteps)
+        self.timings.restart("on_train_epoch_start", steps=total_timesteps)
 
         # Collect fresh trajectories at the start of each training epoch
         # Avoid double-collect on the first epoch: train_dataloader() already
@@ -185,7 +185,7 @@ class BaseAgent(pl.LightningModule):
         if not self.should_run_validation_epoch():
             return
 
-        self._timing_tracker.restart("on_validation_epoch_start", steps=0)
+        self.timings.restart("on_validation_epoch_start", steps=0)
 
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
@@ -213,7 +213,7 @@ class BaseAgent(pl.LightningModule):
         
         # Log eval metrics
         total_timesteps = int(eval_metrics.get("total_timesteps", 0))
-        epoch_fps = self._timing_tracker.fps_since("on_validation_epoch_start", steps_now=total_timesteps)
+        epoch_fps = self.timings.fps_since("on_validation_epoch_start", steps_now=total_timesteps)
         self.metrics.record("val", {
             **{k: v for k, v in eval_metrics.items() if not k.startswith("per_env/")},
             "epoch": int(self.current_epoch),
@@ -225,7 +225,7 @@ class BaseAgent(pl.LightningModule):
 
     def on_fit_end(self):
         # Log training completion time
-        time_elapsed = self._timing_tracker.seconds_since("on_fit_start")
+        time_elapsed = self.timings.seconds_since("on_fit_start")
         print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes). Reason: {self._early_stop_reason}")
 
         # TODO: encapsulate in callback

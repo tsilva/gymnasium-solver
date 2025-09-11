@@ -227,7 +227,7 @@ class BaseAgent(pl.LightningModule):
     def on_fit_end(self):
         # Log training completion time
         time_elapsed = self._timing_tracker.seconds_since("on_fit_start")
-        print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes)")
+        print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes). Reason: {self._early_stop_reason}")
 
         # TODO: encapsulate in callback
         print_terminal_ascii_summary(self.metrics.history())

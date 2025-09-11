@@ -17,7 +17,6 @@ class EarlyStoppingCallback(pl.Callback):
         mode: One of {"max", "min"}. For "max", training stops when value >= threshold.
               For "min", training stops when value <= threshold.
         threshold: Numeric threshold to trigger stop. If None, callback is inert.
-        verbose: If True, prints a stop reason when triggered.
     """
 
     def __init__(
@@ -46,6 +45,11 @@ class EarlyStoppingCallback(pl.Callback):
         # Threshold reached, signal Trainer to stop
         trainer.should_stop = True
         
-        # Print reason if verbose
+        # Print reason
         comp_op = ">=" if self.mode == "max" else "<="
-        print(f"Early stopping! '{self.metric_key}': {value} {comp_op} {self.threshold}.")
+        early_stop_reason = f"'{self.metric_key}': {value} {comp_op} {self.threshold}."
+        print(f"Early stopping! {early_stop_reason}")
+
+        # Store the reason in the module so that it is 
+        # available for the end of training report
+        pl_module._early_stop_reason = early_stop_reason

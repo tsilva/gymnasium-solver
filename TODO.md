@@ -1,5 +1,6 @@
 - wandb dash
 - FEAT: hp vs pf metrics
+- TODO: make sure max timelimit is logged at training start
 - FEAT: add discrete env support (solve taxi-v3, embeddings probably not sized correctly)
 
 - FEAT: add normalization support 
@@ -27,7 +28,6 @@
 - FEAT: overridable rollout collector factory methods instead of extra parameter method
 - FEAT: log checkpoint times to wandb
 - BUG: reset optimizer on learning rate changes
-- TODO: make sure max timelimit is logged at training start
 - TODO: beat lunarlander with ppo and only then with reinforce (trun[cate episode lengths for faster training)
 - REFACTOR: consider changing eval_freq to timesteps so it doesnt depend on n_updates
 - FEAT: figure out if I should log variance instead of std

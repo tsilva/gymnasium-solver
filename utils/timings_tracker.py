@@ -63,12 +63,20 @@ class TimingsTracker:
         Returns:
             Counter units per second since the marker started.
         """
-        if value_now is None and steps_now is None:
-            raise ValueError("throughput_since requires `value_now` (or legacy `steps_now`).")
+        # If no value or steps are provided, raise an error
+        if value_now is None and steps_now is None: raise ValueError("throughput_since requires `value_now` (or legacy `steps_now`).")
+
+        # Get the current value
         current_value = float(steps_now) if steps_now is not None else float(value_now)
+
+        # Get the marker
         m = self.markers[name]
+        
+        # Get the time since the marker started
         dt = self.seconds_since(name, now_ns=now_ns)
         dvalue = max(current_value - m.started_value, 0.0)
+
+        # Return the throughput
         return float(dvalue) / dt if dt > 0 else 0.0
 
     def fps_since(self, name: str, *, steps_now: int, now_ns: Optional[int] = None) -> float:
@@ -76,4 +84,5 @@ class TimingsTracker:
 
         Interprets the counter as timesteps and returns frames-per-second.
         """
+        # Return the throughput
         return self.throughput_since(name, value_now=float(steps_now), now_ns=now_ns)

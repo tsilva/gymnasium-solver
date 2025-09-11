@@ -75,7 +75,12 @@ def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48
         # Sort the points by step
         steps_sorted = sorted(by_step)
         values = [by_step[s] for s in steps_sorted]
-        chart = sparkline(values, width)
+        # Build a chart and render it in a fixed-width column so that
+        # subsequent stats align across metrics. For short histories
+        # (e.g., val/* with one point), right-align the chart to leave
+        # "past" entries visually empty on the left.
+        raw_chart = sparkline(values, width)
+        chart = raw_chart.rjust(max(0, int(width)))
 
         # Calculate the minimum, maximum, mean, and standard deviation
         vmin = min(values)

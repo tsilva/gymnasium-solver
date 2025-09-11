@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Callable, List, Iterable
+from typing import Any, Dict, Optional, Callable, List, Iterable, Tuple
 
 import os
 import sys
-import numbers
 
 from pytorch_lightning.loggers.logger import Logger as LightningLoggerBase  # type: ignore
 
-import torch
 from utils.logging import ansi as _ansi
 from utils.logging import apply_ansi_background as _apply_bg
 from utils.logging import strip_ansi_codes as _strip_ansi
@@ -17,9 +15,7 @@ from utils.dict_utils import group_by_namespace as _group_by_namespace
 from utils.torch import to_python_scalar as _to_python_scalar
 from utils.formatting import (
     is_number,
-    format_value as _format_value,
-    format_delta_magnitude as _fmt_delta_mag,
-    get_sort_key as _get_sort_key,
+    number_to_string
 )
 
 class PrintMetricsLogger(LightningLoggerBase):
@@ -70,7 +66,6 @@ class PrintMetricsLogger(LightningLoggerBase):
         self._metric_bounds = dict(_metric_bounds)
 
         # -------- Inlined table printer configuration/state --------
-        self.float_fmt: str = ".2f"
         self.indent: int = 4
         self.compact_numbers: bool = True
         self.color: bool = bool(sys.stdout.isatty() and os.environ.get("NO_COLOR") is None)
@@ -212,12 +207,11 @@ class PrintMetricsLogger(LightningLoggerBase):
         improved = (delta > 0) if inc_better else (delta < 0)
         color = "green" if improved else "red"
 
-        mag = _fmt_delta_mag(
+        # Format the delta magnitude
+        mag = number_to_string(
             abs(delta),
-            full_key,
-            precision_map=self.metric_precision_map,
-            compact_numbers=self.compact_numbers,
-            float_fmt=self.float_fmt,
+            precision=self.metric_precision_map.get(full_key, 2),
+            humanize=True,
         )
         return (f"{arrow}{mag}", color)
 
@@ -250,6 +244,19 @@ class PrintMetricsLogger(LightningLoggerBase):
             print(text, file=self.stream)
 
     def _render_table(self, data: Dict[str, Any]) -> None:
+        def _get_sort_key(namespace: str, subkey: str, key_priority: Iterable[str]) -> Tuple[int, object]:
+            """Compute a stable sort key honoring an explicit key priority list.
+
+            Returns (0, priority_index) when full_key in key_priority; otherwise
+            (1, subkey.lower()) so prioritized keys appear first in given order.
+            """
+            full_key = f"{namespace}/{subkey}" if subkey else namespace
+            try:
+                priority_index = list(key_priority).index(full_key)
+                return (0, priority_index)
+            except ValueError:
+                return (1, subkey.lower())
+
         # In case we don't have any data, return
         if not data: return
 
@@ -279,12 +286,11 @@ class PrintMetricsLogger(LightningLoggerBase):
             for sub, v in subdict.items():
                 key_candidates.append(sub)
                 full_key = f"{ns}/{sub}" if sub else ns
-                val_str = _format_value(
+                precision = self.metric_precision_map.get(sub, 2)
+                val_str = number_to_string(
                     v,
-                    full_key,
-                    precision_map=self.metric_precision_map,
-                    compact_numbers=self.compact_numbers,
-                    float_fmt=self.float_fmt,
+                    precision=precision,
+                    humanize=True,
                 )
                 if sub in self.highlight_value_bold_for_set:
                     val_str = _ansi(val_str, "bold", enable=self.color)

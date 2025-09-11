@@ -32,7 +32,7 @@ class BaseAgent(pl.LightningModule):
 
         # Initialize timing tracker for training 
         # loop performance measurements
-        self.timings_tracker = TimingsTracker()
+        self.timings = TimingsTracker()
 
         # TODO: take another look at RunManager vs Run concerns
         self.run_manager = None

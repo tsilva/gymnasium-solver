@@ -107,7 +107,6 @@ def build_env(
     record_video_kwargs={},
     env_kwargs={}
 ):
-    import gymnasium as gym
     from stable_baselines3.common.env_util import make_vec_env
     from stable_baselines3.common.vec_env import (
         DummyVecEnv,
@@ -116,10 +115,9 @@ def build_env(
         VecNormalize
     )
     from gym_wrappers.env_info import EnvInfoWrapper
-    from gym_wrappers.vec_info import VecInfoWrapper
+    from gym_wrappers.vec_env_info import VecEnvInfoWrapper
     from gym_wrappers.vec_normalize_static import VecNormalizeStatic
     from gym_wrappers.vec_video_recorder import VecVideoRecorder
-    from gym_wrappers.vec_env_info import VecEnvInfoWrapper
         
     # If recording video was requrested, assert valid render mode and subproc disabled 
     if record_video and render_mode != "rgb_array": raise ValueError("Video recording requires render_mode='rgb_array'")

@@ -35,7 +35,8 @@ class PrintMetricsLogger(LightningLoggerBase):
         metric_precision: Dict[str, int] | None = None,
         metric_delta_rules: Dict[str, Callable] | None = None,
         min_val_width: int = 15,
-        min_table_width: int = 100,
+        min_table_width: int = 90,
+        chart_col_width: int | None = None,
         key_priority: List[str] | None = None,
     ) -> None:
         """Create a pretty-print logger with sensible defaults.
@@ -64,6 +65,8 @@ class PrintMetricsLogger(LightningLoggerBase):
         # Enforce a minimum overall table width to reduce jitter from
         # fluctuating value lengths (numbers + deltas + sparklines).
         self.min_table_width = int(min_table_width)
+        # Fixed-width charts column; default matches sparkline width
+        self.chart_col_width = int(chart_col_width or 0) if chart_col_width is not None else 0
         self.key_priority = list(key_priority or list(default_key_priority))
         self.previous_metrics: Dict[str, Any] = {}
 
@@ -103,6 +106,9 @@ class PrintMetricsLogger(LightningLoggerBase):
         self.show_sparklines: bool = True
         self.sparkline_width: int = 32
         self.sparkline_history_cap: int = 512
+        # If chart_col_width not explicitly set, mirror sparkline_width
+        if self.chart_col_width == 0:
+            self.chart_col_width = int(self.sparkline_width)
 
     # --- Lightning Logger API ---
     @property
@@ -268,11 +274,13 @@ class PrintMetricsLogger(LightningLoggerBase):
                 )
                 
         formatted: Dict[str, Dict[str, str]] = {}
+        charts: Dict[str, Dict[str, str]] = {}
         val_candidates: List[str] = []
         key_candidates: List[str] = [ns + "/" for ns in ns_order]
         for ns in ns_order:
             subdict = grouped[ns]
             f_sub: Dict[str, str] = {}
+            c_sub: Dict[str, str] = {}
             for sub, v in subdict.items():
                 # Add the subkey to the key candidates
                 key_candidates.append(sub)
@@ -298,16 +306,17 @@ class PrintMetricsLogger(LightningLoggerBase):
                 else:
                     val_disp = val_str
 
-                # Add the sparkline to the value
+                # Prepare a sparkline chart separately (fixed-width column)
+                chart = ""
                 if self.show_sparklines and is_number(v):
                     chart = self._spark_for_key(full_key, self.sparkline_width)
-                    if chart:
-                        val_disp = f"{val_disp}  {chart}"
 
                 # Add the subkey to the formatted data
                 f_sub[sub] = val_disp
+                c_sub[sub] = chart
                 val_candidates.append(_strip_ansi(val_disp))
             formatted[ns] = f_sub
+            charts[ns] = c_sub
 
         # Add the border to the lines
         indent = self.indent
@@ -316,13 +325,13 @@ class PrintMetricsLogger(LightningLoggerBase):
         val_width = max(val_width, self.min_val_width)
 
         # Ensure the total table width does not shrink below min_table_width.
-        # Layout: "| " + (indent + key_width) + " | " + (val_width) + " |"
-        # Components around val_width total 2 (prefix) + 3 (middle) + 2 (suffix)
-        static_cols = 2 + (indent + key_width) + 3 + 2
-        if static_cols + val_width < self.min_table_width:
-            val_width = self.min_table_width - static_cols
+        # New layout with a fixed-width charts column:
+        # "| " + (indent + key_width) + " | " + (val_width) + " | " + (chart_col_width) + " |"
+        static_cols = 2 + (indent + key_width) + 3 + 3 + 2
+        if static_cols + val_width + self.chart_col_width < self.min_table_width:
+            val_width = self.min_table_width - static_cols - self.chart_col_width
 
-        border_len = 2 + (indent + key_width) + 3 + val_width + 2
+        border_len = 2 + (indent + key_width) + 3 + val_width + 3 + self.chart_col_width + 2
         border = "-" * border_len
         lines: List[str] = []
         lines.append(border)
@@ -332,7 +341,7 @@ class PrintMetricsLogger(LightningLoggerBase):
 
             # Add the header to the lines
             header = ns + "/"
-            header_line = f"| {header:<{indent + key_width}} | {'':>{val_width}} |"
+            header_line = f"| {header:<{indent + key_width}} | {'':>{val_width}} | {'':<{self.chart_col_width}} |"
             lines.append(_ansi(header_line, "bold", enable=self.color))
 
             # Add the subkeys to the lines
@@ -340,6 +349,10 @@ class PrintMetricsLogger(LightningLoggerBase):
                 val_display_len = len(_strip_ansi(val))
                 val_padding = val_width - val_display_len
                 val_padded = (" " * val_padding + val) if val_padding > 0 else val
+                chart_str = charts.get(ns, {}).get(sub, "")
+                # Truncate or pad chart to fixed width
+                chart_clean = chart_str[: self.chart_col_width]
+                chart_padded = f"{chart_clean:<{self.chart_col_width}}"
 
                 # Add the key to the lines
                 key_cell = f"{sub:<{key_width}}"
@@ -374,7 +387,7 @@ class PrintMetricsLogger(LightningLoggerBase):
                     row_bg_color = self.highlight_row_bg_color
 
                 # Add the row to the lines
-                row = f"| {' ' * indent}{key_cell} | {val_padded} |"
+                row = f"| {' ' * indent}{key_cell} | {val_padded} | {chart_padded} |"
 
                 # Add the highlight to the row
                 if highlight:

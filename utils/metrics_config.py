@@ -43,17 +43,11 @@ class MetricsConfig:
         metrics = [(name, value) for name, value in self._config.items() if not name.startswith("_") and isinstance(value, dict)]
         return metrics
 
-    def get_default_precision(self) -> int:
-        global_cfg = self._get_global_cfg()
-        default_precision = global_cfg["default_precision"]
-        return default_precision
-
     def metric_precision_dict(self) -> Dict[str, int]:
         """Convert metrics config to precision dict keyed by metric name. """
-        default_precision = self.get_default_precision()
         precision_dict: Dict[str, int] = {}
         for metric_name, metric_config in self._get_metrics():
-            precision = int(metric_config.get("precision", default_precision))
+            precision = int(metric_config.get("precision", 2))
             precision_dict[metric_name] = precision
         return precision_dict
 
@@ -115,6 +109,8 @@ class MetricsConfig:
         """Preferred key ordering from metrics config (_global.key_priority)."""
         global_cfg = self._get_global_cfg()
         key_priority = global_cfg["key_priority"]
+        dupes = [x for x in set(key_priority) if key_priority.count(x) > 1]
+        assert len(dupes) == 0, f"key_priority must be a list of unique values, found duplicates: {dupes}"
         return key_priority
 
     def highlight_config(self) -> Dict[str, Any]:

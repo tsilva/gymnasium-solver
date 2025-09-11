@@ -35,6 +35,7 @@ class PrintMetricsLogger(LightningLoggerBase):
         metric_precision: Dict[str, int] | None = None,
         metric_delta_rules: Dict[str, Callable] | None = None,
         min_val_width: int = 15,
+        min_table_width: int = 100,
         key_priority: List[str] | None = None,
     ) -> None:
         """Create a pretty-print logger with sensible defaults.
@@ -60,6 +61,9 @@ class PrintMetricsLogger(LightningLoggerBase):
         self.metric_precision = dict(metric_precision or default_precision)
         self.metric_delta_rules = dict(metric_delta_rules or default_delta_rules)
         self.min_val_width = int(min_val_width)
+        # Enforce a minimum overall table width to reduce jitter from
+        # fluctuating value lengths (numbers + deltas + sparklines).
+        self.min_table_width = int(min_table_width)
         self.key_priority = list(key_priority or list(default_key_priority))
         self.previous_metrics: Dict[str, Any] = {}
 
@@ -228,6 +232,7 @@ class PrintMetricsLogger(LightningLoggerBase):
                 os.system('cls' if os.name == 'nt' else 'clear')
             print(text, file=self.stream)
 
+    # TODO: clean this up
     def _render_table(self, data: Dict[str, Any]) -> None:
         def _get_sort_key(namespace: str, subkey: str, key_priority: Iterable[str]) -> Tuple[int, object]:
             """Compute a stable sort key honoring an explicit key priority list.
@@ -309,6 +314,14 @@ class PrintMetricsLogger(LightningLoggerBase):
         key_width = max((len(k) for k in key_candidates), default=0)
         val_width = max((len(v) for v in val_candidates), default=0)
         val_width = max(val_width, self.min_val_width)
+
+        # Ensure the total table width does not shrink below min_table_width.
+        # Layout: "| " + (indent + key_width) + " | " + (val_width) + " |"
+        # Components around val_width total 2 (prefix) + 3 (middle) + 2 (suffix)
+        static_cols = 2 + (indent + key_width) + 3 + 2
+        if static_cols + val_width < self.min_table_width:
+            val_width = self.min_table_width - static_cols
+
         border_len = 2 + (indent + key_width) + 3 + val_width + 2
         border = "-" * border_len
         lines: List[str] = []

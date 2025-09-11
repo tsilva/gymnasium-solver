@@ -287,6 +287,24 @@ class BaseAgent(pl.LightningModule):
         from utils.user import prompt_confirm
         from utils.logging import display_config_summary
 
+        # TODO: clean this up
+        # Collect model details for summary
+        try:
+            first_param = next(self.policy_model.parameters())
+            device_type = first_param.device.type
+        except StopIteration:
+            device_type = "unknown"
+
+        # Prefer readable enum values where applicable
+        def _enum_val(x):
+            try:
+                return x.value  # Enum
+            except Exception:
+                return x
+
+        num_params_total = int(sum(p.numel() for p in self.policy_model.parameters()))
+        num_params_trainable = int(sum(p.numel() for p in self.policy_model.parameters() if p.requires_grad))
+
         display_config_summary({
             "Run Details": {
                 "Run directory": self.run_manager.get_run_dir(),
@@ -299,6 +317,16 @@ class BaseAgent(pl.LightningModule):
                 "Action space": self.train_env.action_space,
                 "Reward threshold": self.train_env.get_reward_threshold(),
                 "Time limit": self.train_env.get_time_limit(),
+            },
+            "Model Details": {
+                "Algorithm": getattr(self.config, "algo_id", None),
+                "Policy type": _enum_val(getattr(self.config, "policy", None)),
+                "Policy class": type(self.policy_model).__name__,
+                "Hidden dims": getattr(self.config, "hidden_dims", None),
+                "Activation": getattr(self.config, "activation", None),
+                "Device": device_type,
+                "Parameters (total)": num_params_total,
+                "Parameters (trainable)": num_params_trainable,
             }
         })
 

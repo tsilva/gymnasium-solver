@@ -17,6 +17,7 @@ from string import Template
 from typing import Any, Dict, Tuple
 
 import pytorch_lightning as pl
+from utils.metrics_config import metrics_config
 
 class EndOfTrainingReportCallback(pl.Callback):
     def __init__(self, *, filename: str = "report.md"):
@@ -95,6 +96,7 @@ class EndOfTrainingReportCallback(pl.Callback):
                 lines.append(f"{sp}{k}: {v}")
         return "\n".join(lines)
 
+    # TODO: clean this up
     def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         # Resolve run directory
         run_dir = Path(pl_module.run_manager._run_dir)
@@ -213,7 +215,9 @@ class EndOfTrainingReportCallback(pl.Callback):
         config_block = f"```yaml\n{cfg_text}\n```"
 
         # Metrics block
-        selected_keys = [
+        # Display a compact metrics summary. Keep the same default set but
+        # sort it according to config/metrics.yaml _global.key_priority.
+        default_selected_keys = [
             "train/total_timesteps",
             "train/epoch",
             "train/ep_rew_mean",
@@ -226,6 +230,16 @@ class EndOfTrainingReportCallback(pl.Callback):
             "train/value_loss",
             "train/entropy_loss",
         ]
+
+        priority = metrics_config.key_priority() or []
+
+        def _sort_key(k: str) -> tuple[int, object]:
+            try:
+                return (0, list(priority).index(k))
+            except ValueError:
+                return (1, k.lower())
+
+        selected_keys = sorted(default_selected_keys, key=_sort_key)
         selected_lines = ["Selected:"]
         for k in selected_keys:
             if k in last_vals and last_vals[k] is not None:

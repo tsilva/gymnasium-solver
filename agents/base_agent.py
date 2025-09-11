@@ -7,6 +7,8 @@ from utils.metrics_recorder import MetricsRecorder
 from utils.decorators import must_implement
 from utils.reports import print_terminal_ascii_summary
 
+CHECKPOINT_PATH = "checkpoints/"
+
 class BaseAgent(pl.LightningModule):
 
     # TODO: extract to util
@@ -203,7 +205,7 @@ class BaseAgent(pl.LightningModule):
         )
 
         # Run evaluation with optional recording
-        checkpoint_dir = self.run_manager.ensure_path("checkpoints/")
+        checkpoint_dir = self.run_manager.ensure_path(CHECKPOINT_PATH)
         video_path = str(checkpoint_dir / f"epoch={self.current_epoch:02d}.mp4")
         with self.validation_env.recorder(video_path, record_video=record_video):
             # Evaluate using the validation rollout collector to avoid redundant helpers
@@ -233,7 +235,7 @@ class BaseAgent(pl.LightningModule):
         print_terminal_ascii_summary(self.metrics.history())
 
         # Record final evaluation video and save associated metrics JSON next to it
-        checkpoint_dir = self.run_manager.ensure_path("checkpoints/")
+        checkpoint_dir = self.run_manager.ensure_path(CHECKPOINT_PATH)
         video_path = checkpoint_dir / "final.mp4"
         with self.test_env.recorder(str(video_path), record_video=True):
             final_metrics = self.test_collector.evaluate_episodes(
@@ -439,7 +441,7 @@ class BaseAgent(pl.LightningModule):
         #callbacks.append(hyperparam_sync_cb)
 
         # Checkpointing 
-        checkpoint_dir = self.run_manager.ensure_path("checkpoints/")
+        checkpoint_dir = self.run_manager.ensure_path(CHECKPOINT_PATH)
         callbacks.append(ModelCheckpointCallback(
             checkpoint_dir=checkpoint_dir,
             metric="val/ep_rew_mean",

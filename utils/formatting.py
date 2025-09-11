@@ -30,9 +30,10 @@ def number_to_string(
     unit = ""
     magnitudes = [(1_000_000_000, "B"), (1_000_000, "M"), (1_000, "k")]
     if humanize:
-        for magnitude, unit in magnitudes:
-            if value < magnitude: continue
-            value /= magnitude
+        for _magnitude, _unit in magnitudes:
+            if value < _magnitude: continue
+            value /= _magnitude
+            unit = _unit
             break
         
     if precision == 0: value_str = str(int(round(value))) + unit

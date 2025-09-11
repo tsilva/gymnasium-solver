@@ -1,32 +1,30 @@
 from __future__ import annotations
 
+from typing import List
+
 import pytorch_lightning as pl
 
 def build_trainer(
+    config,
     *, 
-    logger, 
-    callbacks, 
-    max_epochs, 
-    accelerator="cpu", 
-    devices=None,
-    eval_freq_epochs=None,
-    eval_warmup_epochs=0
+    logger: List[pl.loggers.Logger],
+    callbacks: List[pl.callbacks.Callback],
 ) -> pl.Trainer:
     # When number of devices is not specified, set to 1 for CPU
-    if devices is None and accelerator == "cpu": devices = 1
+    if config.devices is None and config.accelerator == "cpu": config.devices = 1
 
     # If warmup is active, request validation every epoch and gate in hooks
-    eval_freq_epochs = 1 if (eval_freq_epochs is not None and eval_warmup_epochs > 0) else eval_freq_epochs
+    eval_freq_epochs = 1 if (config.eval_freq_epochs is not None and config.eval_warmup_epochs > 0) else config.eval_freq_epochs
     limit_val_batches = 0 if eval_freq_epochs is None else 1.0
     check_val_every_n_epoch = eval_freq_epochs if eval_freq_epochs is not None else 1
 
     return pl.Trainer(
         logger=logger,
-        max_epochs=max_epochs if max_epochs is not None else -1,
+        max_epochs=config.max_epochs if config.max_epochs is not None else -1,
         enable_progress_bar=False,
         enable_checkpointing=False,
-        accelerator=accelerator,
-        devices=devices,
+        accelerator=config.accelerator,
+        devices=config.devices,
         reload_dataloaders_every_n_epochs=0,
         val_check_interval=None,
         check_val_every_n_epoch=check_val_every_n_epoch,

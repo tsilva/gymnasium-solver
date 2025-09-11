@@ -208,7 +208,7 @@ class BaseAgent(pl.LightningModule):
         with self.validation_env.recorder(video_path, record_video=record_video):
             # Evaluate using the validation rollout collector to avoid redundant helpers
             eval_metrics = self.validation_collector.evaluate_episodes(
-                n_episodes=int(self.config.eval_episodes),
+                n_episodes=self.config.eval_episodes,
                 deterministic=self.config.eval_deterministic,
             )
         
@@ -272,15 +272,10 @@ class BaseAgent(pl.LightningModule):
 
         # Build the trainer
         from utils.trainer_factory import build_trainer
-        trainer = build_trainer( # TODO: pass config object instead?
+        trainer = build_trainer(
+            config=self.config,
             logger=loggers,
-            callbacks=callbacks,
-            max_epochs=self.config.max_epochs,
-            accelerator=self.config.accelerator,
-            devices=self.config.devices,
-            # TODO: review these
-            eval_freq_epochs=self.config.eval_freq_epochs,
-            eval_warmup_epochs=self.config.eval_warmup_epochs or 0,
+            callbacks=callbacks
         )
 
         # Train the agent

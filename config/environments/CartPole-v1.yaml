@@ -55,7 +55,7 @@ ppo:
   n_epochs: 20
   policy_lr: lin_0.001
   gae_lambda: 0.8
-  clip_range: lin_0.1 #lin_0.2
+  clip_range: 0.0001 #lin_0.1 #lin_0.2
   policy_lr: 1e-3
   normalize_advantages: "rollout"
   eval_warmup_epochs: 50

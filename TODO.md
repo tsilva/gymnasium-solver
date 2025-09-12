@@ -1,14 +1,8 @@
-- Ensure metrics summary is sorted with metrics.yaml priorities
-
+- FEAT: report alerts in metrics table (yellow rows)
+- FEAT: report alerts to wandb
 - FEAT: Set alerts for metrics as code (allows different algos to set different alerts)
-  - Remove from metrics.yaml
-  - Ensure alerts are propagated to the logger and persist until disabled
-  - approx_kl: warn if > 0.05 or < 0.001 for >3 updates.
-  - clip_fraction: warn if < 0.05 or > 0.4 for >3 updates.
-  - entropy: early phase alert if it drops to near 0 within first 10% of steps.
-  - explained_variance: alert if < 0.2 after 30% of budget on dense-reward tasks.
-  - grad_norm/*: alert on 2× median spike or NaN/Inf.
-  - obs_std: alert if ≈0 or NaN in any dimension.
+
+- Ensure metrics summary is sorted with metrics.yaml priorities
 
 - wandb dash
 - FEAT: add discrete env support (solve taxi-v3, embeddings probably not sized correctly)

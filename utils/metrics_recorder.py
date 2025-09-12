@@ -4,6 +4,7 @@ from typing import Any, Dict, Mapping, MutableMapping, List
 
 from .metrics_buffer import MetricsBuffer
 from .metrics_history import MetricsHistory
+from .scalars import only_scalar_values
 
 
 class MetricsRecorder:
@@ -35,6 +36,7 @@ class MetricsRecorder:
         """
         assert len(metrics) > 0, "metrics cannot be empty"
         buffer = self._ensure_buffer(namespace)
+        metrics = only_scalar_values(metrics)
         buffer.log(metrics)
 
     # ---- epoch lifecycle ----

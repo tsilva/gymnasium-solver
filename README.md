@@ -150,3 +150,17 @@ Usage:
 wandb sweep config/sweeps/cartpole_ppo_grid.yaml
 wandb agent <entity>/<project>/<sweep_id>
 ```
+
+### 📊 W&B Workspace
+Create a default W&B dashboard for this project:
+```bash
+# Ensure dependencies
+uv sync  # or: pip install -e . && pip install wandb-workspaces
+
+# Push a workspace (reads WANDB_ENTITY/WANDB_PROJECT by default)
+python scripts/setup_wandb_dashboard.py --entity <team-or-user> --project <project-name>
+
+# Dry-run to preview JSON without pushing
+python scripts/setup_wandb_dashboard.py --dry-run
+```
+Requires a logged-in W&B session (`wandb login`) or `WANDB_API_KEY` set.

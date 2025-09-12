@@ -12,6 +12,7 @@ dependencies = [
     "numpy",
     "stable-baselines3>=2.0.0",
     "wandb",
+    "wandb-workspaces",
     "ocatari",
     "pytorch-lightning",
     "ipykernel",

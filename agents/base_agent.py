@@ -93,6 +93,10 @@ class BaseAgent(pl.LightningModule):
             **self.rollout_collector_hyperparams(),
         )
 
+        from utils.metrics_triggers import MetricsTriggers
+        self.metrics_triggers = MetricsTriggers()
+
+
     @must_implement
     def build_models(self):
         # Subclasses must implement this to create their own models (eg: policy, value)
@@ -117,6 +121,12 @@ class BaseAgent(pl.LightningModule):
     def on_fit_start(self):
         # Start the timing tracker for the entire training run
         self.timings.restart("on_fit_start", steps=0) # TODO: allow tracking arbitrary associated values
+
+        self.metrics_triggers.register_trigger("train/approx_kl", self._check_trigger_1)
+
+    def _check_trigger_1(self):
+        history = self.metrics.history()
+        # TODO: do code here
 
     def train_dataloader(self):
         # Some lightweight Trainer stubs used in tests don't manage current_epoch on the module.
@@ -176,6 +186,11 @@ class BaseAgent(pl.LightningModule):
     def on_train_epoch_end(self):
         # Update schedules
         self._update_schedules()
+
+        # Check if any registered metric alerts have triggered
+        alerts = self.metrics_triggers.check_triggers()
+        if alerts:
+            print(f"Alerts triggered: {alerts}")
 
     def val_dataloader(self):
         # TODO: should I just do rollouts here?

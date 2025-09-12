@@ -32,7 +32,7 @@ class MetricsHistory:
             self._last_step = int(step_val)
 
         for k, v in metrics.items():
-            if k.endswith("action_dist"):
+            if k.endswith("action_dist"): # TODO: softcode this
                 continue
             if not isinstance(v, (int, float)):
                 continue

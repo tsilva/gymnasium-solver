@@ -106,6 +106,13 @@ class PrintMetricsLogger(LightningLoggerBase):
         self.show_sparklines: bool = True
         self.sparkline_width: int = 32
         self.sparkline_history_cap: int = 512
+        # Persisted bounds-alert messages by full metric key. Alerts remain
+        # until we observe a non-violating value reported for that key.
+        self._active_bounds_alerts: Dict[str, str] = {}
+        # Persisted trigger-based alerts reported via alerts/<metric_key>.
+        # These persist until a subsequent epoch where the alert key is not
+        # reported (cleared by absence).
+        self._active_trigger_alerts: Dict[str, List[str]] = {}
         # If chart_col_width not explicitly set, mirror sparkline_width
         if self.chart_col_width == 0:
             self.chart_col_width = int(self.sparkline_width)
@@ -131,6 +138,14 @@ class PrintMetricsLogger(LightningLoggerBase):
         # and discard non-namespace keys (eg: epoch injected by Lightning)
         simple: Dict[str, Any] = {k: _to_python_scalar(v) for k, v in dict(metrics).items() if "/" in k}
 
+        # Extract alert keys (alerts/<metric_key>) and update trigger alerts
+        alert_items: Dict[str, Any] = {k: v for k, v in simple.items() if k.startswith("alerts/")}
+        if alert_items:
+            self._update_trigger_alerts(alert_items)
+            # Remove alerts from normal metrics so they don't render as a table section
+            for k in list(alert_items.keys()):
+                simple.pop(k, None)
+
         # Sticky display: merge with previous known metrics so missing keys
         # keep their last values when printing.
         merged: Dict[str, Any] = dict(self.previous_metrics)
@@ -138,6 +153,10 @@ class PrintMetricsLogger(LightningLoggerBase):
 
         # Validate deltas using the latest snapshot
         self._validate_metric_deltas(simple)
+
+        # Update persisted bounds alerts based only on keys reported now
+        # (absence of a key does not clear its alert).
+        self._update_bounds_alerts(simple)
 
         # Render the metrics table
         self._render_table(merged)
@@ -225,6 +244,76 @@ class PrintMetricsLogger(LightningLoggerBase):
 
             # Set the history for the key
             self._history[k] = hist[-self.sparkline_history_cap :]
+
+    def _update_bounds_alerts(self, current_snapshot: Dict[str, Any]) -> None:
+        """Update active bounds alerts based on the current metrics payload.
+
+        - Adds/updates alerts for keys present in `current_snapshot` that
+          violate configured bounds.
+        - Clears alerts only when a key is present and within bounds.
+        - Leaves alerts untouched if a key is absent (persist across epochs).
+        """
+        for full_key, val in current_snapshot.items():
+            if not is_number(val):
+                continue
+            # Lookup bounds for fully-qualified key, then bare subkey
+            bounds = self.metric_bounds_map.get(full_key)
+            if not bounds:
+                subkey = full_key.rsplit("/", 1)[-1]
+                bounds = self.metric_bounds_map.get(subkey)
+            if not bounds:
+                # No bounds configured; do not change any alert state
+                continue
+
+            v = float(val)
+            has_min = "min" in bounds
+            has_max = "max" in bounds
+            below = has_min and (v < float(bounds["min"]))
+            above = has_max and (v > float(bounds["max"]))
+            violating = below or above
+
+            if violating:
+                # Format a concise message and persist it
+                rng = None
+                if has_min and has_max:
+                    rng = f"[{bounds['min']}, {bounds['max']}]"
+                elif has_min:
+                    rng = f">= {bounds['min']}"
+                elif has_max:
+                    rng = f"<= {bounds['max']}"
+                else:
+                    rng = "(no bounds)"
+
+                prec = self.metric_precision_map.get(full_key, self.metric_precision_map.get(full_key.rsplit("/", 1)[-1], 2))
+                vdisp = number_to_string(v, precision=prec, humanize=True)
+                msg = f"⚠️  Bounds alert: {full_key} = {vdisp} outside {rng}"
+                self._active_bounds_alerts[full_key] = msg
+            else:
+                # Observed a non-violating value → clear any persisted alert
+                if full_key in self._active_bounds_alerts:
+                    self._active_bounds_alerts.pop(full_key, None)
+
+    def _update_trigger_alerts(self, alert_items: Dict[str, Any]) -> None:
+        """Update trigger-based alerts from alerts/<metric_key> payload.
+
+        - Keys present in this payload become active with their messages.
+        - Keys absent from this payload are cleared (persistence until absence).
+        - Values can be a string or a list of strings.
+        """
+        next_state: Dict[str, List[str]] = {}
+        for k, v in alert_items.items():
+            if not k.startswith("alerts/"): continue
+            metric_key = k[len("alerts/") : ]
+            if isinstance(v, str):
+                msgs = [v]
+            elif isinstance(v, (list, tuple)):
+                msgs = [str(x) for x in v]
+            else:
+                # best-effort stringification
+                msgs = [str(v)]
+            next_state[metric_key] = msgs
+        # Replace active set with newly reported alerts
+        self._active_trigger_alerts = next_state
 
     def _render_lines(self, lines: List[str]) -> None:
         text = "\n".join(lines)
@@ -334,6 +423,17 @@ class PrintMetricsLogger(LightningLoggerBase):
         border_len = 2 + (indent + key_width) + 3 + val_width + 3 + self.chart_col_width + 2
         border = "-" * border_len
         lines: List[str] = []
+        # Show any active trigger alerts first (persist until absence)
+        if self._active_trigger_alerts:
+            for metric_key in sorted(self._active_trigger_alerts.keys()):
+                for msg in self._active_trigger_alerts[metric_key]:
+                    lines.append(_ansi(f"⚠️  {msg}", "yellow", enable=self.color))
+            lines.append("")  # spacer
+        # Then show any active bounds alerts (persist until in-bounds observed)
+        if self._active_bounds_alerts:
+            for k in sorted(self._active_bounds_alerts.keys()):
+                lines.append(_ansi(self._active_bounds_alerts[k], "yellow", enable=self.color))
+            lines.append("")  # spacer
         lines.append(border)
         for ns in ns_order:
             # Skip if the namespace is not in the formatted data
@@ -359,9 +459,14 @@ class PrintMetricsLogger(LightningLoggerBase):
                 highlight = False
                 row_bg_color = None
                 full_key = f"{ns}/{sub}" if sub else ns
-                # Priority 1: bounds-based highlight (yellow); allow bare-name lookup
+                # Priority 1: trigger-based highlight (yellow) if alert is active for this key
+                if full_key in self._active_trigger_alerts:
+                    highlight = True
+                    row_bg_color = self.highlight_bounds_bg_color
+
+                # Priority 2: bounds-based highlight (yellow); allow bare-name lookup
                 bounds = self.metric_bounds_map.get(full_key) or self.metric_bounds_map.get(sub)
-                if bounds:
+                if not highlight and bounds:
                     raw_val = grouped.get(ns, {}).get(sub)
 
                     # Skip if the value is not a number
@@ -376,7 +481,7 @@ class PrintMetricsLogger(LightningLoggerBase):
                             highlight = True
                             row_bg_color = self.highlight_bounds_bg_color
                             
-                # Priority 2: configured row highlight
+                # Priority 3: configured row highlight (blue)
                 # Set the highlight to true if the subkey is in the highlight row for set
                 if not highlight and sub in self.highlight_row_for_set:
                     if self.highlight_row_bold:

@@ -121,6 +121,7 @@ class BaseAgent(pl.LightningModule):
     def on_fit_start(self):
         # Start the timing tracker for the entire training run
         self.timings.restart("on_fit_start", steps=0) # TODO: allow tracking arbitrary associated values
+        
         # Register metric triggers explicitly (one method per concern; multiple per metric allowed)
         for stage in ("train", "val"):
             # approx_kl: too low / too high

@@ -1,7 +1,7 @@
 - FEAT: report alerts in metrics table (yellow rows)
 - FEAT: report alerts to wandb
 - FEAT: Set alerts for metrics as code (allows different algos to set different alerts)
-
+- FEAT: use codex-cli to debug runs
 - Ensure metrics summary is sorted with metrics.yaml priorities
 
 - wandb dash

@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from pathlib import Path
 
 
 def _parse_args() -> argparse.Namespace:
@@ -54,53 +55,113 @@ def main() -> int:
         print(f"Import error: {e}", file=sys.stderr)
         return 2
 
-    # Define a small, sensible default dashboard for RL
-    # - Reward curves vs total timesteps
-    # - Best eval reward scalar
-    # - Training diagnostic metrics
-    sections = [
-        ws.Section(
-            name="Rewards",
-            is_open=True,
-            panels=[
-                # Line plot showing train/eval reward over time
+    # Sanitize WANDB_BASE_URL if it mistakenly includes /graphql
+    base_url = os.environ.get("WANDB_BASE_URL")
+    if base_url and base_url.rstrip("/").endswith("/graphql"):
+        os.environ["WANDB_BASE_URL"] = base_url.rstrip("/")[:-len("/graphql")]
+
+    # We'll ensure the target project exists just before pushing (skip for --dry-run)
+
+    # Try to source key metrics order from config/metrics.yaml (_global.key_priority)
+    key_metrics = None  # type: ignore[assignment]
+    try:
+        # Resolve repo root from this script location
+        repo_root = Path(__file__).resolve().parents[1]
+        metrics_yaml = repo_root / "config" / "metrics.yaml"
+
+        # Prefer project IO helper; fallback to bare YAML if unavailable
+        try:
+            from utils.io import read_yaml  # type: ignore
+            metrics_cfg = read_yaml(metrics_yaml)
+        except Exception:  # pragma: no cover - best-effort fallback
+            import yaml  # type: ignore
+
+            with metrics_yaml.open("r", encoding="utf-8") as f:
+                metrics_cfg = yaml.safe_load(f)
+
+        global_cfg = metrics_cfg.get("_global", {}) if isinstance(metrics_cfg, dict) else {}
+        # Accept both key names for robustness
+        key_metrics = global_cfg.get("key_priority") or global_cfg.get("keypriority")
+        if key_metrics is not None:
+            # Normalize to strings and keep order
+            key_metrics = [str(k) for k in key_metrics if k is not None]
+    except Exception as e:
+        print(
+            f"Warning: failed to read key metrics from config/metrics.yaml: {e}. Using defaults.",
+            file=sys.stderr,
+        )
+        key_metrics = None
+
+    # Use a conservative default x-axis that always exists in W&B
+    default_x = "Step"
+
+    # Compose sections. Always include a Key Metrics section when key_priority is found.
+    sections = []
+    if key_metrics:
+        # Large lists can create heavy payloads; split into chunks to keep panels responsive
+        def _chunks(seq: list[str], size: int) -> list[list[str]]:
+            return [seq[i : i + size] for i in range(0, len(seq), size)]
+
+        chunks = _chunks(key_metrics, 15)
+        panels = []
+        for idx, ys in enumerate(chunks, start=1):
+            start = (idx - 1) * 15 + 1
+            end = start + len(ys) - 1
+            panels.append(
                 wr.LinePlot(
-                    title="Episode Reward",
-                    x="train/total_timesteps",
-                    y=["train/ep_rew_mean", "val/ep_rew_mean"],
-                ),
-                # Scalar showing the running best eval reward
-                wr.ScalarChart(title="Best Eval Reward", metric="val/ep_rew_best", groupby_aggfunc="max"),
-            ],
-        ),
-        ws.Section(
-            name="Diagnostics",
-            is_open=True,
-            panels=[
-                wr.LinePlot(
-                    title="Policy LR (scheduled)",
-                    x="train/total_timesteps",
-                    y=["train/policy_lr"],
-                ),
-                wr.LinePlot(
-                    title="Losses",
-                    x="train/total_timesteps",
-                    y=["train/policy_loss", "train/value_loss", "train/entropy"],
-                ),
-            ],
-        ),
-        ws.Section(
-            name="Videos",
-            is_open=False,
-            panels=[
-                # W&B video/media panels generally auto-populate when media with keys like
-                # "train/episodes" or "val/episodes" are logged. We add a placeholder here
-                # so users can pin recent episodes.
-                # In Reports v2, use MediaBrowser with media_keys
-                wr.MediaBrowser(title="Recent Episodes", media_keys=["train/episodes", "val/episodes"]),
-            ],
-        ),
-    ]
+                    title=f"Key Metrics {start}–{end}",
+                    x=default_x,
+                    y=ys,
+                )
+            )
+
+        sections.append(
+            ws.Section(
+                name="Key Metrics",
+                is_open=True,
+                panels=panels,
+            )
+        )
+
+    # Keep a couple of focused panels for quick-glance diagnostics
+    sections.extend(
+        [
+            ws.Section(
+                name="Diagnostics",
+                is_open=True,
+                panels=[
+                    wr.LinePlot(
+                        title="Policy LR (scheduled)",
+                        x=default_x,
+                        y=["train/policy_lr"],
+                    ),
+                    wr.LinePlot(
+                        title="Losses",
+                        x=default_x,
+                        y=["train/policy_loss", "train/value_loss", "train/entropy"],
+                    ),
+                    wr.ScalarChart(
+                        title="Best Eval Reward",
+                        metric="val/ep_rew_best",
+                        groupby_aggfunc="max",
+                    ),
+                ],
+            ),
+            ws.Section(
+                name="Videos",
+                is_open=False,
+                panels=[
+                    # W&B video/media panels generally auto-populate when media with keys like
+                    # "train/episodes" or "val/episodes" are logged. We add a placeholder here
+                    # so users can pin recent episodes.
+                    # In Reports v2, use MediaBrowser with media_keys
+                    wr.MediaBrowser(
+                        title="Recent Episodes", media_keys=["train/episodes", "val/episodes"]
+                    ),
+                ],
+            ),
+        ]
+    )
 
     workspace = ws.Workspace(
         name=args.name,
@@ -133,8 +194,42 @@ def main() -> int:
         print(json.dumps(as_json, indent=2))
         return 0
 
+    # Ensure the target project exists (Workspaces API doesn't auto-create projects)
+    try:
+        api = wandb.Api()
+        projects = list(api.projects(args.entity))
+        if not any(getattr(p, "name", None) == args.project for p in projects):
+            api.create_project(args.project, args.entity)
+    except Exception as e:
+        print(
+            f"Error ensuring project {args.entity}/{args.project} exists: {e}",
+            file=sys.stderr,
+        )
+        return 2
+
     # Push to W&B
-    saved = workspace.save(overwrite=args.overwrite)
+    # Some versions of wandb-workspaces do not accept the `overwrite` kwarg.
+    # Try with the kwarg first for forward-compatibility; on TypeError, retry without it.
+    try:
+        saved = workspace.save(overwrite=args.overwrite)
+    except TypeError:
+        if args.overwrite:
+            print(
+                "Warning: this version of wandb-workspaces does not support --overwrite; proceeding without it.",
+                file=sys.stderr,
+            )
+        saved = workspace.save()
+    except Exception as e:
+        import requests
+
+        # If we hit an HTTP 404 to /graphql, suggest base URL/auth issues and exit with context
+        if isinstance(e, requests.exceptions.HTTPError):
+            print(
+                "Error pushing workspace (HTTP error). Check WANDB login and WANDB_BASE_URL (should not include /graphql).",
+                file=sys.stderr,
+            )
+        print(f"Save failed: {e}", file=sys.stderr)
+        return 2
 
     # Try to print a friendly link if available
     url = getattr(saved, "url", None) or getattr(workspace, "url", None)

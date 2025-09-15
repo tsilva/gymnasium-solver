@@ -512,7 +512,7 @@ class RolloutCollector():
         # Immediate episode stats (most recent completed episode in any env)
         self._last_episode_reward = 0.0
         self._last_episode_length = 0
-        self._best_episode_reward = 0.0
+        self._best_episode_reward = -float('inf')
 
         # Lightweight running statistics (avoid per-sample Python overhead)
         # Obs/reward running stats over all seen samples (scalar over all dims)

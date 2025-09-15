@@ -12,15 +12,15 @@ env_wrappers:
 
 ppo:
   algo_id: ppo
-  max_timesteps: 3e5
+  max_timesteps: 10e6 #3e5
   # Slightly longer rollouts help stabilize updates on Taxi
   n_steps: 1024                 # 16*128 = 2048 samples/update
   batch_size: 4096              # 4 minibatches
 
-  n_epochs: 50
+  n_epochs: 20
   clip_range: 0.2
-  policy_lr: 1e-1
-  hidden_dims: [128]        # embeddings via DiscreteEncoder(array) -> 500-cat embedding of dim 128
+  policy_lr: 1e-2
+  hidden_dims: [4, 16]        # embeddings via DiscreteEncoder(array) -> 500-cat embedding of dim 128
   # Normalize advantages per mini-batch (PPO best practice)
   normalize_returns: "rollout"
   normalize_advantages: "batch"

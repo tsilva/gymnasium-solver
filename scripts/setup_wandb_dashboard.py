@@ -25,7 +25,7 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Create a W&B Workspace and push it.")
     p.add_argument("--entity", default=os.getenv("WANDB_ENTITY"), help="W&B entity (team or username)")
     p.add_argument("--project", default=os.getenv("WANDB_PROJECT"), help="W&B project name")
-    p.add_argument("--name", default="Gymnasium Solver Workspace", help="Workspace name (title in UI)")
+    p.add_argument("--name", default=None, help="Workspace name (title in UI). Defaults to '<project> View'.")
     p.add_argument("--overwrite", action="store_true", help="Overwrite workspace with the same name if it exists")
     p.add_argument(
         "--key-panels-per-section",
@@ -43,6 +43,9 @@ def main() -> int:
     if not args.entity or not args.project:
         print("Error: --entity and --project are required (or set WANDB_ENTITY/WANDB_PROJECT)", file=sys.stderr)
         return 2
+    # Default workspace name to '<project> View' when not provided
+    if not args.name:
+        args.name = f"{args.project} View"
 
     try:
         import wandb  # noqa: F401

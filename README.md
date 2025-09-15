@@ -169,3 +169,4 @@ Requires a logged-in W&B session (`wandb login`) or `WANDB_API_KEY` set.
 - Notes:
   - The script won’t overwrite an existing workspace by default; it prints that it already exists. Use `--overwrite` to update the existing layout.
   - Use `--key-panels-per-section N` to control how many “Key Metrics” panels appear per section.
+  - Default workspace name is "<project> View". Override with `--name`.

@@ -152,15 +152,20 @@ wandb agent <entity>/<project>/<sweep_id>
 ```
 
 ### 📊 W&B Workspace
-Create a default W&B dashboard for this project:
+Create a default W&B dashboard for this project (idempotent):
 ```bash
 # Ensure dependencies
 uv sync  # or: pip install -e . && pip install wandb-workspaces
 
-# Push a workspace (reads WANDB_ENTITY/WANDB_PROJECT by default)
+# Push a workspace (reads WANDB_ENTITY/WANDB_PROJECT by default).
+# Safe by default: will not overwrite an existing workspace unless --overwrite is passed.
 python scripts/setup_wandb_dashboard.py --entity <team-or-user> --project <project-name>
 
 # Dry-run to preview JSON without pushing
 python scripts/setup_wandb_dashboard.py --dry-run
 ```
 Requires a logged-in W&B session (`wandb login`) or `WANDB_API_KEY` set.
+
+- Notes:
+  - The script won’t overwrite an existing workspace by default; it prints that it already exists. Use `--overwrite` to update the existing layout.
+  - Use `--key-panels-per-section N` to control how many “Key Metrics” panels appear per section.

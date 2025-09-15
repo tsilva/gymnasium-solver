@@ -219,21 +219,103 @@ def main() -> int:
         )
         return 2
 
-    # Push to W&B
-    # Some versions of wandb-workspaces do not accept the `overwrite` kwarg.
-    # Try with the kwarg first for forward-compatibility; on TypeError, retry without it.
+    # If a workspace with this display name already exists, respect --overwrite
     try:
-        try:
-            saved = workspace.save(overwrite=args.overwrite)
-        except TypeError:
-            if args.overwrite:
-                print(
-                    "Warning: this version of wandb-workspaces does not support --overwrite; proceeding without it.",
-                    file=sys.stderr,
-                )
-            saved = workspace.save()
+        from wandb_gql import gql  # lightweight GQL helper shipped with wandb
+
+        query = gql(
+            """
+            query ProjectViews($entityName: String, $projectName: String, $viewType: String = "project-view") {
+              project(name: $projectName, entityName: $entityName) {
+                allViews(viewType: $viewType) {
+                  edges { node { id name displayName } }
+                }
+              }
+            }
+            """
+        )
+
+        resp = api.client.execute(
+            query,
+            {"entityName": args.entity, "projectName": args.project, "viewType": "project-view"},
+        )
+        edges = (((resp or {}).get("project") or {}).get("allViews") or {}).get("edges", [])
+        existing = None
+        for e in edges:
+            node = e.get("node") or {}
+            if node.get("displayName") == args.name:
+                existing = node
+                break
+
+        if existing and not args.overwrite:
+            # Construct URL to the existing workspace
+            try:
+                from wandb_workspaces.workspaces import internal as ws_internal
+                base = wandb.Api().client.app_url.rstrip("/")
+                nw = ws_internal._internal_name_to_url_query_str(existing.get("name", ""))
+                url = f"{base}/{args.entity}/{args.project}?nw={nw}"
+            except Exception:
+                url = None
+            msg = f"Workspace '{args.name}' already exists under {args.entity}/{args.project}."
+            if url:
+                msg += f" URL: {url}"
+            print(msg)
+            print("Pass --overwrite to update this workspace.")
+            return 0
     except Exception as e:
-        # If we hit an HTTP 404 to /graphql, suggest base URL/auth issues and exit with context
+        # If we can't check, be conservative and only proceed when --overwrite is set
+        if not args.overwrite:
+            print(
+                f"Could not determine if workspace '{args.name}' exists (reason: {e}). Add --overwrite to update/create explicitly.",
+                file=sys.stderr,
+            )
+            return 2
+
+    # Create new or update existing (when --overwrite)
+    try:
+        # If overwriting an existing view, fetch it by URL so we preserve its internal id
+        saved_ws = None
+        if args.overwrite:
+            try:
+                from wandb_workspaces.workspaces import internal as ws_internal
+                # Attempt to find the internal name for the display name again
+                # Reuse edges from previous call if available; otherwise, refetch
+                internal_name = None
+                try:
+                    internal_name = existing.get("name") if existing else None
+                except Exception:
+                    internal_name = None
+                if internal_name is None:
+                    # Refetch minimal if needed
+                    internal_name = None
+                    try:
+                        resp2 = api.client.execute(
+                            query, {"entityName": args.entity, "projectName": args.project, "viewType": "project-view"}
+                        )
+                        edges2 = (
+                            (((resp2 or {}).get("project") or {}).get("allViews") or {}).get("edges", [])
+                        )
+                        for e in edges2:
+                            node = e.get("node") or {}
+                            if node.get("displayName") == args.name:
+                                internal_name = node.get("name")
+                                break
+                    except Exception:
+                        internal_name = None
+                if internal_name:
+                    base = wandb.Api().client.app_url.rstrip("/")
+                    nw = ws_internal._internal_name_to_url_query_str(internal_name)
+                    url = f"{base}/{args.entity}/{args.project}?nw={nw}"
+                    existing_ws = ws.Workspace.from_url(url)
+                    # Apply the new sections/settings
+                    existing_ws.sections = sections
+                    saved_ws = existing_ws.save()
+            except Exception:
+                # Fallback to creating/saving without explicit id
+                pass
+        if saved_ws is None:
+            saved_ws = workspace.save()
+    except Exception as e:
         try:
             import requests  # type: ignore
             if isinstance(e, requests.exceptions.HTTPError):
@@ -246,11 +328,10 @@ def main() -> int:
         print(f"Save failed: {e}", file=sys.stderr)
         return 2
 
-    # Print a friendly link if available
-    url = getattr(saved, "url", None) or getattr(saved, "html_url", None) or getattr(workspace, "url", None)
-    if url:
-        print(f"Workspace saved: {url}")
-    else:
+    # Print a friendly link
+    try:
+        print(f"Workspace saved: {saved_ws.url}")
+    except Exception:
         print("Workspace saved.")
     return 0
 

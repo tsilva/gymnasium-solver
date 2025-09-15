@@ -27,6 +27,12 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--project", default=os.getenv("WANDB_PROJECT"), help="W&B project name")
     p.add_argument("--name", default="Gymnasium Solver Workspace", help="Workspace name (title in UI)")
     p.add_argument("--overwrite", action="store_true", help="Overwrite workspace with the same name if it exists")
+    p.add_argument(
+        "--key-panels-per-section",
+        type=int,
+        default=12,
+        help="When many key metrics exist, split them across multiple sections with at most this many panels each.",
+    )
     p.add_argument("--dry-run", action="store_true", help="Print the spec and exit without pushing")
     return p.parse_args()
 
@@ -98,24 +104,36 @@ def main() -> int:
     # Compose sections. Always include a Key Metrics section when key_priority is found.
     sections = []
     if key_metrics:
-        # Create one panel per metric for clarity
-        panels = []
-        for m in key_metrics:
-            panels.append(
-                wr.LinePlot(
-                    title=m,
-                    x=default_x,
-                    y=[m],
+        # Create one panel per metric for clarity, then split into multiple sections to avoid manual resizing
+        def _chunks(seq: list[str], size: int) -> list[list[str]]:
+            return [seq[i : i + size] for i in range(0, len(seq), size)]
+
+        for idx, group in enumerate(_chunks(key_metrics, max(args.key_panels_per_section, 1)), start=1):
+            panels = []
+            for m in group:
+                panels.append(
+                    wr.LinePlot(
+                        title=m,
+                        x=default_x,
+                        y=[m],
+                    )
+                )
+
+            # Name first section plainly; later ones include index range for clarity
+            if idx == 1:
+                name = "Key Metrics"
+            else:
+                start = (idx - 1) * args.key_panels_per_section + 1
+                end = start + len(group) - 1
+                name = f"Key Metrics {start}–{end}"
+
+            sections.append(
+                ws.Section(
+                    name=name,
+                    is_open=True,
+                    panels=panels,
                 )
             )
-
-        sections.append(
-            ws.Section(
-                name="Key Metrics",
-                is_open=True,
-                panels=panels,
-            )
-        )
 
     # Keep a couple of focused panels for quick-glance diagnostics
     sections.extend(

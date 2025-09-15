@@ -52,7 +52,7 @@ def main():
     try:
         from utils.wandb_workspace import create_or_update_workspace_for_current_run
 
-        url = create_or_update_workspace_for_current_run(overwrite=True)
+        url = create_or_update_workspace_for_current_run(overwrite=True, select_current_run_only=True)
         if url:
             print(f"W&B Workspace: {url}")
     except ImportError:

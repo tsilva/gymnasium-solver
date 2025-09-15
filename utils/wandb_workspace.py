@@ -29,6 +29,8 @@ class WorkspaceRequest:
     key_panels_per_section: int = 12
     overwrite: bool = False
     dry_run: bool = False
+    # When provided, panels will default-select only this run via a runset filter.
+    select_run_id: Optional[str] = None
 
 
 def _read_key_metrics(repo_root: Path) -> Optional[Sequence[str]]:
@@ -59,7 +61,56 @@ def _read_key_metrics(repo_root: Path) -> Optional[Sequence[str]]:
         return None
 
 
-def _build_sections(key_metrics: Optional[Sequence[str]], *, key_panels_per_section: int):
+def _maybe_build_runset(wr, *, entity: str, project: str, run_id: Optional[str]):
+    """Attempt to build a Runset limited to a single run id.
+
+    Returns the runset object or None when unsupported or run_id is None.
+    """
+    if not run_id:
+        return None
+    # Many versions expose Runset under the v2 interface; try common signatures conservatively
+    try:
+        # Heuristic: prefer an explicit constructor with entity/project and filters by run ids
+        return wr.Runset(entity=entity, project=project, name="Latest Run", filters={"ids": [run_id]})
+    except Exception:
+        pass
+    try:
+        # Fallback: alternate arg order or parameter name
+        return wr.Runset(entity, project, name="Latest Run", run_ids=[run_id])
+    except Exception:
+        pass
+    try:
+        # Fallback: query dict with id equals
+        return wr.Runset(entity=entity, project=project, name="Latest Run", query={"id": {"$in": [run_id]}})
+    except Exception:
+        return None
+
+
+def _make_panel(panel_cls, *, title: str, x: Optional[str] = None, y: Optional[Sequence[str]] = None, runset=None):
+    """Create a panel, attaching runset if supported; fall back gracefully otherwise."""
+    # First try with runsets parameter when a runset is provided
+    if runset is not None:
+        try:
+            # Some panel constructors accept runsets=[...]
+            kwargs = {"title": title}
+            if x is not None:
+                kwargs["x"] = x
+            if y is not None:
+                kwargs["y"] = list(y)
+            kwargs["runsets"] = [runset]
+            return panel_cls(**kwargs)
+        except Exception:
+            pass
+    # Fallback without runset
+    kwargs = {"title": title}
+    if x is not None:
+        kwargs["x"] = x
+    if y is not None:
+        kwargs["y"] = list(y)
+    return panel_cls(**kwargs)
+
+
+def _build_sections(key_metrics: Optional[Sequence[str]], *, key_panels_per_section: int, entity: str, project: str, select_run_id: Optional[str]):
     """Compose workspace sections using wandb-workspaces constructs."""
     # Import locally to keep this module import-safe when deps are missing during tests
     from wandb_workspaces import workspaces as ws
@@ -67,6 +118,7 @@ def _build_sections(key_metrics: Optional[Sequence[str]], *, key_panels_per_sect
 
     default_x = "Step"
     sections = []
+    runset = _maybe_build_runset(wr, entity=entity, project=project, run_id=select_run_id)
 
     if key_metrics:
         # Partition key metrics into multiple sections to avoid overcrowding
@@ -74,7 +126,7 @@ def _build_sections(key_metrics: Optional[Sequence[str]], *, key_panels_per_sect
             return [seq[i : i + size] for i in range(0, len(seq), size)]
 
         for idx, group in enumerate(_chunks(list(key_metrics), max(int(key_panels_per_section), 1)), start=1):
-            panels = [wr.LinePlot(title=m, x=default_x, y=[m]) for m in group]
+            panels = [_make_panel(wr.LinePlot, title=m, x=default_x, y=[m], runset=runset) for m in group]
             name = "Key Metrics" if idx == 1 else f"Key Metrics {(idx - 1) * key_panels_per_section + 1}–{(idx - 1) * key_panels_per_section + len(group)}"
             sections.append(ws.Section(name=name, is_open=True, panels=panels))
 
@@ -85,15 +137,18 @@ def _build_sections(key_metrics: Optional[Sequence[str]], *, key_panels_per_sect
                 name="Diagnostics",
                 is_open=True,
                 panels=[
-                    wr.LinePlot(title="Policy LR (scheduled)", x=default_x, y=["train/policy_lr"]),
-                    wr.LinePlot(title="Losses", x=default_x, y=["train/policy_loss", "train/value_loss", "train/entropy"]),
-                    wr.ScalarChart(title="Best Eval Reward", metric="val/ep_rew_best", groupby_aggfunc="max"),
+                    _make_panel(wr.LinePlot, title="Policy LR (scheduled)", x=default_x, y=["train/policy_lr"], runset=runset),
+                    _make_panel(wr.LinePlot, title="Losses", x=default_x, y=["train/policy_loss", "train/value_loss", "train/entropy"], runset=runset),
+                    # ScalarChart doesn't require x/y but may also accept runsets; attempt to attach
+                    _make_panel(wr.ScalarChart, title="Best Eval Reward", runset=runset),
                 ],
             ),
             ws.Section(
                 name="Videos",
                 is_open=False,
-                panels=[wr.MediaBrowser(title="Recent Episodes", media_keys=["train/episodes", "val/episodes"])],
+                panels=[
+                    # MediaBrowser may not support runsets; construct without runset
+                    wr.MediaBrowser(title="Recent Episodes", media_keys=["train/episodes", "val/episodes"])],
             ),
         ]
     )
@@ -133,7 +188,13 @@ def create_or_update_workspace(req: WorkspaceRequest) -> str:
     # Determine repo root to source metrics config
     repo_root = Path(__file__).resolve().parents[1]
     key_metrics = _read_key_metrics(repo_root)
-    sections = _build_sections(key_metrics, key_panels_per_section=req.key_panels_per_section)
+    sections = _build_sections(
+        key_metrics,
+        key_panels_per_section=req.key_panels_per_section,
+        entity=req.entity,
+        project=req.project,
+        select_run_id=req.select_run_id,
+    )
 
     workspace = ws.Workspace(name=req.name, entity=req.entity, project=req.project, sections=sections)
 
@@ -236,7 +297,7 @@ def create_or_update_workspace(req: WorkspaceRequest) -> str:
             return ""
 
 
-def create_or_update_workspace_for_current_run(*, name: Optional[str] = None, overwrite: bool = True, key_panels_per_section: int = 12) -> Optional[str]:
+def create_or_update_workspace_for_current_run(*, name: Optional[str] = None, overwrite: bool = True, key_panels_per_section: int = 12, select_current_run_only: bool = True) -> Optional[str]:
     """Convenience: derive entity/project from the active wandb run and push a workspace.
 
     Returns the workspace URL on success, None when no active run or when required
@@ -263,6 +324,9 @@ def create_or_update_workspace_for_current_run(*, name: Optional[str] = None, ov
     if not name:
         name = f"{project} View"
 
+    # Optionally scope default selection to only the current run id
+    select_run_id = getattr(run, "id", None) if (select_current_run_only and run is not None) else None
+
     url = create_or_update_workspace(
         WorkspaceRequest(
             entity=entity,
@@ -270,6 +334,7 @@ def create_or_update_workspace_for_current_run(*, name: Optional[str] = None, ov
             name=name,
             overwrite=overwrite,
             key_panels_per_section=key_panels_per_section,
+            select_run_id=select_run_id,
         )
     )
     return url or None

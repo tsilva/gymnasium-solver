@@ -45,6 +45,8 @@ def _parse_args() -> argparse.Namespace:
         help="When many key metrics exist, split them across multiple sections with at most this many panels each.",
     )
     p.add_argument("--dry-run", action="store_true", help="Print the spec and exit without pushing")
+    p.add_argument("--select-run-id", default=None, help="Default-select only this run id across panels")
+    p.add_argument("--select-latest", action="store_true", help="Fetch most recent run in the project and select it by default")
     return p.parse_args()
 
 
@@ -58,6 +60,20 @@ def main() -> int:
     if not args.name:
         args.name = f"{args.project} View"
 
+    # Optional: resolve --select-latest into a concrete run id
+    select_run_id = args.select_run_id
+    if args.select_latest and not select_run_id:
+        try:
+            import wandb
+            api = wandb.Api()
+            runs = list(api.runs(f"{args.entity}/{args.project}"))
+            if runs:
+                # Choose most recent by created_at
+                runs.sort(key=lambda r: getattr(r, "created_at", None) or 0, reverse=True)
+                select_run_id = runs[0].id
+        except Exception as e:
+            print(f"Warning: could not resolve --select-latest ({e}). Falling back to all runs.")
+
     # Dry-run returns JSON spec to stdout; otherwise push and print URL
     if args.dry_run:
         try:
@@ -69,6 +85,7 @@ def main() -> int:
                     key_panels_per_section=max(args.key_panels_per_section, 1),
                     overwrite=False,
                     dry_run=True,
+                    select_run_id=select_run_id,
                 )
             )
             print(json_spec)
@@ -89,6 +106,7 @@ def main() -> int:
                 name=args.name or f"{args.project} View",
                 key_panels_per_section=max(args.key_panels_per_section, 1),
                 overwrite=bool(args.overwrite),
+                select_run_id=select_run_id,
             )
         )
         if url:

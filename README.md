@@ -152,7 +152,7 @@ wandb agent <entity>/<project>/<sweep_id>
 ```
 
 ### 📊 W&B Workspace
-Training auto-creates/updates a project workspace at the end and prints the URL (uses the active run's entity/project; workspace name: "<project> View").
+Training auto-creates/updates a project workspace at the end, default-selects the current run across panels, and prints the URL (uses the active run's entity/project; workspace name: "<project> View").
 
 Create or preview a default W&B dashboard manually (idempotent):
 ```bash
@@ -162,6 +162,9 @@ uv sync  # or: pip install -e . && pip install wandb-workspaces
 # Push a workspace (reads WANDB_ENTITY/WANDB_PROJECT by default).
 # Safe by default: will not overwrite an existing workspace unless --overwrite is passed.
 python scripts/setup_wandb_dashboard.py --entity <team-or-user> --project <project-name>
+
+# Default-select the most recent run across panels
+python scripts/setup_wandb_dashboard.py --entity <team-or-user> --project <project-name> --select-latest
 
 # Dry-run to preview JSON without pushing
 python scripts/setup_wandb_dashboard.py --dry-run

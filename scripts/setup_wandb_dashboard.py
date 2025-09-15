@@ -98,20 +98,14 @@ def main() -> int:
     # Compose sections. Always include a Key Metrics section when key_priority is found.
     sections = []
     if key_metrics:
-        # Large lists can create heavy payloads; split into chunks to keep panels responsive
-        def _chunks(seq: list[str], size: int) -> list[list[str]]:
-            return [seq[i : i + size] for i in range(0, len(seq), size)]
-
-        chunks = _chunks(key_metrics, 15)
+        # Create one panel per metric for clarity
         panels = []
-        for idx, ys in enumerate(chunks, start=1):
-            start = (idx - 1) * 15 + 1
-            end = start + len(ys) - 1
+        for m in key_metrics:
             panels.append(
                 wr.LinePlot(
-                    title=f"Key Metrics {start}–{end}",
+                    title=m,
                     x=default_x,
-                    y=ys,
+                    y=[m],
                 )
             )
 
@@ -211,34 +205,35 @@ def main() -> int:
     # Some versions of wandb-workspaces do not accept the `overwrite` kwarg.
     # Try with the kwarg first for forward-compatibility; on TypeError, retry without it.
     try:
-        saved = workspace.save(overwrite=args.overwrite)
-    except TypeError:
-        if args.overwrite:
-            print(
-                "Warning: this version of wandb-workspaces does not support --overwrite; proceeding without it.",
-                file=sys.stderr,
-            )
-        saved = workspace.save()
+        try:
+            saved = workspace.save(overwrite=args.overwrite)
+        except TypeError:
+            if args.overwrite:
+                print(
+                    "Warning: this version of wandb-workspaces does not support --overwrite; proceeding without it.",
+                    file=sys.stderr,
+                )
+            saved = workspace.save()
     except Exception as e:
-        import requests
-
         # If we hit an HTTP 404 to /graphql, suggest base URL/auth issues and exit with context
-        if isinstance(e, requests.exceptions.HTTPError):
-            print(
-                "Error pushing workspace (HTTP error). Check WANDB login and WANDB_BASE_URL (should not include /graphql).",
-                file=sys.stderr,
-            )
+        try:
+            import requests  # type: ignore
+            if isinstance(e, requests.exceptions.HTTPError):
+                print(
+                    "Error pushing workspace (HTTP error). Check WANDB login and WANDB_BASE_URL (should not include /graphql).",
+                    file=sys.stderr,
+                )
+        except Exception:
+            pass
         print(f"Save failed: {e}", file=sys.stderr)
         return 2
 
-    # Try to print a friendly link if available
-    url = getattr(saved, "url", None) or getattr(workspace, "url", None)
-    print("Workspace saved.")
+    # Print a friendly link if available
+    url = getattr(saved, "url", None) or getattr(saved, "html_url", None) or getattr(workspace, "url", None)
     if url:
-        print(f"URL: {url}")
+        print(f"Workspace saved: {url}")
     else:
-        print("Note: Workspace URL not provided by the library version.")
-
+        print("Workspace saved.")
     return 0
 
 

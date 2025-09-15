@@ -47,6 +47,20 @@ def main():
     from agents import build_agent
     agent = build_agent(config)
     agent.learn()
+
+    # Post-training: ensure a W&B workspace exists for this project and print its URL
+    try:
+        from utils.wandb_workspace import create_or_update_workspace_for_current_run
+
+        url = create_or_update_workspace_for_current_run(overwrite=True)
+        if url:
+            print(f"W&B Workspace: {url}")
+    except ImportError:
+        # Soft dependency missing; skip silently
+        pass
+    except Exception as e:
+        # Non-fatal: print a brief note and continue
+        print(f"Warning: could not create/update W&B workspace ({e})")
         
 if __name__ == "__main__":
     main()

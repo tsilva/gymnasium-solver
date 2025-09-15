@@ -152,7 +152,9 @@ wandb agent <entity>/<project>/<sweep_id>
 ```
 
 ### 📊 W&B Workspace
-Create a default W&B dashboard for this project (idempotent):
+Training auto-creates/updates a project workspace at the end and prints the URL (uses the active run's entity/project; workspace name: "<project> View").
+
+Create or preview a default W&B dashboard manually (idempotent):
 ```bash
 # Ensure dependencies
 uv sync  # or: pip install -e . && pip install wandb-workspaces

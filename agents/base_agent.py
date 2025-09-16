@@ -163,6 +163,7 @@ class BaseAgent(pl.LightningModule):
             )
 
     # ---- trigger helpers ----
+    # TODO: move inside history
     def _latest_value(self, full_key: str):
         hist = self.metrics.history().get(full_key)
         if not hist: return None
@@ -180,6 +181,7 @@ class BaseAgent(pl.LightningModule):
         return f"{full_key}={val:.5g} {reason}.{tip_str}"
 
     # ---- triggers (one method per concern) ----
+    # TODO: register these in ppo?
     def trigger_approx_kl_oob(self, metric_key: str):
         v = self._latest_value(metric_key)
         if v is None: return None
@@ -292,9 +294,10 @@ class BaseAgent(pl.LightningModule):
         )
 
         # Run evaluation with optional recording
+        val_env = self.get_env("val")
         checkpoint_dir = self.run_manager.ensure_path(CHECKPOINT_PATH)
         video_path = str(checkpoint_dir / f"epoch={self.current_epoch:02d}.mp4")
-        with self.get_env("val").recorder(video_path, record_video=record_video):
+        with val_env.recorder(video_path, record_video=record_video):
             # Evaluate using the validation rollout collector to avoid redundant helpers
             val_metrics = self.get_rollout_collector("val").evaluate_episodes(
                 n_episodes=self.config.eval_episodes,
@@ -323,9 +326,10 @@ class BaseAgent(pl.LightningModule):
         print_terminal_ascii_summary(self.metrics.history())
 
         # Record final evaluation video and save associated metrics JSON next to it
+        test_env = self.get_env("test")
         checkpoint_dir = self.run_manager.ensure_path(CHECKPOINT_PATH)
         video_path = checkpoint_dir / "final.mp4"
-        with self.get_env("test").recorder(str(video_path), record_video=True):
+        with test_env.recorder(str(video_path), record_video=True):
             final_metrics = self.get_rollout_collector("test").evaluate_episodes(
                 n_episodes=1,
                 deterministic=self.config.eval_deterministic,

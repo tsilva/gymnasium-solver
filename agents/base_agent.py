@@ -316,21 +316,7 @@ class BaseAgent(pl.LightningModule):
     def _prompt_user_start_training(self):
         from utils.user import prompt_confirm
         from utils.logging import display_config_summary
-
-        # TODO: clean this up
-        # Collect model details for summary
-        try:
-            first_param = next(self.policy_model.parameters())
-            device_type = first_param.device.type
-        except StopIteration:
-            device_type = "unknown"
-
-        # Prefer readable enum values where applicable
-        def _enum_val(x):
-            try:
-                return x.value  # Enum
-            except Exception:
-                return x
+        from utils.torch import _device_of
 
         num_params_total = int(sum(p.numel() for p in self.policy_model.parameters()))
         num_params_trainable = int(sum(p.numel() for p in self.policy_model.parameters() if p.requires_grad))
@@ -340,28 +326,26 @@ class BaseAgent(pl.LightningModule):
         train_env = self.get_env("train")
         display_config_summary({
             "Run": {
-                "Run directory": self.run_manager.get_run_dir(),
-                "Run ID": self.run_manager.get_run_id(),
+                "run_id": self.run_manager.get_run_id(),
             },
             "Environment": {
-                "Environment ID": train_env.get_id(),
-                "Observation type": train_env.get_obs_type(),
-                "Observation space": train_env.observation_space,
-                "Action space": train_env.action_space,
-                "Reward threshold": train_env.get_reward_threshold(),
-                "Time limit": train_env.get_time_limit(),
-                "Wrappers": config_dict.get("env_wrappers", None),
-                "Env kwargs": config_dict.get("env_kwargs", None), # TODO: unpack this
+                "env_id": train_env.get_id(),
+                "obs_type": train_env.get_obs_type(),
+                "obs_space": train_env.observation_space,
+                "action_space": train_env.action_space,
+                "reward_threshold": train_env.get_reward_threshold(),
+                "time_limit": train_env.get_time_limit(),
+                "env_wrappers": config_dict.get("env_wrappers", None),
+                "env_kwargs": config_dict.get("env_kwargs", None)
             },
             "Model": {
-                "Algorithm": getattr(self.config, "algo_id", None),
-                "Policy type": _enum_val(getattr(self.config, "policy", None)),
-                "Policy class": type(self.policy_model).__name__,
-                "Hidden dims": getattr(self.config, "hidden_dims", None),
-                "Activation": getattr(self.config, "activation", None),
-                "Device": device_type,
-                "Parameters (total)": num_params_total,
-                "Parameters (trainable)": num_params_trainable,
+                "algo_id": self.config.algo_id,
+                "policy_class": type(self.policy_model).__name__,
+                "hidden_dims": self.config.hidden_dims,
+                "activation": self.config.activation,
+                "device": _device_of(self.policy_model),
+                "num_params_total": num_params_total,
+                "num_params_trainable": num_params_trainable,
             },
             "Config": config_dict,
         })

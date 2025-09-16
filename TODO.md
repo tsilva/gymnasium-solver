@@ -1,4 +1,3 @@
-- TODO: use trainer gradient clipping?
 - FEAT: report alerts in metrics table (yellow rows)
 - FEAT: report alerts to wandb
 - FEAT: use codex-cli to debug runs

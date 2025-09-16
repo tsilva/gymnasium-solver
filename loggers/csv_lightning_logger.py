@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from pytorch_lightning.loggers.logger import Logger as LightningLoggerBase  # type: ignore
+from loggers.csv_metrics_logger import CsvMetricsLogger
 
 class CsvLightningLogger(LightningLoggerBase):
     """
@@ -13,8 +14,6 @@ class CsvLightningLogger(LightningLoggerBase):
     """
 
     def __init__(self, *, csv_path: str | Path, queue_size: int = 10000) -> None:
-        from loggers.csv_metrics_logger import CsvMetricsLogger
-
         self._name = "csv"
         self._version = "0"
         self._experiment = None

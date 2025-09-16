@@ -17,7 +17,7 @@ class PPO(BaseAgent):
     # TODO: do this in init?
     # TODO: call this build models?
     def build_models(self):
-        self.policy_model = build_policy_from_env_and_config(self.train_env, self.config)
+        self.policy_model = build_policy_from_env_and_config(self.get_env("train"), self.config)
 
     def losses_for_batch(self, batch, batch_idx):
         # use type for this? check sb3

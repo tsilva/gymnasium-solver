@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import itertools
 from contextlib import contextmanager
+import math
 from typing import Any
 
 import torch
@@ -23,8 +24,6 @@ def inference_ctx(*modules):
         with inference_ctx(actor, critic):
             ... collect trajectories ...
     """
-    import torch.nn as nn
-
     # Filter out non-modules and Nones; flatten lists/tuples
     flat = [
         m
@@ -126,7 +125,6 @@ def compute_param_group_grad_norm(params):
     Returns:
         float: L2 norm of all gradients, or 0.0 if no gradients present
     """
-    import math
     total_sq = 0.0
     has_grad = False
     for p in params:

@@ -1,6 +1,7 @@
 import os
 import gymnasium as gym
 from dataclasses import asdict
+from gymnasium.wrappers import TimeLimit
 from utils.io import read_yaml
 
 class EnvInfoWrapper(gym.ObservationWrapper):
@@ -56,7 +57,6 @@ class EnvInfoWrapper(gym.ObservationWrapper):
 
     def get_time_limit(self):
         # If the time limit wrapper is found, return the max episode steps
-        from gymnasium.wrappers import TimeLimit
         wrapper = self._find_wrapper(TimeLimit)
         if wrapper: 
             value = getattr(wrapper, "max_episode_steps", None)

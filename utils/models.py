@@ -9,6 +9,7 @@ import torch
 from torch.distributions import Categorical
 import torch.nn as nn
 from .torch import init_model_weights, compute_param_group_grad_norm
+import numpy as np
 
 def resolve_activation(activation_id: str) -> type[nn.Module]:
     key = activation_id.lower()
@@ -28,8 +29,6 @@ def resolve_activation(activation_id: str) -> type[nn.Module]:
 
 def build_mlp(input_shape: Union[tuple[int, ...], int], hidden_dims: tuple[int, ...], activation:str):
     """ Create a stack of sequential linear layers with the given activation function. """
-    import numpy as np
-
     is_int = type(input_shape) in [int, np.int32, np.int64]
     assert is_int or len(input_shape) == 1, "Input shape must be 1D"
     
@@ -144,9 +143,6 @@ class MLPActorCritic(BaseModel):
         activation: str
     ):
         super().__init__()
-        
-        import numpy as np
-
         assert type(input_shape) in [int, np.int32, np.int64] or len(input_shape) == 1, "Input shape must be 1D"
         assert len(output_shape) == 1, "Output shape must be 1D"
 

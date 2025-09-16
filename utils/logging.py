@@ -3,6 +3,8 @@ Comprehensive logging utilities that ensure all stdout output is also logged to 
 """
 
 import sys
+import os
+import re
 import threading
 import time
 from contextlib import contextmanager
@@ -62,7 +64,6 @@ class TeeStream:
     @staticmethod
     def _strip_ansi_codes(text: str) -> str:
         """Remove ANSI escape sequences from text for clean log files."""
-        import re
         ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
         return ansi_escape.sub('', text)
 
@@ -217,7 +218,6 @@ _log_manager = None
 
 def _color_enabled(stream=None) -> bool:
     """Return True if ANSI colors should be enabled for the given stream."""
-    import os, sys
     s = stream or sys.stdout
     return bool(getattr(s, "isatty", lambda: False)() and os.environ.get("NO_COLOR") is None)
 

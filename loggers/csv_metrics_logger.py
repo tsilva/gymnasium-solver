@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from queue import Queue, Empty, Full
 from typing import Any, Dict, Optional, List
+import numbers
 
 
 class CsvMetricsLogger:
@@ -186,13 +187,11 @@ class CsvMetricsLogger:
 
     @staticmethod
     def _is_number(x: Any) -> bool:
-        import numbers
         return isinstance(x, numbers.Number)
 
     @staticmethod
     def _first_number(*values: Any) -> Optional[float]:
         for v in values:
-            import numbers
             if isinstance(v, numbers.Number):
                 return float(v)
         return None

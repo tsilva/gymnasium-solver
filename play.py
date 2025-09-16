@@ -10,11 +10,10 @@ from pathlib import Path
 from utils.environment import build_env_from_config
 from utils.rollouts import RolloutCollector
 from utils.run import Run
+import torch
+from utils.policy_factory import build_policy_from_env_and_config
 
 def load_policy_model(ckpt_path: Path, env, config):
-    import torch
-    from utils.policy_factory import build_policy_from_env_and_config
-    
     # Build policy model
     policy_model = build_policy_from_env_and_config(env, config)
 

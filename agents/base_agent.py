@@ -12,18 +12,19 @@ from utils.formatting import sanitize_name, format_duration
 CHECKPOINT_PATH = "checkpoints/"
 
 class BaseAgent(pl.LightningModule):
-
+    
     def __init__(self, config):
         super().__init__()
 
-        # TODO: what is this for?
+        # Define which hyperparameters are saved along 
+        # with module checkpoints (default to all kwargs)
         self.save_hyperparameters()
 
         # Store experiment configuration
         self.config = config
 
-        # We'll handle optimization manually in training_step
-        # (this is needed for multi-model training, eg: policy + value models without shared backbone)
+        # Disable automatic optimization to allow manual optimization, namely for tuning 
+        # multiple models with different optimizers (eg: independent policy and value models)
         self.automatic_optimization = False
 
         # Metrics recorder aggregates per-epoch metrics (train/eval) and maintains
@@ -39,24 +40,16 @@ class BaseAgent(pl.LightningModule):
 
         # Create the training environment
         from utils.environment import build_env_from_config
-        self.train_env = build_env_from_config(config, seed=config.seed)
+        self.envs = {}
+        self.envs["train"] = build_env_from_config(config, seed=config.seed)
 
         # Create models now that the environment is available. Subclasses use
         # env shapes to build policy/value networks. Must be called before
         # collectors which require self.policy_model.
         self.build_models()
 
-        # Create the rollout collector for the training environment
-        from utils.rollouts import RolloutCollector
-        self.train_collector = RolloutCollector(
-            self.train_env,
-            self.policy_model,
-            n_steps=self.config.n_steps,
-            **self.rollout_collector_hyperparams(),
-        )
-
         # Create validation environment and collector
-        self.validation_env = build_env_from_config(
+        self.envs["val"] = build_env_from_config(
             config,
             seed=config.seed + 1000,
             subproc=False,
@@ -67,15 +60,9 @@ class BaseAgent(pl.LightningModule):
                 "record_env_idx": 0,
             },
         )
-        self.validation_collector = RolloutCollector(
-            self.validation_env,
-            self.policy_model,
-            n_steps=self.config.n_steps,
-            **self.rollout_collector_hyperparams(),
-        )
 
         # Create test environment and collector
-        self.test_env = build_env_from_config(
+        self.envs["test"] = build_env_from_config(
             config,
             seed=config.seed + 2000,
             subproc=False,
@@ -86,12 +73,9 @@ class BaseAgent(pl.LightningModule):
                 "record_env_idx": 0,
             },
         )
-        self.test_collector = RolloutCollector(
-            self.test_env,
-            self.policy_model,
-            n_steps=self.config.n_steps,
-            **self.rollout_collector_hyperparams(),
-        )
+        
+        self.rollout_collectors = {}
+        self.build_rollout_collectors()
 
         from utils.metrics_triggers import MetricsTriggers
         self.metrics_triggers = MetricsTriggers()
@@ -107,16 +91,34 @@ class BaseAgent(pl.LightningModule):
         # Subclasses must implement this to compute the losses for each training steps' batch
         pass
 
-    def rollout_collector_hyperparams(self):
-        return {
-            **self.config.rollout_collector_hyperparams(),
-            "gamma": self.config.gamma, # TODO: shouldn't this be in the config?
-            "gae_lambda": self.config.gae_lambda,
-            "returns_type": self.config.returns_type,
-            "normalize_returns": self.config.normalize_returns == "rollout",
-            "advantages_type": self.config.advantages_type,
-            "normalize_advantages": self.config.normalize_advantages == "rollout",
-        }
+    def get_env(self, stage: str):
+        return self.envs[stage]
+
+    def get_rollout_collector(self, stage: str):
+        return self.rollout_collectors[stage]
+
+    def build_rollout_collectors(self):
+        self.build_rollout_collector("train")
+        self.build_rollout_collector("val")
+        self.build_rollout_collector("test")
+
+    def build_rollout_collector(self, stage: str):
+        from utils.rollouts import RolloutCollector
+
+        self.rollout_collectors[stage] = RolloutCollector(
+            self.get_env(stage),
+            self.policy_model,
+            n_steps=self.config.n_steps,
+            **{
+                **self.config.rollout_collector_hyperparams(),
+                "gamma": self.config.gamma,
+                "gae_lambda": self.config.gae_lambda,      
+                "returns_type": self.config.returns_type,
+                "normalize_returns": self.config.normalize_returns == "rollout",
+                "advantages_type": self.config.advantages_type,
+                "normalize_advantages": self.config.normalize_advantages == "rollout",
+            }
+        )
 
     def on_fit_start(self):
         # Start the timing tracker for the entire training run
@@ -226,7 +228,7 @@ class BaseAgent(pl.LightningModule):
         assert self.current_epoch == 0, "train_dataloader should only be called once at the start of training"
 
         # Collect the first rollout
-        self._trajectories = self.train_collector.collect()
+        self._trajectories = self.get_rollout_collector("train").collect()
 
         # Build efficient index-collate dataloader backed by 
         # MultiPassRandomSampler (allows showing same data N times 
@@ -235,7 +237,7 @@ class BaseAgent(pl.LightningModule):
         from utils.random import get_global_torch_generator
         generator = get_global_torch_generator(self.config.seed)
         return build_index_collate_loader_from_collector(
-            collector=self.train_collector,
+            collector=self.get_rollout_collector("train"),
             trajectories_getter=lambda: self._trajectories,
             batch_size=self.config.batch_size,
             num_passes=self.config.n_epochs,
@@ -248,7 +250,7 @@ class BaseAgent(pl.LightningModule):
 
     def on_train_epoch_start(self):
         # Start epoch timer
-        total_timesteps = self.train_collector.get_metrics()["total_timesteps"]
+        total_timesteps = self.get_rollout_collector("train").get_metrics()["total_timesteps"]
         self.timings.restart("on_train_epoch_start", steps=total_timesteps)
 
         # Log hyperparameters that are tunable in real-time
@@ -259,7 +261,7 @@ class BaseAgent(pl.LightningModule):
         # collected an initial rollout to bootstrap the dataloader. From epoch 1
         # onward, collect once per epoch to ensure constant timestep growth.
         if int(self.current_epoch) > 0:
-            self._trajectories = self.train_collector.collect()
+            self._trajectories = self.get_rollout_collector("train").collect()
 
     def training_step(self, batch, batch_idx):
         # Calculate batch losses
@@ -313,9 +315,9 @@ class BaseAgent(pl.LightningModule):
         # Run evaluation with optional recording
         checkpoint_dir = self.run_manager.ensure_path(CHECKPOINT_PATH)
         video_path = str(checkpoint_dir / f"epoch={self.current_epoch:02d}.mp4")
-        with self.validation_env.recorder(video_path, record_video=record_video):
+        with self.get_env("val").recorder(video_path, record_video=record_video):
             # Evaluate using the validation rollout collector to avoid redundant helpers
-            val_metrics = self.validation_collector.evaluate_episodes(
+            val_metrics = self.get_rollout_collector("val").evaluate_episodes(
                 n_episodes=self.config.eval_episodes,
                 deterministic=self.config.eval_deterministic,
             )
@@ -344,8 +346,8 @@ class BaseAgent(pl.LightningModule):
         # Record final evaluation video and save associated metrics JSON next to it
         checkpoint_dir = self.run_manager.ensure_path(CHECKPOINT_PATH)
         video_path = checkpoint_dir / "final.mp4"
-        with self.test_env.recorder(str(video_path), record_video=True):
-            final_metrics = self.test_collector.evaluate_episodes(
+        with self.get_env("test").recorder(str(video_path), record_video=True):
+            final_metrics = self.get_rollout_collector("test").evaluate_episodes(
                 n_episodes=1,
                 deterministic=self.config.eval_deterministic,
             )
@@ -418,12 +420,12 @@ class BaseAgent(pl.LightningModule):
                 "Run ID": self.run_manager.get_run_id(),
             },
             "Environment Details": {
-                "Environment ID": self.train_env.get_id(),
-                "Observation type": self.train_env.get_obs_type(),
-                "Observation space": self.train_env.observation_space,
-                "Action space": self.train_env.action_space,
-                "Reward threshold": self.train_env.get_reward_threshold(),
-                "Time limit": self.train_env.get_time_limit(),
+                "Environment ID": self.get_env("train").get_id(),
+                "Observation type": self.get_env("train").get_obs_type(),
+                "Observation space": self.get_env("train").observation_space,
+                "Action space": self.get_env("train").action_space,
+                "Reward threshold": self.get_env("train").get_reward_threshold(),
+                "Time limit": self.get_env("train").get_time_limit(),
             },
             "Model Details": {
                 "Algorithm": getattr(self.config, "algo_id", None),
@@ -449,7 +451,7 @@ class BaseAgent(pl.LightningModule):
         from utils.config import Config
 
         # In case the observation space is RGB, warn if MLP policy is used
-        is_rgb = self.train_env.is_rgb_env()
+        is_rgb = self.get_env("train").is_rgb_env()
         is_mlp = self.config.policy == Config.PolicyType.mlp
         is_cnn = self.config.policy == Config.PolicyType.cnn
         if is_rgb and is_mlp:
@@ -575,13 +577,13 @@ class BaseAgent(pl.LightningModule):
         )
 
         # If defined in config, early stop when mean training reward reaches a threshold
-        reward_threshold = self.train_env.get_reward_threshold()
+        reward_threshold = self.get_env("train").get_reward_threshold()
         if self.config.early_stop_on_train_threshold: callbacks.append(
             EarlyStoppingCallback("train/ep_rew_mean", reward_threshold)
         )
 
         # If defined in config, early stop when mean validation reward reaches a threshold
-        reward_threshold = self.validation_env.get_reward_threshold()
+        reward_threshold = self.get_env("val").get_reward_threshold()
         if self.config.early_stop_on_eval_threshold: callbacks.append(
             EarlyStoppingCallback("val/ep_rew_mean", reward_threshold)
         )
@@ -621,7 +623,7 @@ class BaseAgent(pl.LightningModule):
     def _calc_training_progress(self):
         max_timesteps = self.config.max_timesteps
         if max_timesteps is None: return 0.0
-        total_steps = self.train_collector.total_steps
+        total_steps = self.get_rollout_collector("train").total_steps
         training_progress = max(0.0, min(total_steps / max_timesteps, 1.0))
         return training_progress
 
@@ -652,13 +654,6 @@ class BaseAgent(pl.LightningModule):
             optimizer=self.config.optimizer,
             lr=self.config.policy_lr, # TODO: is this taking annealing into account?
         )
-
-    def get_rollout_collector(self, stage: str):
-        return {
-            "train": self.train_collector,
-            "val": self.validation_collector,
-            "test": self.test_collector,
-        }[stage]
 
     def _ensure_wandb_run(self):
         import wandb

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from utils.io import read_yaml
 
 
 ValidationError = Tuple[str, str]
@@ -80,7 +81,6 @@ class EnvInfo:
 
     @classmethod
     def load_yaml(cls, path: Path) -> "EnvInfo":
-        from utils.io import read_yaml
         data = read_yaml(path)
         if not isinstance(data, Mapping):
             # Store raw in extras to preserve context; validation will report

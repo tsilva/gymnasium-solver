@@ -1,6 +1,7 @@
 """Run directory management utilities for organizing all run assets."""
 
 from pathlib import Path
+from utils.io import write_json
 
 class RunManager:
     """Manages run-specific directories and assets organization."""
@@ -19,7 +20,6 @@ class RunManager:
             latest.symlink_to(Path(self._run_id))
     
     def ensure_path(self, path: str | Path) -> Path:
-        from pathlib import Path
         full_path = self._run_dir / Path(path)
         target_dir = full_path.parent if full_path.suffix else full_path
         target_dir.mkdir(parents=True, exist_ok=True)
@@ -52,7 +52,6 @@ class RunManager:
 
     def save_config(self, data: dict, filename: str = "config.json") -> Path:
         """Save a JSON config file under the run directory."""
-        from utils.io import write_json
         path = self.ensure_path(filename)
         write_json(path, data)
         return path

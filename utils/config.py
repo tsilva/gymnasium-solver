@@ -1,6 +1,6 @@
 """Configuration loading for environment YAML and legacy hyperparams."""
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, MISSING
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
@@ -283,7 +283,6 @@ class Config:
         self.validate()
         
     def _resolve_defaults(self) -> None:
-        from dataclasses import MISSING
         for f in self.__dataclass_fields__.values():
             value = getattr(self, f.name)
             if value is not None: continue

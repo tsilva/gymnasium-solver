@@ -3,6 +3,7 @@ import wandb
 import argparse
 from dataclasses import asdict
 from utils.config import load_config, Config
+from stable_baselines3.common.utils import set_random_seed
 
 def _init_wandb_sweep(config: Config):
     base = asdict(config)
@@ -38,9 +39,7 @@ def main():
     use_wandb_sweep = bool(args.wandb_sweep) or bool(os.environ.get("WANDB_SWEEP_ID") or os.environ.get("SWEEP_ID"))
     if use_wandb_sweep: config = _init_wandb_sweep(config)
 
-    # TODO: move this out of here
     # Set global random seed
-    from stable_baselines3.common.utils import set_random_seed
     set_random_seed(config.seed)
 
     # Create agent and start learning

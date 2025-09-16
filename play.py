@@ -33,7 +33,7 @@ def main():
     # Parse command line arguments
     p = argparse.ArgumentParser(description="Play a trained agent using RolloutCollector (human render)")
     p.add_argument("--run-id", default="@latest-run", help="Run ID to load (defaults to @latest-run)")
-    p.add_argument("--episodes", type=int, default=5, help="Number of episodes to play")
+    p.add_argument("--episodes", type=int, default=10, help="Number of episodes to play")
     p.add_argument("--deterministic", action="store_true", help="Use deterministic actions (mode/argmax)")
     args = p.parse_args()
 
@@ -77,6 +77,7 @@ def main():
         _ = collector.collect(deterministic=args.deterministic)
         m = collector.get_metrics()
         played = collector.total_episodes - start_eps
+        played = min(played, target_eps) # NOTE: collector may collect more episodes than requested
         print(
             f"[episodes {played}/{target_eps}] last_rew={m.get('ep_rew_last', 0):.2f} "
             f"mean_rew={m.get('ep_rew_mean', 0):.2f} fps={m.get('rollout_fps', 0):.1f}"

@@ -108,3 +108,27 @@ def format_duration(seconds: float) -> str:
         f"{secs} {_plural(secs, 'second', 'seconds')}",
     ]
     return " ".join(parts)
+
+
+def format_metric_value(metric_key_or_bare: str, value: Any) -> str:
+    """Format a metric value according to precision in metrics.yaml.
+
+    Accepts either a namespaced key like "val/ep_rew_mean" or a bare metric
+    name like "ep_rew_mean". Falls back to precision=2 when unknown.
+    Always humanizes magnitudes (k, M, B) for large values.
+    """
+    try:
+        from utils.metrics_config import metrics_config
+        bare = str(metric_key_or_bare).rsplit("/", 1)[-1]
+        precision_map = metrics_config.metric_precision_dict()
+        precision = int(precision_map.get(bare, 2))
+    except Exception:
+        precision = 2
+
+    try:
+        val = float(value)
+    except Exception:
+        # Best-effort stringification if not numeric
+        return str(value)
+
+    return number_to_string(val, precision=precision, humanize=True)

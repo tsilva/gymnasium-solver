@@ -8,6 +8,7 @@ when the cumulative timesteps reach a configured limit.
 from __future__ import annotations
 
 import pytorch_lightning as pl
+from utils.formatting import format_metric_value
 
 class EarlyStoppingCallback(pl.Callback):
     """Generic early-stopping via metric threshold.
@@ -47,9 +48,17 @@ class EarlyStoppingCallback(pl.Callback):
         # Threshold reached, signal Trainer to stop
         trainer.should_stop = True
         
-        # Print reason
+        # Print reason with metrics.yaml-based formatting
         comp_op = ">=" if self.mode == "max" else "<="
-        early_stop_reason = f"'{self.metric_key}': {value} {comp_op} {self.threshold}."
+        try:
+            v_str = format_metric_value(self.metric_key, float(value))
+        except Exception:
+            v_str = str(value)
+        try:
+            thr_str = format_metric_value(self.metric_key, float(self.threshold))
+        except Exception:
+            thr_str = str(self.threshold)
+        early_stop_reason = f"'{self.metric_key}': {v_str} {comp_op} {thr_str}."
         print(f"Early stopping! {early_stop_reason}")
 
         # Store the reason in the module so that it is 

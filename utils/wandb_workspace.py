@@ -111,7 +111,12 @@ def _make_panel(panel_cls, *, title: str, x: Optional[str] = None, y: Optional[S
 
 
 def _build_sections(key_metrics: Optional[Sequence[str]], *, key_panels_per_section: int, entity: str, project: str, select_run_id: Optional[str]):
-    """Compose workspace sections using wandb-workspaces constructs."""
+    """Compose workspace sections using wandb-workspaces constructs.
+
+    Note: We intentionally avoid creating multiple "Key Metrics" accordions. Instead,
+    metrics are grouped under their original namespaces (e.g., a single 'train'
+    accordion and a single 'val' accordion) to keep the dashboard tidy.
+    """
     # Import locally to keep this module import-safe when deps are missing during tests
     from wandb_workspaces import workspaces as ws
     import wandb_workspaces.reports.v2.interface as wr
@@ -121,14 +126,27 @@ def _build_sections(key_metrics: Optional[Sequence[str]], *, key_panels_per_sect
     runset = _maybe_build_runset(wr, entity=entity, project=project, run_id=select_run_id)
 
     if key_metrics:
-        # Partition key metrics into multiple sections to avoid overcrowding
-        def _chunks(seq, size):
-            return [seq[i : i + size] for i in range(0, len(seq), size)]
+        # Respect original namespaces: build a single accordion per top-level ns
+        by_ns = {"train": [], "val": []}
+        for m in key_metrics:
+            if not isinstance(m, str):
+                continue
+            if "/" in m:
+                ns, _rest = m.split("/", 1)
+            else:
+                ns = ""
+            if ns in by_ns:
+                by_ns[ns].append(m)
 
-        for idx, group in enumerate(_chunks(list(key_metrics), max(int(key_panels_per_section), 1)), start=1):
-            panels = [_make_panel(wr.LinePlot, title=m, x=default_x, y=[m], runset=runset) for m in group]
-            name = "Key Metrics" if idx == 1 else f"Key Metrics {(idx - 1) * key_panels_per_section + 1}–{(idx - 1) * key_panels_per_section + len(group)}"
-            sections.append(ws.Section(name=name, is_open=True, panels=panels))
+        # Train section
+        if by_ns["train"]:
+            train_panels = [_make_panel(wr.LinePlot, title=k, x=default_x, y=[k], runset=runset) for k in by_ns["train"]]
+            sections.append(ws.Section(name="train", is_open=True, panels=train_panels))
+
+        # Validation section
+        if by_ns["val"]:
+            val_panels = [_make_panel(wr.LinePlot, title=k, x=default_x, y=[k], runset=runset) for k in by_ns["val"]]
+            sections.append(ws.Section(name="val", is_open=True, panels=val_panels))
 
     # Diagnostics + Videos sections
     sections.extend(

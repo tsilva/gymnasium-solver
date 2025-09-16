@@ -89,9 +89,7 @@ def _build_env_stable_retro(env_id, obs_type, render_mode, **env_kwargs):
     return env
 
 def _build_env_bandit(env_id, obs_type, render_mode, **env_kwargs):
-    # Stateless context-free multi-armed bandit
-    from gym_wrappers.bandit import MultiArmedBanditEnv
-    # Forward env_kwargs directly (e.g., n_arms, means, stds, episode_length)
+    from gym_envs.bandit import MultiArmedBanditEnv
     env = MultiArmedBanditEnv(**env_kwargs)
     return env
 

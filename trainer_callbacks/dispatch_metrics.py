@@ -12,13 +12,6 @@ class DispatchMetricsCallback(pl.Callback):
         # Dispatch metrics
         self._dispatch_metrics(pl_module, "train")
 
-        # Evaluate metric triggers after dispatching so checks use fresh epoch means
-        alerts = getattr(pl_module, "metrics_triggers", None)
-        if alerts is not None:
-            out = pl_module.metrics_triggers.check_triggers()
-            if out:
-                print(f"Alerts triggered: {out}")
-
     def on_validation_epoch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         if not pl_module.should_run_validation_epoch(): return # TODO: should_run_validation_epoch()?
 
@@ -30,13 +23,7 @@ class DispatchMetricsCallback(pl.Callback):
         
         # Dispatch metrics
         self._dispatch_metrics(pl_module, "val")
-        
-        # Evaluate metric triggers after dispatching validation metrics
-        alerts = getattr(pl_module, "metrics_triggers", None)
-        if alerts is not None:
-            out = pl_module.metrics_triggers.check_triggers()
-            if out:
-                print(f"Alerts triggered: {out}")
+
     
     def _dispatch_metrics(self, pl_module: pl.LightningModule, stage: str):
         # Don't log until we have at least one episode completed 

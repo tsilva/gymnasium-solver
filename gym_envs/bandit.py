@@ -48,6 +48,7 @@ class BanditSpec:
 class MultiArmedBanditEnv(gym.Env):
     metadata = {"render_modes": []}
 
+    # TODO: should I reuse gym class?
     @dataclass
     class EnvSpec:
         id: str
@@ -74,7 +75,7 @@ class MultiArmedBanditEnv(gym.Env):
             n_arms=int(n_arms),
             means=list(means) if means is not None else None,
             stds=stds,
-            episode_length=int(episode_length),
+            episode_length=episode_length
         )
 
         # Initiialize RNG using provided seed (if any)
@@ -98,10 +99,11 @@ class MultiArmedBanditEnv(gym.Env):
         self._timestep = 0
 
         # Minimal EnvSpec to cooperate with EnvInfoWrapper helpers
+        reward_threshold = max(self._means)
         self.spec = MultiArmedBanditEnv.EnvSpec(
             id="Bandit-v0",
             max_episode_steps=self.spec_cfg.episode_length,
-            reward_threshold=None,
+            reward_threshold=reward_threshold,
         )
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
@@ -112,7 +114,7 @@ class MultiArmedBanditEnv(gym.Env):
         self._timestep = 0
 
         # Define dummy observation (stateless env)
-        obs = self._create_dummy_observation()
+        obs = self._build_dummy_observation()
         
         # Define extra info
         info = {
@@ -148,7 +150,7 @@ class MultiArmedBanditEnv(gym.Env):
         truncated = False
 
         # Define dummy observation (stateless env)
-        obs = self._create_dummy_observation()
+        obs = self._build_dummy_observation()
 
         # Define extra info
         info = {
@@ -173,7 +175,7 @@ class MultiArmedBanditEnv(gym.Env):
         self._rng = np.random.default_rng(self._seed) if self._seed is not None else np.random.default_rng()
        
     def _init_means(self, n_arms: int, means: Optional[List[float]]):
-        if means is None: means = np.linspace(-0.5, 0.5, num=n_arms, dtype=np.float32)
+        if means is None: means = np.linspace(0, n_arms, num=n_arms, dtype=np.float32)
         if len(means) != n_arms: raise ValueError("means must be length n_arms")
         self._means = np.asarray(means, dtype=np.float32)
 

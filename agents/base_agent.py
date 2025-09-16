@@ -151,19 +151,6 @@ class BaseAgent(pl.LightningModule):
         # Subclasses must implement this to build their own metric monitor functions
         return ()
 
-    # TODO: get rid of this
-    def _metric_tip(self, bare_key: str) -> str:
-        from utils.metrics_config import metrics_config as _m
-        spec = _m.config.get(bare_key) or {}
-        tip = spec.get("tips")
-        return str(tip) if tip else ""
-
-    # TODO: get rid of this
-    def _mk_alert(self, full_key: str, val: float, reason: str, tip_key: str) -> str:
-        tip = self._metric_tip(tip_key)
-        tip_str = f" Tip: {tip}" if tip else ""
-        return f"{full_key}={val:.5g} {reason}.{tip_str}"
-
     def train_dataloader(self):
         # Some lightweight Trainer stubs used in tests don't manage current_epoch on the module.
         # Guard the assertion to avoid AttributeError while still catching repeated calls.

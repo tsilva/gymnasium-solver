@@ -149,21 +149,26 @@ class PPO(BaseAgent):
             (f"train/explained_variance", self._monitor_explained_variance_oob),
         )
 
-    def _monitor_approx_kl_oob(self, metric: str, history: List[Tuple[int, float]]):
-        _, last_value = history[-1]
-        if last_value < 1e-3: return self._mk_alert(metric, last_value, "is very low; updates may be too weak", metric)
-        if last_value > 5e-2: return self._mk_alert(metric, last_value, "is high; updates may be too aggressive", metric)
+    def _monitor_approx_kl_oob(self, metric: str, metric_values: List[Tuple[int, float]]):
+        _, last_value = metric_values[-1]
+        min_threshold, max_threshold = 1e-3, 5e-2
+        if last_value < min_threshold: return f"{metric}={last_value:.5g} < {min_threshold} is very low; updates may be too weak"
+        if last_value > max_threshold: return f"{metric}={last_value:.5g} > {max_threshold} is high; updates may be too aggressive"
         return None
 
-    def _monitor_clip_fraction_oob(self, metric: str, history: List[Tuple[int, float]]):
-        _, last_value = history[-1]
-        if last_value < 0.05: return self._mk_alert(metric, last_value, "is very low; likely under-updating", metric)
-        if last_value > 0.5: return self._mk_alert(metric, last_value, "is very high; many updates are clipped", metric)
+    def _monitor_clip_fraction_oob(self, metric: str, metric_values: List[Tuple[int, float]]):
+        _, last_value = metric_values[-1]
+        min_threshold, max_threshold = 0.05, 0.5
+        if last_value < min_threshold: return f"{metric}={last_value:.5g} < {min_threshold} is very low; likely under-updating"
+        if last_value > max_threshold: return f"{metric}={last_value:.5g} > {max_threshold} is very high; many updates are clipped"
         return None
 
-    def _monitor_explained_variance_oob(self, metric: str, history: List[Tuple[int, float]]):
-        _, last_value = history[-1]
+    def _monitor_explained_variance_oob(self, metric: str, metric_values: List[Tuple[int, float]]):
+        _, last_value = metric_values[-1]
         p = self._calc_training_progress()
-        if 0.33 <= p < 0.66 and last_value < 0.2: return self._mk_alert(metric, last_value, "is low for mid-training", metric)
-        if p >= 0.66 and last_value < 0.5: return self._mk_alert(metric, last_value, "is low for late training", metric)
+        is_mid_training = 0.33 <= p < 0.66
+        is_late_training = p >= 0.66
+        min_threshold, max_threshold = 0.2, 0.5
+        if is_mid_training and last_value < min_threshold: return f"{metric}={last_value:.5g} < {min_threshold} is low for mid-training"
+        if is_late_training and last_value < max_threshold: return f"{metric}={last_value:.5g} < {max_threshold} is low for late training"
         return None

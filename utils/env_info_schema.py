@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
-from utils.io import read_yaml
+ 
 
 
 ValidationError = Tuple[str, str]
@@ -79,13 +78,7 @@ class EnvInfo:
             extras=extras,
         )
 
-    @classmethod
-    def load_yaml(cls, path: Path) -> "EnvInfo":
-        data = read_yaml(path)
-        if not isinstance(data, Mapping):
-            # Store raw in extras to preserve context; validation will report
-            return cls(extras={"raw": data})
-        return cls.from_mapping(data)
+    
 
     # --- Validation helpers (ported from the previous functional validator) ---
     @staticmethod

@@ -6,7 +6,7 @@ class DispatchMetricsCallback(pl.Callback):
 
     def on_train_epoch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         # Reset epoch metrics
-        pl_module.metrics.reset_epoch("train")
+        pl_module.metrics_recorder.reset_epoch("train")
         
     def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         # Dispatch metrics
@@ -23,7 +23,7 @@ class DispatchMetricsCallback(pl.Callback):
         if not pl_module.should_run_validation_epoch(): return # TODO: should_run_validation_epoch()?
 
         # Reset epoch metrics
-        pl_module.metrics.reset_epoch("val")
+        pl_module.metrics_recorder.reset_epoch("val")
 
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         if not pl_module.should_run_validation_epoch(): return
@@ -54,7 +54,7 @@ class DispatchMetricsCallback(pl.Callback):
         fps_instant = pl_module.timings.fps_since("on_train_epoch_start", steps_now=total_timesteps)
 
         # Aggregate metrics for the this epoch
-        epoch_metrics = pl_module.metrics.compute_epoch_means(stage)
+        epoch_metrics = pl_module.metrics_recorder.compute_epoch_means(stage)
 
         # Discard distribution metrics (not loggable)
         filtered_rollout_metrics = {k:v for k, v in rollout_metrics.items() if not k.endswith("_dist")}
@@ -80,4 +80,4 @@ class DispatchMetricsCallback(pl.Callback):
         pl_module.log_dict(prefixed_metrics)
 
         # Update step-aware history with aggregated snapshot
-        pl_module.metrics.update_history(prefixed_metrics)
+        pl_module.metrics_recorder.update_history(prefixed_metrics)

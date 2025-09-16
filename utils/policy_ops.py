@@ -41,17 +41,4 @@ def policy_predict_values(model: torch.nn.Module, obs: Tensor) -> Tensor:
     if value is None: return torch.zeros(obs.shape[0], dtype=torch.float32, device=obs.device)
     return value.squeeze(-1)
 
-def policy_evaluate_actions(
-    model: torch.nn.Module,
-    obs: Tensor,
-    actions: Tensor,
-) -> Tuple[Tensor, Tensor, Tensor]:
-    """Return log_prob, entropy, and value predictions for given actions.
-
-    Value is zeros when the model has no value head.
-    """
-    dist, value = model(obs)
-    log_prob = dist.log_prob(actions)
-    entropy = dist.entropy()
-    if value is None: value = torch.zeros(obs.shape[0], dtype=torch.float32, device=obs.device)
-    return log_prob, entropy, value.squeeze(-1)
+ 

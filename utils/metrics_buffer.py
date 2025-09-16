@@ -26,20 +26,4 @@ class MetricsBuffer:
     def clear(self) -> None:
         self._data.clear()
 
-    def flush_to(self, log_fn: Callable[[MutableMapping[str, float]], None]) -> Dict[str, float]:
-        """
-        Flush means to the provided logger function (e.g., LightningModule.log_dict)
-        and clear internal buffers. Returns the computed means for external sinks.
-        """
-
-        # Calculate metric means (eg: epoch averages)
-        means = self.means()
-
-        # Logs the means to the provided logger function (eg: LightningModule.log_dict)
-        log_fn(means)
-
-        # Clear the buffer after logging (eg: fresh data for the next epoch)
-        self.clear()
-
-        # Return the means for any further processing
-        return means
+    

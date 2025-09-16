@@ -30,7 +30,7 @@ class BaseAgent(pl.LightningModule):
 
         # Metrics recorder aggregates per-epoch metrics (train/eval) and maintains
         # a step-aware numeric history for terminal summaries.
-        self.metrics = MetricsRecorder(step_key="train/total_timesteps")
+        self.metrics_recorder = MetricsRecorder(step_key="train/total_timesteps")
 
         # Create metrics trigger registry (eg: used for metric alerts)
         self.metrics_triggers = MetricsTriggers()
@@ -162,12 +162,7 @@ class BaseAgent(pl.LightningModule):
                 f"{stage}/explained_variance", lambda s=stage: self.trigger_explained_variance_oob(f"{s}/explained_variance")
             )
 
-    # ---- trigger helpers ----
-    # TODO: move inside history
-    def _latest_value(self, full_key: str):
-        hist = self.metrics.history().get(full_key)
-        if not hist: return None
-        return float(hist[-1][1])
+
 
     def _metric_tip(self, bare_key: str) -> str:
         from utils.metrics_config import metrics_config as _m
@@ -183,21 +178,21 @@ class BaseAgent(pl.LightningModule):
     # ---- triggers (one method per concern) ----
     # TODO: register these in ppo?
     def trigger_approx_kl_oob(self, metric_key: str):
-        v = self._latest_value(metric_key)
+        v = self.metrics_recorder.get_last_value(metric_key)
         if v is None: return None
         if v < 1e-3: return self._mk_alert(metric_key, v, "is very low; updates may be too weak", "approx_kl")
         if v > 5e-2: return self._mk_alert(metric_key, v, "is high; updates may be too aggressive", "approx_kl")
         return None
 
     def trigger_clip_fraction_oob(self, metric_key: str):
-        v = self._latest_value(metric_key)
+        v = self.metrics_recorder.get_last_value(metric_key)
         if v is None: return None
         if v < 0.05: return self._mk_alert(metric_key, v, "is very low; likely under-updating", "clip_fraction")
         if v > 0.5: return self._mk_alert(metric_key, v, "is very high; many updates are clipped", "clip_fraction")
         return None
 
     def trigger_explained_variance_oob(self, metric_key: str):
-        v = self._latest_value(metric_key)
+        v = self.metrics_recorder.get_last_value(metric_key)
         if v is None: return None
         p = self._calc_training_progress()
         if 0.33 <= p < 0.66 and v < 0.2: return self._mk_alert(metric_key, v, "is low for mid-training", "explained_variance")
@@ -307,7 +302,7 @@ class BaseAgent(pl.LightningModule):
         # Log eval metrics
         total_timesteps = int(val_metrics.get("total_timesteps", 0))
         epoch_fps = self.timings.fps_since("on_validation_epoch_start", steps_now=total_timesteps)
-        self.metrics.record("val", {
+        self.metrics_recorder.record("val", {
             **val_metrics,
             "epoch": int(self.current_epoch),
             "epoch_fps": epoch_fps,
@@ -323,7 +318,7 @@ class BaseAgent(pl.LightningModule):
         print(f"Training completed in {human}. Reason: {self._early_stop_reason}")
 
         # TODO: encapsulate in callback
-        print_terminal_ascii_summary(self.metrics.history())
+        print_terminal_ascii_summary(self.metrics_recorder.history())
 
         # Record final evaluation video and save associated metrics JSON next to it
         test_env = self.get_env("test")
@@ -593,7 +588,7 @@ class BaseAgent(pl.LightningModule):
             # Compute model gradient norms and log them
             # (do this before any gradient clipping)
             metrics = model.compute_grad_norms()
-            self.metrics.record("train", metrics)
+            self.metrics_recorder.record("train", metrics)
 
             # In case a maximum gradient norm is set, 
             # clips gradients so that norm isn't exceeded
@@ -621,7 +616,7 @@ class BaseAgent(pl.LightningModule):
         self._change_optimizers_policy_lr(new_policy_lr)
         # TODO: should I do this here or every epoch?
         # Log scheduled LR under train namespace
-        self.metrics.record("train", {"policy_lr": new_policy_lr})
+        self.metrics_recorder.record("train", {"policy_lr": new_policy_lr})
 
     def _change_optimizers_policy_lr(self, policy_lr):
         optimizers = self.optimizers()
@@ -654,4 +649,4 @@ class BaseAgent(pl.LightningModule):
             "policy_lr": self.config.policy_lr,
         }
         prefixed = {f"hp/{k}": v for k, v in metrics.items()}
-        self.metrics.record("train", prefixed)
+        self.metrics_recorder.record("train", prefixed)

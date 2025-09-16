@@ -49,4 +49,3 @@ class MetricsHistory:
 
     def __bool__(self) -> bool:  # truthiness: empty vs non-empty
         return any(self._history.values())
-

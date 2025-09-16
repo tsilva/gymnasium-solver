@@ -55,9 +55,4 @@ class Run:
         if p.exists(): return p
         return None
 
-    @property
-    def last_checkpoint_path(self) -> Optional[Path]:
-        """Return the last checkpoint path when present."""
-        p = self.checkpoints_dir / "last.ckpt"
-        if p.exists(): return p
-        return None
+    

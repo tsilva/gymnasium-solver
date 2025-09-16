@@ -41,14 +41,6 @@ class EnvInfoWrapper(gym.ObservationWrapper):
         obs_type = self.get_obs_type()
         return obs_type == 'ram'
 
-    def is_objects_env(self):
-        obs_type = self.get_obs_type()
-        return obs_type == 'objects' # TODO: dict env?
-
-    def get_max_episode_steps(self):
-        spec = self.get_spec()
-        max_episode_steps = spec['max_episode_steps']
-        return max_episode_steps
 
     def get_reward_treshold(self):
         spec = self.get_spec()

@@ -975,8 +975,7 @@ class RolloutCollector():
             next_observations=trajectories.next_observations[idxs]
         )
 
-    def get_total_timesteps(self):
-        return self.total_steps
+    
 
     def get_metrics(self):
         ep_rew_mean = float(self.episode_reward_deque.mean()) if self.episode_reward_deque else 0.0

@@ -22,7 +22,7 @@ def main():
     args = parser.parse_args()
 
     # Resolve configuration spec from positional, then flag, then default
-    config_spec = args.config or args.config_id or "CartPole-v1:ppo"
+    config_spec = args.config or args.config_id or "Bandit-v0:ppo"
     if ":" not in config_spec:
         raise SystemExit("Config spec must be '<env>:<variant>' (e.g., CartPole-v1:ppo)")
 

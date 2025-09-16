@@ -9,6 +9,9 @@ def is_vizdoom_env_id(env_id: str) -> bool:
 def is_stable_retro_env_id(env_id: str) -> bool:
     return env_id.lower().startswith("retro/")
 
+def is_bandit_env_id(env_id: str) -> bool:
+    return env_id.lower().startswith("bandit-") or env_id.lower().startswith("bandit/") or env_id.lower() == "bandit-v0"
+
 def _build_env_alepy(env_id, obs_type, render_mode, **env_kwargs):
     import ale_py
     import gymnasium as gym
@@ -85,6 +88,13 @@ def _build_env_stable_retro(env_id, obs_type, render_mode, **env_kwargs):
 
     return env
 
+def _build_env_bandit(env_id, obs_type, render_mode, **env_kwargs):
+    # Stateless context-free multi-armed bandit
+    from gym_wrappers.bandit import MultiArmedBanditEnv
+    # Forward env_kwargs directly (e.g., n_arms, means, stds, episode_length)
+    env = MultiArmedBanditEnv(**env_kwargs)
+    return env
+
 def _build_env_gymnasium(env_id, obs_type, render_mode, **env_kwargs):
     import gymnasium as gym
     env = gym.make(env_id, render_mode=render_mode, **env_kwargs)
@@ -127,12 +137,14 @@ def build_env(
     _is_alepy_env = is_alepy_env_id(env_id)
     _is_vizdoom_env = is_vizdoom_env_id(env_id)
     _is_stable_retro_env = is_stable_retro_env_id(env_id)
+    _is_bandit_env = is_bandit_env_id(env_id)
 
     def env_fn():
         # Build the environment using the appropriate factory 
         if _is_alepy_env: env = _build_env_alepy(env_id, obs_type, render_mode, **env_kwargs)
         elif _is_vizdoom_env: env = _build_env_vizdoom(env_id, obs_type, render_mode, **env_kwargs)
-        elif _is_stable_retro_env: env = _build_env_stable_retro(env_id, obs_type, render_mode, **env_kwargs)            
+        elif _is_stable_retro_env: env = _build_env_stable_retro(env_id, obs_type, render_mode, **env_kwargs)
+        elif _is_bandit_env: env = _build_env_bandit(env_id, obs_type, render_mode, **env_kwargs)
         else: env = _build_env_gymnasium(env_id, obs_type, render_mode, **env_kwargs)
 
         # Apply configured env wrappers

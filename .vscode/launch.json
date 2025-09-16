@@ -32,6 +32,18 @@
       ],
       "console": "integratedTerminal",
       "env": {}
+    },
+    {
+      "name": "Debug: train.py (Bandit-v0:ppo)",
+      "type": "python",
+      "request": "launch",
+      "program": "train.py",
+      "args": [
+        "--config_id",
+        "Bandit-v0:ppo"
+      ],
+      "console": "integratedTerminal",
+      "env": {}
     }
   ]
 }

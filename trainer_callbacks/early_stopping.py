@@ -36,6 +36,8 @@ class EarlyStoppingCallback(pl.Callback):
         value = trainer.logged_metrics.get(self.metric_key)
         if value is None: return
 
+        #if self.threshold is None: 
+         #   pass
         # If threshold wasn't reached yet then return (do nothing)
         _should_stop_max = self.mode == "max" and value >= self.threshold
         _should_stop_min = self.mode == "min" and value <= self.threshold

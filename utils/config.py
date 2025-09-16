@@ -384,8 +384,8 @@ class Config:
             raise ValueError("eval_recording_freq_epochs must be a positive integer when set.")
         if self.reward_threshold is not None and not (self.reward_threshold > 0):
             raise ValueError("reward_threshold must be a positive float when set.")
-        if not (self.early_stop_on_train_threshold or self.early_stop_on_eval_threshold):
-            raise ValueError("At least one of early_stop_on_train_threshold or early_stop_on_eval_threshold must be True.")
+        #if not (self.early_stop_on_train_threshold or self.early_stop_on_eval_threshold):
+        #    raise ValueError("At least one of early_stop_on_train_threshold or early_stop_on_eval_threshold must be True.")
         if self.devices is not None and not (isinstance(self.devices, int) or self.devices == "auto"):
             raise ValueError("devices may be an int, 'auto', or None.")
         if self.n_envs is not None and self.n_steps is not None and self.batch_size is not None:

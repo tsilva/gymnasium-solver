@@ -8,7 +8,7 @@ from utils.metrics_recorder import MetricsRecorder
 from utils.decorators import must_implement
 from utils.reports import print_terminal_ascii_summary
 from utils.formatting import sanitize_name, format_duration
-from utils.metrics_triggers import MetricsTriggers
+from utils.metrics_monitor import MetricsMonitor
 
 CHECKPOINT_PATH = "checkpoints/"
 
@@ -32,8 +32,8 @@ class BaseAgent(pl.LightningModule):
         # a step-aware numeric history for terminal summaries.
         self.metrics_recorder = MetricsRecorder(step_key="train/total_timesteps")
 
-        # Create metrics trigger registry (eg: used for metric alerts)
-        self.metrics_triggers = MetricsTriggers()
+        # Create metrics monitor registry (eg: used for metric alerts)
+        self.metrics_monitor = MetricsMonitor(self.metrics_recorder)
 
         # Initialize timing tracker for training 
         # loop performance measurements
@@ -50,7 +50,6 @@ class BaseAgent(pl.LightningModule):
 
         # Build the rollout collectors (requires models and environments)
         self.build_rollout_collectors()
-
 
     @must_implement
     def build_models(self):
@@ -143,61 +142,27 @@ class BaseAgent(pl.LightningModule):
     def on_fit_start(self):
         # Start the timing tracker for the entire training run
         self.timings.restart("on_fit_start", steps=0) # TODO: allow tracking arbitrary associated values
-        
-        # Register metric triggers explicitly (one method per concern; multiple per metric allowed)
-        for stage in ("train", "val"):
-            # approx_kl: too low / too high
-            self.metrics_triggers.register_trigger(
-                f"{stage}/approx_kl", lambda s=stage: self.trigger_approx_kl_oob(f"{s}/approx_kl")
-            )
-            self.metrics_triggers.register_trigger(
-                f"{stage}/approx_kl", lambda s=stage: self.trigger_approx_kl_oob(f"{s}/approx_kl")
-            )
-            # clip_fraction: too low / too high
-            self.metrics_triggers.register_trigger(
-                f"{stage}/clip_fraction", lambda s=stage: self.trigger_clip_fraction_oob(f"{s}/clip_fraction")
-            )
-            # explained_variance: too low for phase
-            self.metrics_triggers.register_trigger( 
-                f"{stage}/explained_variance", lambda s=stage: self.trigger_explained_variance_oob(f"{s}/explained_variance")
-            )
 
+        # Register metric monitor functions
+        monitor_fns = self.get_metric_monitor_fns()
+        for key, monitor_fn in monitor_fns: self.metrics_monitor.register(key, monitor_fn)
 
+    def get_metric_monitor_fns(self):
+        # Subclasses must implement this to build their own metric monitor functions
+        return ()
 
+    # TODO: get rid of this
     def _metric_tip(self, bare_key: str) -> str:
         from utils.metrics_config import metrics_config as _m
         spec = _m.config.get(bare_key) or {}
         tip = spec.get("tips")
         return str(tip) if tip else ""
 
+    # TODO: get rid of this
     def _mk_alert(self, full_key: str, val: float, reason: str, tip_key: str) -> str:
         tip = self._metric_tip(tip_key)
         tip_str = f" Tip: {tip}" if tip else ""
         return f"{full_key}={val:.5g} {reason}.{tip_str}"
-
-    # ---- triggers (one method per concern) ----
-    # TODO: register these in ppo?
-    def trigger_approx_kl_oob(self, metric_key: str):
-        v = self.metrics_recorder.get_last_value(metric_key)
-        if v is None: return None
-        if v < 1e-3: return self._mk_alert(metric_key, v, "is very low; updates may be too weak", "approx_kl")
-        if v > 5e-2: return self._mk_alert(metric_key, v, "is high; updates may be too aggressive", "approx_kl")
-        return None
-
-    def trigger_clip_fraction_oob(self, metric_key: str):
-        v = self.metrics_recorder.get_last_value(metric_key)
-        if v is None: return None
-        if v < 0.05: return self._mk_alert(metric_key, v, "is very low; likely under-updating", "clip_fraction")
-        if v > 0.5: return self._mk_alert(metric_key, v, "is very high; many updates are clipped", "clip_fraction")
-        return None
-
-    def trigger_explained_variance_oob(self, metric_key: str):
-        v = self.metrics_recorder.get_last_value(metric_key)
-        if v is None: return None
-        p = self._calc_training_progress()
-        if 0.33 <= p < 0.66 and v < 0.2: return self._mk_alert(metric_key, v, "is low for mid-training", "explained_variance")
-        if p >= 0.66 and v < 0.5: return self._mk_alert(metric_key, v, "is low for late training", "explained_variance")
-        return None
 
     def train_dataloader(self):
         # Some lightweight Trainer stubs used in tests don't manage current_epoch on the module.
@@ -258,7 +223,7 @@ class BaseAgent(pl.LightningModule):
         # Update schedules
         self._update_schedules()
 
-        alerts = self.metrics_triggers.check_triggers()
+        alerts = self.metrics_monitor.check()
         if alerts: print(f"Alerts triggered: {alerts}")
 
     def val_dataloader(self):

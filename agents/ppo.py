@@ -1,5 +1,6 @@
 import torch
 import torch.nn.functional as F
+from typing import List, Tuple
 
 from utils.policy_factory import build_policy_from_env_and_config
 from utils.torch import assert_detached
@@ -140,3 +141,29 @@ class PPO(BaseAgent):
         self.metrics_recorder.record("train", {
             'clip_range': new_clip_range
         })
+
+    def get_metric_monitor_fns(self):
+        return (
+            (f"train/approx_kl", self._monitor_approx_kl_oob),
+            (f"train/clip_fraction", self._monitor_clip_fraction_oob),
+            (f"train/explained_variance", self._monitor_explained_variance_oob),
+        )
+
+    def _monitor_approx_kl_oob(self, metric: str, history: List[Tuple[int, float]]):
+        _, last_value = history[-1]
+        if last_value < 1e-3: return self._mk_alert(metric, last_value, "is very low; updates may be too weak", metric)
+        if last_value > 5e-2: return self._mk_alert(metric, last_value, "is high; updates may be too aggressive", metric)
+        return None
+
+    def _monitor_clip_fraction_oob(self, metric: str, history: List[Tuple[int, float]]):
+        _, last_value = history[-1]
+        if last_value < 0.05: return self._mk_alert(metric, last_value, "is very low; likely under-updating", metric)
+        if last_value > 0.5: return self._mk_alert(metric, last_value, "is very high; many updates are clipped", metric)
+        return None
+
+    def _monitor_explained_variance_oob(self, metric: str, history: List[Tuple[int, float]]):
+        _, last_value = history[-1]
+        p = self._calc_training_progress()
+        if 0.33 <= p < 0.66 and last_value < 0.2: return self._mk_alert(metric, last_value, "is low for mid-training", metric)
+        if p >= 0.66 and last_value < 0.5: return self._mk_alert(metric, last_value, "is low for late training", metric)
+        return None

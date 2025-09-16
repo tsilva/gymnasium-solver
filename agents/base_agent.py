@@ -344,20 +344,25 @@ class BaseAgent(pl.LightningModule):
         num_params_total = int(sum(p.numel() for p in self.policy_model.parameters()))
         num_params_trainable = int(sum(p.numel() for p in self.policy_model.parameters() if p.requires_grad))
 
+        from dataclasses import asdict
+        config_dict = asdict(self.config)
+        train_env = self.get_env("train")
         display_config_summary({
-            "Run Details": {
+            "Run": {
                 "Run directory": self.run_manager.get_run_dir(),
                 "Run ID": self.run_manager.get_run_id(),
             },
-            "Environment Details": {
-                "Environment ID": self.get_env("train").get_id(),
-                "Observation type": self.get_env("train").get_obs_type(),
-                "Observation space": self.get_env("train").observation_space,
-                "Action space": self.get_env("train").action_space,
-                "Reward threshold": self.get_env("train").get_reward_threshold(),
-                "Time limit": self.get_env("train").get_time_limit(),
+            "Environment": {
+                "Environment ID": train_env.get_id(),
+                "Observation type": train_env.get_obs_type(),
+                "Observation space": train_env.observation_space,
+                "Action space": train_env.action_space,
+                "Reward threshold": train_env.get_reward_threshold(),
+                "Time limit": train_env.get_time_limit(),
+                "Wrappers": config_dict.get("env_wrappers", None),
+                "Env kwargs": config_dict.get("env_kwargs", None), # TODO: unpack this
             },
-            "Model Details": {
+            "Model": {
                 "Algorithm": getattr(self.config, "algo_id", None),
                 "Policy type": _enum_val(getattr(self.config, "policy", None)),
                 "Policy class": type(self.policy_model).__name__,
@@ -366,7 +371,8 @@ class BaseAgent(pl.LightningModule):
                 "Device": device_type,
                 "Parameters (total)": num_params_total,
                 "Parameters (trainable)": num_params_trainable,
-            }
+            },
+            "Config": config_dict,
         })
 
         # Ask for confirmation before any heavy setup (keep prior prints grouped)
@@ -381,7 +387,8 @@ class BaseAgent(pl.LightningModule):
         from utils.config import Config
 
         # In case the observation space is RGB, warn if MLP policy is used
-        is_rgb = self.get_env("train").is_rgb_env()
+        train_env = self.get_env("train")
+        is_rgb = train_env.is_rgb_env()
         is_mlp = self.config.policy == Config.PolicyType.mlp
         is_cnn = self.config.policy == Config.PolicyType.cnn
         if is_rgb and is_mlp:
@@ -507,13 +514,15 @@ class BaseAgent(pl.LightningModule):
         )
 
         # If defined in config, early stop when mean training reward reaches a threshold
-        reward_threshold = self.get_env("train").get_reward_threshold()
+        train_env = self.get_env("train")
+        reward_threshold = train_env.get_reward_threshold()
         if self.config.early_stop_on_train_threshold: callbacks.append(
             EarlyStoppingCallback("train/ep_rew_mean", reward_threshold)
         )
 
         # If defined in config, early stop when mean validation reward reaches a threshold
-        reward_threshold = self.get_env("val").get_reward_threshold()
+        val_env = self.get_env("val")
+        reward_threshold = val_env.get_reward_threshold()
         if self.config.early_stop_on_eval_threshold: callbacks.append(
             EarlyStoppingCallback("val/ep_rew_mean", reward_threshold)
         )

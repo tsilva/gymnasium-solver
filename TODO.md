@@ -1,6 +1,6 @@
 - TODO: make validation methods not run at all if no eval_freq_epochs is set
 
-
+- TODO: use trainer gradient clipping?
 - FEAT: report alerts in metrics table (yellow rows)
 - FEAT: report alerts to wandb
 - FEAT: Set alerts for metrics as code (allows different algos to set different alerts)

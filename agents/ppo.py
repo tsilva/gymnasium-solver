@@ -12,12 +12,12 @@ class PPO(BaseAgent):
     def __init__(self, config):
         super().__init__(config)
         
+        # Set initial clip range (starts as config value, then updated by scheduler)
         self.clip_range = config.clip_range
 
-    # TODO: do this in init?
-    # TODO: call this build models?
     def build_models(self):
-        self.policy_model = build_policy_from_env_and_config(self.get_env("train"), self.config)
+        train_env = self.get_env("train")
+        self.policy_model = build_policy_from_env_and_config(train_env, self.config)
 
     def losses_for_batch(self, batch, batch_idx):
         # use type for this? check sb3

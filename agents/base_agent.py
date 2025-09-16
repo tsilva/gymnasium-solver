@@ -8,6 +8,7 @@ from utils.metrics_recorder import MetricsRecorder
 from utils.decorators import must_implement
 from utils.reports import print_terminal_ascii_summary
 from utils.formatting import sanitize_name, format_duration
+from utils.metrics_triggers import MetricsTriggers
 
 CHECKPOINT_PATH = "checkpoints/"
 
@@ -31,6 +32,9 @@ class BaseAgent(pl.LightningModule):
         # a step-aware numeric history for terminal summaries.
         self.metrics = MetricsRecorder(step_key="train/total_timesteps")
 
+        # Create metrics trigger registry (eg: used for metric alerts)
+        self.metrics_triggers = MetricsTriggers()
+
         # Initialize timing tracker for training 
         # loop performance measurements
         self.timings = TimingsTracker()
@@ -38,47 +42,14 @@ class BaseAgent(pl.LightningModule):
         # TODO: take another look at RunManager vs Run concerns
         self.run_manager = None
 
-        # Create the training environment
-        from utils.environment import build_env_from_config
-        self.envs = {}
-        self.envs["train"] = build_env_from_config(config, seed=config.seed)
+        # Build the environments
+        self.build_envs()
 
-        # Create models now that the environment is available. Subclasses use
-        # env shapes to build policy/value networks. Must be called before
-        # collectors which require self.policy_model.
+        # Build the models (requires environments for shape inference)
         self.build_models()
 
-        # Create validation environment and collector
-        self.envs["val"] = build_env_from_config(
-            config,
-            seed=config.seed + 1000,
-            subproc=False,
-            render_mode="rgb_array",
-            record_video=True,
-            record_video_kwargs={
-                "video_length": 100,
-                "record_env_idx": 0,
-            },
-        )
-
-        # Create test environment and collector
-        self.envs["test"] = build_env_from_config(
-            config,
-            seed=config.seed + 2000,
-            subproc=False,
-            render_mode="rgb_array",
-            record_video=True,
-            record_video_kwargs={
-                "video_length": None,  # full video
-                "record_env_idx": 0,
-            },
-        )
-        
-        self.rollout_collectors = {}
+        # Build the rollout collectors (requires models and environments)
         self.build_rollout_collectors()
-
-        from utils.metrics_triggers import MetricsTriggers
-        self.metrics_triggers = MetricsTriggers()
 
 
     @must_implement
@@ -91,11 +62,53 @@ class BaseAgent(pl.LightningModule):
         # Subclasses must implement this to compute the losses for each training steps' batch
         pass
 
-    def get_env(self, stage: str):
-        return self.envs[stage]
+    def build_envs(self):
+        self.build_env("train")
+        self.build_env("val")
+        self.build_env("test")
 
-    def get_rollout_collector(self, stage: str):
-        return self.rollout_collectors[stage]
+    def build_env(self, stage: str, **kwargs):
+        from utils.environment import build_env_from_config
+
+        # Ensure _envs is initialized
+        self._envs = self._envs if hasattr(self, "_envs") else {}
+
+        default_kwargs = {
+            "train": {
+                "seed": self.config.seed,
+            },
+            "val": {
+                "seed": self.config.seed + 1000,
+                "subproc": False,
+                "render_mode": "rgb_array",
+                "record_video": True,
+                "record_video_kwargs": {
+                    "video_length": 100,
+                    "record_env_idx": 0,
+                },
+            },
+            "test": {
+                "seed": self.config.seed + 2000,
+                "subproc": False,
+                "render_mode": "rgb_array",
+                "record_video": True,
+                "record_video_kwargs": {
+                    "video_length": None,
+                    "record_env_idx": 0,
+                },
+            },
+        }
+
+        # Build the environment
+        self._envs[stage] = build_env_from_config(
+            self.config, **{
+                **default_kwargs[stage],
+                **kwargs,
+            }
+        )
+            
+    def get_env(self, stage: str):
+        return self._envs[stage]
 
     def build_rollout_collectors(self):
         self.build_rollout_collector("train")
@@ -105,7 +118,11 @@ class BaseAgent(pl.LightningModule):
     def build_rollout_collector(self, stage: str):
         from utils.rollouts import RolloutCollector
 
-        self.rollout_collectors[stage] = RolloutCollector(
+        # Ensure _rollout_collectors is initialized
+        self._rollout_collectors = self._rollout_collectors if hasattr(self, "_rollout_collectors") else {}
+
+        # Build the rollout collector
+        self._rollout_collectors[stage] = RolloutCollector(
             self.get_env(stage),
             self.policy_model,
             n_steps=self.config.n_steps,
@@ -119,6 +136,9 @@ class BaseAgent(pl.LightningModule):
                 "normalize_advantages": self.config.normalize_advantages == "rollout",
             }
         )
+
+    def get_rollout_collector(self, stage: str):
+        return self._rollout_collectors[stage]
 
     def on_fit_start(self):
         # Start the timing tracker for the entire training run

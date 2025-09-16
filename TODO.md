@@ -1,4 +1,6 @@
-Training completed in 8.98 seconds (0.15 minutes). Reason: 'val/ep_rew_mean': 9.035758972167969 >= 9.0.
+- TODO: make validation methods not run at all if no eval_freq_epochs is set
+
+
 - FEAT: report alerts in metrics table (yellow rows)
 - FEAT: report alerts to wandb
 - FEAT: Set alerts for metrics as code (allows different algos to set different alerts)

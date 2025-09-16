@@ -517,9 +517,14 @@ class BaseAgent(pl.LightningModule):
             metrics = model.compute_grad_norms()
             self.metrics_recorder.record("train", metrics)
 
-            # In case a maximum gradient norm is set, 
-            # clips gradients so that norm isn't exceeded
-            if self.config.max_grad_norm is not None: clip_grad_norm_(model.parameters(), self.config.max_grad_norm)
+            # Clip gradients using Lightning's built-in method
+            # (respects strategy/precision, eg: mixed precision training)
+            if self.config.max_grad_norm is not None:
+                self.clip_gradients(
+                    optimizer,
+                    gradient_clip_val=self.config.max_grad_norm,
+                    gradient_clip_algorithm="norm",
+                )
 
             # Perform an optimization step 
             # using the computed gradients

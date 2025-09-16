@@ -25,6 +25,8 @@ def build_trainer(
         enable_checkpointing=False,
         accelerator=config.accelerator,
         devices=config.devices,
+        gradient_clip_val=config.max_grad_norm,
+        gradient_clip_algorithm="norm",
         reload_dataloaders_every_n_epochs=0,
         val_check_interval=None,
         check_val_every_n_epoch=check_val_every_n_epoch,

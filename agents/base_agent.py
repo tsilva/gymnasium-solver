@@ -7,7 +7,7 @@ from utils.timings_tracker import TimingsTracker
 from utils.metrics_recorder import MetricsRecorder
 from utils.decorators import must_implement
 from utils.reports import print_terminal_ascii_summary
-from utils.formatting import sanitize_name
+from utils.formatting import sanitize_name, format_duration
 
 CHECKPOINT_PATH = "checkpoints/"
 
@@ -335,7 +335,8 @@ class BaseAgent(pl.LightningModule):
     def on_fit_end(self):
         # Log training completion time
         time_elapsed = self.timings.seconds_since("on_fit_start")
-        print(f"Training completed in {time_elapsed:.2f} seconds ({time_elapsed/60:.2f} minutes). Reason: {self._early_stop_reason}")
+        human = format_duration(time_elapsed)
+        print(f"Training completed in {human}. Reason: {self._early_stop_reason}")
 
         # TODO: encapsulate in callback
         print_terminal_ascii_summary(self.metrics.history())

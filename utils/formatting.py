@@ -50,3 +50,61 @@ def sanitize_name(name: str) -> str:
     directory structures in IDs or project names.
     """
     return str(name).replace("/", "-").replace("\\", "-")
+
+
+def _plural(n: int, singular: str, plural: str) -> str:
+    return singular if n == 1 else plural
+
+
+def format_duration(seconds: float) -> str:
+    """Return a human-readable duration string for a number of seconds.
+
+    Rules:
+    - < 1 minute: show seconds with 2 decimals (e.g., "8.98 seconds").
+    - < 1 hour: show minutes and seconds (e.g., "12 minutes 5 seconds").
+    - < 1 day: show hours, minutes, and seconds (e.g., "1 hour 02 minutes 03 seconds").
+    - >= 1 day: show days, hours, minutes, and seconds.
+    """
+    try:
+        s = max(0.0, float(seconds))
+    except Exception:
+        return "0 seconds"
+
+    # Sub-minute: preserve fractional seconds with two decimals
+    if s < 60.0:
+        return f"{s:.2f} seconds"
+
+    # For minute+ ranges, round to whole seconds and decompose
+    total = int(round(s))
+    days = total // 86_400
+    rem = total % 86_400
+    hours = rem // 3_600
+    rem %= 3_600
+    minutes = rem // 60
+    secs = rem % 60
+
+    # Build per-range strings
+    if total < 3_600:
+        # minutes + seconds
+        parts = [
+            f"{minutes} {_plural(minutes, 'minute', 'minutes')}",
+            f"{secs} {_plural(secs, 'second', 'seconds')}",
+        ]
+        return " ".join(parts)
+
+    if total < 86_400:
+        parts = [
+            f"{hours} {_plural(hours, 'hour', 'hours')}",
+            f"{minutes} {_plural(minutes, 'minute', 'minutes')}",
+            f"{secs} {_plural(secs, 'second', 'seconds')}",
+        ]
+        return " ".join(parts)
+
+    # 1 day or more
+    parts = [
+        f"{days} {_plural(days, 'day', 'days')}",
+        f"{hours} {_plural(hours, 'hour', 'hours')}",
+        f"{minutes} {_plural(minutes, 'minute', 'minutes')}",
+        f"{secs} {_plural(secs, 'second', 'seconds')}",
+    ]
+    return " ".join(parts)

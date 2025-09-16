@@ -148,49 +148,31 @@ class BaseAgent(pl.LightningModule):
         for stage in ("train", "val"):
             # approx_kl: too low / too high
             self.metrics_triggers.register_trigger(
-                f"{stage}/approx_kl", lambda s=stage: self.trigger_approx_kl_too_low(f"{s}/approx_kl")
+                f"{stage}/approx_kl", lambda s=stage: self.trigger_approx_kl_oob(f"{s}/approx_kl")
             )
             self.metrics_triggers.register_trigger(
-                f"{stage}/approx_kl", lambda s=stage: self.trigger_approx_kl_too_high(f"{s}/approx_kl")
+                f"{stage}/approx_kl", lambda s=stage: self.trigger_approx_kl_oob(f"{s}/approx_kl")
             )
             # clip_fraction: too low / too high
             self.metrics_triggers.register_trigger(
-                f"{stage}/clip_fraction", lambda s=stage: self.trigger_clip_fraction_too_low(f"{s}/clip_fraction")
-            )
-            self.metrics_triggers.register_trigger(
-                f"{stage}/clip_fraction", lambda s=stage: self.trigger_clip_fraction_too_high(f"{s}/clip_fraction")
+                f"{stage}/clip_fraction", lambda s=stage: self.trigger_clip_fraction_oob(f"{s}/clip_fraction")
             )
             # explained_variance: too low for phase
-            self.metrics_triggers.register_trigger(
-                f"{stage}/explained_variance", lambda s=stage: self.trigger_explained_variance_low_mid(f"{s}/explained_variance")
-            )
-            self.metrics_triggers.register_trigger(
-                f"{stage}/explained_variance", lambda s=stage: self.trigger_explained_variance_low_late(f"{s}/explained_variance")
+            self.metrics_triggers.register_trigger( 
+                f"{stage}/explained_variance", lambda s=stage: self.trigger_explained_variance_oob(f"{s}/explained_variance")
             )
 
     # ---- trigger helpers ----
     def _latest_value(self, full_key: str):
         hist = self.metrics.history().get(full_key)
         if not hist: return None
-        try:
-            return float(hist[-1][1])
-        except Exception:
-            return None
-
-    def _training_progress(self) -> float:
-        try:
-            return float(self._calc_training_progress())
-        except Exception:
-            return 0.0
+        return float(hist[-1][1])
 
     def _metric_tip(self, bare_key: str) -> str:
-        try:
-            from utils.metrics_config import metrics_config as _m
-            spec = _m.config.get(bare_key) or {}
-            tip = spec.get("tips")
-            return str(tip) if tip else ""
-        except Exception:
-            return ""
+        from utils.metrics_config import metrics_config as _m
+        spec = _m.config.get(bare_key) or {}
+        tip = spec.get("tips")
+        return str(tip) if tip else ""
 
     def _mk_alert(self, full_key: str, val: float, reason: str, tip_key: str) -> str:
         tip = self._metric_tip(tip_key)
@@ -198,48 +180,26 @@ class BaseAgent(pl.LightningModule):
         return f"{full_key}={val:.5g} {reason}.{tip_str}"
 
     # ---- triggers (one method per concern) ----
-    def trigger_approx_kl_too_low(self, metric_key: str):
+    def trigger_approx_kl_oob(self, metric_key: str):
         v = self._latest_value(metric_key)
         if v is None: return None
-        if v < 1e-3:
-            return self._mk_alert(metric_key, v, "is very low; updates may be too weak", "approx_kl")
+        if v < 1e-3: return self._mk_alert(metric_key, v, "is very low; updates may be too weak", "approx_kl")
+        if v > 5e-2: return self._mk_alert(metric_key, v, "is high; updates may be too aggressive", "approx_kl")
         return None
 
-    def trigger_approx_kl_too_high(self, metric_key: str):
+    def trigger_clip_fraction_oob(self, metric_key: str):
         v = self._latest_value(metric_key)
         if v is None: return None
-        if v > 5e-2:
-            return self._mk_alert(metric_key, v, "is high; updates may be too aggressive", "approx_kl")
+        if v < 0.05: return self._mk_alert(metric_key, v, "is very low; likely under-updating", "clip_fraction")
+        if v > 0.5: return self._mk_alert(metric_key, v, "is very high; many updates are clipped", "clip_fraction")
         return None
 
-    def trigger_clip_fraction_too_low(self, metric_key: str):
+    def trigger_explained_variance_oob(self, metric_key: str):
         v = self._latest_value(metric_key)
         if v is None: return None
-        if v < 0.05:
-            return self._mk_alert(metric_key, v, "is very low; likely under-updating", "clip_fraction")
-        return None
-
-    def trigger_clip_fraction_too_high(self, metric_key: str):
-        v = self._latest_value(metric_key)
-        if v is None: return None
-        if v > 0.5:
-            return self._mk_alert(metric_key, v, "is very high; many updates are clipped", "clip_fraction")
-        return None
-
-    def trigger_explained_variance_low_mid(self, metric_key: str):
-        v = self._latest_value(metric_key)
-        if v is None: return None
-        p = self._training_progress()
-        if 0.33 <= p < 0.66 and v < 0.2:
-            return self._mk_alert(metric_key, v, "is low for mid-training", "explained_variance")
-        return None
-
-    def trigger_explained_variance_low_late(self, metric_key: str):
-        v = self._latest_value(metric_key)
-        if v is None: return None
-        p = self._training_progress()
-        if p >= 0.66 and v < 0.5:
-            return self._mk_alert(metric_key, v, "is low for late training", "explained_variance")
+        p = self._calc_training_progress()
+        if 0.33 <= p < 0.66 and v < 0.2: return self._mk_alert(metric_key, v, "is low for mid-training", "explained_variance")
+        if p >= 0.66 and v < 0.5: return self._mk_alert(metric_key, v, "is low for late training", "explained_variance")
         return None
 
     def train_dataloader(self):
@@ -302,8 +262,7 @@ class BaseAgent(pl.LightningModule):
         self._update_schedules()
 
         alerts = self.metrics_triggers.check_triggers()
-        if alerts:
-            print(f"Alerts triggered: {alerts}")
+        if alerts: print(f"Alerts triggered: {alerts}")
 
     def val_dataloader(self):
         # TODO: should I just do rollouts here?

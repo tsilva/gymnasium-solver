@@ -5,18 +5,16 @@ env_kwargs:
   stds: 1
   episode_length: 1
 max_timesteps: 2e5
-#eval_freq_epochs: 10
 eval_episodes: 100
-eval_freq_epochs: null
+eval_freq_epochs: 10
 early_stop_on_train_threshold: false
-early_stop_on_eval_threshold: false
+early_stop_on_eval_threshold: true
 
-# PPO sample tuned for quick debugging
 ppo:
   algo_id: ppo
   n_envs: 16
   n_steps: 64
-  batch_size: 0.25     # fraction of rollout size
+  batch_size: 0.25
   n_epochs: 4
   policy_lr: 3e-3
   clip_range: 0.2

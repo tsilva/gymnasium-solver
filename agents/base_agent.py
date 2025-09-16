@@ -219,21 +219,12 @@ class BaseAgent(pl.LightningModule):
         return build_dummy_loader()
 
     def on_validation_epoch_start(self):
-        # TODO: why is this being called during warmup epochs?
-        # Skip validation entirely during warmup epochs to avoid evaluation overhead
-        if not self.should_run_validation_epoch():
-            return
-
         self.timings.restart("on_validation_epoch_start", steps=0)
 
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
     # TODO: there are train/fps drops caused by running the collector N times (its not only the video recording); cause currently unknown
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
-        # If eval shouldn't be run this epoch, skip the step (eg: warmup epochs)
-        if not self.should_run_validation_epoch(): # TODO: can this be done in the trainer itself?
-            return None
-
         # Decide if we record a video this eval epoch
         record_video = (
             self.current_epoch == 0
@@ -403,23 +394,6 @@ class BaseAgent(pl.LightningModule):
                 "Warning: Detected non-RGB observations with CNN policy. "
                 "For non-image inputs, consider using MLP for better performance."
             )
-    
-    def should_run_validation_epoch(self) -> bool:
-        return self._should_run_eval(self.current_epoch)
-
-    def _should_run_eval(self, epoch_idx: int) -> bool:
-        # If freq is None, never evaluate
-        freq = self.config.eval_freq_epochs
-        if freq is None: return False
-
-        # If warmup is active, skip all epochs <= warmup
-        E = epoch_idx + 1
-        warmup = self.config.eval_warmup_epochs
-        if warmup is not None and E <= warmup: return False
-
-        # Otherwise, evaluate on the cadence grid
-        return (E % int(freq)) == 0
-
     # -------------------------
     # Pre-prompt guidance helpers
     # -------------------------
@@ -485,10 +459,18 @@ class BaseAgent(pl.LightningModule):
             VideoLoggerCallback,
             EndOfTrainingReportCallback,
             EarlyStoppingCallback,
+            WarmupEvalCallback
         )
 
         # Initialize callbacks list
         callbacks = []
+
+        # In case eval warmup is active, add a callback to enable validation only after warmup
+        if self.config.eval_warmup_epochs > 0: 
+            callbacks.append(WarmupEvalCallback(
+                warmup_epochs=self.config.eval_warmup_epochs, 
+                eval_freq_epochs=self.config.eval_freq_epochs
+            ))
 
         # Metrics dispatcher: aggregates epoch metrics and logs to Lightning
         callbacks.append(DispatchMetricsCallback())

@@ -85,10 +85,6 @@ class ModelCheckpointCallback(pl.Callback):
         not be present in `trainer.logged_metrics`. In that case, gracefully
         return without asserting, keeping early-stopping/tracking logic intact.
         """
-        # If eval shouldn't be run this epoch, skip the step (e.g., warmup epochs)
-        if not pl_module.should_run_validation_epoch():
-            return
-
         # If the monitored metric wasn't logged this epoch (e.g., warmup), skip
         if self.metric not in trainer.logged_metrics:
             return

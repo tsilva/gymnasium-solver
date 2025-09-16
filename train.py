@@ -4,6 +4,7 @@ import argparse
 from dataclasses import asdict
 from utils.config import load_config, Config
 from stable_baselines3.common.utils import set_random_seed
+from utils.formatting import format_duration
 
 def _init_wandb_sweep(config: Config):
     base = asdict(config)
@@ -60,6 +61,30 @@ def main():
     except Exception as e:
         # Non-fatal: print a brief note and continue
         print(f"Warning: could not create/update W&B workspace ({e})")
+
+    # Finish W&B so its end-of-run message appears before our final line
+    try:
+        if getattr(wandb, "run", None) is not None:
+            wandb.finish()
+    except Exception:
+        # Non-fatal if wandb.finish fails or wandb not active
+        pass
+
+    # Print the training completion message last, after any W&B output
+    try:
+        # Prefer the value captured by the agent at fit end
+        elapsed = getattr(agent, "_fit_elapsed_seconds", None)
+        if elapsed is None:
+            elapsed = agent.timings.seconds_since("on_fit_start")
+        human = format_duration(float(elapsed))
+    except Exception:
+        human = "unknown"
+    # Prefer the normalized final stop reason determined at fit end
+    reason = getattr(agent, "_final_stop_reason", None) or getattr(agent, "_early_stop_reason", None) or "completed."
+    # Ensure a trailing period for fallback reason
+    if isinstance(reason, str) and reason and not str(reason).endswith(".") and reason != "completed.":
+        reason = f"{reason}."
+    print(f"Training completed in {human}. Reason: {reason}")
         
 if __name__ == "__main__":
     main()

@@ -8,10 +8,11 @@ This file lives under tests/ so it doesn't pollute the main codebase.
 """
 from __future__ import annotations
 
-from types import SimpleNamespace
+from types import SimpleNamespace, ModuleType
 from typing import Any, Dict, List
 
 import torch
+import sys
 
 
 class LightningModule(torch.nn.Module):
@@ -47,6 +48,14 @@ class LightningModule(torch.nn.Module):
         return opt
 
 
+class Callback:  # pragma: no cover - minimal base to satisfy subclassing
+    def on_validation_epoch_end(self, *_args: Any, **_kwargs: Any) -> None:
+        return None
+
+    def on_fit_end(self, *_args: Any, **_kwargs: Any) -> None:
+        return None
+
+
 class Trainer:  # pragma: no cover - type placeholder for annotations
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         self.logger = SimpleNamespace(log_metrics=lambda *a, **k: None)
@@ -72,5 +81,40 @@ class _WandbLogger:
         self.experiment = SimpleNamespace(id="test", define_metric=lambda *a, **k: None)
 
 
-class loggers:  # noqa: N801 - mimic package for `from pytorch_lightning.loggers import WandbLogger`
-    WandbLogger = _WandbLogger
+def _install_logger_modules() -> ModuleType:
+    loggers_mod = ModuleType("pytorch_lightning.loggers")
+    loggers_mod.__path__ = []  # type: ignore[attr-defined]
+    loggers_mod.WandbLogger = _WandbLogger  # type: ignore[attr-defined]
+
+    logger_mod = ModuleType("pytorch_lightning.loggers.logger")
+
+    class _StubLogger:  # pragma: no cover - noop base for PrintMetricsLogger
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+        def log_hyperparams(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+        def log_metrics(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+        def finalize(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+    logger_mod.Logger = _StubLogger  # type: ignore[attr-defined]
+
+    loggers_mod.logger = logger_mod  # type: ignore[attr-defined]
+
+    sys.modules.setdefault("pytorch_lightning.loggers", loggers_mod)
+    sys.modules.setdefault("pytorch_lightning.loggers.logger", logger_mod)
+    return loggers_mod
+
+
+loggers = _install_logger_modules()
+
+__all__ = [
+    "LightningModule",
+    "Trainer",
+    "Callback",
+    "loggers",
+]

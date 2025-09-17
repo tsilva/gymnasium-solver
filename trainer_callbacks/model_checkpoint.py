@@ -105,6 +105,7 @@ class ModelCheckpointCallback(pl.Callback):
         if is_best:
             self.best_value = float(metric_value)
             self.best_epoch = epoch
+            # TODO: log best epoch instead
             print(f"New best model: epoch={epoch}; {self.metric}={float(metric_value):.4f}")
 
     def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):

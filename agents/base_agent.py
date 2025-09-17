@@ -132,8 +132,9 @@ class BaseAgent(pl.LightningModule):
 
     def on_fit_start(self):
         # Start the timing tracker for the entire training run
-        # TODO: currently the timings tracker allows tracking only steps (hardcoded) but we want to be able to track any associated value (pass dict) and then measure throughput (fps since) by massing the dict wit the latest values
-        self.timings.restart("on_fit_start", steps=0)
+        train_collector = self.get_rollout_collector("train")
+        train_metrics = train_collector.get_metrics()
+        self.timings.start("on_fit_start", values=train_metrics)
 
         # Register metric monitor functions
         monitor_fns = self.get_metric_monitor_fns()
@@ -173,8 +174,8 @@ class BaseAgent(pl.LightningModule):
     def on_train_epoch_start(self):
         # Start epoch timer
         train_collector = self.get_rollout_collector("train")
-        total_timesteps = train_collector.get_metrics()["total_timesteps"]
-        self.timings.restart("on_train_epoch_start", steps=total_timesteps)
+        train_metrics = train_collector.get_metrics()
+        self.timings.start("on_train_epoch_start", values=train_metrics)
 
         # Log hyperparameters that are tunable in real-time
         self._log_hyperparameters()
@@ -215,7 +216,9 @@ class BaseAgent(pl.LightningModule):
         return build_dummy_loader()
 
     def on_validation_epoch_start(self):
-        self.timings.restart("on_validation_epoch_start", steps=0)
+        val_collector = self.get_rollout_collector("val")
+        val_metrics = val_collector.get_metrics()
+        self.timings.start("on_validation_epoch_start", values=val_metrics)
 
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
@@ -240,8 +243,8 @@ class BaseAgent(pl.LightningModule):
             )
         
         # Log eval metrics
-        total_timesteps = int(val_metrics.get("total_timesteps", 0))
-        epoch_fps = self.timings.fps_since("on_validation_epoch_start", steps_now=total_timesteps)
+        epoch_fps_values = self.timings.throughput_since("on_validation_epoch_start", values_now=val_metrics)
+        epoch_fps = epoch_fps_values["total_timesteps"]
         self.metrics_recorder.record("val", {
             **val_metrics,
             "epoch": int(self.current_epoch),

@@ -30,10 +30,11 @@ class DispatchMetricsCallback(pl.Callback):
         #if total_episodes == 0: return
 
         # Calculate timing metrics
-        total_timesteps = int(rollout_metrics["total_timesteps"])
         time_elapsed = pl_module.timings.seconds_since("on_fit_start")
-        fps_total = pl_module.timings.fps_since("on_fit_start", steps_now=total_timesteps)
-        fps_instant = pl_module.timings.fps_since("on_train_epoch_start", steps_now=total_timesteps)
+        fps_total_map = pl_module.timings.throughput_since("on_fit_start", values_now=rollout_metrics)
+        fps_instant_map = pl_module.timings.throughput_since("on_train_epoch_start", values_now=rollout_metrics)
+        fps_total = fps_total_map["total_timesteps"]
+        fps_instant = fps_instant_map["total_timesteps"]
 
         # Aggregate metrics for the this epoch
         epoch_metrics = pl_module.metrics_recorder.compute_epoch_means(stage)

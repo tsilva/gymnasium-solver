@@ -4,12 +4,29 @@ import pytest
 
 import importlib.util
 import sys
+import types
 
 from pathlib import Path as _P
 
 # Load the real ModelCheckpointCallback directly from file to avoid the
-# test stub that injects a dummy 'callbacks' module in sys.modules.
-_mod_path = _P(__file__).resolve().parents[1] / "callbacks" / "model_checkpoint.py"
+# test stub that injects a dummy module in sys.modules.
+try:
+    import pytorch_lightning as _pl  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover - fallback when dependency missing
+    _pl = types.ModuleType("pytorch_lightning")
+    sys.modules["pytorch_lightning"] = _pl
+
+if not hasattr(_pl, "Callback"):
+    class _StubCallback:  # pragma: no cover - minimal base for callback subclassing
+        def on_validation_epoch_end(self, *_args, **_kwargs):
+            return None
+
+        def on_fit_end(self, *_args, **_kwargs):
+            return None
+
+    _pl.Callback = _StubCallback  # type: ignore[attr-defined]
+
+_mod_path = _P(__file__).resolve().parents[1] / "trainer_callbacks" / "model_checkpoint.py"
 _spec = importlib.util.spec_from_file_location("real_callbacks_model_checkpoint", str(_mod_path))
 assert _spec and _spec.loader
 _real_mod = importlib.util.module_from_spec(_spec)
@@ -67,12 +84,13 @@ def test_best_mp4_symlink_points_to_epoch_video(tmp_path: Path):
     epoch_video = ckpt_dir / "epoch=01.mp4"
     epoch_video.write_bytes(b"fake mp4 bytes")
 
-    cb = ModelCheckpointCallback(checkpoint_dir=str(ckpt_dir))
+    cb = ModelCheckpointCallback(checkpoint_dir=str(ckpt_dir), metric="val/ep_rew_mean")
     trainer = _Trainer()
     agent = _Agent(tmp_path)
 
     # invoke validation end; since current metric > -inf, it will be best
     cb.on_validation_epoch_end(trainer, agent)
+    cb.on_fit_end(trainer, agent)
 
     best_link = ckpt_dir / "best.mp4"
     assert best_link.exists(), "best.mp4 link not created"

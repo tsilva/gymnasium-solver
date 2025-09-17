@@ -208,9 +208,10 @@ class BaseAgent(pl.LightningModule):
     def on_train_epoch_end(self):
         # Update schedules
         self._update_schedules()
-
-        alerts = self.metrics_monitor.check()
-        if alerts: print(f"Alerts triggered: {alerts}")
+        
+        # Run registered metric monitor functions
+        # (will add alerts if any are triggered)
+        self.metrics_monitor.check()
 
     def val_dataloader(self):
         # TODO: should I just do rollouts here?
@@ -381,7 +382,7 @@ class BaseAgent(pl.LightningModule):
                 "Warning: Detected non-RGB observations with CNN policy. "
                 "For non-image inputs, consider using MLP for better performance."
             )
-            
+
     # -------------------------
     # Pre-prompt guidance helpers
     # -------------------------

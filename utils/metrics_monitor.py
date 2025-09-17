@@ -47,13 +47,24 @@ class MetricsMonitor:
 
         # For each metric, add to active alerts if alerts
         # are present, if no alerts, remove previous alerts
+        add_alerts = {}
+        remove_alerts = []
         for metric, alerts in metrics_alerts.items():
-            if alerts: self.active_alerts[metric] = alerts
-            else: del self.active_alerts[metric]
+            if alerts: add_alerts[metric] = alerts
+            else: remove_alerts.append(metric)
 
-        # Return active alerts (copy to avoid mutation)
-        active_alerts = self.get_active_alerts()
-        return active_alerts
+        # Remove alerts that are no longer present
+        for metric in remove_alerts: del self.active_alerts[metric]
+
+        # Add new alerts
+        self.active_alerts.update(add_alerts)   
+
+        # Return active/added/removed alerts
+        return dict(
+            active=list(self.active_alerts.keys()),
+            added=list(add_alerts.keys()),
+            removed=list(remove_alerts)
+        )
 
     def get_active_alerts(self) -> Dict[str, List[str]]:
         return dict(self.active_alerts)

@@ -50,14 +50,8 @@ class EarlyStoppingCallback(pl.Callback):
         
         # Print reason with metrics.yaml-based formatting
         comp_op = ">=" if self.mode == "max" else "<="
-        try:
-            v_str = format_metric_value(self.metric_key, float(value))
-        except Exception:
-            v_str = str(value)
-        try:
-            thr_str = format_metric_value(self.metric_key, float(self.threshold))
-        except Exception:
-            thr_str = str(self.threshold)
+        v_str = format_metric_value(self.metric_key, float(value))
+        thr_str = format_metric_value(self.metric_key, float(self.threshold))
         early_stop_reason = f"'{self.metric_key}': {v_str} {comp_op} {thr_str}."
         print(f"Early stopping! {early_stop_reason}")
 

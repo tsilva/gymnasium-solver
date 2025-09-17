@@ -367,8 +367,8 @@ class Config:
             raise ValueError("batch_size must be a positive integer when set.")
         if self.max_timesteps is not None and not (self.max_timesteps > 0):
             raise ValueError("max_timesteps must be a positive number when set.")
-        if self.gamma is not None and not (0 < self.gamma <= 1):
-            raise ValueError("gamma must be in (0, 1] when set.")
+        if self.gamma is not None and not (0 <= self.gamma <= 1):
+            raise ValueError("gamma must be in [0, 1] when set.")
         if self.gae_lambda is not None and not (0 <= self.gae_lambda <= 1):
             raise ValueError("gae_lambda must be in [0, 1] when set.")
         if self.clip_range is not None and not (0 < self.clip_range < 1):

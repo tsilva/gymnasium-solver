@@ -206,10 +206,6 @@ class BaseAgent(pl.LightningModule):
         # Update schedules
         self._update_schedules()
         
-        # Run registered metric monitor functions
-        # (will add alerts if any are triggered)
-        self.metrics_monitor.check()
-
     def val_dataloader(self):
         # TODO: should I just do rollouts here?
         from utils.dataloaders import build_dummy_loader
@@ -441,6 +437,7 @@ class BaseAgent(pl.LightningModule):
         """Assemble trainer callbacks, with an optional end-of-training report."""
         # Lazy imports to avoid heavy deps at module import time
         from trainer_callbacks import (
+            MonitorMetricsCallback,
             DispatchMetricsCallback,
             ModelCheckpointCallback,
             VideoLoggerCallback,
@@ -458,6 +455,10 @@ class BaseAgent(pl.LightningModule):
                 warmup_epochs=self.config.eval_warmup_epochs, 
                 eval_freq_epochs=self.config.eval_freq_epochs
             ))
+
+        # Monitor metrics: add alerts if any are triggered
+        # (must be before DispatchMetricsCallback because alerts are reported as metrics)
+        callbacks.append(MonitorMetricsCallback())
 
         # Metrics dispatcher: aggregates epoch metrics and logs to Lightning
         callbacks.append(DispatchMetricsCallback())

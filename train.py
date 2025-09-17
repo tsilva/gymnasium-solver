@@ -62,13 +62,9 @@ def main():
         # Non-fatal: print a brief note and continue
         print(f"Warning: could not create/update W&B workspace ({e})")
 
-    # Finish W&B so its end-of-run message appears before our final line
-    try:
-        if getattr(wandb, "run", None) is not None:
-            wandb.finish()
-    except Exception:
-        # Non-fatal if wandb.finish fails or wandb not active
-        pass
+    # Intentionally avoid calling wandb.finish() to suppress W&B's
+    # end-of-run console summary ("Run history", etc.). The run
+    # will be finalized implicitly on process exit.
 
     # Print the training completion message last, after any W&B output
     try:

@@ -152,15 +152,15 @@ class PPO(BaseAgent):
     def _monitor_approx_kl_oob(self, metric: str, metric_values: List[Tuple[int, float]]):
         _, last_value = metric_values[-1]
         min_threshold, max_threshold = 1e-3, 5e-2
-        if last_value < min_threshold: return f"value < {min_threshold} is very low; updates may be too weak"
-        if last_value > max_threshold: return f"value > {max_threshold} is high; updates may be too aggressive"
+        if last_value < min_threshold: return f"< {min_threshold} is very low; updates may be too weak"
+        if last_value > max_threshold: return f"> {max_threshold} is high; updates may be too aggressive"
         return None
 
     def _monitor_clip_fraction_oob(self, metric: str, metric_values: List[Tuple[int, float]]):
         _, last_value = metric_values[-1]
         min_threshold, max_threshold = 0.05, 0.5
-        if last_value < min_threshold: return f"value < {min_threshold} is very low; likely under-updating"
-        if last_value > max_threshold: return f"value > {max_threshold} is very high; many updates are clipped"
+        if last_value < min_threshold: return f"< {min_threshold} is very low; likely under-updating"
+        if last_value > max_threshold: return f"> {max_threshold} is very high; many updates are clipped"
         return None
 
     def _monitor_explained_variance_oob(self, metric: str, metric_values: List[Tuple[int, float]]):
@@ -169,6 +169,6 @@ class PPO(BaseAgent):
         is_mid_training = 0.33 <= p < 0.66
         is_late_training = p >= 0.66
         min_threshold, max_threshold = 0.2, 0.5
-        if is_mid_training and last_value < min_threshold: return f"value < {min_threshold} is low for mid-training"
-        if is_late_training and last_value < max_threshold: return f"value < {max_threshold} is low for late training"
+        if is_mid_training and last_value < min_threshold: return f"< {min_threshold} is low for mid-training"
+        if is_late_training and last_value < max_threshold: return f"< {max_threshold} is low for late training"
         return None

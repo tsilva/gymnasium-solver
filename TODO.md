@@ -14,6 +14,8 @@ Cleanup Targets
   Next steps: 1) break the inspector helpers into smaller modules/functions (env/model loading, UI layout, event handlers). 2) carve RolloutCollector into focused
   components (buffer, metrics, evaluation) before touching the TODO-labeled logic.
 
+- FEAT: make time elapsed metric be highlited as blue
+- FEAT: log model gradients to wandb
 - FEAT: report alerts to wandb
 - FEAT: use codex-cli to debug runs
 - Ensure metrics summary is sorted with metrics.yaml priorities

@@ -22,3 +22,27 @@ ppo:
   gae_lambda: 1.0
   normalize_advantages: "rollout"
   
+ppo_optimal:
+  algo_id: ppo
+  max_timesteps: 300_000
+
+  # Bandit-friendly dynamics
+  gamma: 0.0              # 1-step bandit → no bootstrapping
+  optimizer: adam         # AdamW not needed here
+  policy_lr: 0.01         # bigger, faster updates
+  clip_range: 0.35        # allow larger policy moves
+
+  # Bigger low-variance batches
+  n_envs: 64
+  n_steps: 64             # 64 * 64 = 4096 samples/rollout
+  batch_size: 4096
+  n_epochs: 8             # a few strong passes per batch
+
+  # Stabilizers
+  ent_coef: 0.02          # explore early; small but nonzero
+  vf_coef: 0.05           # tiny baseline to cut variance
+  max_grad_norm: 1.0
+
+  # Evaluation
+  eval_freq_epochs: 5
+  eval_episodes: 200

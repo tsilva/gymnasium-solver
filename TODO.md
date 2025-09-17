@@ -1,3 +1,21 @@
+Cleanup Targets
+
+  - inspector.py:294 & inspector.py:696 – run_episode and build_ui are 1000+ lines together, bundling env/model setup, data munging, and Gradio wiring into huge nested
+  closures; they’re hard to reason about compared with BaseAgent’s structure.
+  - utils/rollouts.py:434 (see also :497, :828, :940) – the collector is a 1k-line grab bag of rollout storage, statistics, evaluation, and logging with many TODO
+  “review this” notes; logic like collect() still ships obvious hacks.
+  - utils/logging.py:70 – the helper declares __getattr__ indented under strip_ansi_codes, so it never runs, and the module mixes tee streams, log rotation, and ANSI
+  utilities without clear separation.
+  - trainer_callbacks/end_of_training_report.py:100 – on_fit_end remains a single 150+ line method (flagged by its own TODO), doing ad-hoc introspection, CSV parsing,
+  templating, and filesystem writes inline.
+  - utils/models.py:30 & utils/models.py:174 – the MLP builders rely on type lists, numpy dtypes, and squeeze hacks with TODOs complaining about them; actor-critic
+  shape handling needs a principled cleanup.
+
+  No code changes were made.
+
+  Next steps: 1) break the inspector helpers into smaller modules/functions (env/model loading, UI layout, event handlers). 2) carve RolloutCollector into focused
+  components (buffer, metrics, evaluation) before touching the TODO-labeled logic.
+
 - FEAT: report alerts in metrics table (yellow rows)
 - FEAT: report alerts to wandb
 - FEAT: use codex-cli to debug runs

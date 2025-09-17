@@ -256,20 +256,12 @@ class BaseAgent(pl.LightningModule):
 
     def on_fit_end(self):
         # Persist final duration and stop reason for external reporting
-        try:
-            time_elapsed = self.timings.seconds_since("on_fit_start")
-            self._fit_elapsed_seconds = float(time_elapsed)
-        except Exception:
-            self._fit_elapsed_seconds = None
-
-        # Capture final stop reason (may be set by EarlyStoppingCallback)
-        try:
-            reason = getattr(self, "_early_stop_reason", None)
-            self._final_stop_reason = reason if isinstance(reason, str) and reason else "completed."
-        except Exception:
-            self._final_stop_reason = "completed."
+        time_elapsed = self.timings.seconds_since("on_fit_start")
+        self._fit_elapsed_seconds = float(time_elapsed)
+        self._final_stop_reason = self._early_stop_reason
 
         # TODO: encapsulate in callback
+        # TODO: print training finished inside this method, pass all vars to it
         print_terminal_ascii_summary(self.metrics_recorder.history())
 
         # Record final evaluation video and save associated metrics JSON next to it
@@ -366,7 +358,8 @@ class BaseAgent(pl.LightningModule):
         # Prompt if user wants to start training
         start_training = prompt_confirm("Start training?", default=True, quiet=self.config.quiet)
         return start_training
-
+    
+    # TODO: get this out of here
     def _maybe_warn_observation_policy_mismatch(self):
         from utils.config import Config
 
@@ -421,7 +414,7 @@ class BaseAgent(pl.LightningModule):
     def _build_trainer_loggers__print(self): # Prepare a terminal print logger that formats metrics from the unified logging stream
         from loggers.print_metrics_logger import PrintMetricsLogger
         # Rely on PrintMetricsLogger defaults sourced from utils.metrics_config
-        print_logger = PrintMetricsLogger()
+        print_logger = PrintMetricsLogger(metrics_monitor=self.metrics_monitor)
         return print_logger
         
     def _build_trainer_loggers(self):

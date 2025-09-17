@@ -25,17 +25,19 @@ reinforce_baseline2:
   # Optionally shrink the batch per update:
   # n_steps: 512   # was 1024
 
-# SOLVED: 983040 timesteps (~33m)
+# Previous solve: 983040 timesteps (~33m)
 ppo:
   algo_id: ppo
-  n_envs: 16
+  n_envs: 12
   max_timesteps: 1e6
-  n_steps: 1024
-  batch_size: 64
+  n_steps: 512
+  batch_size: 256
   gae_lambda: 0.98
   gamma: 0.999
   n_epochs: 4
+  policy_lr: 0.0005
   ent_coef: 0.01
-  eval_freq_epochs: 10
+  eval_warmup_epochs: 100
+  eval_freq_epochs: 5
   policy_targets: "advantages"
   normalize_advantages: "batch"

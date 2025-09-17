@@ -132,7 +132,8 @@ class BaseAgent(pl.LightningModule):
 
     def on_fit_start(self):
         # Start the timing tracker for the entire training run
-        self.timings.restart("on_fit_start", steps=0) # TODO: allow tracking arbitrary associated values
+        # TODO: currently the timings tracker allows tracking only steps (hardcoded) but we want to be able to track any associated value (pass dict) and then measure throughput (fps since) by massing the dict wit the latest values
+        self.timings.restart("on_fit_start", steps=0)
 
         # Register metric monitor functions
         monitor_fns = self.get_metric_monitor_fns()

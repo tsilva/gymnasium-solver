@@ -14,9 +14,17 @@ Cleanup Targets
   Next steps: 1) break the inspector helpers into smaller modules/functions (env/model loading, UI layout, event handlers). 2) carve RolloutCollector into focused
   components (buffer, metrics, evaluation) before touching the TODO-labeled logic.
 
+- FEAT: make boot and shutdown times faster
+- FEAT: wandb bug may caused by lack of .finish()
+- FEAT: wandb run names (as they appear in dashboard) are currently {algo_id}-{seed}, make them {algo_id}-{run_id}
+- FEAT: create vibe task for tuning hyperparameters, task prompt should be in vibes/tasks/tune_hyperparameters.md; given a project id and algo, it should run it, check the respective run folder when training ends, think about which parameters to tune, change the respective hyperparameters file and try again; the objective is to make the training complete as fast as possible by achieving train/ep_rew_mean trheshold in the shortest wall clock time possible, deterministic eval is not allowed (must use stochastic eval, which is the default); tip to understand what each metric is refer to metrics.yaml
+
+- BUG: can't inspect bandit training
+- BUG: W&B workspace redundant print
 - FEAT: make time elapsed metric be highlited as blue
 - FEAT: log model gradients to wandb
-- FEAT: report alerts to wandb
+- FEAT: add autotuner worklflow (check wandb logs)
+
 - FEAT: use codex-cli to debug runs
 - Ensure metrics summary is sorted with metrics.yaml priorities
 - FEAT: add normalization support 
@@ -75,6 +83,7 @@ Cleanup Targets
 - FEAT: Write wandb diagnostics script, use claude desktop to debug
 - FEAT: support continuous environments
 - FEAT: support for multi-env rollout collectors
+- FEAT: add curriculum learning support
 - FEAT: add multitask heads support (eg: Atari, Sega Genesis) -- consider large output space
 - Ask agent for next learning steps/tasks (prompt file)
 - REFACTOR: add type hints where applicable

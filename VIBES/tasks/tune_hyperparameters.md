@@ -1,0 +1,26 @@
+# Tune hyperparameters for speed
+
+## Goal
+Given a `<project_id>:<algo>` pair, iteratively adjust the variant's hyperparameters so `train/ep_rew_mean` reaches the environment reward threshold in the least wall-clock time possible while keeping evaluation stochastic.
+
+## Inputs
+- Target config identifier (e.g., `CartPole-v1:ppo`)
+- Corresponding YAML at `config/environments/<project_id>.yaml`
+- Existing run history under `runs/`
+
+## Steps
+1. Examine the baseline: open the environment YAML and note key knobs (rollout size, learning rates, entropy/vf coefficients, evaluation cadence, early-stop flags) plus the configured or inferred `reward_threshold`.
+2. Launch a reference run: record the start time and run `python train.py <project_id>:<algo> -q`. Do not flip `eval_deterministic`; stochastic evaluation must remain enabled (default).
+3. Supervise training: watch stdout or `runs/@latest-run/run.log` for throughput (`train/fps`, `train/time_elapsed`) and when `train/ep_rew_mean` crosses the threshold. Let early stopping finish naturally if configured.
+4. Inspect artifacts: after the run, review `runs/@latest-run/metrics.csv` (or the per-run folder) to pinpoint the epoch/timestep and elapsed seconds where `train/ep_rew_mean ≥ reward_threshold`. Capture companion stats like `train/total_timesteps`, `train/fps`, and `train/rollout_fps` to understand bottlenecks.
+5. Choose adjustments: based on the metrics (consult `config/metrics.yaml` for definitions), decide which hyperparameters to tweak—e.g., `n_envs`, `n_steps`, `batch_size`, learning-rate schedule, `clip_range`, `ent_coef`, normalization toggles, or evaluation cadence. Target changes that plausibly cut the time-to-threshold without destabilizing training.
+6. Edit the variant block inside `config/environments/<project_id>.yaml` to apply the minimal set of adjustments. Keep unrelated settings untouched.
+7. Re-run training with the updated config, repeating Steps 3–6. Track each iteration’s wall-clock to threshold and note regressions.
+8. When satisfied, summarize which hyperparameters moved, the fastest observed time-to-threshold, and any remaining ideas or risks (e.g., diminishing returns, throughput limits).
+
+## Notes
+- Use `runs/@latest-run` for quick access, but archive the exact run id when comparing experiments.
+- If early stopping never triggers, consider raising `max_timesteps` slightly while balancing rollout size and learning rate to avoid wasted updates.
+- Refer to `config/metrics.yaml` for metric meaning and healthy ranges before reacting to spikes or plateaus.
+- Favor few, well-justified edits per iteration so you can attribute gains to specific changes.
+- Keep evaluation stochastic; avoid any config changes (including CLI flags) that set `eval_deterministic=True` or otherwise force deterministic policies.

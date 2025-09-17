@@ -48,24 +48,18 @@ def main():
     agent = build_agent(config)
     agent.learn()
 
+    # TODO: move to callback
     # Post-training: ensure a W&B workspace exists for this project and print its URL
-    try:
-        from utils.wandb_workspace import create_or_update_workspace_for_current_run
-
-        url = create_or_update_workspace_for_current_run(overwrite=True, select_current_run_only=True)
-        if url:
-            print(f"W&B Workspace: {url}")
-    except ImportError:
-        # Soft dependency missing; skip silently
-        pass
-    except Exception as e:
-        # Non-fatal: print a brief note and continue
-        print(f"Warning: could not create/update W&B workspace ({e})")
+    from utils.wandb_workspace import create_or_update_workspace_for_current_run
+    url = create_or_update_workspace_for_current_run(overwrite=True, select_current_run_only=True)
+    if url: print(f"W&B Workspace: {url}")
 
     # Intentionally avoid calling wandb.finish() to suppress W&B's
     # end-of-run console summary ("Run history", etc.). The run
     # will be finalized implicitly on process exit.
+    wandb.finish()
 
+    # TODO: move to callback
     # Print the training completion message last, after any W&B output
     try:
         # Prefer the value captured by the agent at fit end

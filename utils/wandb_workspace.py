@@ -121,7 +121,12 @@ def _build_sections(key_metrics: Optional[Sequence[str]], *, key_panels_per_sect
     from wandb_workspaces import workspaces as ws
     import wandb_workspaces.reports.v2.interface as wr
 
-    default_x = "Step"
+    # Panels should align to the same step metric Lightning/W&B use for this
+    # project. Runs log with `define_metric("*", step_metric="train/total_timesteps")`
+    # (see BaseAgent._build_trainer_loggers__wandb). Using the same key here ensures
+    # workspace charts immediately render instead of showing "No metrics yet" when
+    # the default "Step" column is missing from history tables.
+    default_x = "train/total_timesteps"
     sections = []
     runset = _maybe_build_runset(wr, entity=entity, project=project, run_id=select_run_id)
 

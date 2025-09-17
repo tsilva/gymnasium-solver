@@ -384,22 +384,39 @@ class BaseAgent(pl.LightningModule):
     
     def _build_trainer_loggers__wandb(self):
         import wandb
-        from dataclasses import asdict
         from pytorch_lightning.loggers import WandbLogger
 
-        # Create the wandb logger, attach to the existing run if present
-        project_name = self.config.project_id if self.config.project_id else BaseAgent._sanitize_name(self.config.env_id)
-        experiment_name = f"{self.config.algo_id}-{self.config.seed}"
-        wandb_logger = WandbLogger(
-            project=project_name,
-            name=experiment_name,
-            log_model=True,
-            config=asdict(self.config),
-        ) if wandb.run is None else WandbLogger(log_model=True)
+        wandb_run = self._ensure_wandb_run()
+        run_id = getattr(wandb_run, "id", None)
+        desired_name = f"{self.config.algo_id}-{run_id}" if run_id else None
+
+        if wandb_run is None:
+            from dataclasses import asdict
+            project_name = self.config.project_id if self.config.project_id else BaseAgent._sanitize_name(self.config.env_id)
+            fallback_name = desired_name or f"{self.config.algo_id}-{self.config.seed}"
+            wandb_logger = WandbLogger(
+                project=project_name,
+                name=fallback_name,
+                log_model=True,
+                config=asdict(self.config),
+            )
+            wandb_run = wandb_logger.experiment
+            run_id = getattr(wandb_run, "id", None)
+            if run_id:
+                desired_name = f"{self.config.algo_id}-{run_id}"
+        else:
+            wandb_logger = WandbLogger(log_model=True)
+            wandb_run = wandb_logger.experiment
+
+        if desired_name and getattr(wandb_run, "name", None) != desired_name:
+            wandb_run.name = desired_name
 
         # Define the common step metric
-        wandb_run = wandb_logger.experiment
         wandb_run.define_metric("*", step_metric="train/total_timesteps")
+
+        # TODO: review if log_freq makes sense, perhaps tie to eval_freq?
+        # Log model gradients to wandb
+        wandb_logger.watch(self.policy_model, log="gradients", log_freq=100)
 
         return wandb_logger
     
@@ -572,12 +589,20 @@ class BaseAgent(pl.LightningModule):
 
     def _ensure_wandb_run(self):
         import wandb
-        if hasattr(wandb, "run") and wandb.run is not None: return wandb.run
-        from dataclasses import asdict
-        project_name = self.config.project_id if self.config.project_id else sanitize_name(self.config.env_id)
-        experiment_name = f"{self.config.algo_id}-{self.config.seed}"
-        wandb.init(project=project_name, name=experiment_name, config=asdict(self.config))
-        return wandb.run
+        run = getattr(wandb, "run", None)
+        if run is None:
+            from dataclasses import asdict
+            project_name = self.config.project_id if self.config.project_id else sanitize_name(self.config.env_id)
+            run = wandb.init(project=project_name, config=asdict(self.config))
+        if run is None: return None
+
+        run_id = getattr(run, "id", None)
+        if run_id:
+            desired_name = f"{self.config.algo_id}-{run_id}"
+            current_name = getattr(run, "name", None)
+            if current_name != desired_name:
+                run.name = desired_name
+        return run
 
     def _log_hyperparameters(self):
         metrics = {

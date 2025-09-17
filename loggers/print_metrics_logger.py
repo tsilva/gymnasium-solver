@@ -335,12 +335,37 @@ class PrintMetricsLogger(LightningLoggerBase):
                 
         formatted: Dict[str, Dict[str, str]] = {}
         charts: Dict[str, Dict[str, str]] = {}
+        alerts: Dict[str, Dict[str, str]] = {}
         val_candidates: List[str] = []
+        alert_candidates: List[str] = []
         key_candidates: List[str] = [ns + "/" for ns in ns_order]
+        active_alerts = self.metrics_monitor.get_active_alerts()
+
+        def _normalize_alert(msg: str) -> str:
+            stripped = msg.strip()
+            if stripped.startswith("⚠️"):
+                stripped = stripped.replace("⚠️", "", 1).lstrip()
+            return stripped
+
+        alert_text_by_key: Dict[str, str] = {}
+        for full_key, messages in active_alerts.items():
+            normalized = [_normalize_alert(m) for m in messages if m]
+            if normalized:
+                alert_text_by_key[full_key] = " | ".join(normalized)
+        for full_key, message in self._active_bounds_alerts.items():
+            normalized = _normalize_alert(message)
+            if not normalized:
+                continue
+            if full_key in alert_text_by_key and alert_text_by_key[full_key]:
+                alert_text_by_key[full_key] = f"{alert_text_by_key[full_key]} | {normalized}"
+            else:
+                alert_text_by_key[full_key] = normalized
+
         for ns in ns_order:
             subdict = grouped[ns]
             f_sub: Dict[str, str] = {}
             c_sub: Dict[str, str] = {}
+            a_sub: Dict[str, str] = {}
             for sub, v in subdict.items():
                 # Add the subkey to the key candidates
                 key_candidates.append(sub)
@@ -374,31 +399,36 @@ class PrintMetricsLogger(LightningLoggerBase):
                 # Add the subkey to the formatted data
                 f_sub[sub] = val_disp
                 c_sub[sub] = chart
+                alert_plain = alert_text_by_key.get(full_key, "")
+                if alert_plain:
+                    alert_disp = _ansi(f"⚠️  {alert_plain}", "yellow", enable=self.color)
+                else:
+                    alert_disp = ""
+                a_sub[sub] = alert_disp
                 val_candidates.append(_strip_ansi(val_disp))
+                if alert_disp:
+                    alert_candidates.append(_strip_ansi(alert_disp))
             formatted[ns] = f_sub
             charts[ns] = c_sub
+            alerts[ns] = a_sub
 
         # Add the border to the lines
         indent = self.indent
         key_width = max((len(k) for k in key_candidates), default=0)
         val_width = max((len(v) for v in val_candidates), default=0)
         val_width = max(val_width, self.min_val_width)
+        alert_width = max((len(v) for v in alert_candidates), default=0)
 
         # Ensure the total table width does not shrink below min_table_width.
         # New layout with a fixed-width charts column:
-        # "| " + (indent + key_width) + " | " + (val_width) + " | " + (chart_col_width) + " |"
-        static_cols = 2 + (indent + key_width) + 3 + 3 + 2
-        if static_cols + val_width + self.chart_col_width < self.min_table_width:
-            val_width = self.min_table_width - static_cols - self.chart_col_width
+        # "| " + (indent + key_width) + " | " + (val_width) + " | " + (chart_col_width) + " | " + (alert_col_width) + " |"
+        static_cols = 2 + (indent + key_width) + 3 + 3 + 3 + 2
+        if static_cols + val_width + self.chart_col_width + alert_width < self.min_table_width:
+            val_width = self.min_table_width - static_cols - self.chart_col_width - alert_width
 
-        border_len = 2 + (indent + key_width) + 3 + val_width + 3 + self.chart_col_width + 2
+        border_len = 2 + (indent + key_width) + 3 + val_width + 3 + self.chart_col_width + 3 + alert_width + 2
         border = "-" * border_len
         lines: List[str] = []
-
-        active_alerts = self.metrics_monitor.get_active_alerts()
-        for metric_key in sorted(active_alerts.keys()):
-            for msg in active_alerts[metric_key]:
-                lines.append(_ansi(f"⚠️  {msg}", "yellow", enable=self.color))
         lines.append("")  # spacer
 
         for ns in ns_order:
@@ -407,7 +437,13 @@ class PrintMetricsLogger(LightningLoggerBase):
 
             # Add the header to the lines
             header = ns + "/"
-            header_line = f"| {header:<{indent + key_width}} | {'':>{val_width}} | {'':<{self.chart_col_width}} |"
+            alert_header = "alert" if alert_width else ""
+            header_line = (
+                f"| {header:<{indent + key_width}} | "
+                f"{'':>{val_width}} | "
+                f"{'':<{self.chart_col_width}} | "
+                f"{alert_header:<{alert_width}} |"
+            )
             lines.append(_ansi(header_line, "bold", enable=self.color))
 
             # Add the subkeys to the lines
@@ -419,13 +455,17 @@ class PrintMetricsLogger(LightningLoggerBase):
                 # Truncate or pad chart to fixed width
                 chart_clean = chart_str[: self.chart_col_width]
                 chart_padded = f"{chart_clean:<{self.chart_col_width}}"
+                alert_str = alerts.get(ns, {}).get(sub, "")
+                alert_len = len(_strip_ansi(alert_str))
+                alert_padding = alert_width - alert_len
+                alert_padded = alert_str + (" " * alert_padding if alert_padding > 0 else "")
 
                 # Add the key to the lines
                 key_cell = f"{sub:<{key_width}}"
                 highlight = False
                 row_bg_color = None
                 full_key = f"{ns}/{sub}" if sub else ns
-                alert_active = full_key in active_alerts
+                alert_active = full_key in active_alerts or full_key in self._active_bounds_alerts
 
                 # Priority 1: trigger-based highlight (yellow) if alert is active for this key
                 if alert_active:
@@ -460,7 +500,10 @@ class PrintMetricsLogger(LightningLoggerBase):
                     row_bg_color = self.highlight_row_bg_color
 
                 # Add the row to the lines
-                row = f"| {' ' * indent}{key_cell} | {val_padded} | {chart_padded} |"
+                row = (
+                    f"| {' ' * indent}{key_cell} | {val_padded} | {chart_padded} | "
+                    f"{alert_padded} |"
+                )
 
                 # Add the highlight to the row
                 if highlight:

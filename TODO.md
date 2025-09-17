@@ -11,12 +11,9 @@ Cleanup Targets
   - utils/models.py:30 & utils/models.py:174 – the MLP builders rely on type lists, numpy dtypes, and squeeze hacks with TODOs complaining about them; actor-critic
   shape handling needs a principled cleanup.
 
-  No code changes were made.
-
   Next steps: 1) break the inspector helpers into smaller modules/functions (env/model loading, UI layout, event handlers). 2) carve RolloutCollector into focused
   components (buffer, metrics, evaluation) before touching the TODO-labeled logic.
 
-- FEAT: report alerts in metrics table (yellow rows)
 - FEAT: report alerts to wandb
 - FEAT: use codex-cli to debug runs
 - Ensure metrics summary is sorted with metrics.yaml priorities

@@ -29,7 +29,7 @@ ppo_optimal:
   # Bandit-friendly dynamics
   gamma: 0.0              # 1-step bandit → no bootstrapping
   optimizer: adam         # AdamW not needed here
-  policy_lr: 0.01         # bigger, faster updates
+  policy_lr: 0.02         # larger step size to escape tiny KL updates faster
   clip_range: 0.2       # allow larger policy moves
 
   # Bigger low-variance batches
@@ -39,10 +39,10 @@ ppo_optimal:
   n_epochs: 8             # a few strong passes per batch
 
   # Stabilizers
-  ent_coef: lin_0.02          # explore early; small but nonzero
+  ent_coef: 0.0           # exploit once gradients identify the best arm; initial randomness still explores
   vf_coef: 0.3           # tiny baseline to cut variance
   max_grad_norm: 1.0
 
   # Evaluation
   eval_freq_epochs: 10
-  eval_episodes: 200
+  eval_episodes: 100      # match base variant to keep stochastic eval variance high

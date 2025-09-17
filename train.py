@@ -53,11 +53,12 @@ def main():
     from utils.wandb_workspace import create_or_update_workspace_for_current_run
     url = create_or_update_workspace_for_current_run(overwrite=True, select_current_run_only=True)
     if url: print(f"W&B Workspace: {url}")
-
+    
+    # TODO: remove finish and check if it still works
     # Intentionally avoid calling wandb.finish() to suppress W&B's
     # end-of-run console summary ("Run history", etc.). The run
     # will be finalized implicitly on process exit.
-    wandb.finish()
+    #wandb.finish()
 
     # TODO: move to callback
     # Print the training completion message last, after any W&B output

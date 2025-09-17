@@ -7,6 +7,7 @@ This repository allows autonomous and assisted agents to make changes and answer
 - Agent helper docs now live under `VIBES/`, with task playbooks in `VIBES/tasks/`.
 - Predefined tasks live in `VIBES/tasks/`; `run task: <name>` looks for a matching markdown file (e.g., `run task: find separation of concerns` loads `VIBES/tasks/separation_of_concerns_audit.md`).
 - Any prompt that begins with `!RUN_TASK: <name>` always refers to a single markdown file in `VIBES/tasks/`. Normalize `<name>` (lowercase, spaces → underscores, strip punctuation) to locate the file and execute every instruction it contains.
+- When you execute a `!RUN_TASK` and the user later confirms the task succeeded, record any process improvements learned during that run in the corresponding `VIBES/tasks/<task>.md` file so future runs benefit.
 
 ### Decision hierarchy
 - **Safety first**: Security, privacy, and data integrity rules override all other instructions.

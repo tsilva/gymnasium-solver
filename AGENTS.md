@@ -6,6 +6,7 @@ This repository allows autonomous and assisted agents to make changes and answer
 - Before starting any task, read `INTERNALS.md` and `README.md` end-to-end to ensure up-to-date context.
 - Agent helper docs now live under `VIBES/`, with task playbooks in `VIBES/tasks/`.
 - Predefined tasks live in `VIBES/tasks/`; `run task: <name>` looks for a matching markdown file (e.g., `run task: find separation of concerns` loads `VIBES/tasks/find_separation_of_concerns_violations.md`).
+- Any prompt that begins with `TASK: <name>` always refers to a single markdown file in `VIBES/tasks/`. Normalize `<name>` (lowercase, spaces → underscores, strip punctuation) to locate the file and execute every instruction it contains.
 
 ### Decision hierarchy
 - **Safety first**: Security, privacy, and data integrity rules override all other instructions.

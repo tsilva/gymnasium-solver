@@ -10,23 +10,7 @@ from pathlib import Path
 from utils.environment import build_env_from_config
 from utils.rollouts import RolloutCollector
 from utils.run import Run
-import torch
-from utils.policy_factory import build_policy_from_env_and_config
-
-def load_policy_model(ckpt_path: Path, env, config):
-    # Build policy model
-    policy_model = build_policy_from_env_and_config(env, config)
-
-    # Load checkpoint into policy model
-    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-    state_dict = ckpt["model_state_dict"]
-    policy_model.load_state_dict(state_dict)
-
-    # Set to evaluation mode
-    policy_model.eval()
-
-    # Return policy model
-    return policy_model
+from utils.policy_factory import load_policy_model_from_checkpoint
 
 def main():
     # Parse command line arguments
@@ -55,7 +39,7 @@ def main():
     )
 
     # Load configuration 
-    policy_model = load_policy_model(ckpt_path, env, config)    
+    policy_model, _ = load_policy_model_from_checkpoint(ckpt_path, env, config)
 
     # Initialize rollout collector with training-time hyperparams
     collector = RolloutCollector(

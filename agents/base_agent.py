@@ -1,7 +1,5 @@
 import pytorch_lightning as pl
 
-from torch.nn.utils import clip_grad_norm_
-
 from utils.io import write_json
 from utils.timings_tracker import TimingsTracker
 from utils.metrics_recorder import MetricsRecorder
@@ -62,9 +60,8 @@ class BaseAgent(pl.LightningModule):
         pass
 
     def build_envs(self):
-        self.build_env("train")
-        self.build_env("val")
-        self.build_env("test")
+        for stage in ["train", "val", "test"]:
+            self.build_env(stage)
 
     def build_env(self, stage: str, **kwargs):
         from utils.environment import build_env_from_config
@@ -110,9 +107,8 @@ class BaseAgent(pl.LightningModule):
         return self._envs[stage]
 
     def build_rollout_collectors(self):
-        self.build_rollout_collector("train")
-        self.build_rollout_collector("val")
-        self.build_rollout_collector("test")
+        for stage in ["train", "val", "test"]:
+            self.build_rollout_collector(stage)
 
     def build_rollout_collector(self, stage: str):
         from utils.rollouts import RolloutCollector
@@ -157,7 +153,8 @@ class BaseAgent(pl.LightningModule):
         assert self.current_epoch == 0, "train_dataloader should only be called once at the start of training"
 
         # Collect the first rollout
-        self._trajectories = self.get_rollout_collector("train").collect()
+        train_collector = self.get_rollout_collector("train")
+        self._trajectories = train_collector.collect()
 
         # Build efficient index-collate dataloader backed by 
         # MultiPassRandomSampler (allows showing same data N times 
@@ -166,7 +163,7 @@ class BaseAgent(pl.LightningModule):
         from utils.random import get_global_torch_generator
         generator = get_global_torch_generator(self.config.seed)
         return build_index_collate_loader_from_collector(
-            collector=self.get_rollout_collector("train"),
+            collector=train_collector,
             trajectories_getter=lambda: self._trajectories,
             batch_size=self.config.batch_size,
             num_passes=self.config.n_epochs,
@@ -179,7 +176,8 @@ class BaseAgent(pl.LightningModule):
 
     def on_train_epoch_start(self):
         # Start epoch timer
-        total_timesteps = self.get_rollout_collector("train").get_metrics()["total_timesteps"]
+        train_collector = self.get_rollout_collector("train")
+        total_timesteps = train_collector.get_metrics()["total_timesteps"]
         self.timings.restart("on_train_epoch_start", steps=total_timesteps)
 
         # Log hyperparameters that are tunable in real-time
@@ -190,7 +188,8 @@ class BaseAgent(pl.LightningModule):
         # collected an initial rollout to bootstrap the dataloader. From epoch 1
         # onward, collect once per epoch to ensure constant timestep growth.
         if int(self.current_epoch) > 0:
-            self._trajectories = self.get_rollout_collector("train").collect()
+            train_collector = self.get_rollout_collector("train")
+            self._trajectories = train_collector.collect()
 
     def training_step(self, batch, batch_idx):
         # Calculate batch losses
@@ -237,7 +236,8 @@ class BaseAgent(pl.LightningModule):
         video_path = str(checkpoint_dir / f"epoch={self.current_epoch:02d}.mp4")
         with val_env.recorder(video_path, record_video=record_video):
             # Evaluate using the validation rollout collector to avoid redundant helpers
-            val_metrics = self.get_rollout_collector("val").evaluate_episodes(
+            val_collector = self.get_rollout_collector("val")
+            val_metrics = val_collector.evaluate_episodes(
                 n_episodes=self.config.eval_episodes,
                 deterministic=self.config.eval_deterministic,
             )
@@ -269,7 +269,8 @@ class BaseAgent(pl.LightningModule):
         checkpoint_dir = self.run_manager.ensure_path(CHECKPOINT_PATH)
         video_path = checkpoint_dir / "final.mp4"
         with test_env.recorder(str(video_path), record_video=True):
-            final_metrics = self.get_rollout_collector("test").evaluate_episodes(
+            test_collector = self.get_rollout_collector("test")
+            final_metrics = test_collector.evaluate_episodes(
                 n_episodes=1,
                 deterministic=self.config.eval_deterministic,
             )
@@ -380,6 +381,7 @@ class BaseAgent(pl.LightningModule):
                 "Warning: Detected non-RGB observations with CNN policy. "
                 "For non-image inputs, consider using MLP for better performance."
             )
+            
     # -------------------------
     # Pre-prompt guidance helpers
     # -------------------------
@@ -411,9 +413,8 @@ class BaseAgent(pl.LightningModule):
         csv_logger = CsvLightningLogger(csv_path=str(csv_path))
         return csv_logger
     
-    def _build_trainer_loggers__print(self): # Prepare a terminal print logger that formats metrics from the unified logging stream
+    def _build_trainer_loggers__print(self):
         from loggers.print_metrics_logger import PrintMetricsLogger
-        # Rely on PrintMetricsLogger defaults sourced from utils.metrics_config
         print_logger = PrintMetricsLogger(metrics_monitor=self.metrics_monitor)
         return print_logger
         
@@ -535,7 +536,8 @@ class BaseAgent(pl.LightningModule):
     def _calc_training_progress(self):
         max_timesteps = self.config.max_timesteps
         if max_timesteps is None: return 0.0
-        total_steps = self.get_rollout_collector("train").total_steps
+        train_collector = self.get_rollout_collector("train")
+        total_steps = train_collector.total_steps
         training_progress = max(0.0, min(total_steps / max_timesteps, 1.0))
         return training_progress
 

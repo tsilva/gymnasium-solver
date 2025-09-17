@@ -32,123 +32,8 @@ FRAME_LABEL_STACK = "Frame (processed stack)"
 PLAY_ICON = "\u25B6"  # ▶
 PAUSE_ICON = "\u23F8"  # ⏸
 
-# Local minimal loaders to avoid depending on play.py helpers
-def _load_config_from_run(run_id: str):
-    """Load a run's config.json as an attribute-access object.
-
-    Falls back from runs/<id>/config.json to runs/<id>/configs/config.json.
-    Returns a simple object exposing keys as attributes, with sensible defaults.
-    """
-    import json
-    from types import SimpleNamespace
-
-    run_dir = _resolve_run_dir(run_id)
-    cfg_path = run_dir / "config.json"
-    if not cfg_path.exists():
-        alt = run_dir / "configs" / "config.json"
-        if alt.exists():
-            cfg_path = alt
-    if not cfg_path.exists():
-        raise FileNotFoundError(f"config.json not found under run: {run_dir}")
-    with open(cfg_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    # Provide defaults to fields the inspector uses
-    defaults = {
-        "env_wrappers": [],
-        "normalize_obs": False,
-        "frame_stack": 1,
-        "obs_type": "rgb",
-        "env_kwargs": {},
-        "grayscale_obs": False,
-        "resize_obs": False,
-        "policy_kwargs": {},
-        "policy": "mlp",
-        "hidden_dims": (64, 64),
-        "activation": "relu",
-        "gamma": 0.99,
-        "gae_lambda": 0.95,
-    }
-    for k, v in defaults.items():
-        data.setdefault(k, v)
-
-    return SimpleNamespace(**data)
-
-
-def _load_model(ckpt_path: Path, config):
-    """Build a policy model from config/env shapes and load weights from a checkpoint.
-
-    Creates a short-lived helper env to infer input/output shapes, then closes it
-    before the long-lived env used by the inspector is constructed (important for
-    Retro environments that do not allow multiple emulator instances per process).
-    """
-    from utils.environment import build_env_from_config
-    from utils.policy_factory import build_actor_critic_policy, build_policy
-
-    # Helper env strictly for shape inference
-    helper_env = build_env_from_config(
-        config,
-        config.env_id,
-        seed=getattr(config, "seed", 42),
-        env_wrappers=getattr(config, "env_wrappers", []),
-        norm_obs=getattr(config, "normalize_obs", False),
-        n_envs=1,
-        frame_stack=getattr(config, "frame_stack", 1),
-        obs_type=getattr(config, "obs_type", None),
-        render_mode=None,
-        env_kwargs=getattr(config, "env_kwargs", {}),
-        subproc=False,
-        grayscale_obs=getattr(config, "grayscale_obs", False),
-        resize_obs=getattr(config, "resize_obs", False),
-    )
-
-    try:
-        input_shape = helper_env.observation_space
-        output_shape = helper_env.action_space
-        if not input_shape or not output_shape:
-            raise RuntimeError("Could not infer model input/output shapes from environment")
-
-        policy_type = str(getattr(config, "policy", "mlp")).lower()
-        hidden_dims = getattr(config, "hidden_dims", (64, 64))
-        if isinstance(hidden_dims, int):
-            hidden_dims = (hidden_dims,)
-        activation = str(getattr(config, "activation", "relu"))
-        policy_kwargs = getattr(config, "policy_kwargs", {}) or {}
-
-        algo_id = str(getattr(config, "algo_id", "")).lower()
-        if algo_id == "ppo":
-            model = build_actor_critic_policy(
-                policy_type,
-                input_shape=input_shape,
-                output_shape=output_shape,
-                hidden_dims=hidden_dims,
-                activation=activation,
-                **policy_kwargs,
-            )
-        else:
-            # Policy-only (REINFORCE and other stateless baselines)
-            model = build_policy(
-                policy_type,
-                input_shape=input_shape,
-                output_shape=output_shape,
-                hidden_dims=hidden_dims,
-                activation=activation,
-                **policy_kwargs,
-            )
-
-        # Load weights
-        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-        state_dict = ckpt.get("model_state_dict") if isinstance(ckpt, dict) else None
-        if not isinstance(state_dict, dict):
-            raise RuntimeError(f"Invalid checkpoint: missing model_state_dict in {ckpt_path}")
-        model.load_state_dict(state_dict)
-        model.eval()
-        return model
-    finally:
-        try:
-            helper_env.close()
-        except Exception:
-            pass
+from utils.policy_factory import load_policy_model_from_checkpoint
+from utils.run import Run, list_run_ids
 from utils.rollouts import (
     compute_batched_mc_returns,
     compute_batched_gae_advantages_and_returns,
@@ -204,76 +89,6 @@ def compute_gae_advantages_and_returns(
         gae_lambda=float(gae_lambda),
     )
     return adv_b.reshape(-1), ret_b.reshape(-1)
-
-
-RUNS_DIR = Path("runs")
-
-
-def _resolve_run_dir(run_id: str) -> Path:
-    if run_id in {"latest-run", "@latest-run"}:
-        # Prefer new '@latest-run' symlink, fallback to legacy name
-        latest = RUNS_DIR / "@latest-run"
-        if not latest.is_symlink():
-            legacy = RUNS_DIR / "latest-run"
-            latest = legacy if legacy.is_symlink() else latest
-        if latest.is_symlink():
-            run_id = str(latest.readlink())
-        else:
-            raise FileNotFoundError("@latest-run symlink not found")
-    run_path = RUNS_DIR / run_id
-    if not run_path.exists():
-        raise FileNotFoundError(f"Run directory not found: {run_path}")
-    return run_path
-
-
-def list_runs() -> List[str]:
-    if not RUNS_DIR.exists():
-        return []
-    runs = [
-        p.name
-        for p in RUNS_DIR.iterdir()
-        if p.is_dir() and p.name not in {"@latest-run", "latest-run"}
-    ]
-    runs.sort(key=lambda n: (RUNS_DIR / n).stat().st_mtime, reverse=True)
-    return runs
-
-
-def list_checkpoints_for_run(run_id: str) -> Tuple[List[str], Dict[str, Path], str | None]:
-    run_dir = _resolve_run_dir(run_id)
-    ckpt_dir = run_dir / "checkpoints"
-    if not ckpt_dir.exists():
-        return [], {}, None
-
-    files = list(ckpt_dir.glob("*.ckpt"))
-    if not files:
-        return [], {}, None
-
-    def score(p: Path):
-        name = p.name
-        # Prefer best, then last, then everything else by recency.
-        if name in {"best.ckpt", "best_checkpoint.ckpt"}:  # support legacy and new names
-            return (0, -p.stat().st_mtime)
-        if name in {"last.ckpt", "last_checkpoint.ckpt"}:
-            return (1, -p.stat().st_mtime)
-        return (2, -p.stat().st_mtime)
-
-    files.sort(key=score)
-
-    labels: List[str] = []
-    mapping: Dict[str, Path] = {}
-    for p in files:
-        label = p.name
-        if label in {"best.ckpt", "best_checkpoint.ckpt"}:
-            label = f"{label} (best)"
-        elif label in {"last.ckpt", "last_checkpoint.ckpt"}:
-            label = f"{label} (last)"
-        labels.append(label)
-        mapping[label] = p
-
-    default_label = next((l for l in labels if l.startswith("best")), labels[0])
-    return labels, mapping, default_label
-
-
 # Note: Action labels/spec/fps fallbacks are provided by VecInfoWrapper methods.
 # Avoid duplicating YAML parsing here; call env.get_action_labels(), env.get_spec(), etc.
 
@@ -297,29 +112,25 @@ def run_episode(
     deterministic: bool = False,
     max_steps: int = 1000,
 ) -> Tuple[List[np.ndarray], List[np.ndarray] | None, List[np.ndarray] | None, List[Dict[str, Any]], Dict[str, Any]]:
-    config = _load_config_from_run(run_id)
+    run = Run.from_id(run_id)
+    config = run.load_config()
 
-    ckpt_labels, mapping, default_label = list_checkpoints_for_run(run_id)
-    if not ckpt_labels:
+    labels, _, default_label = run.checkpoint_choices()
+    if not labels:
         raise FileNotFoundError("No checkpoints found for this run")
     selected_label = checkpoint_label or default_label
-    ckpt_path = mapping[selected_label]
-
-    # Important for Retro environments: load the model (which briefly creates
-    # a helper env to infer shapes) BEFORE creating the main episode env.
-    # Retro does not allow multiple emulator instances per process, so this
-    # ordering ensures the helper env is closed prior to constructing the
-    # long-lived env used for stepping/recording here.
-    policy_model = _load_model(ckpt_path, config)
-    policy_model.eval()
+    ckpt_path = run.resolve_checkpoint(selected_label)
 
     from utils.environment import build_env_from_config
+
     env = build_env_from_config(
         config,
         n_envs=1,
         render_mode="rgb_array",
-        subproc=False
+        subproc=False,
     )
+
+    policy_model, ckpt_data = load_policy_model_from_checkpoint(ckpt_path, env, config)
 
     # Load action labels from vec env wrapper if available
     action_labels: List[str] | None = None
@@ -366,8 +177,8 @@ def run_episode(
     # Collect checkpoint metrics (from sidecar json or checkpoint contents)
     checkpoint_metrics_summary: Dict[str, Any] = {}
     import json
-    ckpt_data = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-    if isinstance(ckpt_data, dict):
+    raw_ckpt = ckpt_data
+    if isinstance(raw_ckpt, dict):
         for k in [
             "epoch",
             "global_step",
@@ -379,11 +190,12 @@ def run_episode(
             "is_threshold",
             "threshold_value",
         ]:
-            if k in ckpt_data:
-                checkpoint_metrics_summary[k] = ckpt_data.get(k)
+            if k in raw_ckpt:
+                checkpoint_metrics_summary[k] = raw_ckpt.get(k)
         # Merge metrics dict if present
-        if isinstance(ckpt_data.get("metrics"), dict):
-            checkpoint_metrics_summary["metrics"] = ckpt_data.get("metrics")
+        metrics_dict = raw_ckpt.get("metrics") if isinstance(raw_ckpt, dict) else None
+        if isinstance(metrics_dict, dict):
+            checkpoint_metrics_summary["metrics"] = metrics_dict
     # Sidecar JSON
     sidecar = ckpt_path.with_suffix(".json")
     if sidecar.exists():
@@ -696,13 +508,16 @@ def run_episode(
 def build_ui(default_run_id: str = "@latest-run"):
     import gradio as gr
 
-    runs = list_runs()
+    runs = list_run_ids()
     initial_run = default_run_id if default_run_id else (runs[0] if runs else "@latest-run")
-    labels, mapping, default_label = (
-        list_checkpoints_for_run(initial_run)
-        if (runs or initial_run in {"@latest-run", "latest-run"})
-        else ([], {}, None)
-    )
+
+    def _checkpoint_choices_for_run(run_identifier: str):
+        try:
+            return Run.from_id(run_identifier).checkpoint_choices()
+        except FileNotFoundError:
+            return [], {}, None
+
+    labels, _, default_label = _checkpoint_choices_for_run(initial_run)
 
     with gr.Blocks(theme=gr.themes.Base()) as demo:
         gr.Markdown("""
@@ -822,7 +637,7 @@ def build_ui(default_run_id: str = "@latest-run"):
                     ckpt_metrics_json = gr.JSON(label="Checkpoint metrics")
 
         def _on_run_change(selected_run: str):
-            labels, _, default_label = list_checkpoints_for_run(selected_run)
+            labels, _, default_label = _checkpoint_choices_for_run(selected_run)
             return gr.Dropdown(choices=labels, value=default_label)
 
         run_id.change(_on_run_change, inputs=run_id, outputs=checkpoint)

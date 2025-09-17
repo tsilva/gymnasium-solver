@@ -7,6 +7,9 @@ compatible shapes; this module focuses on model instantiation and wiring.
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import torch
 import torch.nn as nn
 
 from .models import (
@@ -54,4 +57,28 @@ def build_policy_from_env_and_config(env, config):
         activation=config.activation,
         **config.policy_kwargs,
     )
-    
+
+
+def load_policy_model_from_checkpoint(
+    ckpt_path: Path,
+    env,
+    config,
+):
+    """Instantiate a policy for the given env/config and load weights from checkpoint."""
+
+    policy_model = build_policy_from_env_and_config(env, config)
+    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+
+    state_dict = None
+    if isinstance(ckpt, dict):
+        maybe = ckpt.get("model_state_dict")
+        if isinstance(maybe, dict):
+            state_dict = maybe
+        elif all(isinstance(k, str) for k in ckpt.keys()):
+            state_dict = ckpt  # fallback: treat whole dict as state dict
+    if not isinstance(state_dict, dict):
+        raise RuntimeError(f"Invalid checkpoint: missing model_state_dict in {ckpt_path}")
+
+    policy_model.load_state_dict(state_dict)
+    policy_model.eval()
+    return policy_model, ckpt

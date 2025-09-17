@@ -140,8 +140,9 @@ class PrintMetricsLogger(LightningLoggerBase):
 
         # Extract alert keys (alerts/<metric_key>) and update trigger alerts
         alert_items: Dict[str, Any] = {k: v for k, v in simple.items() if k.startswith("alerts/")}
+        # Always update trigger alerts so absence of alert keys clears old state
+        self._update_trigger_alerts(alert_items)
         if alert_items:
-            self._update_trigger_alerts(alert_items)
             # Remove alerts from normal metrics so they don't render as a table section
             for k in list(alert_items.keys()):
                 simple.pop(k, None)
@@ -459,8 +460,10 @@ class PrintMetricsLogger(LightningLoggerBase):
                 highlight = False
                 row_bg_color = None
                 full_key = f"{ns}/{sub}" if sub else ns
+                alert_active = full_key in self._active_trigger_alerts
+
                 # Priority 1: trigger-based highlight (yellow) if alert is active for this key
-                if full_key in self._active_trigger_alerts:
+                if alert_active:
                     highlight = True
                     row_bg_color = self.highlight_bounds_bg_color
 
@@ -496,7 +499,15 @@ class PrintMetricsLogger(LightningLoggerBase):
 
                 # Add the highlight to the row
                 if highlight:
-                    row = _apply_bg(row, row_bg_color or self.highlight_row_bg_color, enable=self.color)
+                    enable_bg = self.color or alert_active
+                    row = _apply_bg(
+                        row,
+                        row_bg_color or self.highlight_row_bg_color,
+                        enable=enable_bg,
+                    )
+                    if alert_active and not enable_bg:
+                        # Provide a visible textual cue when colors are fully disabled
+                        row = f"⚠️  {row}"
                 lines.append(row)
 
         # Add the border to the lines

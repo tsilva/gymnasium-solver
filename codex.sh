@@ -1,1 +1,1 @@
-codex -m gpt-5 -c model_reasoning_effort="high"
+codex -m gpt-5-codex -c model_reasoning_effort="high"

@@ -29,13 +29,13 @@ ppo_optimal:
   # Bandit-friendly dynamics
   gamma: 0.0              # 1-step bandit → no bootstrapping
   optimizer: adam         # AdamW not needed here
-  policy_lr: 0.02         # larger step size to escape tiny KL updates faster
-  clip_range: 0.2       # allow larger policy moves
+  policy_lr: 0.03         # bigger step size to accelerate policy shifts
+  clip_range: 0.3       # widen PPO trust region for larger moves
 
   # Bigger low-variance batches
   n_envs: 64
   n_steps: 64             # 64 * 64 = 4096 samples/rollout
-  batch_size: 4096
+  batch_size: 1024        # multiple mini-batches per rollout for larger policy moves
   n_epochs: 8             # a few strong passes per batch
 
   # Stabilizers

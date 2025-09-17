@@ -24,3 +24,5 @@ Given a `<project_id>:<algo>` pair, iteratively adjust the variant's hyperparame
 - Refer to `config/metrics.yaml` for metric meaning and healthy ranges before reacting to spikes or plateaus.
 - Favor few, well-justified edits per iteration so you can attribute gains to specific changes.
 - Keep evaluation stochastic; avoid any config changes (including CLI flags) that set `eval_deterministic=True` or otherwise force deterministic policies.
+- Track `train/approx_kl` and `train/clip_fraction`; if they stay near zero after several epochs the policy updates are too small—raise `policy_lr`, widen `clip_range`, or reduce the effective batch size (smaller `batch_size`, fewer minibatches) to speed convergence while watching the KL warning bounds.
+- When early stopping keys off evaluation rewards, calibrate `eval_episodes`: higher counts stabilize metrics, but once learning is stable, lowering the episode count can surface threshold crossings sooner without altering stochastic evaluation.

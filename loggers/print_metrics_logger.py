@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, Optional, Callable, List, Iterable, Tuple
+from dataclasses import dataclass
 
 import os
 import sys
@@ -18,6 +19,24 @@ from utils.formatting import (
     number_to_string
 )
 from utils.metrics_monitor import MetricsMonitor
+
+
+@dataclass
+class _PreparedSections:
+    formatted: Dict[str, Dict[str, str]]
+    charts: Dict[str, Dict[str, str]]
+    alerts: Dict[str, Dict[str, str]]
+    key_candidates: List[str]
+    val_candidates: List[str]
+    alert_candidates: List[str]
+
+
+@dataclass
+class _TableDimensions:
+    key_width: int
+    val_width: int
+    alert_width: int
+    border: str
 
 class PrintMetricsLogger(LightningLoggerBase):
     """
@@ -72,6 +91,7 @@ class PrintMetricsLogger(LightningLoggerBase):
         # Fixed-width charts column; default matches sparkline width
         self.chart_col_width = int(chart_col_width or 0) if chart_col_width is not None else 0
         self.key_priority = list(key_priority or list(default_key_priority))
+        self._key_priority_map: Dict[str, int] = {key: idx for idx, key in enumerate(self.key_priority)}
         self.previous_metrics: Dict[str, Any] = {}
 
         # Highlight/bounds from metrics.yaml
@@ -298,230 +318,260 @@ class PrintMetricsLogger(LightningLoggerBase):
                 os.system('cls' if os.name == 'nt' else 'clear')
             print(text, file=self.stream)
 
-    # TODO: clean this up
-    def _render_table(self, data: Dict[str, Any]) -> None:
-        def _get_sort_key(namespace: str, subkey: str, key_priority: Iterable[str]) -> Tuple[int, object]:
-            """Compute a stable sort key honoring an explicit key priority list.
+    def _sort_key(self, namespace: str, subkey: str) -> Tuple[int, object]:
+        """Sorting helper that honours an explicit key priority list."""
+        full_key = f"{namespace}/{subkey}" if subkey else namespace
+        priority_index = self._key_priority_map.get(full_key)
+        if priority_index is not None:
+            return (0, priority_index)
+        return (1, subkey.lower())
 
-            Returns (0, priority_index) when full_key in key_priority; otherwise
-            (1, subkey.lower()) so prioritized keys appear first in given order.
-            """
-            full_key = f"{namespace}/{subkey}" if subkey else namespace
-            try:
-                priority_index = list(key_priority).index(full_key)
-                return (0, priority_index)
-            except ValueError:
-                return (1, subkey.lower())
-
-        # In case we don't have any data, return
-        if not data: return
-
-        self._update_history(data)
-
-        grouped = _group_by_namespace(data)
-
+    def _namespace_order(self, grouped: Dict[str, Dict[str, Any]]) -> List[str]:
         ns_names = list(grouped.keys())
         if self.fixed_section_order:
             pref = [ns for ns in self.fixed_section_order if ns in grouped]
-            rest = sorted([ns for ns in ns_names if ns not in self.fixed_section_order])
-            ns_order = pref + rest
-        else:
-            ns_order = sorted(ns_names)
-        for ns in ns_order:
-            if self.sort_keys_within_section:
-                grouped[ns] = dict(
-                    sorted(grouped[ns].items(), key=lambda kv: _get_sort_key(ns, kv[0], self.key_priority))
-                )
-                
-        formatted: Dict[str, Dict[str, str]] = {}
-        charts: Dict[str, Dict[str, str]] = {}
-        alerts: Dict[str, Dict[str, str]] = {}
-        val_candidates: List[str] = []
-        alert_candidates: List[str] = []
-        key_candidates: List[str] = [ns + "/" for ns in ns_order]
-        active_alerts = self.metrics_monitor.get_active_alerts()
+            rest = sorted(ns for ns in ns_names if ns not in self.fixed_section_order)
+            return pref + rest
+        return sorted(ns_names)
 
-        def _normalize_alert(msg: str) -> str:
-            stripped = msg.strip()
-            if stripped.startswith("⚠️"):
-                stripped = stripped.replace("⚠️", "", 1).lstrip()
-            return stripped
+    @staticmethod
+    def _normalize_alert_message(message: str) -> str:
+        stripped = message.strip()
+        if stripped.startswith("⚠️"):
+            stripped = stripped.replace("⚠️", "", 1).lstrip()
+        return stripped
 
+    def _collect_alert_texts(self, active_alerts: Dict[str, Iterable[str]]) -> Dict[str, str]:
         alert_text_by_key: Dict[str, str] = {}
         for full_key, messages in active_alerts.items():
-            normalized = [_normalize_alert(m) for m in messages if m]
+            normalized = [self._normalize_alert_message(m) for m in messages if m]
             if normalized:
                 alert_text_by_key[full_key] = " | ".join(normalized)
         for full_key, message in self._active_bounds_alerts.items():
-            normalized = _normalize_alert(message)
+            normalized = self._normalize_alert_message(message)
             if not normalized:
                 continue
             if full_key in alert_text_by_key and alert_text_by_key[full_key]:
                 alert_text_by_key[full_key] = f"{alert_text_by_key[full_key]} | {normalized}"
             else:
                 alert_text_by_key[full_key] = normalized
+        return alert_text_by_key
+
+    def _prepare_sections(
+        self,
+        grouped: Dict[str, Dict[str, Any]],
+        ns_order: List[str],
+        alert_text_by_key: Dict[str, str],
+    ) -> _PreparedSections:
+        formatted: Dict[str, Dict[str, str]] = {}
+        charts: Dict[str, Dict[str, str]] = {}
+        alerts: Dict[str, Dict[str, str]] = {}
+        key_candidates: List[str] = [f"{ns}/" for ns in ns_order]
+        val_candidates: List[str] = []
+        alert_candidates: List[str] = []
 
         for ns in ns_order:
-            subdict = grouped[ns]
-            f_sub: Dict[str, str] = {}
-            c_sub: Dict[str, str] = {}
-            a_sub: Dict[str, str] = {}
-            for sub, v in subdict.items():
-                # Add the subkey to the key candidates
+            subdict = grouped.get(ns, {})
+            if not subdict:
+                continue
+
+            formatted_sub: Dict[str, str] = {}
+            charts_sub: Dict[str, str] = {}
+            alerts_sub: Dict[str, str] = {}
+
+            for sub, value in subdict.items():
                 key_candidates.append(sub)
                 full_key = f"{ns}/{sub}" if sub else ns
                 precision = self.metric_precision_map.get(sub, 2)
 
-                # Format the value
-                val_str = number_to_string(
-                    v,
-                    precision=precision,
-                    humanize=True,
-                )
-
-                # Add the highlight to the value
+                val_str = number_to_string(value, precision=precision, humanize=True)
                 if sub in self.highlight_value_bold_for_set:
                     val_str = _ansi(val_str, "bold", enable=self.color)
 
-                # Add the delta to the value
-                delta_str, color_name = self._delta_for_key(ns, sub, v)
+                delta_str, color_name = self._delta_for_key(ns, sub, value)
                 if delta_str:
                     delta_disp = _ansi(delta_str, color_name, enable=self.color)
                     val_disp = f"{val_str} {delta_disp}"
                 else:
                     val_disp = val_str
 
-                # Prepare a sparkline chart separately (fixed-width column)
-                chart = ""
-                if self.show_sparklines and is_number(v):
-                    chart = self._spark_for_key(full_key, self.sparkline_width)
+                chart_disp = ""
+                if self.show_sparklines and is_number(value):
+                    chart_disp = self._spark_for_key(full_key, self.sparkline_width)
 
-                # Add the subkey to the formatted data
-                f_sub[sub] = val_disp
-                c_sub[sub] = chart
                 alert_plain = alert_text_by_key.get(full_key, "")
                 if alert_plain:
                     alert_disp = _ansi(f"⚠️  {alert_plain}", "yellow", enable=self.color)
                 else:
                     alert_disp = ""
-                a_sub[sub] = alert_disp
+
+                formatted_sub[sub] = val_disp
+                charts_sub[sub] = chart_disp
+                alerts_sub[sub] = alert_disp
+
                 val_candidates.append(_strip_ansi(val_disp))
                 if alert_disp:
                     alert_candidates.append(_strip_ansi(alert_disp))
-            formatted[ns] = f_sub
-            charts[ns] = c_sub
-            alerts[ns] = a_sub
 
-        # Add the border to the lines
-        indent = self.indent
-        key_width = max((len(k) for k in key_candidates), default=0)
-        val_width = max((len(v) for v in val_candidates), default=0)
+            if formatted_sub:
+                formatted[ns] = formatted_sub
+                charts[ns] = charts_sub
+                alerts[ns] = alerts_sub
+
+        return _PreparedSections(
+            formatted=formatted,
+            charts=charts,
+            alerts=alerts,
+            key_candidates=key_candidates,
+            val_candidates=val_candidates,
+            alert_candidates=alert_candidates,
+        )
+
+    def _compute_dimensions(self, prepared: _PreparedSections) -> _TableDimensions:
+        key_width = max((len(k) for k in prepared.key_candidates), default=0)
+        val_width = max((len(v) for v in prepared.val_candidates), default=0)
         val_width = max(val_width, self.min_val_width)
-        alert_width = max((len(v) for v in alert_candidates), default=0)
+        alert_width = max((len(v) for v in prepared.alert_candidates), default=0)
 
-        # Ensure the total table width does not shrink below min_table_width.
-        # New layout with a fixed-width charts column:
-        # "| " + (indent + key_width) + " | " + (val_width) + " | " + (chart_col_width) + " | " + (alert_col_width) + " |"
-        static_cols = 2 + (indent + key_width) + 3 + 3 + 3 + 2
-        if static_cols + val_width + self.chart_col_width + alert_width < self.min_table_width:
-            val_width = self.min_table_width - static_cols - self.chart_col_width - alert_width
+        def _sample_row(width: int) -> str:
+            return (
+                f"| {' ' * (self.indent + key_width)} | "
+                f"{' ' * width} | "
+                f"{' ' * self.chart_col_width} | "
+                f"{' ' * alert_width} |"
+            )
 
-        border_len = 2 + (indent + key_width) + 3 + val_width + 3 + self.chart_col_width + 3 + alert_width + 2
-        border = "-" * border_len
-        lines: List[str] = []
-        lines.append("")  # spacer
+        sample = _sample_row(val_width)
+        if len(sample) < self.min_table_width:
+            val_width += self.min_table_width - len(sample)
+            sample = _sample_row(val_width)
+
+        border = "-" * len(sample)
+        return _TableDimensions(
+            key_width=key_width,
+            val_width=val_width,
+            alert_width=alert_width,
+            border=border,
+        )
+
+    def _resolve_row_highlight(
+        self,
+        namespace: str,
+        subkey: str,
+        raw_value: Any,
+        key_cell: str,
+        alert_active: bool,
+    ) -> Tuple[str, bool, Optional[str]]:
+        highlight = False
+        row_bg_color: Optional[str] = None
+        full_key = f"{namespace}/{subkey}" if subkey else namespace
+
+        if alert_active:
+            highlight = True
+            row_bg_color = self.highlight_bounds_bg_color
+
+        if not highlight:
+            bounds = self.metric_bounds_map.get(full_key) or self.metric_bounds_map.get(subkey)
+            if bounds and is_number(raw_value):
+                vnum = float(raw_value)
+                below = ("min" in bounds) and (vnum < float(bounds["min"]))
+                above = ("max" in bounds) and (vnum > float(bounds["max"]))
+                if below or above:
+                    highlight = True
+                    row_bg_color = self.highlight_bounds_bg_color
+
+        if not highlight and subkey in self.highlight_row_for_set:
+            if self.highlight_row_bold:
+                key_cell = _ansi(key_cell, "bold", enable=self.color)
+            highlight = True
+            row_bg_color = self.highlight_row_bg_color
+
+        return key_cell, highlight, row_bg_color
+
+    def _compose_lines(
+        self,
+        grouped: Dict[str, Dict[str, Any]],
+        ns_order: List[str],
+        prepared: _PreparedSections,
+        dims: _TableDimensions,
+        active_alerts: Dict[str, Iterable[str]],
+    ) -> List[str]:
+        lines: List[str] = [""]
+        key_width = dims.key_width
+        val_width = dims.val_width
+        alert_width = dims.alert_width
 
         for ns in ns_order:
-            # Skip if the namespace is not in the formatted data
-            if not formatted.get(ns): continue
+            namespace_formatted = prepared.formatted.get(ns)
+            if not namespace_formatted:
+                continue
 
-            # Add the header to the lines
-            header = ns + "/"
+            header = f"{ns}/"
             alert_header = "alert" if alert_width else ""
             header_line = (
-                f"| {header:<{indent + key_width}} | "
+                f"| {header:<{self.indent + key_width}} | "
                 f"{'':>{val_width}} | "
                 f"{'':<{self.chart_col_width}} | "
                 f"{alert_header:<{alert_width}} |"
             )
             lines.append(_ansi(header_line, "bold", enable=self.color))
 
-            # Add the subkeys to the lines
-            for sub, val in formatted[ns].items():
-                val_display_len = len(_strip_ansi(val))
-                val_padding = val_width - val_display_len
-                val_padded = (" " * val_padding + val) if val_padding > 0 else val
-                chart_str = charts.get(ns, {}).get(sub, "")
-                # Truncate or pad chart to fixed width
-                chart_clean = chart_str[: self.chart_col_width]
+            for sub, val in namespace_formatted.items():
+                raw_val = grouped.get(ns, {}).get(sub)
+                val_len = len(_strip_ansi(val))
+                val_padded = (" " * (val_width - val_len) + val) if val_width > val_len else val
+
+                chart_disp = prepared.charts.get(ns, {}).get(sub, "")
+                chart_clean = chart_disp[: self.chart_col_width]
                 chart_padded = f"{chart_clean:<{self.chart_col_width}}"
-                alert_str = alerts.get(ns, {}).get(sub, "")
-                alert_len = len(_strip_ansi(alert_str))
+
+                alert_disp = prepared.alerts.get(ns, {}).get(sub, "")
+                alert_len = len(_strip_ansi(alert_disp))
                 alert_padding = alert_width - alert_len
-                alert_padded = alert_str + (" " * alert_padding if alert_padding > 0 else "")
+                if alert_padding > 0:
+                    alert_padded = alert_disp + (" " * alert_padding)
+                else:
+                    alert_padded = alert_disp
 
-                # Add the key to the lines
-                key_cell = f"{sub:<{key_width}}"
-                highlight = False
-                row_bg_color = None
                 full_key = f"{ns}/{sub}" if sub else ns
-                alert_active = full_key in active_alerts or full_key in self._active_bounds_alerts
+                alert_active = (full_key in active_alerts) or (full_key in self._active_bounds_alerts)
+                key_cell = f"{sub:<{key_width}}"
+                key_cell, highlight, row_bg_color = self._resolve_row_highlight(ns, sub, raw_val, key_cell, alert_active)
 
-                # Priority 1: trigger-based highlight (yellow) if alert is active for this key
-                if alert_active:
-                    highlight = True
-                    row_bg_color = self.highlight_bounds_bg_color
-
-                # Priority 2: bounds-based highlight (yellow); allow bare-name lookup
-                bounds = self.metric_bounds_map.get(full_key) or self.metric_bounds_map.get(sub)
-                if not highlight and bounds:
-                    raw_val = grouped.get(ns, {}).get(sub)
-
-                    # Skip if the value is not a number
-                    if is_number(raw_val):
-                        vnum = float(raw_val)
-
-                        # Check if the value is below or above the bounds
-                        below = ("min" in bounds) and (vnum < float(bounds["min"]))
-                        above = ("max" in bounds) and (vnum > float(bounds["max"]))
-                        if below or above:
-                            # Set the highlight to true
-                            highlight = True
-                            row_bg_color = self.highlight_bounds_bg_color
-                            
-                # Priority 3: configured row highlight (blue)
-                # Set the highlight to true if the subkey is in the highlight row for set
-                if not highlight and sub in self.highlight_row_for_set:
-                    if self.highlight_row_bold:
-                        key_cell = _ansi(key_cell, "bold", enable=self.color)
-
-                    # Set the highlight to true
-                    highlight = True
-                    row_bg_color = self.highlight_row_bg_color
-
-                # Add the row to the lines
                 row = (
-                    f"| {' ' * indent}{key_cell} | {val_padded} | {chart_padded} | "
-                    f"{alert_padded} |"
+                    f"| {' ' * self.indent}{key_cell} | {val_padded} | {chart_padded} | {alert_padded} |"
                 )
 
-                # Add the highlight to the row
                 if highlight:
                     enable_bg = self.color or alert_active
-                    row = _apply_bg(
-                        row,
-                        row_bg_color or self.highlight_row_bg_color,
-                        enable=enable_bg,
-                    )
+                    row = _apply_bg(row, row_bg_color or self.highlight_row_bg_color, enable=enable_bg)
                     if alert_active and not enable_bg:
-                        # Provide a visible textual cue when colors are fully disabled
                         row = f"⚠️  {row}"
                 lines.append(row)
 
-        # Add the border to the lines
-        lines.append(border)
-        self._render_lines(lines)
+        lines.append(dims.border)
+        return lines
 
-        # Set the previous metrics
+    def _render_table(self, data: Dict[str, Any]) -> None:
+        if not data:
+            return
+
+        self._update_history(data)
+
+        grouped = _group_by_namespace(data)
+        ns_order = self._namespace_order(grouped)
+        if self.sort_keys_within_section:
+            for ns in ns_order:
+                grouped[ns] = dict(
+                    sorted(grouped[ns].items(), key=lambda kv: self._sort_key(ns, kv[0]))
+                )
+
+        active_alerts = self.metrics_monitor.get_active_alerts()
+        alert_text_by_key = self._collect_alert_texts(active_alerts)
+        prepared = self._prepare_sections(grouped, ns_order, alert_text_by_key)
+        dims = self._compute_dimensions(prepared)
+        lines = self._compose_lines(grouped, ns_order, prepared, dims, active_alerts)
+
+        self._render_lines(lines)
         self._prev = dict(data)
         self._last_height = len(lines)

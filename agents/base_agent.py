@@ -9,6 +9,7 @@ from utils.formatting import sanitize_name
 from utils.metrics_monitor import MetricsMonitor
 
 CHECKPOINT_PATH = "checkpoints/"
+STAGES = ["train", "val", "test"]
 
 class BaseAgent(pl.LightningModule):
     
@@ -26,6 +27,10 @@ class BaseAgent(pl.LightningModule):
         # multiple models with different optimizers (eg: independent policy and value models)
         self.automatic_optimization = False
 
+        # Initialize timing tracker for training 
+        # loop performance measurements
+        self.timings = TimingsTracker()
+
         # Metrics recorder aggregates per-epoch metrics (train/eval) and maintains
         # a step-aware numeric history for terminal summaries.
         self.metrics_recorder = MetricsRecorder(step_key="train/total_timesteps")
@@ -33,21 +38,17 @@ class BaseAgent(pl.LightningModule):
         # Create metrics monitor registry (eg: used for metric alerts)
         self.metrics_monitor = MetricsMonitor(self.metrics_recorder)
 
-        # Initialize timing tracker for training 
-        # loop performance measurements
-        self.timings = TimingsTracker()
-
         # TODO: take another look at RunManager vs Run concerns
         self.run_manager = None
 
         # Build the environments
-        self.build_envs()
+        for stage in STAGES: self.build_env(stage)
 
         # Build the models (requires environments for shape inference)
         self.build_models()
 
         # Build the rollout collectors (requires models and environments)
-        self.build_rollout_collectors()
+        for stage in STAGES: self.build_rollout_collector(stage)
 
     @must_implement
     def build_models(self):
@@ -59,10 +60,6 @@ class BaseAgent(pl.LightningModule):
         # Subclasses must implement this to compute the losses for each training steps' batch
         pass
 
-    def build_envs(self):
-        for stage in ["train", "val", "test"]:
-            self.build_env(stage)
-
     def build_env(self, stage: str, **kwargs):
         from utils.environment import build_env_from_config
 
@@ -73,6 +70,7 @@ class BaseAgent(pl.LightningModule):
             "train": {
                 "seed": self.config.seed,
             },
+            # Record truncated video of first env (requires subproc=False, render_mode="rgb_array")
             "val": {
                 "seed": self.config.seed + 1000,
                 "subproc": False,
@@ -83,6 +81,7 @@ class BaseAgent(pl.LightningModule):
                     "record_env_idx": 0,
                 },
             },
+            # Record truncated video of first env (requires subproc=False, render_mode="rgb_array")
             "test": {
                 "seed": self.config.seed + 2000,
                 "subproc": False,
@@ -105,10 +104,6 @@ class BaseAgent(pl.LightningModule):
             
     def get_env(self, stage: str):
         return self._envs[stage]
-
-    def build_rollout_collectors(self):
-        for stage in ["train", "val", "test"]:
-            self.build_rollout_collector(stage)
 
     def build_rollout_collector(self, stage: str):
         from utils.rollouts import RolloutCollector

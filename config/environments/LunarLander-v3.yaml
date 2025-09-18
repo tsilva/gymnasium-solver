@@ -29,13 +29,13 @@ reinforce_baseline2:
 ppo:
   algo_id: ppo
   n_envs: 12
-  max_timesteps: 1e6
+  max_timesteps: 5e6
   n_steps: 512
   batch_size: 256
   gae_lambda: 0.98
   gamma: 0.999
   n_epochs: 4
-  policy_lr: 0.0005
+  policy_lr: 9e-4
   ent_coef: 0.01
   #eval_warmup_epochs: 100
   eval_freq_epochs: 5

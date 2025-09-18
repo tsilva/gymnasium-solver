@@ -1,5 +1,6 @@
 """Checkpoint management utilities for model saving and resuming training."""
 
+import time
 from pathlib import Path
 from typing import Any
 
@@ -43,17 +44,20 @@ class ModelCheckpointCallback(pl.Callback):
         agent: pl.LightningModule,
         epoch: int,
         metrics: dict[str, Any],
-    ) -> Path:
-        """Save a checkpoint with all necessary information, including a metrics snapshot."""
+    ) -> tuple[Path, float]:
+        """Save a checkpoint and return the path plus wall-clock save duration."""
+        start_ns = time.perf_counter_ns()
+
         checkpoint_path = self.checkpoint_dir / f"epoch={epoch:02d}.ckpt"
         checkpoint_data = {"model_state_dict": agent.policy_model.state_dict()}
         torch.save(checkpoint_data, checkpoint_path)
 
         # Save the metrics snapshot at this epoch
-        json_path = checkpoint_path.with_suffix(".json")    
+        json_path = checkpoint_path.with_suffix(".json")
         write_json(json_path, metrics)
 
-        return checkpoint_path
+        duration_s = max((time.perf_counter_ns() - start_ns) / 1e9, 0.0)
+        return checkpoint_path, duration_s
 
     def _sync_symlinks_for_epoch(self, epoch: int, tag: str) -> None:
         """Create/update symlinks like `<tag>.<ext>` for all files of a given epoch.
@@ -92,10 +96,34 @@ class ModelCheckpointCallback(pl.Callback):
         # Always save a checkpoint for this eval epoch
         epoch = pl_module.current_epoch
         metrics = only_scalar_values(trainer.logged_metrics)
-        self._save_checkpoint(pl_module, epoch, metrics)
+        _, save_duration_s = self._save_checkpoint(pl_module, epoch, metrics)
 
         # Track "last" epoch seen with a checkpoint
         self.last_epoch = epoch
+
+        # Log checkpoint timing metrics to the unified logging stream (e.g., W&B)
+        checkpoint_metrics: dict[str, float] = {"checkpoint/save_duration_s": save_duration_s}
+
+        timings = getattr(pl_module, "timings", None)
+        if timings is not None:
+            try:
+                elapsed = float(timings.seconds_since("on_fit_start"))
+            except (KeyError, AttributeError):
+                elapsed = None
+            if elapsed is not None:
+                checkpoint_metrics["checkpoint/time_elapsed_s"] = elapsed
+
+        if checkpoint_metrics:
+            recorder = getattr(pl_module, "metrics_recorder", None)
+            if recorder is not None:
+                recorder.record("val", checkpoint_metrics)
+
+            pl_module.log_dict(
+                {f"val/{k}": v for k, v in checkpoint_metrics.items()},
+                logger=True,
+                on_step=False,
+                on_epoch=True,
+            )
 
         # Determine if this is the best checkpoint so far
         metric_value = trainer.logged_metrics[self.metric]

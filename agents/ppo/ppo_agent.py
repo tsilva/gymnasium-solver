@@ -14,7 +14,16 @@ class PPOAgent(BaseAgent):
     
     def __init__(self, config):
         super().__init__(config)
-        
+
+        extra_nan_metrics = (
+            "train/policy_loss",
+            "train/value_loss",
+            "train/clip_fraction",
+            "train/approx_kl",
+            "train/explained_variance",
+        )
+        self._common_metric_alerts.extend_nan_watchlist(extra_nan_metrics)
+
         # Set initial clip range (starts as config value, then updated by scheduler)
         self.clip_range = config.clip_range
 
@@ -147,4 +156,3 @@ class PPOAgent(BaseAgent):
         
         # Register PPO-specific metric monitors as a bundle
         self.metrics_monitor.register_bundle(PPOAlerts(self))
-

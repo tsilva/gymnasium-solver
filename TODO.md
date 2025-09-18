@@ -1,11 +1,12 @@
+- FEAT: make metric triggers smooth value by averaging over last N epochs
+- FEAT: percentage of epochs oob
+- BUG: play first episode reward = 0
 - TODO: dont tie eval_freq_epochs and eval_warmup_epochs to epochs because ppos updates for many epochs
 - FEAT: prefix metrics (eg: time/epoch, time/step, etc., env/obs_mean, env/obs_std, env/)
 - FEAT: make boot and shutdown times faster
 - FEAT: wandb bug may caused by lack of .finish()
 - BUG: can't inspect bandit training
 - BUG: W&B workspace redundant print
-- FEAT: make time elapsed metric be highlited as blue
-- FEAT: log model gradients to wandb
 - FEAT: add autotuner worklflow (check wandb logs)
 - FEAT: use codex-cli to debug runs
 - FEAT: add normalization support 
@@ -17,7 +18,6 @@
 - FEAT: add kl early stopping to PPO
 - BUG: fix cnn policy training, in separate file create env and inspect traversing layers
 - FEAT: overridable rollout collector factory methods instead of extra parameter method
-- FEAT: log checkpoint times to wandb
 - BUG: reset optimizer on learning rate changes
 - TODO: beat lunarlander with ppo and only then with reinforce (trun[cate episode lengths for faster training)
 - REFACTOR: consider changing eval_freq to timesteps so it doesnt depend on n_updates

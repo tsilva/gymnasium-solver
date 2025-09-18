@@ -3,6 +3,7 @@ import pytorch_lightning as pl
 from utils.decorators import must_implement
 from utils.formatting import sanitize_name
 from utils.io import write_json
+from utils.metric_bundles import CommonMetricAlerts
 from utils.metrics_monitor import MetricsMonitor
 from utils.metrics_recorder import MetricsRecorder
 from utils.timings_tracker import TimingsTracker
@@ -36,6 +37,8 @@ class BaseAgent(pl.LightningModule):
 
         # Create metrics monitor registry (eg: used for metric alerts)
         self.metrics_monitor = MetricsMonitor(self.metrics_recorder)
+        self._common_metric_alerts = CommonMetricAlerts()
+        self.metrics_monitor.register_bundle(self._common_metric_alerts)
 
         # TODO: take another look at RunManager vs Run concerns
         self.run_manager = None

@@ -3,6 +3,7 @@ import sys
 import types
 from pathlib import Path
 from pathlib import Path as _P
+from typing import Any
 
 import pytest
 
@@ -99,3 +100,63 @@ def test_best_mp4_symlink_points_to_epoch_video(tmp_path: Path):
     else:
         # copy fallback
         assert best_link.read_bytes() == epoch_video.read_bytes()
+
+
+class _RecorderStub:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, float]]] = []
+
+    def record(self, namespace: str, metrics: dict[str, float]) -> None:
+        self.calls.append((namespace, dict(metrics)))
+
+
+class _TimingsStub:
+    def __init__(self, elapsed: float) -> None:
+        self.elapsed = elapsed
+
+    def seconds_since(self, marker: str) -> float:
+        if marker != "on_fit_start":
+            raise KeyError(marker)
+        return self.elapsed
+
+
+class _LoggingAgent:
+    def __init__(self, tmp: Path, elapsed: float) -> None:
+        self.current_epoch = 3
+        self.policy_model = type("_Policy", (), {"state_dict": lambda self: {}})()
+        self.metrics_recorder = _RecorderStub()
+        self.timings = _TimingsStub(elapsed)
+        self._log_calls: list[tuple[dict[str, float], dict[str, Any]]] = []
+
+        # lightning callback expects checkpoint directory to be pre-created via cb init
+        tmp.mkdir(parents=True, exist_ok=True)
+
+    def log_dict(self, data, **kwargs):  # type: ignore[override]
+        self._log_calls.append((dict(data), dict(kwargs)))
+
+
+@pytest.mark.unit
+def test_checkpoint_logs_timing_metrics(tmp_path: Path):
+    ckpt_dir = tmp_path / "with_timing" / "checkpoints"
+    cb = ModelCheckpointCallback(checkpoint_dir=str(ckpt_dir), metric="val/ep_rew_mean")
+    trainer = _Trainer()
+    trainer.logged_metrics["val/ep_rew_mean"] = 2.5
+
+    elapsed = 12.5
+    agent = _LoggingAgent(ckpt_dir, elapsed=elapsed)
+
+    cb.on_validation_epoch_end(trainer, agent)
+
+    # Confirm checkpoint timing metrics were logged via Lightning
+    logged_dicts = [payload for payload, _ in agent._log_calls]
+    matching = [d for d in logged_dicts if "val/checkpoint/save_duration_s" in d]
+    assert matching, "checkpoint timing metrics were not logged"
+    entry = matching[-1]
+    assert entry["val/checkpoint/time_elapsed_s"] == pytest.approx(elapsed)
+    assert entry["val/checkpoint/save_duration_s"] >= 0.0
+
+    # Ensure metrics recorder received the checkpoint metrics namespace
+    assert any(
+        ns == "val" and "checkpoint/save_duration_s" in metrics
+        for ns, metrics in agent.metrics_recorder.calls
+    )

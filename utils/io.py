@@ -29,13 +29,14 @@ def write_json(
     path: PathLike,
     data: Any,
     *,
+    indent: int = 2,
     encoding: str = "utf-8",
     ensure_dirs: bool = True,
     **kwargs,
 ) -> None:
     p = _to_path(path)
     if ensure_dirs: p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("w", encoding=encoding) as f: json.dump(data, f, **kwargs)
+    with p.open("w", encoding=encoding) as f: json.dump(data, f, indent=indent, **kwargs)
 
 
 def read_yaml(path: PathLike, *, encoding: str = "utf-8") -> Any:

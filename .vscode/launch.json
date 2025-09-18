@@ -44,6 +44,18 @@
       ],
       "console": "integratedTerminal",
       "env": {}
+    },
+    {
+      "name": "Debug: train.py (LunarLander-v3:ppo)",
+      "type": "python",
+      "request": "launch",
+      "program": "train.py",
+      "args": [
+        "--config_id",
+        "LunarLander-v3:ppo"
+      ],
+      "console": "integratedTerminal",
+      "env": {}
     }
   ]
 }

@@ -14,7 +14,7 @@ Cleanup Targets
   Next steps: 1) break the inspector helpers into smaller modules/functions (env/model loading, UI layout, event handlers). 2) carve RolloutCollector into focused
   components (buffer, metrics, evaluation) before touching the TODO-labeled logic.
 
-- BUG: train on lunar-lander-v3, no videos being recorded on eval, no best/last checkpoints appearing
+- FEAT: count how many times each alert triggered, couple that with predefined recommendations on what to tune
 - FEAT: prefix metrics (eg: time/epoch, time/step, etc., env/obs_mean, env/obs_std, env/)
 - FEAT: make boot and shutdown times faster
 - FEAT: wandb bug may caused by lack of .finish()

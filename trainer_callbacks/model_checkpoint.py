@@ -108,7 +108,6 @@ class ModelCheckpointCallback(pl.Callback):
             # TODO: log best epoch instead
             print(f"New best model: epoch={epoch}; {self.metric}={float(metric_value):.4f}")
 
-    def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         """Handle training completion summary and ensure symlinks are consistent."""
         # Ensure `last.*` symlinks reflect the final checkpointed epoch
         if self.last_epoch is not None: self._sync_symlinks_for_epoch(self.last_epoch, tag="last")

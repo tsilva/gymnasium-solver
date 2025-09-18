@@ -37,7 +37,8 @@ ppo:
   n_epochs: 4
   policy_lr: 0.0005
   ent_coef: 0.01
-  eval_warmup_epochs: 100
+  #eval_warmup_epochs: 100
   eval_freq_epochs: 5
+  eval_recording_freq_epochs: 5
   policy_targets: "advantages"
   normalize_advantages: "batch"

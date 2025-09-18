@@ -6,7 +6,7 @@ Fast, practical reinforcement learning on Gymnasium. Train PPO/REINFORCE agents 
 This project is currently for self-education purposes only. I'm doing a lot of vibe coding: I quickly vibe-code features, then review the code and chisel out the AI slop. At any point the codebase may be ugly and buggy. Please don't assume it's a "real" project until I make the first release. From that point on, I'll start working with branches and a more stable workflow.
 
 ### ✨ Highlights
-- **Algorithms** 🧠: PPO, REINFORCE, Q-Learning
+- **Algorithms** 🧠: PPO, REINFORCE
 - **Config-first** ⚙️: concise YAML configs with inheritance and linear schedules (e.g., `lin_0.001`)
 - **Vectorized envs** ⚡: Dummy/Subproc, frame stacking, obs/reward normalization
 - **Atari-ready** 🕹️: ALE with `obs_type` rgb/ram/objects (via [Gymnasium](https://gymnasium.farama.org) and [OCAtari](https://github.com/Kautenja/oc-atari))
@@ -30,7 +30,7 @@ pip install -e .
 ```
 
 ### 🚀 Quickstart
-- **Train** 🏃 (pass config either positionally or via `--config_id`; defaults to `CartPole-v1:ppo` when omitted):
+- **Train** 🏃 (pass config either positionally or via `--config_id`; defaults to `Bandit-v0:ppo` when omitted):
 ```bash
 # Positional config (shorthand)
 python train.py CartPole-v1:ppo -q
@@ -40,7 +40,7 @@ python train.py CartPole-v1:reinforce -q
 python train.py --config_id "CartPole-v1:ppo" -q
 python train.py --config_id "CartPole-v1:reinforce" -q
 
-# Uses train.py default when --config_id is omitted
+# Uses train.py default (Bandit-v0:ppo) when --config_id is omitted
 python train.py -q
 ```
 - **Play a trained policy** 🎮 (auto-loads best/last checkpoint from a run):
@@ -74,8 +74,9 @@ ppo:
 ```
 
 Selection:
-- Programmatic (Python): `load_config("CartPole-v1_ppo")` or `load_config("CartPole-v1", "ppo")`; omitting a variant defaults to the first defined (prefers `ppo`, then `reinforce`).
-- CLI (train.py): pass config as positional `CartPole-v1:ppo` or flag `--config_id "CartPole-v1:ppo"` (colon, not underscore).
+- Programmatic (Python): `load_config("CartPole-v1", "ppo")`; pass the environment id and variant explicitly because the compact `"CartPole-v1_ppo"` form is no longer supported.
+- CLI (train.py): pass config as positional `CartPole-v1:ppo` or flag `--config_id "CartPole-v1:ppo"` (colon, not underscore). The CLI enforces providing a variant.
+Callers must always supply a variant; the loader no longer falls back to the first block in the YAML file.
 The loader remains compatible with the legacy multi-block format for a transitional period. When `project_id` is omitted in environment YAMLs, it is inferred from the file name.
 
 Key fields: `env_id`, `algo_id`, `n_envs`, `n_steps`, `batch_size`, `max_timesteps`, `policy` (`mlp|cnn`), `hidden_dims`, `obs_type` (`rgb|ram|objects` for ALE), `optimizer` (`adamw` default; supports `adam|adamw|sgd`).

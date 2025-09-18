@@ -102,6 +102,8 @@ class MetricsTableLogger(LightningLoggerBase):
         self.colors_enabled: bool = sys.stdout.isatty()
 
         self.better_when_increasing: Dict[str, bool] = {}
+
+
         self.group_keys_order: Tuple[str, ...] | None = ("train", "val")
         self.group_subkeys_order: bool = True
         self.use_ansi_inplace: bool = False
@@ -111,20 +113,16 @@ class MetricsTableLogger(LightningLoggerBase):
 
         # Highlight settings (bare metric subkeys)
         hl_config = metrics_config.highlight_config()
-        hl_value_bold_for = tuple(hl_config['value_bold_metrics'])
-        hl_row_for = tuple(hl_config['row_metrics'])
-        self.style_bold_metrics_set = frozenset(hl_value_bold_for)
-        self.highlight_row_for_set = frozenset(hl_row_for)
-        self.bgcolor_highlight: str = "bg_blue"
+        self.style_bold_metrics_set = frozenset(hl_config['value_bold_metrics'])
+        self.highlight_row_for_set = frozenset(hl_config['row_metrics'])
 
-        # Bounds-based highlighting
+        self.bgcolor_highlight: str = "bg_blue"
         self.bgcolor_alert: str = 'bg_yellow'
 
         # In-memory history for sparklines (per full metric key)
         self._prev: Optional[Dict[str, Any]] = None
         self._last_height: int = 0
         self._history: Dict[str, List[float]] = {}
-        self.show_sparklines: bool = True
         self.sparkline_width: int = 32
         self.sparkline_history_cap: int = 512
        

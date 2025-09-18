@@ -1,367 +1,108 @@
-### 
-# DISCLAIMER: originally from stable_baselines3/common/vec_env/vec_video_recorder.py
-###
-
-import os
-import os.path
 from contextlib import contextmanager
-from typing import Optional, Tuple
+from typing import Optional
 
-import numpy as np
-from gymnasium import error, logger
-from stable_baselines3.common.vec_env.base_vec_env import (
-    VecEnv,
-    VecEnvObs,
-    VecEnvStepReturn,
-    VecEnvWrapper,
-)
-from stable_baselines3.common.vec_env.dummy_vec_env import DummyVecEnv
-from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
+from gymnasium import Env, error
+from stable_baselines3.common.vec_env.base_vec_env import VecEnv, VecEnvWrapper
+
+from gym_wrappers.env_video_recorder import EnvVideoRecorder
 
 
 class VecVideoRecorder(VecEnvWrapper):
-    """
-    Wraps a VecEnv or VecEnvWrapper object to record rendered image as mp4 video.
-    It requires ffmpeg or avconv to be installed on the machine.
+    """Proxy VecEnv wrapper that delegates recording to EnvVideoRecorder instances."""
 
-    Note: for now it only allows to record one video and all videos
-    must have at least two frames.
-
-    The video recorder code was adapted from Gymnasium v1.0.
-
-    :param venv:
-    :param video_folder: Where to save videos
-    :param record_video_trigger: Function that defines when to start recording.
-                                        The function takes the current number of step,
-                                        and returns whether we should start recording or not.
-    :param video_length:  Length of recorded videos
-    :param name_prefix: Prefix to the video name
-    :param enable_overlay: Whether to add episode and step overlay text to frames
-    :param font_size: Size of the overlay text font
-    :param text_position: (x, y) position for the overlay text
-    :param text_color: RGB color tuple for the text
-    :param stroke_color: RGB color tuple for the text outline
-    :param stroke_width: Width of the text outline in pixels
-    :param record_env_idx: If set, record only this env index from a VecEnv (defaults to 0).
-                           When None, falls back to the default VecEnv tiled render of all envs.
-    """
-
-    def __init__(
-        self,
-        venv: VecEnv,
-        video_length: Optional[int] = 200,
-    record_env_idx: Optional[int] = 0,
-        # Text overlay options
-        enable_overlay: bool = True,
-        font_size: int = 12,
-        text_position: Tuple[int, int] = (6, 6),
-        text_color: Tuple[int, int, int] = (255, 255, 255),
-        stroke_color: Tuple[int, int, int] = (0, 0, 0),
-        stroke_width: int = 2,
-    ):
-        VecEnvWrapper.__init__(self, venv)
-
-        self.env = venv
-        # Temp variable to retrieve metadata
-        temp_env = venv
-
-        # Unwrap to retrieve metadata dict
-        # that will be used by gym recorder
-        while isinstance(temp_env, VecEnvWrapper):
-            temp_env = temp_env.venv
-
-        if isinstance(temp_env, DummyVecEnv) or isinstance(temp_env, SubprocVecEnv):
-            metadata = temp_env.get_attr("metadata")[0]
-        else:  # pragma: no cover # assume gym interface
-            metadata = temp_env.metadata
-
-        self.env.metadata = metadata
-        assert self.env.render_mode == "rgb_array", f"The render_mode must be 'rgb_array', not {self.env.render_mode}"
-
-        # Try env metadata, then fall back to VecInfoWrapper helper if present
-        fps = None
-        md = getattr(self.env, "metadata", None)
-        if isinstance(md, dict):
-            fps = md.get("render_fps")
-        if not isinstance(fps, (int, float)) and hasattr(venv, "get_render_fps"):
-            inferred = venv.get_render_fps()
-            if isinstance(inferred, int) and inferred > 0:
-                fps = inferred
-        if not isinstance(fps, (int, float)):
-            fps = 30
-        self.frames_per_sec = int(fps)
-
-        self.step_id = 0
-        self.video_length = video_length
+    def __init__(self, venv: VecEnv, record_env_idx: Optional[int] = 0):
+        super().__init__(venv)
         self.record_env_idx = record_env_idx
-        self.num_envs = self.env.num_envs   
-
         self.recording = False
-        self.recorded_frames: list[np.ndarray] = []
-        
-        # Episode and step tracking for overlay
-        self.current_episode = 0
-        self.current_step = 0
-        self.accumulated_reward = 0.0
-        
-        # Overlay configuration
-        self.enable_overlay = enable_overlay
-        self.font_size = font_size
-        self.text_position = text_position
-        self.text_color = text_color
-        self.stroke_color = stroke_color
-        self.stroke_width = stroke_width
-        self._font = None  # Will be initialized when needed
+        self.num_envs = venv.num_envs
 
-    def _resolve_env_index(self, length: int) -> int:
-        """Return a clamped env index for vector data, defaulting to env 0."""
-        idx_value = self.record_env_idx if self.record_env_idx is not None else 0
-        try:
-            idx = int(idx_value)
-        except (TypeError, ValueError):
+    # ------------------------------------------------------------------ helpers
+
+    def _resolve_env_index(self, idx_value: Optional[int], length: int) -> int:
+        if idx_value is None:
             idx = 0
+        else:
+            try:
+                idx = int(idx_value)
+            except (TypeError, ValueError):
+                idx = 0
         if length <= 0:
             return idx
         return max(0, min(idx, length - 1))
 
-    def _on_episode_finished(self) -> None:
-        """Reset counters when the tracked env completes an episode."""
-        self.current_step = 0
-        self.current_episode += 1
-        self.accumulated_reward = 0.0
+    def _unwrap_base_vec_env(self):
+        base = self.venv
+        while isinstance(base, VecEnvWrapper):
+            base = base.venv
+        return base
 
-    def _get_font(self):
-        """Get or create the font for text overlay."""
-        if self._font is None:
-            try:
-                from PIL import ImageFont
-                try:
-                    # Try to load a monospace font
-                    self._font = ImageFont.truetype("DejaVuSansMono.ttf", size=self.font_size)
-                except OSError:
-                    try:
-                        # Fallback to Arial or similar
-                        self._font = ImageFont.truetype("Arial.ttf", size=self.font_size)
-                    except OSError:
-                        # Use default font
-                        self._font = ImageFont.load_default()
-            except ImportError:
-                # PIL not available, overlay will be disabled
-                self.enable_overlay = False
-                self._font = None
-        return self._font
+    def _find_env_wrapper(self, env: Env, wrapper_class):
+        current = env
+        while isinstance(current, Env):
+            if isinstance(current, wrapper_class):
+                return current
+            if not hasattr(current, "env"):
+                break
+            current = current.env
+        return None
 
-    def _add_overlay_to_frame(self, frame: np.ndarray) -> np.ndarray:
-        """Add episode, step and reward overlay to the frame.
+    def _get_env_recorder(self, env_idx: Optional[int] = None) -> EnvVideoRecorder:
+        base = self._unwrap_base_vec_env()
+        envs = getattr(base, "envs", None)
+        if not isinstance(envs, list):
+            raise error.Error(
+                "VecVideoRecorder requires a DummyVecEnv-style base with direct env access"
+            )
+        idx = self._resolve_env_index(env_idx if env_idx is not None else self.record_env_idx, len(envs))
+        target_env = envs[idx]
+        recorder = self._find_env_wrapper(target_env, EnvVideoRecorder)
+        if recorder is None:
+            raise error.Error(
+                "EnvVideoRecorder not found in the base env wrapper chain. Did you enable record_video?"
+            )
+        return recorder
 
-        The overlay is rendered as small, vertically stacked, high-contrast text
-        anchored to the top-left corner for maximum legibility.
-        """
-        if not self.enable_overlay:
-            return frame
-            
-        try:
-            from PIL import Image, ImageDraw
-            
-            # Convert numpy array to PIL Image
-            pil_image = Image.fromarray(frame)
-            draw = ImageDraw.Draw(pil_image)
-            
-            # Create overlay text (stacked vertically)
-            lines = [
-                f"Episode: {self.current_episode + 1}",
-                f"Step: {self.current_step}",
-                f"Reward: {self.accumulated_reward:.2f}",
-            ]
-            
-            # Get font
-            font = self._get_font()
-            
-            if font is not None:
-                x, y = self.text_position
-
-                # Measure text block to draw a solid high-contrast background rectangle
-                try:
-                    # Preferred precise measurement
-                    bboxes = [draw.textbbox((0, 0), t, font=font) for t in lines]
-                    line_heights = [(b[3] - b[1]) for b in bboxes]
-                    line_widths = [(b[2] - b[0]) for b in bboxes]
-                except (AttributeError, TypeError):
-                    # Fallback sizing if textbbox is not available
-                    line_widths, line_heights = [], []
-                    for t in lines:
-                        w, h = font.getsize(t)
-                        line_widths.append(w)
-                        line_heights.append(h)
-
-                line_spacing = max(1, int(self.font_size * 0.25))
-                padding = 4
-                total_height = sum(line_heights) + line_spacing * (len(lines) - 1)
-                max_width = max(line_widths) if line_widths else 0
-
-                bg_left = x - padding
-                bg_top = y - padding
-                bg_right = x + max_width + padding
-                bg_bottom = y + total_height + padding
-
-                # Solid black background for high contrast
-                draw.rectangle([bg_left, bg_top, bg_right, bg_bottom], fill=(0, 0, 0))
-
-                # Draw each line with stroke for extra contrast
-                current_y = y
-                for i, text in enumerate(lines):
-                    # Stroke
-                    if self.stroke_width > 0:
-                        for dx in [-self.stroke_width, 0, self.stroke_width]:
-                            for dy in [-self.stroke_width, 0, self.stroke_width]:
-                                if dx != 0 or dy != 0:
-                                    draw.text((x + dx, current_y + dy), text, font=font, fill=self.stroke_color)
-                    # Main text
-                    draw.text((x, current_y), text, font=font, fill=self.text_color)
-
-                    # Advance to next line
-                    current_y += line_heights[i] + line_spacing
-            
-            # Convert back to numpy array
-            return np.array(pil_image)
-            
-        except ImportError:
-            # PIL not available, return original frame
-            self.enable_overlay = False
-            return frame
-
-    def reset(self) -> VecEnvObs:
-        obs = self.venv.reset()
-        
-        # Increment episode counter and reset step counter
-        self.current_episode = 0
-        self.current_step = 0
-        self.accumulated_reward = 0.0
-        
-        self._capture_frame()
-
-        return obs
-
-    def step_wait(self) -> VecEnvStepReturn:
-        obs, rewards, dones, infos = self.venv.step_wait()
-
-        self.step_id += 1 # TODO: should this be incremented ever?
-        self.current_step += 1
-        
-        # Accumulate reward for the selected env (default to first)
-        env_idx: Optional[int] = None
-        if isinstance(rewards, np.ndarray):
-            env_idx = self._resolve_env_index(rewards.shape[0])
-            self.accumulated_reward += float(rewards[env_idx])
-        else:
-            # Non-vector case
-            self.accumulated_reward += float(rewards)
-
-        self._capture_frame()
-
-        # Reset step counter if the selected environment is done
-        if isinstance(dones, np.ndarray):
-            idx = env_idx if env_idx is not None else self._resolve_env_index(dones.shape[0])
-            if bool(dones[idx]):
-                self._on_episode_finished()
-        else:
-            if bool(dones):
-                self._on_episode_finished()
-
-        return obs, rewards, dones, infos
-
-    def _capture_frame(self) -> None:
-        if not self.recording: 
-            return
-
-        if self.video_length is not None and len(self.recorded_frames) >= self.video_length:
-            return
-        
-        frame = None
-
-        # Prefer capturing a single env image if requested and available
-        if self.record_env_idx is not None:
-            images = self.env.get_images()
-            if isinstance(images, (list, tuple)) and len(images) > 0:
-                idx = self._resolve_env_index(len(images))
-                img = images[idx]
-                if isinstance(img, np.ndarray):
-                    frame = img
-
-        # Fallback: use the VecEnv tiled render (all envs)
-        if frame is None:
-            frame = self.env.render()
-
-        assert isinstance(frame, np.ndarray)
-        frame_with_overlay = self._add_overlay_to_frame(frame)
-        self.recorded_frames.append(frame_with_overlay)
-        
-    def close(self) -> None:
-        """Closes the wrapper then the video recorder."""
-        VecEnvWrapper.close(self)
-        if self.recording:  # pragma: no cover
-            self.stop_recording()
+    # ------------------------------------------------------------------ API
 
     def start_recording(self) -> None:
-        self.recorded_frames = []
+        recorder = self._get_env_recorder()
+        recorder.start_recording()
         self.recording = True
 
     def stop_recording(self) -> None:
-        assert self.recording, "_stop_recording was called, but no recording was started"
+        recorder = self._get_env_recorder()
+        recorder.stop_recording()
         self.recording = False
+
+    def reset(self):
+        return self.venv.reset()
+
+    def step_wait(self):
+        return self.venv.step_wait()
 
     @contextmanager
     def recorder(self, video_path: str, record_video: bool = True):
-        """Context manager for automatic recording start/stop.
-        
-        Usage:
-            with recorder.recording_context():
-                # Recording starts automatically
-                for _ in range(100):
-                    obs, rewards, dones, infos = env.step(actions)
-                # Recording stops automatically when exiting the with block
-        """
-        # Normalize to string in case a PathLike was provided
-        video_path = os.fspath(video_path)
-
         if not record_video:
             yield self
             return
 
-        video_root = os.path.dirname(video_path)
-        os.makedirs(video_root, exist_ok=True)
-
-        self.start_recording()
-        try:
-            yield self
-        finally:
-            # Always stop and save
-            self.stop_recording()
-            # Only save if we have at least one frame
-            if len(self.recorded_frames) > 0:
-                self.save_recording(video_path)
+        recorder = self._get_env_recorder()
+        with recorder.recorder(video_path, record_video=True):
+            self.recording = True
+            try:
+                yield self
+            finally:
+                self.recording = False
 
     def save_recording(self, video_path: str) -> None:
-        assert len(self.recorded_frames) > 0, "No frames recorded to save."
+        recorder = self._get_env_recorder()
+        recorder.save_recording(video_path)
 
-        # Normalize potential PathLike to str for safety
-        path_str = os.fspath(video_path)
-        assert path_str.endswith(".mp4"), "Video file must have .mp4 extension"
-
-        from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
-        clip = ImageSequenceClip(self.recorded_frames, fps=self.frames_per_sec)
-        clip.write_videofile(path_str, audio=False, logger=None)
-        
-        # Clear recorded frames after saving to prevent warning in __del__
-        self.recorded_frames = []
-
-    def __del__(self) -> None:
-        """Warn the user in case last video wasn't saved."""
-        # Access via __dict__ to avoid VecEnvWrapper __getattr__ forwarding during interpreter shutdown
-        frames = self.__dict__.get("recorded_frames", [])
-        try:
-            if isinstance(frames, list) and len(frames) > 0:  # pragma: no cover
-                logger.warn("Unable to save last video! Did you call close()?")
-        except Exception:
-            # Be resilient during GC/teardown
-            pass
+    def close(self) -> None:
+        if self.recording:
+            try:
+                self.stop_recording()
+            except AssertionError:
+                # Recorder may already be stopped by the underlying context manager
+                pass
+        super().close()

@@ -338,28 +338,21 @@ class PrintMetricsLogger(LightningLoggerBase):
                 else:
                     val_disp = metric_value_s
 
-                chart_disp = ""
-                if self.show_sparklines and is_number(metric_value):
-                    chart_disp = self._spark_for_key(full_key, self.sparkline_width)
+                chart_disp = self._spark_for_key(full_key, self.sparkline_width)
 
                 _alerts = active_alerts.get(full_key, [])
-                if _alerts:
-                    alerts_str = " | ".join([alert['message'] for alert in _alerts])
-                    alert_disp = _ansi(f"⚠️  {alerts_str}", "yellow", enable=self.color)
-                else:   
-                    alert_disp = ""
+                alerts_str = " | ".join([alert['message'] for alert in _alerts])
+                alert_disp = _ansi(f"⚠️  {alerts_str}", "yellow", enable=self.color) if alerts_str else ""
 
                 formatted_sub[metric_name] = val_disp
                 charts_sub[metric_name] = chart_disp
                 alerts_sub[metric_name] = alert_disp
 
                 val_candidates.append(_strip_ansi(val_disp))
-                if alert_disp:
-                    alert_candidates.append(_strip_ansi(alert_disp))
+                alert_candidates.append(_strip_ansi(alert_disp))
 
-            if formatted_sub:
-                formatted[group_key] = formatted_sub
-                charts[group_key] = charts_sub
+            formatted[group_key] = formatted_sub
+            charts[group_key] = charts_sub
 
         return _PreparedSections(
             formatted=formatted,
@@ -420,8 +413,8 @@ class PrintMetricsLogger(LightningLoggerBase):
 
     def _compose_lines(
         self,
-        grouped: Dict[str, Dict[str, Any]],
-        ns_order: List[str],
+        grouped_metrics: Dict[str, Dict[str, Any]],
+        group_key_order: List[str],
         prepared: _PreparedSections,
         dims: _TableDimensions,
         active_alerts: Dict[str, Iterable[str]],
@@ -431,12 +424,12 @@ class PrintMetricsLogger(LightningLoggerBase):
         val_width = dims.val_width
         alert_width = dims.alert_width
 
-        for ns in ns_order:
-            namespace_formatted = prepared.formatted.get(ns)
-            if not namespace_formatted:
+        for group_key in group_key_order:
+            formatted_metrics = prepared.formatted.get(group_key)
+            if not formatted_metrics:
                 continue
 
-            header = f"{ns}/"
+            header = f"{group_key}/"
             alert_header = "alert" if alert_width else ""
             header_line = (
                 f"| {header:<{self.indent + key_width}} | "
@@ -446,29 +439,26 @@ class PrintMetricsLogger(LightningLoggerBase):
             )
             lines.append(_ansi(header_line, "bold", enable=self.color))
 
-            for sub, val in namespace_formatted.items():
-                val_len = len(_strip_ansi(val))
-                val_padded = (" " * (val_width - val_len) + val) if val_width > val_len else val
+            for metric_name, metric_value_s in formatted_metrics.items():
+                metric_value_len = len(_strip_ansi(metric_value_s))
+                metric_value_padded_s = (" " * (val_width - metric_value_len) + metric_value_s) if val_width > metric_value_len else metric_value_s
 
-                chart_disp = prepared.charts.get(ns, {}).get(sub, "")
+                chart_disp = prepared.charts.get(group_key, {}).get(metric_name, "")
                 chart_clean = chart_disp[: self.chart_col_width]
                 chart_padded = f"{chart_clean:<{self.chart_col_width}}"
 
-                alert_disp = prepared.alerts.get(ns, {}).get(sub, "")
+                alert_disp = prepared.alerts.get(group_key, {}).get(metric_name, "")
                 alert_len = len(_strip_ansi(alert_disp))
                 alert_padding = alert_width - alert_len
-                if alert_padding > 0:
-                    alert_padded = alert_disp + (" " * alert_padding)
-                else:
-                    alert_padded = alert_disp
+                alert_padded = alert_disp + (" " * alert_padding) if alert_padding > 0 else alert_disp
 
-                full_key = self._full_key(ns, sub)
+                full_key = self._full_key(group_key, metric_name)
                 alert_active = full_key in active_alerts
-                key_cell = f"{sub:<{key_width}}"
-                key_cell, highlight, row_bg_color = self._resolve_row_highlight(sub, key_cell, alert_active)    
+                key_cell = f"{metric_name:<{key_width}}"
+                key_cell, highlight, row_bg_color = self._resolve_row_highlight(metric_name, key_cell, alert_active)    
 
                 row = (
-                    f"| {' ' * self.indent}{key_cell} | {val_padded} | {chart_padded} | {alert_padded} |"
+                    f"| {' ' * self.indent}{key_cell} | {metric_value_padded_s} | {chart_padded} | {alert_padded} |"
                 )
 
                 if highlight:
@@ -489,7 +479,7 @@ class PrintMetricsLogger(LightningLoggerBase):
 
         # Group metrics by namespace (eg: train and val namespaces)
         grouped_metrics = group_dict_by_key_namespace(metrics)
-        
+
         # Order namespaces using reusable util (prefers self.group_keys_order)
         sorted_grouped_metrics = order_grouped_namespaces(grouped_metrics, self.group_keys_order)
 

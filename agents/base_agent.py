@@ -5,7 +5,6 @@ from utils.formatting import sanitize_name
 from utils.io import write_json
 from utils.metrics_monitor import MetricsMonitor
 from utils.metrics_recorder import MetricsRecorder
-from utils.reports import print_terminal_ascii_summary
 from utils.timings_tracker import TimingsTracker
 
 CHECKPOINT_PATH = "checkpoints/"
@@ -256,17 +255,6 @@ class BaseAgent(pl.LightningModule):
         self._fit_elapsed_seconds = float(time_elapsed)
         self._final_stop_reason = self._early_stop_reason
 
-        # TODO: encapsulate in callback
-        # TODO: print training finished inside this method, pass all vars to it
-        print_terminal_ascii_summary(self.metrics_recorder.history())
-
-        # TODO: must create alert ids 
-        print("### ALERTS RAISED DURING TRAINING ###")
-        alerts_counter = self.metrics_monitor.get_alerts_counter()
-        alerts_counter = sorted(alerts_counter.items(), key=lambda x: x[1][1], reverse=True)
-        for metric, (_, count) in alerts_counter:
-            print(f"{metric}: {count}")
-
         # Record final evaluation video and save associated metrics JSON next to it
         test_env = self.get_env("test")
         checkpoint_dir = self.run_manager.ensure_path(CHECKPOINT_PATH)
@@ -457,6 +445,7 @@ class BaseAgent(pl.LightningModule):
             DispatchMetricsCallback,
             EarlyStoppingCallback,
             EndOfTrainingReportCallback,
+            ConsoleSummaryCallback,
             ModelCheckpointCallback,
             MonitorMetricsCallback,
             WandbVideoLoggerCallback,
@@ -516,6 +505,9 @@ class BaseAgent(pl.LightningModule):
 
         # When training ends, write a report describing on the training went
         callbacks.append(EndOfTrainingReportCallback(filename="report.md"))
+
+        # Also print a terminal summary and alerts recap at the end of training
+        callbacks.append(ConsoleSummaryCallback())
 
         return callbacks
 

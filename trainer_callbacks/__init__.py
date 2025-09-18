@@ -7,6 +7,7 @@ from .model_checkpoint import ModelCheckpointCallback
 from .monitor_metrics import MonitorMetricsCallback
 from .wandb_video_logger import WandbVideoLoggerCallback
 from .warmup_eval import WarmupEvalCallback
+from .console_summary import ConsoleSummaryCallback
 
 __all__ = [
     "ModelCheckpointCallback", 
@@ -15,5 +16,6 @@ __all__ = [
     "EarlyStoppingCallback",
     "DispatchMetricsCallback",
     "WarmupEvalCallback",
-    "MonitorMetricsCallback"
+    "MonitorMetricsCallback",
+    "ConsoleSummaryCallback",
 ]

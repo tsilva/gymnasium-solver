@@ -1,18 +1,19 @@
 # Run all test suites
 
 ## Goal
-Exercise every automated test target, repair flaky or outdated tests, and surface genuine product bugs without masking them.
+Exercise every automated test target and document failures or flakiness with precise remediation tasks. Do not change code or tests as part of this task. Capture each finding as a `TEST:` and/or `BUG:` item in `TODO.md` with exact file paths and reproduction details.
 
 ## Steps
 1. Run the full suite (`pytest -q` unless a project-specific command is documented); capture the full failure output for each failing test case.
-2. For each failure, investigate whether the test expectation is wrong or the product code has regressed. When behavior appears correct and the test is stale or brittle, move to Step 3; otherwise collect a minimal reproduction, note the suspected root cause, and flag the bug to the user instead of patching production code.
-3. Fix broken tests by adjusting fixtures, assertions, or localized helpers under `tests/`; keep shims colocated with the affected tests (e.g., `tests/helpers/`) and never modify the main source directories to accommodate tests.
-4. Re-run only the affected tests to confirm the fix, then re-run the whole suite to ensure it is clean.
-5. Summarize the work: list remaining flagged bugs, document any skipped fixes, and call out new test-side helpers that were introduced.
+2. For each failure, determine whether the test expectation is wrong or product code has regressed. Do not patch code. Collect a minimal reproduction, suspected root cause, and impacted files/symbols.
+3. Add `TEST:` items for test-side fixes (fixtures/assertions/helpers) and `BUG:` items for product defects. Each entry should include:
+   - Exact file paths and symbols (e.g., `tests/test_print_metrics_logger.py::test_sorted_metrics`).
+   - Proposed minimal change and acceptance criteria.
+4. Optionally re-run targeted tests to confirm reproductions remain consistent. Do not implement fixes during this audit.
+5. Summarize the work: list flagged bugs and test issues, and link to the corresponding `TODO.md` entries.
 
 ## Notes
-- Preserve existing test structure; prefer targeted updates over rewrites.
-- If multiple suites or optional extras exist, run them all (integration, lint, property tests) and record their outcomes.
-- Do not paper over real failures—provide stack traces, configs, and environment details when escalating bugs to the user.
-- Keep tests deterministic: pin random seeds and mock external services locally when needed.
-- Remove any temporary instrumentation once a test passes to avoid noisy diffs.
+- No code or test edits in this task—produce `TEST:`/`BUG:` items only.
+- Preserve existing test structure in follow-ups; prefer targeted updates over rewrites.
+- Do not paper over real failures—include stack traces, configs, and environment details in the TODO entries.
+- Keep tests deterministic: pin random seeds and mock external services locally when needed (document these in acceptance criteria).

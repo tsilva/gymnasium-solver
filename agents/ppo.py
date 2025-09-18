@@ -150,7 +150,7 @@ class PPO(BaseAgent):
             (f"train/explained_variance", self._monitor_explained_variance_oob),
         )
     
-    # TODO: consider creating bundles objects that can be registered, set this there, because this doesn't need to be in class
+    # TODO: consider deploying these metric monitors as bundles, these bundles are classes that can be registered with one call, and this way we can register a base bundle, plus algo specific bundles, in this case, a MetricAlertsPPO bundle, this way they don't have to live as PPO algo methods 
     def _monitor_approx_kl_oob(self, metric: str, metric_values: List[Tuple[int, float]]):
         alert = {}
         

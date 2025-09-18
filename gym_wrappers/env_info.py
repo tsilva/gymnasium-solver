@@ -89,7 +89,7 @@ class EnvInfoWrapper(gym.ObservationWrapper):
                 return int(fps)
         except Exception:
             pass
-        return None
+        return 30
 
     # NOTE: required by ObservationWrapper
     def observation(self, observation): 

@@ -1,112 +1,112 @@
 ## AGENTS: Workspace Rules and Operating Guide
 
-This repository allows autonomous and assisted agents to make changes and answer questions. This document defines the default rules those agents must follow.
+Rules for autonomous and assisted agents working in this repository. Follow these in order to make safe, minimal, and helpful changes.
 
-### Start-of-task requirements
-- Before starting any task or making edits, read `VIBES/ARCHITECTURE_GUIDE.md`, `VIBES/CODING_PRINCIPLES.md`, and `README.md` end-to-end to ensure up-to-date context.
-- Agent helper docs now live under `VIBES/`, with task playbooks in `VIBES/tasks/`.
-- Predefined tasks live in `VIBES/tasks/`; `run task: <name>` looks for a matching markdown file (e.g., `run task: audit separation of concerns` loads `VIBES/tasks/audit_separation_of_concerns.md`).
-- Any prompt that begins with `!TASK: <name>` always refers to a single markdown file in `VIBES/tasks/`. Normalize `<name>` (lowercase, spaces → underscores, strip punctuation) to locate the file and execute every instruction it contains.
-- Do **not** modify `VIBES/tasks/*.md` while executing a `!TASK`. Capture any follow-up notes separately and only update the playbook when explicitly asked outside the active task run.
+### Before You Start
+- Read `VIBES/ARCHITECTURE_GUIDE.md`, `VIBES/CODING_PRINCIPLES.md`, and `README.md` end-to-end.
+- Task system: playbooks live under `VIBES/tasks/`.
+  - `run task: <name>` maps to `VIBES/tasks/<name>.md` (normalize: lowercase, spaces→underscores, strip punctuation).
+  - `!TASK: <name>` always refers to a single file in `VIBES/tasks/`; execute every instruction in that file.
+- Do not modify `VIBES/tasks/*.md` while executing a `!TASK`. Capture notes separately and update later only when explicitly asked.
 
-### Decision hierarchy
-- **Safety first**: Security, privacy, and data integrity rules override all other instructions.
-- **User intent next**: Follow explicit user instructions in the current session unless they are unsafe.
-- **This file then**: When user intent is ambiguous, follow the rules in this document.
-- **Codebase conventions**: Match existing styles and patterns in the repository.
+### Decision Hierarchy
+- Safety first: security, privacy, and data integrity override everything.
+- User intent: follow explicit current-session instructions unless unsafe.
+- This guide: when intent is ambiguous, follow these rules.
+- Codebase conventions: match existing styles and patterns.
 
-### Scope of allowed actions
-- **Reading**: Agents may freely read files in the workspace to gather context.
-- **Editing**: Agents may make minimal, focused edits that are directly tied to the user’s request or to fix issues introduced by those edits.
-- **Creating files**: Allowed when necessary (e.g., new configs, docs, tests, or small helpers). Prefer co-locating with similar files.
-- **Deleting files**: Only when explicitly requested or when replacing generated artifacts that are clearly obsolete.
+### Allowed Actions
+- Read: freely read workspace files for context.
+- Edit: make minimal, focused edits tied to the request or to fix issues introduced by your edits.
+- Create files: when necessary (configs, docs, tests, small helpers); co-locate with similar files.
+- Delete: only when explicitly requested or when replacing clearly obsolete generated artifacts.
 
-### Communication standards
-- **Be concise by default**; add details only when needed.
-- Use `##`/`###` headings, short paragraphs, and bullet lists for readability.
-- **Show code** only when essential. Use fenced code blocks for new code and include exact paths when citing existing files.
-- **Summarize edits** at the end of a turn: what changed and why, in 2–6 bullets.
+### Communication
+- Be concise; add detail only when needed.
+- Use headings and bullets for readability.
+- Show code only when essential; use fenced blocks for new code and include exact paths when citing existing files.
+- End each turn with a brief edit summary: what changed and why (2–6 bullets).
 
-### Editing rules
-- **Minimal diffs**: Change only what is necessary; avoid drive-by refactors.
-- **Preserve formatting**: Keep existing indentation style (tabs vs spaces) and width. Do not reflow or reformat unrelated lines.
-- **Naming and clarity**: Prefer descriptive names over abbreviations. Write clear, readable code.
-- **Imports and deps**: Add required imports and update configuration/dependency files if needed.
-- **Tests**: When behavior changes or is newly added, create or update tests.
-- **Config/docs**: Update `README.md`, `EXPERIMENTS.md`, and relevant configs when user-facing behavior or defaults change.
+### Editing & Code Changes
+- Minimal diffs: change only what’s necessary; avoid drive-by refactors.
+- Preserve formatting: keep indentation style and width; don’t reflow unrelated lines.
+- Naming: prefer descriptive, clear identifiers.
+- Imports and deps: add needed imports and update configs/dependencies if required.
+- Tests: add or update tests when behavior changes or is newly added.
+- Docs/config: update `README.md and relevant configs when user-facing behavior or defaults change.
 
-### Root-cause-first changes
-- **Diagnose deeply**: Before editing, trace the failing behavior to its true cause. Read adjacent modules, follow data flow, and verify assumptions; do not guess.
-- **Plan minimal intervention**: Choose the smallest targeted change that fixes the root cause. Write down the intended change before applying it.
-- **No symptom patches**: Do not add hardcoded values, special-case branches, broad try/excepts, or duplicate logic that merely hides the bug.
-- **Avoid code bloat**: Do not introduce knobs/flags or helper layers to “make it work” unless they directly eliminate the root cause and are justified.
-- **Prove it**: Reproduce the issue, then add/adjust a focused test or reproducible check. The fix should make the test pass for the right reason.
-- **Explain why**: In the edit summary, include a one-line root-cause statement and why this is the minimal, correct fix.
+### Root-Cause-First Changes
+- Diagnose: trace failures to their true cause by reading adjacent modules and following data flow; don’t guess.
+- Plan minimal fix: choose the smallest targeted change that fixes the root cause and note the intended change before editing.
+- No symptom patches: avoid hardcoded values, special-case branches, broad try/excepts, or duplicated logic that hides bugs.
+- Avoid bloat: don’t introduce knobs/flags or helper layers unless they directly eliminate the root cause.
+- Prove it: reproduce the issue and add/adjust a focused test or check; make it pass for the right reason.
+- Explain why: include a one-line root-cause statement in your summary and why the fix is the minimal, correct one.
 
-### Documentation maintenance
-- After completing any task, update `VIBES/ARCHITECTURE_GUIDE.md` and `README.md` with relevant changes. If no updates are needed, leave them untouched, and never modify `VIBES/CODING_PRINCIPLES.md` unless explicitly instructed by the user.
+### Documentation
+- After tasks, update `VIBES/ARCHITECTURE_GUIDE.md` and `README.md` when relevant.
+- Never modify `VIBES/CODING_PRINCIPLES.md` unless explicitly instructed.
 
-### Python/project conventions
+### Python/Project Conventions
 - Prefer explicit, readable code and early returns.
-- Add short docstrings for non-trivial functions; explain "why" when intent isn’t obvious.
-- Match the repository’s existing module layout and patterns (e.g., `utils/`, `agents/`, `gym_wrappers/`).
+- Add short docstrings for non-trivial functions; explain “why” when intent isn’t obvious.
+- Match existing module layout and patterns (e.g., `utils/`, `agents/`, `gym_wrappers/`).
 
-### Exception handling
-- Fail fast by default: do not silence unexpected errors. Let exceptions propagate so failures are visible and attributable.
-- Avoid broad catches (`except Exception:`) and bare `except:`. Do not use `pass`, sentinel returns, or silent fallbacks that mask bugs.
-- Only catch specific, expected exceptions in these cases:
-  - Optional/soft dependencies (e.g., guarding imports); raise a clear `ImportError` with guidance.
-  - Cleanup/finalizers where raising would mask the primary error; prefer logging context and preserving the original exception.
-  - Expected control flow where the exception is part of the API contract; catch narrowly and re-raise with added context if not handled.
-- Never use `contextlib.suppress` for broad error hiding.
-- When catching, keep scope minimal, match exact exception types, and re-raise after enriching context where appropriate.
+### Exceptions
+- Fail fast: don’t silence unexpected errors; let them surface.
+- Never use broad catches (`except Exception:`) or bare `except:`. Don’t use `pass`, sentinel returns, or silent fallbacks that mask bugs.
+- Catch only specific, expected cases:
+  - Soft dependencies: raise a clear `ImportError` with guidance.
+  - Cleanup/finalizers: log context without masking the primary error.
+  - Expected control flow: catch narrowly and re-raise with context if unhandled.
+- Keep catch scopes minimal and match exact exception types.
 
-### Commands and environment
-- Assume non-interactive shells. Use `--yes`/`--non-interactive` flags where applicable.
-- If a command would use a pager, append `| cat`.
-- Long-running services should run in the background.
-- Default working directory is the repo root. Prefer absolute paths when possible.
-- Before destructive operations, either avoid them or request explicit confirmation.
+### Commands & Environment
+- Assume non-interactive shells; use `--yes`/`--non-interactive` flags when available.
+- If a command pages output, append `| cat`.
+- Run long-lived services in the background.
+- Default working directory is the repo root; prefer absolute paths when practical.
+- Avoid destructive operations or seek explicit confirmation first.
 
-### Tooling and checks
-- Prefer semantic search when exploring the codebase; use exact search for precise symbols.
-- After making code edits, ensure the project still builds and tests pass when feasible:
-  - Default: `pytest -q` (or `uv run pytest -q` if `uv` is used in the project).
-  - Fix introduced linter/test failures before returning, when reasonably scoped.
+### Validation & Checks
+- Explore with semantic search; use exact search for precise symbols.
+- After code edits, ensure the project still builds and tests pass when feasible:
+  - Default: `pytest -q` (or `uv run pytest -q` when using `uv`).
+  - Fix introduced linter/test failures when reasonably scoped.
 
-### Data, privacy, and safety
-- Do not exfiltrate secrets, tokens, environment variables, or private data into responses.
-- Do not access external networks or services unless explicitly requested.
-- Avoid running commands that alter the system outside the repository, unless explicitly requested and safe.
+### Data, Privacy, and Safety
+- Don’t exfiltrate secrets, tokens, environment variables, or private data.
+- Don’t access external networks or services unless explicitly requested.
+- Avoid commands that alter the system outside this repo unless explicitly requested and safe.
 
-### Decision-making when uncertain
-- If blocked by missing information, ask one focused question and propose a sensible default.
-- If multiple viable approaches exist, briefly list trade-offs and choose one with the least risk/complexity.
- - Prefer asking for clarity over shipping a workaround that papers over the issue.
+### When Uncertain
+- If blocked by missing info, ask one focused question and propose a sensible default.
+- When multiple approaches exist, briefly list trade-offs and choose the least risky/complex.
+- Prefer asking for clarity over shipping workarounds that paper over issues.
 
-### Repository-specific guidance
-- Respect the existing testing layout in `tests/` and update or add tests near related modules.
-- Keep environment and wrapper logic consistent with `gym_wrappers/` patterns and registries.
-- When adding agents or training logic, align with patterns in `agents/` and `utils/`.
+### Repo-Specific Guidance
+- Respect `tests/` layout and add tests near related modules.
+- Keep env/wrapper logic consistent with `gym_wrappers/` patterns and registries.
+- Align new agents or training logic with patterns in `agents/` and `utils/`.
 
-### Prohibited actions
-- Bulk refactoring or formatting unrelated code.
-- Introducing new runtime dependencies without necessity or explanation.
+### Prohibited
+- Bulk refactors or unrelated formatting changes.
+- New runtime dependencies without necessity or explanation.
 - Deleting or overwriting user work without explicit instruction.
- - Symptom-masking hacks (hardcoded values, broad exception swallowing, duplicate branches) that avoid fixing the root cause.
+- Symptom-masking hacks (hardcoded values, broad exception swallowing, duplicate branches).
 
-### Change management
-- Group related changes into coherent edits. Include brief rationales in summaries.
+### Change Management
+- Group related changes into coherent edits with brief rationales.
 - Prefer small, reviewable steps over large rewrites.
 
-### Quick checklists
+### Quick Checklists
 **Before editing**
 - Clarify goal and constraints; scan related files for context.
- - Identify and state the suspected root cause.
- - Plan a minimal intervention that addresses that root cause.
+- Identify and state the suspected root cause.
+- Plan a minimal intervention that addresses that root cause.
 
 **After editing**
 - Validate imports, types, and obvious edge cases.
 - Run tests/build if feasible; ensure no new failures.
 - Summarize changes and their impact concisely.
- - Add or update a regression test that proves the fix, when reasonable.
+- Add or update a regression test that proves the fix when reasonable.

@@ -24,7 +24,6 @@ from utils.formatting import (
 )
 from utils.metrics_monitor import MetricsMonitor
 
-
 @dataclass
 class _PreparedSections:
     formatted: Dict[str, Dict[str, str]]
@@ -115,9 +114,7 @@ class PrintMetricsLogger(LightningLoggerBase):
         hl_config = metrics_config.highlight_config()
         hl_value_bold_for = tuple(hl_config['value_bold_metrics'])
         hl_row_for = tuple(hl_config['row_metrics'])
-        self.style_bold_metrics: Tuple[str, ...] = hl_value_bold_for
         self.style_bold_metrics_set = frozenset(hl_value_bold_for)
-        self.highlight_row_for: Tuple[str, ...] = hl_row_for
         self.highlight_row_for_set = frozenset(hl_row_for)
         self.bgcolor_highlight: str = "bg_blue"
 
@@ -164,9 +161,6 @@ class PrintMetricsLogger(LightningLoggerBase):
         merged: Dict[str, Any] = dict(self.previous_metrics)
         merged.update(simple)
 
-        # Validate deltas using the latest snapshot
-        self._validate_metric_deltas(simple)
-
         # TODO: assert metrics within bounds
 
         # Render the metrics table
@@ -175,65 +169,73 @@ class PrintMetricsLogger(LightningLoggerBase):
         # Track across calls
         self.previous_metrics = dict(merged)
 
+    # TODO: remove?
     def finalize(self, status: str) -> None:  # pragma: no cover - best-effort noop
         return None
 
+    # TODO: remove?
     def after_save_checkpoint(self, checkpoint_callback: Any) -> None:  # pragma: no cover - unused
         return None
 
-    # --- Helpers ---
-    # Scalar conversion lives in utils.torch.to_python_scalar
+    def _calc_deltas(self, metrics: Dict[str, Any]) -> Dict[str, Tuple[str, Optional[str]]]:
+        """Compute deltas and validate delta rules in a single pass.
 
-    def _validate_metric_deltas(self, current_metrics: Dict[str, Any]) -> None:
-        for metric_name, rule_lambda in self.metric_delta_rules.items():
-            if metric_name in current_metrics and metric_name in self.previous_metrics:
-                curr = current_metrics[metric_name]
-                prev = self.previous_metrics[metric_name]
+        Returns a mapping of full metric key -> (delta_str, color_name or None).
+        Missing/invalid deltas map to ("", None).
+        """
+        deltas: Dict[str, Tuple[str, Optional[str]]] = {}
 
-                # Assert that the value and previous value are numbers
-                assert is_number(curr) and is_number(prev), f"Value and previous value must be numbers: {curr} and {prev}"
+        # Choose previous snapshot to compare against
+        prev_snapshot = self._prev if self._prev is not None else self.previous_metrics
 
-                # If the delta rule is satisfied, continue
-                ok = bool(rule_lambda(prev, curr))
-                if ok: continue
+        # Pre-validate against configured delta rules (rules are defined per bare metric name)
+        for full_key, curr_val in metrics.items():
+            # Expect namespaced keys: ns/sub
+            if "/" not in full_key:
+                continue
+            # Lookup previous value for the same full key
+            if full_key not in prev_snapshot:
+                # No previous value → no delta
+                deltas[full_key] = ("", None)
+                continue
 
-                # Emit a clear violation message but do not raise
-                print(
-                    f"⚠️  Metric delta rule violation for '{metric_name}': previous={prev}, current={curr}."
+            prev_val = prev_snapshot[full_key]
+            # If either is non-numeric, we don't compute a delta
+            if not (is_number(curr_val) and is_number(prev_val)):
+                deltas[full_key] = ("", None)
+                continue
+
+            # Apply delta rule if one exists for the bare metric name
+            bare_key = self._subkey_from_full(full_key)
+            rule_fn = self.metric_delta_rules.get(bare_key)
+            if rule_fn is not None:
+                assert rule_fn(prev_val, curr_val), (
+                    f"Delta rule violation for '{full_key}': previous={prev_val}, current={curr_val}."
                 )
 
-    # Algorithm-specific metric rules removed.
+            # Compute display delta
+            delta = float(curr_val) - float(prev_val)
+            if abs(delta) <= self.delta_tol:
+                deltas[full_key] = ("→0", "gray")
+                continue
 
-    def _delta_for_key(self, namespace: str, key: str, value: Any):
-        # In case we don't have a previous value, return empty string
-        if self._prev is None: return ("", None)
+            arrow = "↑" if delta > 0 else "↓"
+            inc_better = self.better_when_increasing.get(full_key, True)
+            improved = (delta > 0) if inc_better else (delta < 0)
+            color = "green" if improved else "red"
+            mag = number_to_string(
+                abs(delta),
+                precision=self.metric_precision_map.get(full_key, 2),
+                humanize=True,
+            )
+            deltas[full_key] = (f"{arrow}{mag}", color)
 
-        # In case we don't have a previous value for the key, return empty string
-        full_key = self._full_key(namespace, key)
-        if full_key not in self._prev: return ("", None)
+        # For any metric without previous, ensure there's a default entry
+        for k in metrics.keys():
+            if k not in deltas:
+                deltas[k] = ("", None)
 
-        # In case the delta is less than the tolerance, return 0 delta
-        prev_value = self._prev[full_key]
-        assert is_number(value) and is_number(prev_value), f"Value and previous value must be numbers: {value} and {prev_value}"
-        delta = float(value) - float(prev_value)
-        if abs(delta) <= self.delta_tol: return ("→0", "gray")
-
-        # Determine arrow to represent the delta direction
-        arrow = "↑" if delta > 0 else "↓"
-
-        # Determine color to represent if delta direction 
-        # is better or worse (depends on metric delta rule)
-        inc_better = self.better_when_increasing.get(full_key, True)
-        improved = (delta > 0) if inc_better else (delta < 0)
-        color = "green" if improved else "red"
-
-        # Format the delta magnitude
-        mag = number_to_string(
-            abs(delta),
-            precision=self.metric_precision_map.get(full_key, 2),
-            humanize=True,
-        )
-        return (f"{arrow}{mag}", color)
+        return deltas
 
     def _spark_for_key(self, full_key: str, width: int) -> str:
         values = self._history.get(full_key)
@@ -291,6 +293,7 @@ class PrintMetricsLogger(LightningLoggerBase):
         grouped_metrics: Dict[str, Dict[str, Any]],
         group_key_order: List[str],
         active_alerts: Dict[str, Iterable[Dict[str, str]]],
+        deltas_map: Dict[str, Tuple[str, Optional[str]]],
     ) -> _PreparedSections:
         formatted: Dict[str, Dict[str, str]] = {}
         charts: Dict[str, Dict[str, str]] = {}
@@ -316,7 +319,7 @@ class PrintMetricsLogger(LightningLoggerBase):
                 if metric_name in self.style_bold_metrics_set:
                     metric_value_s = _ansi(metric_value_s, "bold", enable=self.colors_enabled)
 
-                delta_str, color_name = self._delta_for_key(group_key, metric_name, metric_value)
+                delta_str, color_name = deltas_map.get(full_key, ("", None))
                 if delta_str:
                     delta_disp = _ansi(delta_str, color_name, enable=self.colors_enabled)
                     val_disp = f"{metric_value_s} {delta_disp}"
@@ -480,8 +483,11 @@ class PrintMetricsLogger(LightningLoggerBase):
                 self._key_priority_map,
             )
 
+        # Compute deltas once and validate delta rules
+        deltas_map = self._calc_deltas(metrics)
+
         active_alerts = self.metrics_monitor.get_active_alerts()
-        prepared = self._prepare_sections(grouped_metrics, sorted_grouped_metrics, active_alerts)
+        prepared = self._prepare_sections(grouped_metrics, sorted_grouped_metrics, active_alerts, deltas_map)
         dims = self._compute_dimensions(prepared)
         lines = self._compose_lines(grouped_metrics, prepared, dims, active_alerts)
 

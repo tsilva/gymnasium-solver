@@ -106,4 +106,35 @@ class MetricsConfig:
             if _bounds: bounds[metric_name] = dict(_bounds)
         return bounds
 
+    # Static helpers -----------------------------------------------------
+    @staticmethod
+    def full_key(namespace: str, subkey: Optional[str]) -> str:
+        """Build a fully-qualified metric key validating the namespace.
+
+        Namespaces are restricted to one of: "train", "val", "test".
+        Returns "{namespace}/{subkey}" when a subkey is provided; otherwise
+        just the namespace.
+        """
+        allowed = {"train", "val", "test"}
+        assert namespace in allowed, (
+            f"Invalid metrics namespace '{namespace}'. Expected one of: {sorted(allowed)}"
+        )
+        return f"{namespace}/{subkey}" if subkey else namespace
+
+    @staticmethod
+    def subkey_from_full(full_key: str) -> str:
+        """Extract the subkey from a fully-qualified metric key.
+
+        Validates the namespace part is one of: "train", "val", "test".
+        Expects a key in the form "<namespace>/<subkey>" and returns
+        the subkey portion.
+        """
+        assert "/" in full_key, f"Invalid metric key '{full_key}': expected '<namespace>/<subkey>'"
+        namespace, subkey = full_key.split("/", 1)
+        allowed = {"train", "val", "test"}
+        assert namespace in allowed, (
+            f"Invalid metrics namespace '{namespace}'. Expected one of: {sorted(allowed)}"
+        )
+        return subkey
+
 metrics_config = MetricsConfig()

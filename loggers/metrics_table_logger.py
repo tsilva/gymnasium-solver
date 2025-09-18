@@ -18,6 +18,7 @@ from utils.dict_utils import (
     sort_subkeys_by_priority as sort_grouped_subkeys_by_priority,
 )
 from utils.torch import to_python_scalar as _to_python_scalar
+from utils.metrics_config import MetricsConfig
 from utils.formatting import (
     is_number,
     number_to_string
@@ -51,7 +52,8 @@ class MetricsTableLogger(LightningLoggerBase):
     Intended to be used alongside other loggers (e.g., WandbLogger,
     CsvLightningLogger) so all receive the same metrics payload.
     """
-
+    
+    # TODO: this method is a bit clunky, organize it bette, group related properties together and comment them as a group, remove any unused properties
     def __init__(
         self,
         *,
@@ -59,7 +61,6 @@ class MetricsTableLogger(LightningLoggerBase):
         min_table_width: int = 90,
         min_value_column_width: int = 15,
         chart_column_width: int | None = None,
-        key_priority: Iterable[str] | None = None,
     ) -> None:
         """Create a pretty-print logger with sensible defaults.
 
@@ -69,62 +70,48 @@ class MetricsTableLogger(LightningLoggerBase):
         """
         from utils.metrics_config import metrics_config
 
-        # Display config
+        # -- Core metadata --
         self._name = "print"
         self._version: str | int = "0"
-        self._experiment = None
 
+        # -- Dependencies --
         self.metrics_monitor = metrics_monitor
 
-        self.metric_precision = metrics_config.metric_precision_dict()
-        self.metric_delta_rules = metrics_config.metric_delta_rules()
-
-        self.min_val_width = int(min_value_column_width)
-        self.min_table_width = int(min_table_width)
-
-        # Fixed-width charts column; default matches sparkline width
-        if chart_column_width is not None:
-            self.chart_column_width = int(chart_column_width)
-        else:
-            self.chart_column_width = 0  # will be set to sparkline_width below
-
-        resolved_priority = key_priority or metrics_config.key_priority()
-        self.key_priority: Tuple[str, ...] = tuple(resolved_priority)
-        self._key_priority_map: Dict[str, int] = {
-            key: idx for idx, key in enumerate(self.key_priority)
-        }
-        self.previous_metrics: Dict[str, Any] = {}
-
-        # Table printer configuration/state
-        self.indent: int = 4
+        # -- Output environment --
+        self.stream = sys.stdout
         self.colors_enabled: bool = sys.stdout.isatty()
-        self.better_when_increasing: Dict[str, bool] = {}
+        self.use_ansi_inplace: bool = False
+        self.indent: int = 4
 
+        # -- Table layout --
+        self.min_table_width = int(min_table_width)
+        self.min_val_width = int(min_value_column_width)
+        self.sparkline_width: int = 32
+        self.sparkline_history_cap: int = 512
+        self.chart_column_width = self.sparkline_width
+
+        # -- Ordering/prioritization --
+        self.key_priority: Tuple[str, ...] = tuple(metrics_config.key_priority())
+        self._key_priority_map: Dict[str, int] = {key: idx for idx, key in enumerate(self.key_priority)}
         self.group_keys_order: Tuple[str, ...] | None = ("train", "val")
         self.group_subkeys_order: bool = True
-        self.use_ansi_inplace: bool = False
-        self.stream = sys.stdout
+
+        # -- Formatting and thresholds --
+        self.metric_precision_map: Dict[str, int] = dict(metrics_config.metric_precision_dict())
+        self.metric_delta_rules = metrics_config.metric_delta_rules()
         self.delta_tol: float = 1e-12
-        self.metric_precision_map: Dict[str, int] = dict(self.metric_precision)
-
-        # Highlight settings (bare metric subkeys)
         hl_config = metrics_config.highlight_config()
-        self.style_bold_metrics_set = frozenset(hl_config['value_bold_metrics'])
-        self.highlight_row_for_set = frozenset(hl_config['row_metrics'])
-
+        self.style_bold_metrics_set = frozenset(hl_config["value_bold_metrics"])
+        self.highlight_row_for_set = frozenset(hl_config["row_metrics"])
         self.bgcolor_highlight: str = "bg_blue"
         self.bgcolor_alert: str = "bg_yellow"
+        self.better_when_increasing: Dict[str, bool] = {}
 
-        # In-memory history for sparklines (per full metric key)
+        # -- State (updated as we log) --
+        self.previous_metrics: Dict[str, Any] = {}
         self._prev: Optional[Dict[str, Any]] = None
         self._last_height: int = 0
         self._history: Dict[str, List[float]] = {}
-        self.sparkline_width: int = 32
-        self.sparkline_history_cap: int = 512
-
-        # If chart_col_width not explicitly set, mirror sparkline_width
-        if self.chart_column_width == 0:
-            self.chart_column_width = self.sparkline_width
 
 
     # --- Lightning Logger API ---
@@ -183,20 +170,21 @@ class MetricsTableLogger(LightningLoggerBase):
             # Expect namespaced keys: ns/sub
             if "/" not in full_key:
                 continue
+
             # Lookup previous value for the same full key
             if full_key not in prev_snapshot:
                 # No previous value → no delta
                 deltas[full_key] = ("", None)
                 continue
 
-            prev_val = prev_snapshot[full_key]
             # If either is non-numeric, we don't compute a delta
+            prev_val = prev_snapshot[full_key]
             if not (is_number(curr_val) and is_number(prev_val)):
                 deltas[full_key] = ("", None)
                 continue
 
             # Apply delta rule if one exists for the bare metric name
-            bare_key = self._subkey_from_full(full_key)
+            bare_key = MetricsConfig.subkey_from_full(full_key)
             rule_fn = self.metric_delta_rules.get(bare_key)
             if rule_fn is not None:
                 assert rule_fn(prev_val, curr_val), (
@@ -260,19 +248,9 @@ class MetricsTableLogger(LightningLoggerBase):
                 os.system('cls' if os.name == 'nt' else 'clear')
             print(text, file=self.stream)
 
-    # TODO: make this a static method from MetricsConfig, which validates namespaces to be train, val, test
-    @staticmethod
-    def _full_key(namespace: str, subkey: Optional[str]) -> str:
-        return f"{namespace}/{subkey}" if subkey else namespace
-
-    # TODO: make this a static method from MetricsConfig, which validates namespaces to be train, val, test
-    @staticmethod
-    def _subkey_from_full(full_key: str) -> str:
-        return full_key.rsplit("/", 1)[-1]
-
     def _sort_key(self, namespace: str, subkey: str) -> Tuple[int, object]:
         """Sorting helper that honours an explicit key priority list."""
-        full_key = self._full_key(namespace, subkey)
+        full_key = MetricsConfig.full_key(namespace, subkey)
         priority_index = self._key_priority_map.get(full_key)
         if priority_index is not None:
             return (0, priority_index)
@@ -302,7 +280,7 @@ class MetricsTableLogger(LightningLoggerBase):
 
             for metric_name, metric_value in group_metrics.items():
                 key_candidates.append(metric_name)
-                full_key = self._full_key(group_key, metric_name)
+                full_key = MetricsConfig.full_key(group_key, metric_name)
                 metric_precision = self.metric_precision_map.get(metric_name, 2)
 
                 metric_value_s = number_to_string(metric_value, precision=metric_precision, humanize=True)
@@ -379,7 +357,6 @@ class MetricsTableLogger(LightningLoggerBase):
             border=border,
         )
 
-
     def _compose_lines(
         self,
         group_key_order: List[str],
@@ -430,7 +407,7 @@ class MetricsTableLogger(LightningLoggerBase):
                 alert_padded = alert_padding_s + alerts_s
 
                 # Resolve row highlight
-                full_key = self._full_key(group_key, metric_name)
+                full_key = MetricsConfig.full_key(group_key, metric_name)
                 alert_active = full_key in active_alerts
                 key_cell = f"{metric_name:<{key_width}}"
                 

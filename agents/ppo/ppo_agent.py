@@ -7,10 +7,10 @@ from utils.policy_factory import build_policy_from_env_and_config
 from utils.torch import assert_detached
 
 from ..base_agent import BaseAgent
-from .bundles import MetricAlertsPPO
+from .ppo_alerts import PPOAlerts
 
 
-class PPO(BaseAgent):
+class PPOAgent(BaseAgent):
     
     def __init__(self, config):
         super().__init__(config)
@@ -144,6 +144,7 @@ class PPO(BaseAgent):
 
     def on_fit_start(self):
         super().on_fit_start()
+        
         # Register PPO-specific metric monitors as a bundle
-        self.metrics_monitor.register_bundle(MetricAlertsPPO(self))
+        self.metrics_monitor.register_bundle(PPOAlerts(self))
 

@@ -6,7 +6,7 @@ from utils.torch import assert_detached
 from ..base_agent import BaseAgent
 
 
-class REINFORCE(BaseAgent):
+class REINFORCEAgent(BaseAgent):
     
     def build_models(self):
         input_shape = self.train_env.observation_space.shape

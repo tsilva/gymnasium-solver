@@ -1,8 +1,8 @@
-from .agent import PPO
-from .bundles import MetricAlertsPPO
+from .ppo_agent import PPOAgent
+from .ppo_alerts import PPOAlerts
 
 __all__ = [
-    "PPO",
-    "MetricAlertsPPO",
+    "PPOAgent",
+    "PPOAlerts",
 ]
 

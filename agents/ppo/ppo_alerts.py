@@ -2,7 +2,7 @@ from utils.metric_bundles import MetricMonitorBundle
 from utils.metrics_monitor import MetricAlert
 
 
-class MetricAlertsPPO(MetricMonitorBundle):
+class PPOAlerts(MetricMonitorBundle):
     """PPO-specific metric alert bundle.
 
     Encapsulates alert monitors for KL, clip fraction, and explained variance.

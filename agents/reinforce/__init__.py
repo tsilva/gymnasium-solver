@@ -1,6 +1,6 @@
-from .agent import REINFORCE
+from .reinforce_agent import REINFORCEAgent
 
 __all__ = [
-    "REINFORCE",
+    "REINFORCEAgent",
 ]
 

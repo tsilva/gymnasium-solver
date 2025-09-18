@@ -31,9 +31,9 @@ def policy_act(
     dist, value = model(obs)
     if deterministic: actions = dist.mode
     else: actions = dist.sample()
-    log_prob = dist.log_prob(actions)
+    logprobs = dist.log_prob(actions)
     if value is None: value = torch.zeros(actions.shape[0], dtype=torch.float32, device=actions.device)
-    return actions, log_prob, value.squeeze(-1)
+    return actions, logprobs, value.squeeze(-1)
 
 @torch.inference_mode()
 def policy_predict_values(model: torch.nn.Module, obs: Tensor) -> Tensor:

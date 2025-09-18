@@ -92,7 +92,8 @@ _global:
     - "val/baseline_mean" # (used for returns normalization)
     - "val/baseline_std" # (used for returns normalization)
     - "val/entropy_loss_scaled" # (used for entropy regularization)
-    
+  
+  step_key: "train/total_timesteps"
   # Console highlight configuration
   highlight:
     # Rows to highlight across namespaces (blue background + bold key)

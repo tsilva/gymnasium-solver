@@ -26,7 +26,7 @@ class REINFORCE(BaseAgent):
         # Retrieve tensors from batch
         states = batch.observations
         actions = batch.actions
-        old_logprobs = batch.log_prob
+        old_logprobs = batch.logprobs
         returns = batch.returns
         advantages = batch.advantages
 

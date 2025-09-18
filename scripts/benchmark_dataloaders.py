@@ -151,7 +151,7 @@ def build_index_collate_loader(dataset, *, batch_size: int, cfg: BenchmarkConfig
             traj.actions[idxs],
             traj.rewards[idxs],
             traj.dones[idxs],
-            traj.log_prob[idxs],
+            traj.logprobs[idxs],
             traj.values[idxs],
             traj.advantages[idxs],
             traj.returns[idxs],

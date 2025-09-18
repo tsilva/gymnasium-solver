@@ -216,7 +216,7 @@ class RolloutTrajectory(NamedTuple):
     actions: torch.Tensor
     rewards: torch.Tensor
     dones: torch.Tensor
-    log_prob: torch.Tensor
+    logprobs: torch.Tensor
     values: torch.Tensor
     advantages: torch.Tensor
     returns: torch.Tensor
@@ -969,7 +969,7 @@ class RolloutCollector():
             actions=trajectories.actions[idxs],
             rewards=trajectories.rewards[idxs],
             dones=trajectories.dones[idxs],
-            log_prob=trajectories.log_prob[idxs],
+            logprobs=trajectories.logprobs[idxs],
             values=trajectories.values[idxs],
             advantages=trajectories.advantages[idxs],
             returns=trajectories.returns[idxs],

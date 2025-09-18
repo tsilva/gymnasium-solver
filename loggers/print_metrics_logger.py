@@ -93,7 +93,7 @@ class PrintMetricsLogger(LightningLoggerBase):
         # fluctuating value lengths (numbers + deltas + sparklines).
         self.min_table_width = int(min_table_width)
         # Fixed-width charts column; default matches sparkline width
-        self.chart_col_width = int(chart_col_width or 0) if chart_col_width is not None else 0
+        self.chart_column_width = int(chart_col_width or 0) if chart_col_width is not None else 0
         self.key_priority = list(key_priority or list(default_key_priority))
         self._key_priority_map: Dict[str, int] = {key: idx for idx, key in enumerate(self.key_priority)}
         self.previous_metrics: Dict[str, Any] = {}
@@ -136,8 +136,8 @@ class PrintMetricsLogger(LightningLoggerBase):
         self.sparkline_history_cap: int = 512
        
         # If chart_col_width not explicitly set, mirror sparkline_width
-        if self.chart_col_width == 0:
-            self.chart_col_width = int(self.sparkline_width)
+        if self.chart_column_width == 0:
+            self.chart_column_width = int(self.sparkline_width)
 
     # --- Lightning Logger API ---
     @property
@@ -373,7 +373,7 @@ class PrintMetricsLogger(LightningLoggerBase):
             return (
                 f"| {' ' * (self.indent + key_width)} | "
                 f"{' ' * width} | "
-                f"{' ' * self.chart_col_width} | "
+                f"{' ' * self.chart_column_width} | "
                 f"{' ' * alert_width} |"
             )
 
@@ -416,49 +416,61 @@ class PrintMetricsLogger(LightningLoggerBase):
         grouped_metrics: Dict[str, Dict[str, Any]],
         group_key_order: List[str],
         prepared: _PreparedSections,
-        dims: _TableDimensions,
+        dimensions: _TableDimensions,
         active_alerts: Dict[str, Iterable[str]],
     ) -> List[str]:
         lines: List[str] = [""]
-        key_width = dims.key_width
-        val_width = dims.val_width
-        alert_width = dims.alert_width
+        key_width = dimensions.key_width
+        value_width = dimensions.val_width
+        alert_width = dimensions.alert_width
 
         for group_key in group_key_order:
-            formatted_metrics = prepared.formatted.get(group_key)
-            if not formatted_metrics:
+            metrics_formatted_map = prepared.formatted.get(group_key)
+            if not metrics_formatted_map:
                 continue
+
+            metrics_chart_map = prepared.charts.get(group_key, {})
+            metrics_alerts_map = prepared.alerts.get(group_key, {})
 
             header = f"{group_key}/"
             alert_header = "alert" if alert_width else ""
             header_line = (
                 f"| {header:<{self.indent + key_width}} | "
-                f"{'':>{val_width}} | "
-                f"{'':<{self.chart_col_width}} | "
+                f"{'':>{value_width}} | "
+                f"{'':<{self.chart_column_width}} | "
                 f"{alert_header:<{alert_width}} |"
             )
-            lines.append(_ansi(header_line, "bold", enable=self.color))
+            lines.append(_ansi(header_line, "bold", enable=self.color)) # TODO: what is self.color
 
-            for metric_name, metric_value_s in formatted_metrics.items():
-                metric_value_len = len(_strip_ansi(metric_value_s))
-                metric_value_padded_s = (" " * (val_width - metric_value_len) + metric_value_s) if val_width > metric_value_len else metric_value_s
+            for metric_name, metric_value_s in metrics_formatted_map.items():
+                # Pad metric value to the right
+                metric_value_clean_s = _strip_ansi(metric_value_s)
+                metric_value_len = len(metric_value_clean_s)
+                metric_value_padding_s = " " * (value_width - metric_value_len)
+                metric_value_padded_s = metric_value_padding_s + metric_value_s
 
-                chart_disp = prepared.charts.get(group_key, {}).get(metric_name, "")
-                chart_clean = chart_disp[: self.chart_col_width]
-                chart_padded = f"{chart_clean:<{self.chart_col_width}}"
+                # Pad chart to the left
+                chart_s = metrics_chart_map.get(metric_name, "")
+                chart_clean_s = chart_s[: self.chart_column_width]
+                chart_padded_s = f"{chart_clean_s:<{self.chart_column_width}}"
 
-                alert_disp = prepared.alerts.get(group_key, {}).get(metric_name, "")
-                alert_len = len(_strip_ansi(alert_disp))
-                alert_padding = alert_width - alert_len
-                alert_padded = alert_disp + (" " * alert_padding) if alert_padding > 0 else alert_disp
+                # Pad alert to the right
+                alerts_s = metrics_alerts_map.get(metric_name, "")
+                alert_clean = _strip_ansi(alerts_s)
+                alert_len = len(alert_clean)
+                alert_padding_s = " " * (alert_width - alert_len)
+                alert_padded = alert_padding_s + alerts_s
 
+                # Resolve row highlight
                 full_key = self._full_key(group_key, metric_name)
                 alert_active = full_key in active_alerts
                 key_cell = f"{metric_name:<{key_width}}"
+                
                 key_cell, highlight, row_bg_color = self._resolve_row_highlight(metric_name, key_cell, alert_active)    
 
+                key_padding_s = " " * self.indent
                 row = (
-                    f"| {' ' * self.indent}{key_cell} | {metric_value_padded_s} | {chart_padded} | {alert_padded} |"
+                    f"| {key_padding_s}{key_cell} | {metric_value_padded_s} | {chart_padded_s} | {alert_padded} |"
                 )
 
                 if highlight:
@@ -466,13 +478,18 @@ class PrintMetricsLogger(LightningLoggerBase):
                     row = _apply_bg(row, row_bg_color or self.highlight_row_bg_color, enable=enable_bg)
                     if alert_active and not enable_bg:
                         row = f"⚠️  {row}"
+
+                # Add row to lines
                 lines.append(row)
 
-        lines.append(dims.border)
+        # Add border to lines
+        lines.append(dimensions.border)
+
+        # Return lines
         return lines
 
     def _render_table(self, metrics: Dict[str, Any]) -> None:
-        assert metrics, "Data cannot be empty"
+        assert metrics, "metrics cannot be empty"
 
         # Add metrics to the logger history (eg: used for sparklines)
         self._update_history(metrics)

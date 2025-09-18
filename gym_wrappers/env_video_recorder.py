@@ -35,21 +35,7 @@ class EnvVideoRecorder(gym.Wrapper):
             "EnvVideoRecorder requires the base env to be created with render_mode='rgb_array'"
         )
 
-        fps = None
-        metadata = getattr(self.env, "metadata", None)
-        if isinstance(metadata, dict):
-            fps = metadata.get("render_fps")
-        if not isinstance(fps, (int, float)) and hasattr(self.env, "get_render_fps"):
-            extracted = self.env.get_render_fps()
-            if isinstance(extracted, int) and extracted > 0:
-                fps = extracted
-        if not isinstance(fps, (int, float)):
-            metadata = getattr(self._base_env, "metadata", None)
-            if isinstance(metadata, dict):
-                fps = metadata.get("render_fps")
-        if not isinstance(fps, (int, float)):
-            fps = 30
-        self.frames_per_sec = int(fps)
+        self.frames_per_sec = self.env.get_render_fps()
 
         self.video_length = video_length
         self.recording = False

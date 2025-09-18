@@ -65,7 +65,8 @@ class EnvInfoWrapper(gym.ObservationWrapper):
         """Best-effort retrieval of render FPS from env metadata.
 
         Walks the wrapper chain to find a metadata dict exposing `render_fps`.
-        Returns an integer FPS when available, otherwise None.
+        If not found on the env objects, falls back to the loaded spec file
+        (if available). Returns an integer FPS when available, otherwise None.
         """
         current = self
         while isinstance(current, gym.Env):
@@ -77,6 +78,14 @@ class EnvInfoWrapper(gym.ObservationWrapper):
             if not hasattr(current, "env"):
                 break
             current = getattr(current, "env")
+        # Fallback: try spec file
+        try:
+            spec = self.get_spec()
+            fps = spec.get("render_fps", None)
+            if isinstance(fps, (int, float)) and fps > 0:
+                return int(fps)
+        except Exception:
+            pass
         return None
 
     # NOTE: required by ObservationWrapper

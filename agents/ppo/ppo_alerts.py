@@ -12,44 +12,50 @@ class PPOAlerts(MetricMonitorBundle):
         self.agent = agent
 
     def _monitor_approx_kl_oob(self, history: dict):
-        alert_msg = None
         metric_key = "train/approx_kl"
         metric_values = history.get(metric_key)
         if not metric_values:
             return None
         _, last_value = metric_values[-1]
 
+        # If the KL divergence is too low, it means that the updates are too weak
         min_threshold, max_threshold = 1e-3, 5e-2
-        tip = None
         if last_value < min_threshold:
-            alert_msg = f"< {min_threshold} is very low; updates may be too weak"
-            tip = "Increase the learning rate or decrease the clip range"
+            return MetricAlert(
+                metric=metric_key, 
+                message=f"< {min_threshold} is very low; updates may be too weak", 
+                tip="Increase the learning rate or decrease the clip range"
+            )
+        
+        # If the KL divergence is too high, it means that the updates are too aggressive
         if last_value > max_threshold:
-            alert_msg = f"> {max_threshold} is high; updates may be too aggressive"
-            tip = "Decrease the learning rate or increase the clip range"
-
-        if not alert_msg:
-            return None
-        return MetricAlert(metric=metric_key, message=alert_msg, tip=tip)
+            return MetricAlert(
+                metric=metric_key, 
+                message=f"> {max_threshold} is high; updates may be too aggressive", 
+                tip="Decrease the learning rate or increase the clip range"
+            )
 
     def _monitor_clip_fraction_oob(self, history: dict):
-        alert_msg = None
         metric_key = "train/clip_fraction"
         metric_values = history.get(metric_key)
         if not metric_values:
             return None
         _, last_value = metric_values[-1]
 
+        # If the clip fraction is too low, it means that the updates are too weak
         min_threshold, max_threshold = 0.05, 0.5
-        tip = None
         if last_value < min_threshold:
-            alert_msg = f"< {min_threshold} is very low; likely under-updating"
-            tip = "Increase the learning rate or decrease the clip range"
+            return MetricAlert(
+                metric=metric_key, 
+                message=f"< {min_threshold} is very low; likely under-updating", 
+                tip="Increase the learning rate or decrease the clip range"
+            )
+        
+        # If the clip fraction is too high, it means that the updates are too aggressive
         if last_value > max_threshold:
-            alert_msg = f"> {max_threshold} is very high; many updates are clipped"
-            tip = "Decrease the learning rate or increase the clip range"
-
-        if not alert_msg:
-            return None
-        return MetricAlert(metric=metric_key, message=alert_msg, tip=tip)
+            return MetricAlert(
+                metric=metric_key, 
+                message=f"> {max_threshold} is very high; many updates are clipped", 
+                tip="Decrease the learning rate or increase the clip range"
+            )
 

@@ -5,6 +5,7 @@ from gymnasium import Env, error
 from stable_baselines3.common.vec_env.base_vec_env import VecEnv, VecEnvWrapper
 
 from gym_wrappers.env_video_recorder import EnvVideoRecorder
+from gym_wrappers.utils import find_wrapper
 
 
 class VecVideoRecorder(VecEnvWrapper):
@@ -36,16 +37,6 @@ class VecVideoRecorder(VecEnvWrapper):
             base = base.venv
         return base
 
-    def _find_env_wrapper(self, env: Env, wrapper_class):
-        current = env
-        while isinstance(current, Env):
-            if isinstance(current, wrapper_class):
-                return current
-            if not hasattr(current, "env"):
-                break
-            current = current.env
-        return None
-
     def _get_env_recorder(self, env_idx: Optional[int] = None) -> EnvVideoRecorder:
         base = self._unwrap_base_vec_env()
         envs = getattr(base, "envs", None)
@@ -55,7 +46,7 @@ class VecVideoRecorder(VecEnvWrapper):
             )
         idx = self._resolve_env_index(env_idx if env_idx is not None else self.record_env_idx, len(envs))
         target_env = envs[idx]
-        recorder = self._find_env_wrapper(target_env, EnvVideoRecorder)
+        recorder = find_wrapper(target_env, EnvVideoRecorder)
         if recorder is None:
             raise error.Error(
                 "EnvVideoRecorder not found in the base env wrapper chain. Did you enable record_video?"

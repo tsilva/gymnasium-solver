@@ -78,8 +78,28 @@ def _ensure_wandb_run_initialized(config) -> None:
     project_name = config.project_id if getattr(config, "project_id", None) else sanitize_name(config.env_id)
     wandb.init(project=project_name, config=asdict(config))
 
+def _extract_elapsed_seconds(agent) -> Optional[float]:
+    """Return elapsed seconds from agent without broad exception handling.
 
-# TODO: make this code respect CODING_PRINCIPLES.md
+    Prefers an explicit cached value, falling back to timings tracker when
+    available. Returns None when not determinable.
+    """
+    cached = getattr(agent, "_fit_elapsed_seconds", None)
+    if cached is not None:
+        try:
+            return float(cached)
+        except (TypeError, ValueError):
+            return None
+
+    timings = getattr(agent, "timings", None)
+    if timings is None or not hasattr(timings, "seconds_since"):
+        return None
+    try:
+        return float(timings.seconds_since("on_fit_start"))
+    except (TypeError, ValueError, KeyError, RuntimeError):
+        return None
+
+
 def launch_training_from_args(args) -> None:
     """End-to-end training launcher extracted from train.py.
 
@@ -133,13 +153,8 @@ def launch_training_from_args(args) -> None:
         print(f"W&B Workspace: {url}")
 
     # Print final training completion message (duration and normalized reason)
-    try:
-        elapsed = getattr(agent, "_fit_elapsed_seconds", None)
-        if elapsed is None:
-            elapsed = agent.timings.seconds_since("on_fit_start")
-        human = format_duration(float(elapsed))
-    except Exception:
-        human = "unknown"
+    elapsed_seconds = _extract_elapsed_seconds(agent)
+    human = format_duration(elapsed_seconds) if isinstance(elapsed_seconds, (int, float)) else "unknown"
     reason = (
         getattr(agent, "_final_stop_reason", None)
         or getattr(agent, "_early_stop_reason", None)

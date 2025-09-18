@@ -26,9 +26,6 @@ class MetricsConfig:
 
     config_dir: str = "config"
     _config: Dict[str, Any] = field(init=False, default_factory=dict)
-    _metric_delta_rules: Dict[str, Callable] = field(init=False, default_factory=dict)
-    _metric_precision_dict: Dict[str, int] = field(init=False, default_factory=dict)
-    _metric_bounds: Dict[str, Dict[str, float]] = field(init=False, default_factory=dict)
 
     def __post_init__(self) -> None:
         self._load()
@@ -38,58 +35,13 @@ class MetricsConfig:
         metrics_config_path = project_root / self.config_dir / "metrics.yaml"
         data = read_yaml(metrics_config_path) or {}
         self._config = data
-        self._metric_delta_rules = self._build_metric_delta_rules_dict()
-        self._metric_precision_dict = self._build_metric_precision_dict()
-        self._metric_bounds = self._build_metric_bounds_dict()
-    
+
     def _get_global_cfg(self) -> Dict[str, Any]:
         return self._config["_global"]
 
     def _get_metrics(self) -> Dict[str, Any]:
         metrics = [(name, value) for name, value in self._config.items() if not name.startswith("_") and isinstance(value, dict)]
         return metrics
-
-    def _build_metric_bounds_dict(self) -> Dict[str, Dict[str, float]]:
-        """Return min/max bounds per metric if defined in metrics.yaml.
-
-        Shape: {metric_name or namespaced: {"min": float, "max": float}}
-        Missing bounds are omitted per metric.
-        """
-        bounds: Dict[str, Dict[str, float]] = {}
-        for metric_name, metric_cfg in self._config.items():
-            _bounds: Dict[str, float] = {}
-            if "min" in metric_cfg: _bounds["min"] = float(metric_cfg["min"])
-            if "max" in metric_cfg: _bounds["max"] = float(metric_cfg["max"])
-            if _bounds: bounds[metric_name] = dict(_bounds)
-        return bounds
-
-    def _build_metric_precision_dict(self) -> Dict[str, int]:
-        """Convert metrics config to precision dict keyed by metric name. """
-        precision_dict: Dict[str, int] = {}
-        for metric_name, metric_config in self._get_metrics():
-            precision = int(metric_config.get("precision", 2))
-            precision_dict[metric_name] = precision
-        return precision_dict
-
-    def _build_metric_delta_rules_dict(self) -> Dict[str, Callable]:
-        """Return delta validation rules per metric (as callables)."""
-        delta_rules: Dict[str, Callable] = {}
-
-        # Iterate over all metrics and add the delta rule to the delta rules dictionary
-        for metric_name, metric_config in self._get_metrics():
-            # If no delta rule is defined, skip
-            delta_rule = metric_config.get("delta_rule")
-            if not delta_rule: continue
-
-            # If delta rule is non-decreasing, set the rule function
-            if delta_rule == ">=": rule_fn = lambda prev, curr: curr >= prev
-            else: continue
-
-            # Add the rule function to the delta rules dictionary
-            delta_rules[metric_name] = rule_fn
-
-        # Return the delta rules dictionary
-        return delta_rules
 
     @staticmethod
     def add_namespace_to_metric(namespace: str, subkey: Optional[str]) -> str:
@@ -157,12 +109,10 @@ class MetricsConfig:
     def get_metrics_bounds_violations(self, metrics: Dict[str, Any]) -> List[str]:
         """Get violations of metrics within configured bounds."""
         # Collect out of bounds violations (if any)
-        metric_bounds = self._build_metric_bounds_dict()
         violations: List[str] = []
         for metric_name, value in metrics.items():
             # If no bounds, skip
-            _metric_name = MetricsConfig.ensure_unnamespaced_metric(metric_name)
-            bounds = metric_bounds.get(_metric_name)
+            bounds = self.bounds_for_metric(metric_name)
             if not bounds: continue
             
             # If value is less than min bound, add violation
@@ -177,18 +127,32 @@ class MetricsConfig:
 
     def bounds_for_metric(self, metric_name: str) -> Dict[str, float]:
         metric_name = self.ensure_unnamespaced_metric(metric_name)
-        bounds = self._metric_bounds.get(metric_name)
+        bounds = self._config.get(metric_name, {}).get("bounds")
         return bounds
 
     def delta_rules_for_metric(self, metric_name: str) -> Callable:
         metric_name = self.ensure_unnamespaced_metric(metric_name)
-        delta_rules = self._metric_delta_rules.get(metric_name)
-        return delta_rules
+        delta_rule = self._config.get(metric_name, {}).get("delta_rule")
+        if not delta_rule: return None
+        if delta_rule == ">=": delta_rule = lambda prev, curr: curr >= prev
+        else: raise ValueError(f"Invalid delta rule '{delta_rule}' for metric '{metric_name}'")
+        return delta_rule
 
     def precision_for_metric(self, metric_name: str) -> int:
         metric_name = self.ensure_unnamespaced_metric(metric_name)
-        precision = self._metric_precision_dict.get(metric_name, 2)
+        precision = self._config.get(metric_name, {}).get("precision", 2)
         return precision
+
+    def style_for_metric(self, metric_name: str) -> Dict[str, Any]:
+        metric_name = self.ensure_unnamespaced_metric(metric_name)
+        config = self._config.get(metric_name, {})
+        highlight = config.get("highlight", False)
+        bold = config.get("bold", False)
+        style = {
+            "highlight": highlight,
+            "bold": bold,
+        }
+        return style
 
     def assert_metrics_within_bounds(self, metrics: Dict[str, Any]) -> None:
         bound_violations = self.get_metrics_bounds_violations(metrics)

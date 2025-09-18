@@ -6,6 +6,8 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import logger
 
+from gym_wrappers.utils import get_innermost_env
+
 
 class EnvVideoRecorder(gym.Wrapper):
     """Record RGB frames from a single Gymnasium env to an MP4 file."""
@@ -24,9 +26,7 @@ class EnvVideoRecorder(gym.Wrapper):
         super().__init__(env)
 
         # Walk down the wrapper stack to find the innermost environment
-        self._base_env = env
-        while hasattr(self._base_env, "env"):
-            self._base_env = getattr(self._base_env, "env")
+        self._base_env = get_innermost_env(env)
 
         render_mode = getattr(self.env, "render_mode", None)
         if render_mode is None:

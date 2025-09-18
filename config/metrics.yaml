@@ -94,23 +94,6 @@ _global:
     - "val/entropy_loss_scaled"
   
   step_key: "train/total_timesteps"
-  # Console highlight configuration
-  highlight:
-    # Rows to highlight across namespaces (blue background + bold key)
-    row_metrics:
-      - ep_rew_mean
-      - ep_rew_last
-      - ep_rew_best
-      - total_timesteps
-      - loss
-    # Metrics whose values are emphasized in bold (no row background required)
-    value_bold_metrics:
-      - ep_rew_mean
-      - ep_rew_last
-      - ep_rew_best
-      - epoch
-    row_bg_color: bg_blue
-    row_bold: true
 
 clip_range:
   description: "PPO clip range for policy updates (ratio clamp around 1.0)"
@@ -125,6 +108,7 @@ total_episodes:
   delta_rule: ">="  # Should always increase
 
 total_timesteps:
+  highlight: true
   # Note: delta_rule removed because eval/total_timesteps can legitimately decrease
   # between evaluation runs when using different eval strategies or env resets
   description: "Cumulative number of environment steps taken across all training"
@@ -147,6 +131,8 @@ rollout_episodes:
 
 # Episode statistics
 ep_rew_mean:
+  bold: true
+  highlight: true
   description: "Average episode reward over recent episodes window"
   precision: 2
 
@@ -156,6 +142,8 @@ ep_len_mean:
 
 # Immediate episode stats
 ep_rew_last:
+  bold: true
+  highlight: true
   description: "Reward of the most recent completed episode"
   precision: 2
 
@@ -164,6 +152,8 @@ ep_len_last:
   precision: 0
 
 ep_rew_best:
+  bold: true
+  highlight: true
   description: "Running best of ep_rew_mean across epochs"
   precision: 2
 
@@ -239,6 +229,7 @@ value_loss:
   precision: 4
 
 loss:
+  highlight: true
   description: "Total loss used for backprop (policy + value + entropy terms)"
   precision: 4
 

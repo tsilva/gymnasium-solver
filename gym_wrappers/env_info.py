@@ -4,6 +4,7 @@ from dataclasses import asdict
 import gymnasium as gym
 from gymnasium.wrappers import TimeLimit
 
+from gym_wrappers.utils import find_wrapper
 from utils.io import read_yaml
 
 
@@ -96,17 +97,7 @@ class EnvInfoWrapper(gym.ObservationWrapper):
         return observation
 
     def _find_wrapper(self, wrapper_class):
-        """Return the first wrapper instance matching `wrapper_class` in the chain.
-
-        Traverses inward via successive `.env` attributes until it finds an
-        instance of `wrapper_class` or reaches the base env. Returns None when
-        not found.
-        """
-        current = self
-        while True:
-            if isinstance(current, wrapper_class): return current
-            if not hasattr(current, "env"): return None
-            current = getattr(current, "env")
+        return find_wrapper(self, wrapper_class)
 
 if __name__ == "__main__":
     env = gym.make("CartPole-v1")

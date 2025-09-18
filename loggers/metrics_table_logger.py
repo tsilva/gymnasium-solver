@@ -148,31 +148,6 @@ class MetricsTableLogger(LightningLoggerBase):
     def finalize(self, status: str) -> None:  # pragma: no cover - best-effort noop
         return None
 
-    # --- On-demand highlight helpers (lazy, fast) ---
-    def _highlight_value_bold_metrics(self) -> frozenset[str]:
-        """Return the set of metric names whose values should be rendered bold.
-
-        Lazily derived from metrics_config.highlight_config(), cached to avoid
-        repeated allocations while keeping initialization lightweight.
-        """
-        if self._highlight_value_bold_cache is None:
-            hl = metrics_config.highlight_config()
-            self._highlight_value_bold_cache = frozenset(hl.get("value_bold_metrics", ()))
-        return self._highlight_value_bold_cache
-
-    def _highlight_row_metrics(self) -> frozenset[str]:
-        """Return the set of metric names whose rows should be highlighted."""
-        if self._highlight_row_metrics_cache is None:
-            hl = metrics_config.highlight_config()
-            self._highlight_row_metrics_cache = frozenset(hl.get("row_metrics", ()))
-        return self._highlight_row_metrics_cache
-
-    def _is_value_bold_metric(self, metric_name: str) -> bool:
-        return metric_name in self._highlight_value_bold_metrics()
-
-    def _should_highlight_row_for_metric(self, metric_name: str) -> bool:
-        return metric_name in self._highlight_row_metrics()
-
     # TODO: remove?
     def after_save_checkpoint(self, checkpoint_callback: Any) -> None:  # pragma: no cover - unused
         return None
@@ -303,7 +278,7 @@ class MetricsTableLogger(LightningLoggerBase):
                 metric_precision = metrics_config.precision_for_metric(metric_name)
 
                 metric_value_s = number_to_string(metric_value, precision=metric_precision, humanize=True)
-                if self._is_value_bold_metric(metric_name):
+                if metrics_config.style_for_metric(metric_name).get("bold"):
                     metric_value_s = _ansi(metric_value_s, "bold", enable=self.colors_enabled)
 
                 delta_str, color_name = deltas_map.get(full_key, ("", None))
@@ -435,7 +410,7 @@ class MetricsTableLogger(LightningLoggerBase):
                     highlight = True
                     row_bg_color = self.bgcolor_alert
 
-                if not highlight and self._should_highlight_row_for_metric(metric_name):
+                if not highlight and metrics_config.style_for_metric(metric_name).get("highlight"):
                     key_cell = _ansi(key_cell, "bold", enable=self.colors_enabled)
                     highlight = True
                     row_bg_color = self.bgcolor_highlight

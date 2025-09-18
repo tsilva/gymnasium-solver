@@ -587,20 +587,19 @@ class BaseAgent(pl.LightningModule):
         )
 
     def _ensure_wandb_run(self):
+        # If run is not initialized, initialize it
         import wandb
-        run = getattr(wandb, "run", None)
+        run = wandb.run
         if run is None:
             from dataclasses import asdict
             project_name = self.config.project_id if self.config.project_id else sanitize_name(self.config.env_id)
             run = wandb.init(project=project_name, config=asdict(self.config))
-        if run is None: return None
+        
+        # Ensure run has desired name
+        run_name = f"{self.config.algo_id}-{run.id}"
+        if run.name != run_name: run.name = run_name
 
-        run_id = getattr(run, "id", None)
-        if run_id:
-            desired_name = f"{self.config.algo_id}-{run_id}"
-            current_name = getattr(run, "name", None)
-            if current_name != desired_name:
-                run.name = desired_name
+        # Return run
         return run
 
     def _log_hyperparameters(self):

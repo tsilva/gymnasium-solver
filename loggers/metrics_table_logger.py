@@ -103,7 +103,6 @@ class MetricsTableLogger(LightningLoggerBase):
 
         self.better_when_increasing: Dict[str, bool] = {}
 
-
         self.group_keys_order: Tuple[str, ...] | None = ("train", "val")
         self.group_subkeys_order: bool = True
         self.use_ansi_inplace: bool = False
@@ -127,8 +126,7 @@ class MetricsTableLogger(LightningLoggerBase):
         self.sparkline_history_cap: int = 512
        
         # If chart_col_width not explicitly set, mirror sparkline_width
-        if self.chart_column_width == 0:
-            self.chart_column_width = int(self.sparkline_width)
+        self.chart_column_width = self.chart_column_width if self.chart_column_width is not None else self.sparkline_width
 
     # --- Lightning Logger API ---
     @property

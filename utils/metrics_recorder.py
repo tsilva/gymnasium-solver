@@ -24,9 +24,9 @@ class MetricsRecorder:
         rec.update_history({"train/total_timesteps": 1024, "train/loss": 0.2})
     """
 
-    def __init__(self, *, step_key: str | None = None) -> None:
+    def __init__(self) -> None:
         self._buffers: MutableMapping[str, MetricsBuffer] = {}
-        self._history = MetricsHistory(step_key=step_key)
+        self._history = MetricsHistory()
 
     # ---- hot-path recorder ----
     def record(self, namespace: str, metrics: Mapping[str, Any]) -> None:

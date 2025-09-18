@@ -165,11 +165,10 @@ class MetricMonitorBundle:
         # Auto-register any bound method starting with `_monitor`
         fns: list[Callable] = []
         for name in dir(self):
-            if not name.startswith("_monitor"):
-                continue
+            if not name.startswith("_monitor"): continue
             fn = getattr(self, name)
-            if callable(fn):
-                fns.append(fn)
+            if not callable(fn): continue
+            fns.append(fn)
         return tuple(fns)
 
 

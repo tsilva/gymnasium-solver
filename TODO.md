@@ -8,7 +8,6 @@
 - FEAT: make time elapsed metric be highlited as blue
 - FEAT: log model gradients to wandb
 - FEAT: add autotuner worklflow (check wandb logs)
-
 - FEAT: use codex-cli to debug runs
 - Ensure metrics summary is sorted with metrics.yaml priorities
 - FEAT: add normalization support 

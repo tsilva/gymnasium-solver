@@ -23,7 +23,7 @@ Infer the developer’s current coding preferences from uncommitted changes and 
      - Broad `except:` replaced with specific → “Catch only specific, expected exceptions; re‑raise with context.”
      - Constants/config pulled from code into YAML → “Respect the config‑first workflow; avoid hard‑coded branches.”
      - Long function split into helpers → “Prefer small, composable helpers and early returns.”
-     - Docstrings/comments added for tricky paths → “Document non‑trivial helpers; explain intent/edge cases briefly.”
+     - Docstrings/comments added for tricky paths → “Only add docstrings when code isn’t self‑explanatory; don’t document parameters—give a brief overview and any gotchas.”
      - Test coverage added for changed logic → “Add/adjust tests alongside behavior changes.”
      - Metrics unified via existing logger → “Route metrics through established logging surfaces.”
      - Renames toward clarity → “Choose descriptive identifiers; avoid cryptic names.”
@@ -55,4 +55,3 @@ Infer the developer’s current coding preferences from uncommitted changes and 
 - Keep edits localized: do not introduce sweeping reformatting, section renaming, or stylistic churn.
 - Match voice and structure of the existing document; avoid duplicating content from the Architecture Guide.
 - Do not modify `VIBES/tasks/*.md` while executing this task. Only edit `VIBES/CODING_PRINCIPLES.md` when intent is clear.
-

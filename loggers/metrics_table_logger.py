@@ -97,8 +97,6 @@ class MetricsTableLogger(LightningLoggerBase):
         self.group_subkeys_order: bool = True
 
         # -- Formatting and thresholds --
-        self.metric_precision_map: Dict[str, int] = dict(metrics_config.metric_precision_dict())
-        self.metric_delta_rules = metrics_config.metric_delta_rules()
         self.delta_tol: float = 1e-12
         hl_config = metrics_config.highlight_config()
         self.style_bold_metrics_set = frozenset(hl_config["value_bold_metrics"])
@@ -128,7 +126,7 @@ class MetricsTableLogger(LightningLoggerBase):
 
     def log_metrics(self, metrics: dict[str, Any], step: Optional[int] = None) -> None:
         assert metrics, "metrics cannot be empty"
-        metrics_config.assert_metrics_within_bounds(metrics)
+        metrics_config.assert_metrics_within_bounds(metrics) # TODO: move this to the logger?
 
         # Convert values to basic Python scalars for rendering/validation 
         # and discard non-namespace keys (eg: epoch injected by Lightning)
@@ -177,13 +175,10 @@ class MetricsTableLogger(LightningLoggerBase):
 
             # If either is non-numeric, we don't compute a delta
             prev_val = prev_snapshot[full_key]
-            if not (is_number(current_value) and is_number(prev_val)):
-                deltas[full_key] = ("", None)
-                continue
+            assert is_number(current_value) and is_number(prev_val), f"Invalid metric value '{current_value}' or '{prev_val}'"
 
             # Apply delta rule if one exists for the bare metric name
-            bare_key = metrics_config.metric_from_namespaced_metric(full_key)
-            rule_fn = self.metric_delta_rules.get(bare_key)
+            rule_fn = metrics_config.delta_rules_for_metric(full_key)
             if rule_fn is not None:
                 assert rule_fn(prev_val, current_value), (
                     f"Delta rule violation for '{full_key}': previous={prev_val}, current={current_value}."
@@ -201,7 +196,7 @@ class MetricsTableLogger(LightningLoggerBase):
             color = "green" if improved else "red"
             mag = number_to_string(
                 abs(delta),
-                precision=self.metric_precision_map.get(full_key, 2),
+                precision=metrics_config.precision_for_metric(full_key),
                 humanize=True,
             )
             deltas[full_key] = (f"{arrow}{mag}", color)
@@ -248,7 +243,7 @@ class MetricsTableLogger(LightningLoggerBase):
 
     def _sort_key(self, namespace: str, subkey: str) -> Tuple[int, object]:
         """Sorting helper that honours an explicit key priority list."""
-        full_key = metrics_config.namespaced_metric(namespace, subkey)
+        full_key = metrics_config.add_namespace_to_metric(namespace, subkey)
         priority_index = self._key_priority_map.get(full_key)
         if priority_index is not None:
             return (0, priority_index)
@@ -278,8 +273,8 @@ class MetricsTableLogger(LightningLoggerBase):
 
             for metric_name, metric_value in group_metrics.items():
                 key_candidates.append(metric_name)
-                full_key = metrics_config.namespaced_metric(group_key, metric_name)
-                metric_precision = self.metric_precision_map.get(metric_name, 2)
+                full_key = metrics_config.add_namespace_to_metric(group_key, metric_name)
+                metric_precision = metrics_config.precision_for_metric(metric_name)
 
                 metric_value_s = number_to_string(metric_value, precision=metric_precision, humanize=True)
                 if metric_name in self.style_bold_metrics_set:
@@ -405,7 +400,7 @@ class MetricsTableLogger(LightningLoggerBase):
                 alert_padded = alert_padding_s + alerts_s
 
                 # Resolve row highlight
-                namespaced_metric_name = metrics_config.namespaced_metric(group_key, metric_name)
+                namespaced_metric_name = metrics_config.add_namespace_to_metric(group_key, metric_name)
                 alert_active = namespaced_metric_name in active_alerts
                 key_cell = f"{metric_name:<{key_width}}"
                 

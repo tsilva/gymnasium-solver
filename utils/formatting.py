@@ -120,7 +120,7 @@ def format_metric_value(metric_key_or_bare: str, value: Any) -> str:
     try:
         from utils.metrics_config import metrics_config
         bare = str(metric_key_or_bare).rsplit("/", 1)[-1]
-        precision_map = metrics_config.metric_precision_dict()
+        precision_map = metrics_config._build_metric_precision_dict()
         precision = int(precision_map.get(bare, 2))
     except Exception:
         precision = 2

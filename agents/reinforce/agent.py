@@ -3,7 +3,7 @@ import torch
 from utils.policy_factory import build_policy
 from utils.torch import assert_detached
 
-from .base_agent import BaseAgent
+from ..base_agent import BaseAgent
 
 
 class REINFORCE(BaseAgent):
@@ -100,3 +100,4 @@ class REINFORCE(BaseAgent):
             'policy_targets_std': policy_targets.std().detach()
         })
         return loss
+

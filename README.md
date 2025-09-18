@@ -131,22 +131,6 @@ config/            # environment YAML configs
 runs/              # training outputs (checkpoints, videos, logs, config)
 ```
 
-### 🧪 Tests
-```bash
-pytest -q
-```
-
-### 🧑‍💻 Developer tasks
-- **Quality & Debugging**: `run task: bug sweep`, `run task: audit static analysis`
-- **Code Health**: `run task: cleanup dead code`, `run task: cleanup dry file`, `run task: audit encapsulation dry`, `run task: audit separation of concerns`, `run task: audit internals`
-- **Configuration & Dependencies**: `run task: audit config consistency`, `run task: audit dependency health`, `run task: tune hyperparams`
-- **Documentation & Developer Experience**: `run task: audit docs accuracy`, `run task: docs update readme`
-- **Testing**: `run task: audit tests`, `run task: test upgrade`
-- **Style & Imports**: `run task: cleanup imports`
-
-### 📄 License
-MIT
-
 ### 🌀 W&B Sweeps
 - Train under a sweep: set your sweep `program` to call `python train.py --config_id "<env>:<variant>"` (e.g., `CartPole-v1:ppo`).
 - The script auto-detects W&B Agent via `WANDB_SWEEP_ID` and merges `wandb.config` into the main config before training. You can also force this behavior with `--wandb_sweep`.
@@ -187,3 +171,29 @@ Requires a logged-in W&B session (`wandb login`) or `WANDB_API_KEY` set.
   - The script won’t overwrite an existing workspace by default; it prints that it already exists. Use `--overwrite` to update the existing layout.
   - Use `--key-panels-per-section N` to control how many “Key Metrics” panels appear per section.
   - Default workspace name is "<project> View". Override with `--name`.
+
+### 🧪 Tests
+```bash
+pytest -q
+```
+
+### 🧑‍💻 Developer tasks
+- `!TASK: audit_bugs` - Find and document functional defects with precise remediation plans
+- `!TASK: audit_static_analysis` - Identify latent defects using lightweight static checks
+- `!TASK: cleanup_dead_code` - Find and remove unused modules, functions, and branches
+- `!TASK: cleanup_dry_file` - Reduce duplication within a single module by extracting shared behavior
+- `!TASK: audit_dryness` - Identify copy-paste and near-duplicate logic across the codebase
+- `!TASK: audit_encapsulation` - Find places where shared behavior can be encapsulated
+- `!TASK: audit_concerns` - Find separation of concerns issues across layers or modules
+- `!TASK: audit_config_consistency` - Validate inconsistencies across configuration files and registries
+- `!TASK: audit_dependency_health` - Assess and document the state of runtime and development dependencies
+- `!TASK: tune_hyperparams` - Iteratively adjust hyperparameters for fastest convergence
+- `!TASK: update_docs_architecture` - Ensure Architecture Guide stays accurate and useful
+- `!TASK: update_docs_coding_from_diff` - Infer coding preferences from uncommitted changes
+- `!TASK: update_docs_readme` - Keep README concise, accurate, and aligned with current features
+- `!TASK: audit_tests` - Exercise all test suites and document failures or flakiness
+- `!TASK: test_upgrade` - Strengthen test suite by adding tests for high-risk modules
+- `!TASK: cleanup_imports` - Streamline Python imports to reflect actual usage and follow conventions
+
+### 📄 License
+MIT

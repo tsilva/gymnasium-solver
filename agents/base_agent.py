@@ -135,14 +135,6 @@ class BaseAgent(pl.LightningModule):
         train_metrics = train_collector.get_metrics()
         self.timings.start("on_fit_start", values=train_metrics)
 
-        # Register metric monitor functions
-        monitor_fns = self.get_metric_monitor_fns()
-        for key, monitor_fn in monitor_fns: self.metrics_monitor.register(key, monitor_fn)
-
-    def get_metric_monitor_fns(self):
-        # Subclasses must implement this to build their own metric monitor functions
-        return ()
-
     def train_dataloader(self):
         # Some lightweight Trainer stubs used in tests don't manage current_epoch on the module.
         # Guard the assertion to avoid AttributeError while still catching repeated calls.

@@ -1,5 +1,4 @@
 from typing import List, Tuple, Iterable, Callable
-from utils.metrics_monitor import MetricAlert
 
 import torch
 import torch.nn.functional as F
@@ -7,7 +6,8 @@ import torch.nn.functional as F
 from utils.policy_factory import build_policy_from_env_and_config
 from utils.torch import assert_detached
 
-from .base_agent import BaseAgent
+from ..base_agent import BaseAgent
+from .bundles import MetricAlertsPPO
 
 
 class PPO(BaseAgent):
@@ -103,7 +103,6 @@ class PPO(BaseAgent):
             # Measure how many log probs moved beyond the trusted region (average of how many samples are outside the allowed range)
             clip_fraction = ((ratio < 1.0 - self.clip_range) | (ratio > 1.0 + self.clip_range)).float().mean()
 
-
             kl_div = (old_logprobs - new_logprobs).mean()
             approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
             explained_var = 1 - torch.var(returns - values_pred) / torch.var(returns)
@@ -143,106 +142,8 @@ class PPO(BaseAgent):
             'clip_range': new_clip_range
         })
 
-    def get_metric_monitor_fns(self):
-        # PPO now registers metric monitors via a bundle at fit start.
-        # Keep this empty to avoid double-registration.
-        return ()
-
     def on_fit_start(self):
         super().on_fit_start()
         # Register PPO-specific metric monitors as a bundle
         self.metrics_monitor.register_bundle(MetricAlertsPPO(self))
 
-
-class MetricMonitorBundle:
-    """Interface for metric monitor bundles.
-
-    Implementations should return an iterable of (metric_key, monitor_fn)
-    where monitor_fn has signature (metric: str, values: List[Tuple[int, float]]) -> dict | None.
-    """
-
-    def get_monitor_fns(self) -> Iterable[Callable]:
-        # Auto-register any bound method starting with `_monitor`
-        fns: list[Callable] = []
-        for name in dir(self):
-            if not name.startswith("_monitor"): continue
-            fn = getattr(self, name)
-            if not callable(fn): continue
-            fns.append(fn)
-        return tuple(fns)
-
-
-class MetricAlertsPPO(MetricMonitorBundle):
-    """PPO-specific metric alert bundle.
-
-    Encapsulates alert monitors for KL, clip fraction, and explained variance.
-    """
-
-    def __init__(self, agent) -> None:
-        self.agent = agent
-
-    def _monitor_approx_kl_oob(self, history: dict):
-        alert_msg = None
-        metric_key = "train/approx_kl"
-        metric_values = history.get(metric_key)
-        if not metric_values:
-            return None
-        _, last_value = metric_values[-1]
-
-        min_threshold, max_threshold = 1e-3, 5e-2
-        tip = None
-        if last_value < min_threshold:
-            alert_msg = f"< {min_threshold} is very low; updates may be too weak"
-            tip = "Increase the learning rate or decrease the clip range"
-        if last_value > max_threshold:
-            alert_msg = f"> {max_threshold} is high; updates may be too aggressive"
-            tip = "Decrease the learning rate or increase the clip range"
-
-        if not alert_msg:
-            return None
-        return MetricAlert(metric=metric_key, message=alert_msg, tip=tip)
-
-    def _monitor_clip_fraction_oob(self, history: dict):
-        alert_msg = None
-        metric_key = "train/clip_fraction"
-        metric_values = history.get(metric_key)
-        if not metric_values:
-            return None
-        _, last_value = metric_values[-1]
-
-        min_threshold, max_threshold = 0.05, 0.5
-        tip = None
-        if last_value < min_threshold:
-            alert_msg = f"< {min_threshold} is very low; likely under-updating"
-            tip = "Increase the learning rate or decrease the clip range"
-        if last_value > max_threshold:
-            alert_msg = f"> {max_threshold} is very high; many updates are clipped"
-            tip = "Decrease the learning rate or increase the clip range"
-
-        if not alert_msg:
-            return None
-        return MetricAlert(metric=metric_key, message=alert_msg, tip=tip)
-
-    def _monitor_explained_variance_oob(self, history: dict):
-        alert_msg = None
-        metric_key = "train/explained_variance"
-        metric_values = history.get(metric_key)
-        if not metric_values:
-            return None
-        _, last_value = metric_values[-1]
-
-        p = self.agent._calc_training_progress()
-        is_mid_training = 0.33 <= p < 0.66
-        is_late_training = p >= 0.66
-        min_threshold, max_threshold = 0.2, 0.5
-        tip = None
-        if is_mid_training and last_value < min_threshold:
-            alert_msg = f"< {min_threshold} is low for mid-training"
-            tip = "Increase the learning rate or decrease the clip range"
-        elif is_late_training and last_value < max_threshold:
-            alert_msg = f"< {max_threshold} is low for late training"
-            tip = "Increase the learning rate or decrease the clip range"
-
-        if not alert_msg:
-            return None
-        return MetricAlert(metric=metric_key, message=alert_msg, tip=tip)

@@ -12,7 +12,11 @@ from utils.logging import ansi as _ansi
 from utils.logging import apply_ansi_background as _apply_bg
 from utils.logging import strip_ansi_codes as _strip_ansi
 from utils.reports import sparkline as _sparkline
-from utils.dict_utils import group_by_namespace as group_dict_by_key_namespace
+from utils.dict_utils import (
+    group_by_namespace as group_dict_by_key_namespace,
+    order_namespaces as order_grouped_namespaces,
+    sort_subkeys_by_priority as sort_grouped_subkeys_by_priority,
+)
 from utils.torch import to_python_scalar as _to_python_scalar
 from utils.formatting import (
     is_number,
@@ -116,7 +120,7 @@ class PrintMetricsLogger(LightningLoggerBase):
         self.delta_tol: float = 1e-12
         self.metric_precision_map: Dict[str, int] = dict(self.metric_precision)
         # Highlight settings (bare metric subkeys)
-        self.highlight_value_bold_for_set = set(_hl_value_bold_for or {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "epoch"})
+        self.style_bold_metrics_set = set(_hl_value_bold_for or {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "epoch"})
         self.highlight_row_for_set = set(_hl_row_for or {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "total_timesteps"})
         self.highlight_row_bg_color: str = _hl_row_bg_color or "bg_blue"
         self.highlight_row_bold: bool = bool(_hl_row_bold)
@@ -299,44 +303,43 @@ class PrintMetricsLogger(LightningLoggerBase):
 
     def _prepare_sections(
         self,
-        grouped: Dict[str, Dict[str, Any]],
-        ns_order: List[str],
+        grouped_metrics: Dict[str, Dict[str, Any]],
+        group_key_order: List[str],
         active_alerts: Dict[str, Iterable[Dict[str, str]]],
     ) -> _PreparedSections:
         formatted: Dict[str, Dict[str, str]] = {}
         charts: Dict[str, Dict[str, str]] = {}
-        key_candidates: List[str] = [f"{ns}/" for ns in ns_order]
+        key_candidates: List[str] = [f"{ns}/" for ns in group_key_order]
         val_candidates: List[str] = []
         alert_candidates: List[str] = []
         alerts: Dict[str, Dict[str, str]] = {}
 
-        for ns in ns_order:
-            subdict = grouped.get(ns, {})
-            if not subdict:
-                continue
+        for group_key in group_key_order:
+            group_metrics = grouped_metrics.get(group_key, {})
+            assert group_metrics, f"Group metrics cannot be empty: {group_key}"
 
             formatted_sub: Dict[str, str] = {}
             charts_sub: Dict[str, str] = {}
             alerts_sub: Dict[str, str] = {}
 
-            for sub, value in subdict.items():
-                key_candidates.append(sub)
-                full_key = self._full_key(ns, sub)
-                precision = self.metric_precision_map.get(sub, 2)
+            for metric_name, metric_value in group_metrics.items():
+                key_candidates.append(metric_name)
+                full_key = self._full_key(group_key, metric_name)
+                metric_precision = self.metric_precision_map.get(metric_name, 2)
 
-                val_str = number_to_string(value, precision=precision, humanize=True)
-                if sub in self.highlight_value_bold_for_set:
-                    val_str = _ansi(val_str, "bold", enable=self.color)
+                metric_value_s = number_to_string(metric_value, precision=metric_precision, humanize=True)
+                if metric_name in self.style_bold_metrics_set:
+                    metric_value_s = _ansi(metric_value_s, "bold", enable=self.color)
 
-                delta_str, color_name = self._delta_for_key(ns, sub, value)
+                delta_str, color_name = self._delta_for_key(group_key, metric_name, metric_value)
                 if delta_str:
                     delta_disp = _ansi(delta_str, color_name, enable=self.color)
-                    val_disp = f"{val_str} {delta_disp}"
+                    val_disp = f"{metric_value_s} {delta_disp}"
                 else:
-                    val_disp = val_str
+                    val_disp = metric_value_s
 
                 chart_disp = ""
-                if self.show_sparklines and is_number(value):
+                if self.show_sparklines and is_number(metric_value):
                     chart_disp = self._spark_for_key(full_key, self.sparkline_width)
 
                 _alerts = active_alerts.get(full_key, [])
@@ -346,17 +349,17 @@ class PrintMetricsLogger(LightningLoggerBase):
                 else:   
                     alert_disp = ""
 
-                formatted_sub[sub] = val_disp
-                charts_sub[sub] = chart_disp
-                alerts_sub[sub] = alert_disp
+                formatted_sub[metric_name] = val_disp
+                charts_sub[metric_name] = chart_disp
+                alerts_sub[metric_name] = alert_disp
 
                 val_candidates.append(_strip_ansi(val_disp))
                 if alert_disp:
                     alert_candidates.append(_strip_ansi(alert_disp))
 
             if formatted_sub:
-                formatted[ns] = formatted_sub
-                charts[ns] = charts_sub
+                formatted[group_key] = formatted_sub
+                charts[group_key] = charts_sub
 
         return _PreparedSections(
             formatted=formatted,
@@ -486,15 +489,17 @@ class PrintMetricsLogger(LightningLoggerBase):
 
         # Group metrics by namespace (eg: train and val namespaces)
         grouped_metrics = group_dict_by_key_namespace(metrics)
-        # TODO: create reusable util for dict_utils.py and use it here instead of class method
-        sorted_grouped_metrics = self._sort_grouped_metrics(grouped_metrics)
+        
+        # Order namespaces using reusable util (prefers self.group_keys_order)
+        sorted_grouped_metrics = order_grouped_namespaces(grouped_metrics, self.group_keys_order)
 
-        # TODO: create reusable util for dict_utils.py and use it here instead of class method
+        # Sort subkeys per-namespace using reusable util (respects priority map)
         if self.group_subkeys_order:
-            for ns in sorted_grouped_metrics:
-                grouped_metrics[ns] = dict(
-                    sorted(grouped_metrics[ns].items(), key=lambda kv: self._sort_key(ns, kv[0]))
-                )
+            grouped_metrics = sort_grouped_subkeys_by_priority(
+                grouped_metrics,
+                sorted_grouped_metrics,
+                self._key_priority_map,
+            )
 
         active_alerts = self.metrics_monitor.get_active_alerts()
         prepared = self._prepare_sections(grouped_metrics, sorted_grouped_metrics, active_alerts)

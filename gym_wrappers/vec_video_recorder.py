@@ -113,6 +113,23 @@ class VecVideoRecorder(VecEnvWrapper):
         self.stroke_width = stroke_width
         self._font = None  # Will be initialized when needed
 
+    def _resolve_env_index(self, length: int) -> int:
+        """Return a clamped env index for vector data, defaulting to env 0."""
+        idx_value = self.record_env_idx if self.record_env_idx is not None else 0
+        try:
+            idx = int(idx_value)
+        except (TypeError, ValueError):
+            idx = 0
+        if length <= 0:
+            return idx
+        return max(0, min(idx, length - 1))
+
+    def _on_episode_finished(self) -> None:
+        """Reset counters when the tracked env completes an episode."""
+        self.current_step = 0
+        self.current_episode += 1
+        self.accumulated_reward = 0.0
+
     def _get_font(self):
         """Get or create the font for text overlay."""
         if self._font is None:
@@ -232,29 +249,24 @@ class VecVideoRecorder(VecEnvWrapper):
         self.current_step += 1
         
         # Accumulate reward for the selected env (default to first)
+        env_idx: Optional[int] = None
         if isinstance(rewards, np.ndarray):
-            idx = int(self.record_env_idx or 0)
-            idx = max(0, min(idx, rewards.shape[0] - 1))
-            self.accumulated_reward += float(rewards[idx])
+            env_idx = self._resolve_env_index(rewards.shape[0])
+            self.accumulated_reward += float(rewards[env_idx])
         else:
             # Non-vector case
             self.accumulated_reward += float(rewards)
-        
+
         self._capture_frame()
 
         # Reset step counter if the selected environment is done
         if isinstance(dones, np.ndarray):
-            idx = int(self.record_env_idx or 0)
-            idx = max(0, min(idx, dones.shape[0] - 1))
+            idx = env_idx if env_idx is not None else self._resolve_env_index(dones.shape[0])
             if bool(dones[idx]):
-                self.current_step = 0
-                self.current_episode += 1
-                self.accumulated_reward = 0.0
+                self._on_episode_finished()
         else:
             if bool(dones):
-                self.current_step = 0
-                self.current_episode += 1
-                self.accumulated_reward = 0.0
+                self._on_episode_finished()
 
         return obs, rewards, dones, infos
 
@@ -271,9 +283,7 @@ class VecVideoRecorder(VecEnvWrapper):
         if self.record_env_idx is not None:
             images = self.env.get_images()
             if isinstance(images, (list, tuple)) and len(images) > 0:
-                idx = int(self.record_env_idx)
-                # Clamp index to valid range
-                idx = max(0, min(idx, len(images) - 1))
+                idx = self._resolve_env_index(len(images))
                 img = images[idx]
                 if isinstance(img, np.ndarray):
                     frame = img

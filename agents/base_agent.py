@@ -454,7 +454,7 @@ class BaseAgent(pl.LightningModule):
             MonitorMetricsCallback,
             DispatchMetricsCallback,
             ModelCheckpointCallback,
-            VideoLoggerCallback,
+            WandbVideoLoggerCallback,
             EndOfTrainingReportCallback,
             EarlyStoppingCallback,
             WarmupEvalCallback
@@ -487,7 +487,7 @@ class BaseAgent(pl.LightningModule):
 
         # Video logger watches a run-specific media directory lazily (do not create it up-front)
         video_dir = self.run_manager.get_run_dir() / "videos"
-        callbacks.append(VideoLoggerCallback(
+        callbacks.append(WandbVideoLoggerCallback(
             media_root=str(video_dir),
             namespace_depth=1,
         ))

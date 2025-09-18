@@ -12,7 +12,7 @@ from watchdog.observers import Observer
 import wandb
 
 
-class VideoLoggerCallback(pl.Callback):
+class WandbVideoLoggerCallback(pl.Callback):
     """
     Watches multiple media directories for new files and logs them to Weights & Biases
     on epoch end. Supports separate directories for train and eval videos.

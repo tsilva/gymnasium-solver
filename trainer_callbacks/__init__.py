@@ -2,7 +2,7 @@
 
 from .dispatch_metrics import DispatchMetricsCallback
 from .model_checkpoint import ModelCheckpointCallback
-from .video_logger import VideoLoggerCallback
+from .wandb_video_logger import WandbVideoLoggerCallback
 from .end_of_training_report import EndOfTrainingReportCallback
 from .early_stopping import EarlyStoppingCallback
 from .warmup_eval import WarmupEvalCallback
@@ -10,7 +10,7 @@ from .monitor_metrics import MonitorMetricsCallback
 
 __all__ = [
     "ModelCheckpointCallback", 
-    "VideoLoggerCallback",
+    "WandbVideoLoggerCallback",
     "EndOfTrainingReportCallback",
     "EarlyStoppingCallback",
     "DispatchMetricsCallback",

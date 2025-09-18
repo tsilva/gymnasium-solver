@@ -66,8 +66,6 @@ class MetricsTableLogger(LightningLoggerBase):
         When explicit rule/formatting dicts are not provided, defaults are
         sourced from `utils.metrics_config.metrics_config` so callers can simply
         instantiate `PrintMetricsLogger()` without wiring config plumbing.
-
-        Algorithm-specific metric checks have been removed.
         """
         from utils.metrics_config import metrics_config
 
@@ -82,11 +80,14 @@ class MetricsTableLogger(LightningLoggerBase):
         self.metric_delta_rules = metrics_config.metric_delta_rules()
 
         self.min_val_width = int(min_value_column_width)
-        # Enforce a minimum overall table width to reduce jitter from
-        # fluctuating value lengths (numbers + deltas + sparklines).
         self.min_table_width = int(min_table_width)
+
         # Fixed-width charts column; default matches sparkline width
-        self.chart_column_width = int(chart_column_width or 0) if chart_column_width is not None else 0
+        if chart_column_width is not None:
+            self.chart_column_width = int(chart_column_width)
+        else:
+            self.chart_column_width = 0  # will be set to sparkline_width below
+
         resolved_priority = key_priority or metrics_config.key_priority()
         self.key_priority: Tuple[str, ...] = tuple(resolved_priority)
         self._key_priority_map: Dict[str, int] = {
@@ -94,13 +95,9 @@ class MetricsTableLogger(LightningLoggerBase):
         }
         self.previous_metrics: Dict[str, Any] = {}
 
-        # Highlight/bounds from metrics.yaml
-        # -------- Inlined table printer configuration/state --------
+        # Table printer configuration/state
         self.indent: int = 4
-
-        # Enable colors if stdout is a tty
         self.colors_enabled: bool = sys.stdout.isatty()
-
         self.better_when_increasing: Dict[str, bool] = {}
 
         self.group_keys_order: Tuple[str, ...] | None = ("train", "val")
@@ -116,7 +113,7 @@ class MetricsTableLogger(LightningLoggerBase):
         self.highlight_row_for_set = frozenset(hl_config['row_metrics'])
 
         self.bgcolor_highlight: str = "bg_blue"
-        self.bgcolor_alert: str = 'bg_yellow'
+        self.bgcolor_alert: str = "bg_yellow"
 
         # In-memory history for sparklines (per full metric key)
         self._prev: Optional[Dict[str, Any]] = None
@@ -124,9 +121,11 @@ class MetricsTableLogger(LightningLoggerBase):
         self._history: Dict[str, List[float]] = {}
         self.sparkline_width: int = 32
         self.sparkline_history_cap: int = 512
-       
+
         # If chart_col_width not explicitly set, mirror sparkline_width
-        self.chart_column_width = self.chart_column_width if self.chart_column_width is not None else self.sparkline_width
+        if self.chart_column_width == 0:
+            self.chart_column_width = self.sparkline_width
+
 
     # --- Lightning Logger API ---
     @property

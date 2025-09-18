@@ -22,6 +22,7 @@ class PPOAlerts(MetricMonitorBundle):
         min_threshold, max_threshold = 1e-3, 5e-2
         if last_value < min_threshold:
             return MetricAlert(
+                _id=f"{metric_key}/oob_min",
                 metric=metric_key, 
                 message=f"< {min_threshold} is very low; updates may be too weak", 
                 tip="Increase the learning rate or decrease the clip range"
@@ -30,6 +31,7 @@ class PPOAlerts(MetricMonitorBundle):
         # If the KL divergence is too high, it means that the updates are too aggressive
         if last_value > max_threshold:
             return MetricAlert(
+                _id=f"{metric_key}/oob_max",
                 metric=metric_key, 
                 message=f"> {max_threshold} is high; updates may be too aggressive", 
                 tip="Decrease the learning rate or increase the clip range"
@@ -46,6 +48,7 @@ class PPOAlerts(MetricMonitorBundle):
         min_threshold, max_threshold = 0.05, 0.5
         if last_value < min_threshold:
             return MetricAlert(
+                _id=f"{metric_key}/oob_min",
                 metric=metric_key, 
                 message=f"< {min_threshold} is very low; likely under-updating", 
                 tip="Increase the learning rate or decrease the clip range"
@@ -54,6 +57,7 @@ class PPOAlerts(MetricMonitorBundle):
         # If the clip fraction is too high, it means that the updates are too aggressive
         if last_value > max_threshold:
             return MetricAlert(
+                _id=f"{metric_key}/oob_max",
                 metric=metric_key, 
                 message=f"> {max_threshold} is very high; many updates are clipped", 
                 tip="Decrease the learning rate or increase the clip range"

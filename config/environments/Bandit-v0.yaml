@@ -4,45 +4,18 @@ env_kwargs:
   means: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
   stds: 1
   episode_length: 1
-max_timesteps: 2e5
-eval_episodes: 100
-eval_freq_epochs: 10
-early_stop_on_train_threshold: false
-early_stop_on_eval_threshold: true
 
 ppo:
   algo_id: ppo
+  max_timesteps: 20_000
   n_envs: 16
   n_steps: 64
   batch_size: 0.25
   n_epochs: 4
-  policy_lr: 3e-3
+  policy_lr: lin_4e-2
   clip_range: 0.2
   gamma: 1.0           # single-step episodes
   gae_lambda: 1.0
   normalize_advantages: "rollout"
-  
-ppo_optimal:
-  algo_id: ppo
-  max_timesteps: 300_000
-
-  # Bandit-friendly dynamics
-  gamma: 0.0              # 1-step bandit → no bootstrapping
-  optimizer: adam         # AdamW not needed here
-  policy_lr: 0.03         # bigger step size to accelerate policy shifts
-  clip_range: 0.3       # widen PPO trust region for larger moves
-
-  # Bigger low-variance batches
-  n_envs: 64
-  n_steps: 64             # 64 * 64 = 4096 samples/rollout
-  batch_size: 1024        # multiple mini-batches per rollout for larger policy moves
-  n_epochs: 8             # a few strong passes per batch
-
-  # Stabilizers
-  ent_coef: 0.0           # exploit once gradients identify the best arm; initial randomness still explores
-  vf_coef: 0.3           # tiny baseline to cut variance
-  max_grad_norm: 1.0
-
-  # Evaluation
-  eval_freq_epochs: 10
-  eval_episodes: 100      # match base variant to keep stochastic eval variance high
+  eval_warmup_epochs: 5
+  eval_freq_epochs: 1

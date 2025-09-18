@@ -2,7 +2,6 @@ from typing import Iterable, List
 
 from utils.logging import format_section_footer, format_section_header
 
-
 def downsample(seq: Iterable[float], target: int) -> List[float]:
     """Uniformly downsample a sequence to a target length (best-effort).
 
@@ -100,7 +99,7 @@ def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48
         vlast = values[-1]
         if not printed_header:
             # Use shared header/footer formatting for consistency
-            print("\n" + format_section_header("Metrics Summary (ASCII)", width=width))
+            print("\n" + format_section_header("Metric History".upper(), width=width))
             printed_header = True
         
         # Pipe-separated stats for easier parsing/reading
@@ -117,3 +116,22 @@ def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48
         if shown == 0:
             print("(no numeric metrics to summarize)")
         print(format_section_footer(width=width))
+
+def print_terminal_ascii_alerts(freq_alerts: List[dict], width: int = 48): 
+    """Print an ASCII alert summary.
+
+    Args:
+        freq_alerts: List of MetricAlert objects.
+        width: Width of the section header.
+
+    Returns:
+        None
+    """
+    print("\n" + format_section_header("Metric Alerts".upper(), width=width))
+    for freq_alert in freq_alerts:
+        alert = freq_alert["alert"]
+        count = freq_alert["count"]
+        print(f"\n- `{alert._id}` ocurred `{count}` times during training:")
+        print(f"  - message: {alert.message}") 
+        print(f"  - tip: {alert.tip}")
+    print(format_section_footer(width=width))

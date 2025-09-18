@@ -185,12 +185,12 @@ class Config:
     # (eval_freq_epochs doesn't apply until these many epochs have passed)
     eval_warmup_epochs: int = 0
 
-    # How often to evaluate the policy (how many training epochs between evaluations)
-    eval_freq_epochs: Optional[int] = None
-
     # How many episodes to evaluate the policy for each evaluation
     # (stats will be averaged over all episodes; the more episodes, the more reliable the stats)
-    eval_episodes: Optional[int] = None
+    eval_episodes: int = 100
+
+    # How often to evaluate the policy (how many training epochs between evaluations)
+    eval_freq_epochs: Optional[int] = None
 
     # How often to record videos of the policy during evaluation
     # (how many training epochs between recordings)

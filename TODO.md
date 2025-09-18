@@ -1,5 +1,4 @@
-- must sort by alert id not by metric
-- FEAT: count how many times each alert triggered, couple that with predefined recommendations on what to tune
+- TODO: dont tie eval_freq_epochs and eval_warmup_epochs to epochs because ppos updates for many epochs
 - FEAT: prefix metrics (eg: time/epoch, time/step, etc., env/obs_mean, env/obs_std, env/)
 - FEAT: make boot and shutdown times faster
 - FEAT: wandb bug may caused by lack of .finish()

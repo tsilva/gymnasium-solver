@@ -40,15 +40,15 @@ class MetricsMonitor:
             # Execute monitor functions for each metric
             for fn in fns:
                 # If no alert triggered, skip
-                msg = fn(metric, metric_values)
-                if not msg:  continue
+                alert = fn(metric, metric_values)
+                if not alert: continue
 
                 # Add alert to list
-                metrics_alerts.setdefault(metric, []).append(msg)
+                metrics_alerts.setdefault(metric, []).append(alert)
 
                 # Count the number of times this alert was raised during training
-                self.alerts_counter.setdefault(metric, 0)
-                self.alerts_counter[metric] += 1
+                self.alerts_counter.setdefault(metric, [alert, 0])
+                self.alerts_counter[metric][1] += 1
 
         # For each metric, add to active alerts if alerts
         # are present, if no alerts, remove previous alerts

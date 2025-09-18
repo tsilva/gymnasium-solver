@@ -14,6 +14,7 @@ Cleanup Targets
   Next steps: 1) break the inspector helpers into smaller modules/functions (env/model loading, UI layout, event handlers). 2) carve RolloutCollector into focused
   components (buffer, metrics, evaluation) before touching the TODO-labeled logic.
 
+- must sort by alert id not by metric
 - FEAT: count how many times each alert triggered, couple that with predefined recommendations on what to tune
 - FEAT: prefix metrics (eg: time/epoch, time/step, etc., env/obs_mean, env/obs_std, env/)
 - FEAT: make boot and shutdown times faster

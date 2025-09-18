@@ -1,3 +1,4 @@
+from click import Option
 import torch
 import torch.nn.functional as F
 from typing import List, Tuple
@@ -148,27 +149,55 @@ class PPO(BaseAgent):
             (f"train/clip_fraction", self._monitor_clip_fraction_oob),
             (f"train/explained_variance", self._monitor_explained_variance_oob),
         )
-
+    
+    # TODO: consider creating bundles objects that can be registered, set this there, because this doesn't need to be in class
     def _monitor_approx_kl_oob(self, metric: str, metric_values: List[Tuple[int, float]]):
+        alert = {}
+        
         _, last_value = metric_values[-1]
+        
         min_threshold, max_threshold = 1e-3, 5e-2
-        if last_value < min_threshold: return f"< {min_threshold} is very low; updates may be too weak"
-        if last_value > max_threshold: return f"> {max_threshold} is high; updates may be too aggressive"
-        return None
+        if last_value < min_threshold: 
+            alert['message'] = f"< {min_threshold} is very low; updates may be too weak"
+            alert['tip'] = "Increase the learning rate or decrease the clip range"
+        if last_value > max_threshold: 
+            alert['message'] = f"> {max_threshold} is high; updates may be too aggressive"
+            alert['tip'] = "Decrease the learning rate or increase the clip range"
+
+        alert = alert if alert else None
+        return alert
 
     def _monitor_clip_fraction_oob(self, metric: str, metric_values: List[Tuple[int, float]]):
+        alert = {}
+
         _, last_value = metric_values[-1]
+
         min_threshold, max_threshold = 0.05, 0.5
-        if last_value < min_threshold: return f"< {min_threshold} is very low; likely under-updating"
-        if last_value > max_threshold: return f"> {max_threshold} is very high; many updates are clipped"
-        return None
+        if last_value < min_threshold: 
+            alert['message'] = f"< {min_threshold} is very low; likely under-updating"
+            alert['tip'] = "Increase the learning rate or decrease the clip range"
+        if last_value > max_threshold: 
+            alert['message'] = f"> {max_threshold} is very high; many updates are clipped"
+            alert['tip'] = "Decrease the learning rate or increase the clip range"
+
+        alert = alert if alert else None
+        return alert
 
     def _monitor_explained_variance_oob(self, metric: str, metric_values: List[Tuple[int, float]]):
+        alert = {}
         _, last_value = metric_values[-1]
+
         p = self._calc_training_progress()
+
         is_mid_training = 0.33 <= p < 0.66
-        is_late_training = p >= 0.66
+        is_late_training = p >= 0.66    
         min_threshold, max_threshold = 0.2, 0.5
-        if is_mid_training and last_value < min_threshold: return f"< {min_threshold} is low for mid-training"
-        if is_late_training and last_value < max_threshold: return f"< {max_threshold} is low for late training"
-        return None
+        if is_mid_training and last_value < min_threshold: 
+            alert['message'] = f"< {min_threshold} is low for mid-training"
+            alert['tip'] = "Increase the learning rate or decrease the clip range"
+        elif is_late_training and last_value < max_threshold: 
+            alert['message'] = f"< {max_threshold} is low for late training"
+            alert['tip'] = "Increase the learning rate or decrease the clip range"
+
+        alert = alert if alert else None
+        return alert

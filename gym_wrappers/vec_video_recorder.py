@@ -113,11 +113,6 @@ class VecVideoRecorder(VecEnvWrapper):
         self.stroke_width = stroke_width
         self._font = None  # Will be initialized when needed
 
-        try:
-            import moviepy  # noqa: F401
-        except ImportError as e:  # pragma: no cover
-            raise error.DependencyNotInstalled("MoviePy is not installed, run `pip install 'gymnasium[other]'`") from e
-
     def _get_font(self):
         """Get or create the font for text overlay."""
         if self._font is None:
@@ -317,11 +312,7 @@ class VecVideoRecorder(VecEnvWrapper):
                 # Recording stops automatically when exiting the with block
         """
         # Normalize to string in case a PathLike was provided
-        try:
-            video_path = os.fspath(video_path)
-        except TypeError:
-            # Fallback: ensure it's a string for downstream APIs
-            video_path = str(video_path)
+        video_path = os.fspath(video_path)
 
         if not record_video:
             yield self
@@ -344,11 +335,7 @@ class VecVideoRecorder(VecEnvWrapper):
         assert len(self.recorded_frames) > 0, "No frames recorded to save."
 
         # Normalize potential PathLike to str for safety
-        try:
-            path_str = os.fspath(video_path)
-        except TypeError:
-            path_str = str(video_path)
-
+        path_str = os.fspath(video_path)
         assert path_str.endswith(".mp4"), "Video file must have .mp4 extension"
 
         from moviepy.video.io.ImageSequenceClip import ImageSequenceClip

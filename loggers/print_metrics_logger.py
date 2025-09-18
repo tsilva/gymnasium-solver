@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Callable, List, Iterable, Tuple
+from typing import Any, Dict, Optional, Callable, List, Iterable, Tuple, Mapping
 from dataclasses import dataclass
 
 import os
@@ -12,7 +12,7 @@ from utils.logging import ansi as _ansi
 from utils.logging import apply_ansi_background as _apply_bg
 from utils.logging import strip_ansi_codes as _strip_ansi
 from utils.reports import sparkline as _sparkline
-from utils.dict_utils import group_by_namespace as _group_by_namespace
+from utils.dict_utils import group_by_namespace as group_dict_by_key_namespace
 from utils.torch import to_python_scalar as _to_python_scalar
 from utils.formatting import (
     is_number,
@@ -109,8 +109,8 @@ class PrintMetricsLogger(LightningLoggerBase):
         self.compact_numbers: bool = True
         self.color: bool = bool(sys.stdout.isatty() and os.environ.get("NO_COLOR") is None)
         self.better_when_increasing: Dict[str, bool] = {}
-        self.fixed_section_order: Optional[List[str]] = ["train", "val"]
-        self.sort_keys_within_section: bool = True
+        self.group_keys_order: Optional[List[str]] = ["train", "val"]
+        self.group_subkeys_order: bool = True
         self.use_ansi_inplace: bool = False
         self.stream = sys.stdout
         self.delta_tol: float = 1e-12
@@ -130,9 +130,6 @@ class PrintMetricsLogger(LightningLoggerBase):
         self.show_sparklines: bool = True
         self.sparkline_width: int = 32
         self.sparkline_history_cap: int = 512
-        # Persisted bounds-alert messages by full metric key. Alerts remain
-        # until we observe a non-violating value reported for that key.
-        self._active_bounds_alerts: Dict[str, str] = {}
        
         # If chart_col_width not explicitly set, mirror sparkline_width
         if self.chart_col_width == 0:
@@ -155,6 +152,8 @@ class PrintMetricsLogger(LightningLoggerBase):
         return None
 
     def log_metrics(self, metrics: dict[str, Any], step: Optional[int] = None) -> None:
+        assert metrics, "Metrics cannot be empty"
+        
         # Convert values to basic Python scalars for rendering/validation 
         # and discard non-namespace keys (eg: epoch injected by Lightning)
         simple: Dict[str, Any] = {k: _to_python_scalar(v) for k, v in dict(metrics).items() if "/" in k}
@@ -167,9 +166,7 @@ class PrintMetricsLogger(LightningLoggerBase):
         # Validate deltas using the latest snapshot
         self._validate_metric_deltas(simple)
 
-        # Update persisted bounds alerts based only on keys reported now
-        # (absence of a key does not clear its alert).
-        self._update_bounds_alerts(simple)
+        # TODO: assert metrics within bounds
 
         # Render the metrics table
         self._render_table(merged)
@@ -211,7 +208,7 @@ class PrintMetricsLogger(LightningLoggerBase):
         if self._prev is None: return ("", None)
 
         # In case we don't have a previous value for the key, return empty string
-        full_key = f"{namespace}/{key}" if key else namespace
+        full_key = self._full_key(namespace, key)
         if full_key not in self._prev: return ("", None)
 
         # In case the delta is less than the tolerance, return 0 delta
@@ -258,54 +255,6 @@ class PrintMetricsLogger(LightningLoggerBase):
             # Set the history for the key
             self._history[k] = hist[-self.sparkline_history_cap :]
 
-    def _update_bounds_alerts(self, current_snapshot: Dict[str, Any]) -> None:
-        """Update active bounds alerts based on the current metrics payload.
-
-        - Adds/updates alerts for keys present in `current_snapshot` that
-          violate configured bounds.
-        - Clears alerts only when a key is present and within bounds.
-        - Leaves alerts untouched if a key is absent (persist across epochs).
-        """
-        for full_key, val in current_snapshot.items():
-            if not is_number(val):
-                continue
-            # Lookup bounds for fully-qualified key, then bare subkey
-            bounds = self.metric_bounds_map.get(full_key)
-            if not bounds:
-                subkey = full_key.rsplit("/", 1)[-1]
-                bounds = self.metric_bounds_map.get(subkey)
-            if not bounds:
-                # No bounds configured; do not change any alert state
-                continue
-
-            v = float(val)
-            has_min = "min" in bounds
-            has_max = "max" in bounds
-            below = has_min and (v < float(bounds["min"]))
-            above = has_max and (v > float(bounds["max"]))
-            violating = below or above
-
-            if violating:
-                # Format a concise message and persist it
-                rng = None
-                if has_min and has_max:
-                    rng = f"[{bounds['min']}, {bounds['max']}]"
-                elif has_min:
-                    rng = f">= {bounds['min']}"
-                elif has_max:
-                    rng = f"<= {bounds['max']}"
-                else:
-                    rng = "(no bounds)"
-
-                prec = self.metric_precision_map.get(full_key, self.metric_precision_map.get(full_key.rsplit("/", 1)[-1], 2))
-                vdisp = number_to_string(v, precision=prec, humanize=True)
-                msg = f"⚠️  Bounds alert: {full_key} = {vdisp} outside {rng}"
-                self._active_bounds_alerts[full_key] = msg
-            else:
-                # Observed a non-violating value → clear any persisted alert
-                if full_key in self._active_bounds_alerts:
-                    self._active_bounds_alerts.pop(full_key, None)
-
     def _render_lines(self, lines: List[str]) -> None:
         text = "\n".join(lines)
         if self.use_ansi_inplace and self._last_height > 0:
@@ -318,57 +267,48 @@ class PrintMetricsLogger(LightningLoggerBase):
                 os.system('cls' if os.name == 'nt' else 'clear')
             print(text, file=self.stream)
 
+    @staticmethod
+    def _full_key(namespace: str, subkey: Optional[str]) -> str:
+        return f"{namespace}/{subkey}" if subkey else namespace
+
+    @staticmethod
+    def _subkey_from_full(full_key: str) -> str:
+        return full_key.rsplit("/", 1)[-1]
+
+    def _bounds_for_metric(self, full_key: str) -> Optional[Mapping[str, Any]]:
+        bounds = self.metric_bounds_map.get(full_key)
+        if bounds:
+            return bounds
+        subkey = self._subkey_from_full(full_key)
+        return self.metric_bounds_map.get(subkey)
+
     def _sort_key(self, namespace: str, subkey: str) -> Tuple[int, object]:
         """Sorting helper that honours an explicit key priority list."""
-        full_key = f"{namespace}/{subkey}" if subkey else namespace
+        full_key = self._full_key(namespace, subkey)
         priority_index = self._key_priority_map.get(full_key)
         if priority_index is not None:
             return (0, priority_index)
         return (1, subkey.lower())
 
-    def _namespace_order(self, grouped: Dict[str, Dict[str, Any]]) -> List[str]:
-        ns_names = list(grouped.keys())
-        if self.fixed_section_order:
-            pref = [ns for ns in self.fixed_section_order if ns in grouped]
-            rest = sorted(ns for ns in ns_names if ns not in self.fixed_section_order)
-            return pref + rest
-        return sorted(ns_names)
-
-    @staticmethod
-    def _normalize_alert_message(message: str) -> str:
-        stripped = message.strip()
-        if stripped.startswith("⚠️"):
-            stripped = stripped.replace("⚠️", "", 1).lstrip()
-        return stripped
-
-    def _collect_alert_texts(self, active_alerts: Dict[str, Iterable[str]]) -> Dict[str, str]:
-        alert_text_by_key: Dict[str, str] = {}
-        for full_key, messages in active_alerts.items():
-            normalized = [self._normalize_alert_message(m) for m in messages if m]
-            if normalized:
-                alert_text_by_key[full_key] = " | ".join(normalized)
-        for full_key, message in self._active_bounds_alerts.items():
-            normalized = self._normalize_alert_message(message)
-            if not normalized:
-                continue
-            if full_key in alert_text_by_key and alert_text_by_key[full_key]:
-                alert_text_by_key[full_key] = f"{alert_text_by_key[full_key]} | {normalized}"
-            else:
-                alert_text_by_key[full_key] = normalized
-        return alert_text_by_key
+    def _sort_grouped_metrics(self, grouped_metrics: Dict[str, Dict[str, Any]]) -> List[str]:
+        group_keys = list(grouped_metrics.keys())
+        if not self.group_keys_order: return sorted(group_keys)
+        pref = [key for key in self.group_keys_order if key in group_keys]
+        rest = sorted(key for key in group_keys if key not in self.group_keys_order)
+        return pref + rest
 
     def _prepare_sections(
         self,
         grouped: Dict[str, Dict[str, Any]],
         ns_order: List[str],
-        alert_text_by_key: Dict[str, str],
+        active_alerts: Dict[str, Iterable[Dict[str, str]]],
     ) -> _PreparedSections:
         formatted: Dict[str, Dict[str, str]] = {}
         charts: Dict[str, Dict[str, str]] = {}
-        alerts: Dict[str, Dict[str, str]] = {}
         key_candidates: List[str] = [f"{ns}/" for ns in ns_order]
         val_candidates: List[str] = []
         alert_candidates: List[str] = []
+        alerts: Dict[str, Dict[str, str]] = {}
 
         for ns in ns_order:
             subdict = grouped.get(ns, {})
@@ -381,7 +321,7 @@ class PrintMetricsLogger(LightningLoggerBase):
 
             for sub, value in subdict.items():
                 key_candidates.append(sub)
-                full_key = f"{ns}/{sub}" if sub else ns
+                full_key = self._full_key(ns, sub)
                 precision = self.metric_precision_map.get(sub, 2)
 
                 val_str = number_to_string(value, precision=precision, humanize=True)
@@ -399,10 +339,11 @@ class PrintMetricsLogger(LightningLoggerBase):
                 if self.show_sparklines and is_number(value):
                     chart_disp = self._spark_for_key(full_key, self.sparkline_width)
 
-                alert_plain = alert_text_by_key.get(full_key, "")
-                if alert_plain:
-                    alert_disp = _ansi(f"⚠️  {alert_plain}", "yellow", enable=self.color)
-                else:
+                _alerts = active_alerts.get(full_key, [])
+                if _alerts:
+                    alerts_str = " | ".join([alert['message'] for alert in _alerts])
+                    alert_disp = _ansi(f"⚠️  {alerts_str}", "yellow", enable=self.color)
+                else:   
                     alert_disp = ""
 
                 formatted_sub[sub] = val_disp
@@ -416,7 +357,6 @@ class PrintMetricsLogger(LightningLoggerBase):
             if formatted_sub:
                 formatted[ns] = formatted_sub
                 charts[ns] = charts_sub
-                alerts[ns] = alerts_sub
 
         return _PreparedSections(
             formatted=formatted,
@@ -455,30 +395,17 @@ class PrintMetricsLogger(LightningLoggerBase):
         )
 
     def _resolve_row_highlight(
-        self,
-        namespace: str,
+        self,   
         subkey: str,
-        raw_value: Any,
         key_cell: str,
         alert_active: bool,
     ) -> Tuple[str, bool, Optional[str]]:
         highlight = False
         row_bg_color: Optional[str] = None
-        full_key = f"{namespace}/{subkey}" if subkey else namespace
 
         if alert_active:
             highlight = True
             row_bg_color = self.highlight_bounds_bg_color
-
-        if not highlight:
-            bounds = self.metric_bounds_map.get(full_key) or self.metric_bounds_map.get(subkey)
-            if bounds and is_number(raw_value):
-                vnum = float(raw_value)
-                below = ("min" in bounds) and (vnum < float(bounds["min"]))
-                above = ("max" in bounds) and (vnum > float(bounds["max"]))
-                if below or above:
-                    highlight = True
-                    row_bg_color = self.highlight_bounds_bg_color
 
         if not highlight and subkey in self.highlight_row_for_set:
             if self.highlight_row_bold:
@@ -517,7 +444,6 @@ class PrintMetricsLogger(LightningLoggerBase):
             lines.append(_ansi(header_line, "bold", enable=self.color))
 
             for sub, val in namespace_formatted.items():
-                raw_val = grouped.get(ns, {}).get(sub)
                 val_len = len(_strip_ansi(val))
                 val_padded = (" " * (val_width - val_len) + val) if val_width > val_len else val
 
@@ -533,10 +459,10 @@ class PrintMetricsLogger(LightningLoggerBase):
                 else:
                     alert_padded = alert_disp
 
-                full_key = f"{ns}/{sub}" if sub else ns
-                alert_active = (full_key in active_alerts) or (full_key in self._active_bounds_alerts)
+                full_key = self._full_key(ns, sub)
+                alert_active = full_key in active_alerts
                 key_cell = f"{sub:<{key_width}}"
-                key_cell, highlight, row_bg_color = self._resolve_row_highlight(ns, sub, raw_val, key_cell, alert_active)
+                key_cell, highlight, row_bg_color = self._resolve_row_highlight(sub, key_cell, alert_active)    
 
                 row = (
                     f"| {' ' * self.indent}{key_cell} | {val_padded} | {chart_padded} | {alert_padded} |"
@@ -552,26 +478,29 @@ class PrintMetricsLogger(LightningLoggerBase):
         lines.append(dims.border)
         return lines
 
-    def _render_table(self, data: Dict[str, Any]) -> None:
-        if not data:
-            return
+    def _render_table(self, metrics: Dict[str, Any]) -> None:
+        assert metrics, "Data cannot be empty"
 
-        self._update_history(data)
+        # Add metrics to the logger history (eg: used for sparklines)
+        self._update_history(metrics)
 
-        grouped = _group_by_namespace(data)
-        ns_order = self._namespace_order(grouped)
-        if self.sort_keys_within_section:
-            for ns in ns_order:
-                grouped[ns] = dict(
-                    sorted(grouped[ns].items(), key=lambda kv: self._sort_key(ns, kv[0]))
+        # Group metrics by namespace (eg: train and val namespaces)
+        grouped_metrics = group_dict_by_key_namespace(metrics)
+        # TODO: create reusable util for dict_utils.py and use it here instead of class method
+        sorted_grouped_metrics = self._sort_grouped_metrics(grouped_metrics)
+
+        # TODO: create reusable util for dict_utils.py and use it here instead of class method
+        if self.group_subkeys_order:
+            for ns in sorted_grouped_metrics:
+                grouped_metrics[ns] = dict(
+                    sorted(grouped_metrics[ns].items(), key=lambda kv: self._sort_key(ns, kv[0]))
                 )
 
         active_alerts = self.metrics_monitor.get_active_alerts()
-        alert_text_by_key = self._collect_alert_texts(active_alerts)
-        prepared = self._prepare_sections(grouped, ns_order, alert_text_by_key)
+        prepared = self._prepare_sections(grouped_metrics, sorted_grouped_metrics, active_alerts)
         dims = self._compute_dimensions(prepared)
-        lines = self._compose_lines(grouped, ns_order, prepared, dims, active_alerts)
+        lines = self._compose_lines(grouped_metrics, sorted_grouped_metrics, prepared, dims, active_alerts)
 
         self._render_lines(lines)
-        self._prev = dict(data)
+        self._prev = dict(metrics)
         self._last_height = len(lines)

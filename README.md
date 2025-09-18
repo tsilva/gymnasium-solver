@@ -137,11 +137,12 @@ pytest -q
 ```
 
 ### 🧑‍💻 Developer tasks
-- **Quality & Debugging**: `run task: bug sweep`, `run task: static analysis`, `run task: tests audit`, `run task: tests upgrade`
-- **Code Health**: `run task: dead code cleanup`, `run task: dry up file`, `run task: encapsulation dry audit`, `run task: separation of concerns audit`
-- **Configuration & Dependencies**: `run task: config consistency audit`, `run task: dependency health audit`, `run task: tune hyperparameters`
-- **Documentation & Developer Experience**: `run task: docs accuracy audit`, `run task: internals audit`, `run task: update readme`
-- **Style & Imports**: `run task: import cleanup`
+- **Quality & Debugging**: `run task: bug sweep`, `run task: audit static analysis`
+- **Code Health**: `run task: cleanup dead code`, `run task: cleanup dry file`, `run task: audit encapsulation dry`, `run task: audit separation of concerns`, `run task: audit internals`
+- **Configuration & Dependencies**: `run task: audit config consistency`, `run task: audit dependency health`, `run task: tune hyperparams`
+- **Documentation & Developer Experience**: `run task: audit docs accuracy`, `run task: docs update readme`
+- **Testing**: `run task: audit tests`, `run task: test upgrade`
+- **Style & Imports**: `run task: cleanup imports`
 
 ### 📄 License
 MIT

@@ -5,7 +5,7 @@ This repository allows autonomous and assisted agents to make changes and answer
 ### Start-of-task requirements
 - Before starting any task or making edits, read `VIBES/ARCHITECTURE_GUIDE.md`, `VIBES/CODING_PRINCIPLES.md`, and `README.md` end-to-end to ensure up-to-date context.
 - Agent helper docs now live under `VIBES/`, with task playbooks in `VIBES/tasks/`.
-- Predefined tasks live in `VIBES/tasks/`; `run task: <name>` looks for a matching markdown file (e.g., `run task: find separation of concerns` loads `VIBES/tasks/separation_of_concerns_audit.md`).
+- Predefined tasks live in `VIBES/tasks/`; `run task: <name>` looks for a matching markdown file (e.g., `run task: audit separation of concerns` loads `VIBES/tasks/audit_separation_of_concerns.md`).
 - Any prompt that begins with `!TASK: <name>` always refers to a single markdown file in `VIBES/tasks/`. Normalize `<name>` (lowercase, spaces → underscores, strip punctuation) to locate the file and execute every instruction it contains.
 - Do **not** modify `VIBES/tasks/*.md` while executing a `!TASK`. Capture any follow-up notes separately and only update the playbook when explicitly asked outside the active task run.
 

@@ -268,10 +268,12 @@ class PrintMetricsLogger(LightningLoggerBase):
                 os.system('cls' if os.name == 'nt' else 'clear')
             print(text, file=self.stream)
 
+    # TODO: make this a static method from MetricsConfig, which validates namespaces to be train, val, test
     @staticmethod
     def _full_key(namespace: str, subkey: Optional[str]) -> str:
         return f"{namespace}/{subkey}" if subkey else namespace
 
+    # TODO: make this a static method from MetricsConfig, which validates namespaces to be train, val, test
     @staticmethod
     def _subkey_from_full(full_key: str) -> str:
         return full_key.rsplit("/", 1)[-1]
@@ -428,6 +430,7 @@ class PrintMetricsLogger(LightningLoggerBase):
                 alert_active = full_key in active_alerts
                 key_cell = f"{metric_name:<{key_width}}"
                 
+                highlight = False
                 if alert_active:
                     highlight = True
                     row_bg_color = self.bgcolor_alert

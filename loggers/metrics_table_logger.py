@@ -41,8 +41,7 @@ class _TableDimensions:
     alert_width: int
     border: str
 
-# TODO: call this metricstablelogger
-class PrintMetricsLogger(LightningLoggerBase):
+class MetricsTableLogger(LightningLoggerBase):
     """
     Lightning logger that pretty-prints the latest logged metrics as a
     namespaced table, leveraging the same formatting/highlighting rules as

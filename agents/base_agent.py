@@ -420,14 +420,15 @@ class BaseAgent(pl.LightningModule):
         return wandb_logger
 
     def _build_trainer_loggers__csv(self):
-        from loggers.csv_lightning_logger import CsvLightningLogger
+        from loggers.metrics_csv_lightning_logger import MetricsCSVLightningLogger
         csv_path = self.run_manager.ensure_path("metrics.csv")
-        csv_logger = CsvLightningLogger(csv_path=str(csv_path))
+        # TODO: queue_size?
+        csv_logger = MetricsCSVLightningLogger(csv_path=str(csv_path))
         return csv_logger
     
     def _build_trainer_loggers__print(self):
-        from loggers.print_metrics_logger import PrintMetricsLogger
-        print_logger = PrintMetricsLogger(metrics_monitor=self.metrics_monitor)
+        from loggers.metrics_table_logger import MetricsTableLogger
+        print_logger = MetricsTableLogger(metrics_monitor=self.metrics_monitor)
         return print_logger
         
     def _build_trainer_loggers(self):

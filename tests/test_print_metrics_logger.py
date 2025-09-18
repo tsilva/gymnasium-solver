@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import io
 
-from loggers.print_metrics_logger import PrintMetricsLogger
+from loggers.print_metrics_logger import MetricsTableLogger
 from utils.logging import strip_ansi_codes
 from utils.metrics_monitor import MetricsMonitor
 from utils.metrics_recorder import MetricsRecorder
@@ -12,7 +12,7 @@ def _make_logger():
     buf = io.StringIO()
     recorder = MetricsRecorder(step_key="train/total_timesteps")
     monitor = MetricsMonitor(recorder)
-    logger = PrintMetricsLogger(metrics_monitor=monitor)
+    logger = MetricsTableLogger(metrics_monitor=monitor)
     logger.use_ansi_inplace = True
     logger.stream = buf
     return logger, buf

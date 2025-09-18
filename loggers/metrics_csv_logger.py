@@ -9,7 +9,7 @@ from queue import Empty, Full, Queue
 from typing import Any, Dict, List, Optional
 
 
-class CsvMetricsLogger:
+class MetricsCSVLogger:
     """
     High-throughput CSV metrics logger (wide format).
 

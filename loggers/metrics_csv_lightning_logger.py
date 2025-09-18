@@ -7,13 +7,13 @@ from pytorch_lightning.loggers.logger import (
     Logger as LightningLoggerBase,  # type: ignore
 )
 
-from loggers.csv_metrics_logger import CsvMetricsLogger
+from loggers.metrics_csv_logger import MetricsCSVLogger
 
 
-class CsvLightningLogger(LightningLoggerBase):
+class MetricsCSVLightningLogger(LightningLoggerBase):
     """
     PyTorch Lightning logger that writes metrics to a wide-form CSV via
-    loggers.csv_logger.CsvMetricsLogger. Accepts the same metrics dict that
+    loggers.metrics_csv_logger.MetricsCSVLogger. Accepts the same metrics dict that
     pl_module.log_dict emits; non-numeric values are ignored.
     """
 
@@ -21,7 +21,7 @@ class CsvLightningLogger(LightningLoggerBase):
         self._name = "csv"
         self._version = "0"
         self._experiment = None
-        self._csv = CsvMetricsLogger(csv_path, queue_size=queue_size)
+        self._csv = MetricsCSVLogger(csv_path, queue_size=queue_size)
 
     # --- Lightning Logger API ---
     @property

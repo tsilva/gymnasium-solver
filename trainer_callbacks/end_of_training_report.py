@@ -100,6 +100,9 @@ class EndOfTrainingReportCallback(pl.Callback):
 
     # TODO: clean this up
     def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+        # If training was aborted before it began, skip report generation
+        if getattr(pl_module, "_aborted_before_training", False):
+            return
         # Resolve run directory
         run_dir = Path(pl_module.run_manager._run_dir)
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -180,19 +183,51 @@ class EndOfTrainingReportCallback(pl.Callback):
         )
 
         # Summary bullets
+        # Collect metric-related bullets first so we can sort them using
+        # metrics.yaml priorities. Non-metric bullets follow unchanged.
         summary_lines = []
+
+        # Map of full metric key -> bullet text
+        metric_bullets: Dict[str, str] = {}
         if key_last_values.get("train/total_timesteps") is not None:
-            summary_lines.append(f"- Total timesteps: {int(float(key_last_values['train/total_timesteps']))}")
+            metric_bullets["train/total_timesteps"] = (
+                f"- Total timesteps: {int(float(key_last_values['train/total_timesteps']))}"
+            )
         if key_last_values.get("train/epoch") is not None:
-            summary_lines.append(f"- Final epoch: {int(float(key_last_values['train/epoch']))}")
+            metric_bullets["train/epoch"] = (
+                f"- Final epoch: {int(float(key_last_values['train/epoch']))}"
+            )
         if key_last_values.get("train/fps") is not None:
-            summary_lines.append(f"- FPS (avg): {float(key_last_values['train/fps']):.1f}")
+            metric_bullets["train/fps"] = (
+                f"- FPS (avg): {float(key_last_values['train/fps']):.1f}"
+            )
         if key_last_values.get("train/fps_instant") is not None:
-            summary_lines.append(f"- FPS (instant): {float(key_last_values['train/fps_instant']):.1f}")
+            metric_bullets["train/fps_instant"] = (
+                f"- FPS (instant): {float(key_last_values['train/fps_instant']):.1f}"
+            )
         if key_last_values.get("train/ep_rew_mean") is not None:
-            summary_lines.append(f"- Train ep_rew_mean (last): {float(key_last_values['train/ep_rew_mean']):.3f}")
+            metric_bullets["train/ep_rew_mean"] = (
+                f"- Train ep_rew_mean (last): {float(key_last_values['train/ep_rew_mean']):.3f}"
+            )
         if key_last_values.get("val/ep_rew_mean") is not None:
-            summary_lines.append(f"- Eval ep_rew_mean (last): {float(key_last_values['val/ep_rew_mean']):.3f}")
+            metric_bullets["val/ep_rew_mean"] = (
+                f"- Eval ep_rew_mean (last): {float(key_last_values['val/ep_rew_mean']):.3f}"
+            )
+
+        # Sort metric bullets using metrics.yaml key_priority
+        priority_list = metrics_config.key_priority() or []
+        priority_map = {k: i for i, k in enumerate(priority_list)}
+
+        def _metric_sort_key(full_key: str) -> Tuple[int, object]:
+            idx = priority_map.get(full_key)
+            if idx is not None:
+                return (0, idx)
+            return (1, full_key.lower())
+
+        for k in sorted(metric_bullets.keys(), key=_metric_sort_key):
+            summary_lines.append(metric_bullets[k])
+
+        # Follow with non-metric bullets in their existing order
         if best_eval is not None:
             be, step = best_eval
             step_str = f" at step {int(step)}" if step is not None else ""

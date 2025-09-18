@@ -1,5 +1,3 @@
-- REFACTOR: Consider moving wandb initialization out of BaseAgent._ensure_wandb_run into train.py (or pass run_id/run ref into agent) to reduce infra coupling.
-- REFACTOR: Move pre-fit config summary/prompt from BaseAgent._prompt_user_start_training into a presentation callback.
 - must sort by alert id not by metric
 - FEAT: count how many times each alert triggered, couple that with predefined recommendations on what to tune
 - FEAT: prefix metrics (eg: time/epoch, time/step, etc., env/obs_mean, env/obs_std, env/)
@@ -11,7 +9,6 @@
 - FEAT: log model gradients to wandb
 - FEAT: add autotuner worklflow (check wandb logs)
 - FEAT: use codex-cli to debug runs
-- Ensure metrics summary is sorted with metrics.yaml priorities
 - FEAT: add normalization support 
 - FEAT: add sweeping support
 - TODO: how is pongv5 determinism enforce
@@ -29,8 +26,6 @@
 - TODO: x metric cant be total timesteps because that increases with parallelization.... must be n_updates? index by epoch? or add updates metric?
 - TODO: optimal single metric for best training (samples/reward)
 - TODO: add kl divergence metric to reinforce
-- TODO: keep working on guide
-- REFACTOR: move hidden_dims inside policy_kwargsp
 - FEAT: ensure we can see baseline advantages in inspector.py
 - BUG: PPO can solve FrozenLake-v1, but REINFORCE cannot. REINFORCE is likely not implemented correctly.
 - TASK: solve Pong-v5_objects, then propagate to other envs
@@ -73,3 +68,6 @@
 - Ask agent for next learning steps/tasks (prompt file)
 - REFACTOR: add type hints where applicable
 - FEAT: add [Minari support](https://minari.farama.org/)
+- REFACTOR: unify wrapper-chain traversal in gym_wrappers/env_info.py:_find_wrapper, gym_wrappers/vec_video_recorder.py:_find_env_wrapper, and the base-env walk in gym_wrappers/env_video_recorder.py.__init__ by extracting a shared helper (e.g., gym_wrappers/utils.py:find_wrapper); keep behaviors identical so existing video/info wrapper paths and tests continue to pass.
+- REFACTOR: consolidate single-trajectory return/advantage helpers by moving run_inspect.py:compute_mc_returns and run_inspect.py:compute_gae_advantages_and_returns onto shared utilities next to utils/rollouts.py:compute_batched_mc_returns/compute_batched_gae_advantages_and_returns; acceptance: inspector outputs stay the same and rollout-related tests remain green.
+- REFACTOR: deduplicate YAML config discovery by reusing Config loader logic between scripts/smoke_test_envs.py:_collect_env_config_map/_resolve_inheritance and utils/config.py:Config.build_from_yaml via a shared utility (e.g., utils/config_loader.collect_raw_configs); acceptance: both callers produce identical config maps without manual field lists and existing config-selection tests still pass.

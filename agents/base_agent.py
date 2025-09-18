@@ -242,6 +242,11 @@ class BaseAgent(pl.LightningModule):
         pass
 
     def on_fit_end(self):
+        # If user aborted before training, skip finalization work
+        if getattr(self, "_aborted_before_training", False):
+            self._final_stop_reason = getattr(self, "_early_stop_reason", "User aborted before training.")
+            return
+
         # Persist final duration and stop reason for external reporting
         time_elapsed = self.timings.seconds_since("on_fit_start")
         self._fit_elapsed_seconds = float(time_elapsed)
@@ -266,8 +271,19 @@ class BaseAgent(pl.LightningModule):
         from utils.logging import stream_output_to_log
         from utils.run_manager import RunManager
 
-        wandb_run = self._ensure_wandb_run()
-        self.run_manager = RunManager(wandb_run.id)
+        # Expect a W&B run to be initialized by the launcher (train.py)
+        try:
+            import wandb  # lazy import; training requires wandb
+        except Exception as e:
+            raise ImportError("wandb is required for training. Install with `pip install wandb`.") from e
+
+        run = getattr(wandb, "run", None)
+        if run is None:
+            raise RuntimeError(
+                "No active W&B run found. Initialize via train.py or call wandb.init() before agent.learn()."
+            )
+
+        self.run_manager = RunManager(run.id)
         
         # Save configuration to run directory
         config_path = self.run_manager.ensure_path("config.json")
@@ -278,9 +294,6 @@ class BaseAgent(pl.LightningModule):
         with stream_output_to_log(log_path): self._learn()
 
     def _learn(self):
-        # Prompt user to start training, return if user declines
-        if not self._prompt_user_start_training(): return
-
         # Build trainer loggers
         loggers = self._build_trainer_loggers()
 
@@ -298,50 +311,7 @@ class BaseAgent(pl.LightningModule):
         # Train the agent
         trainer.fit(self)
     
-    def _prompt_user_start_training(self):
-        from utils.logging import display_config_summary
-        from utils.torch import _device_of
-        from utils.user import prompt_confirm
-
-        num_params_total = int(sum(p.numel() for p in self.policy_model.parameters()))
-        num_params_trainable = int(sum(p.numel() for p in self.policy_model.parameters() if p.requires_grad))
-
-        from dataclasses import asdict
-        config_dict = asdict(self.config)
-        train_env = self.get_env("train")
-        display_config_summary({
-            "Run": {
-                "run_id": self.run_manager.get_run_id(),
-            },
-            "Environment": {
-                "env_id": train_env.get_id(),
-                "obs_type": train_env.get_obs_type(),
-                "obs_space": train_env.observation_space,
-                "action_space": train_env.action_space,
-                "reward_threshold": train_env.get_reward_threshold(),
-                "time_limit": train_env.get_time_limit(),
-                "env_wrappers": config_dict.get("env_wrappers", None),
-                "env_kwargs": config_dict.get("env_kwargs", None)
-            },
-            "Model": {
-                "algo_id": self.config.algo_id,
-                "policy_class": type(self.policy_model).__name__,
-                "hidden_dims": self.config.hidden_dims,
-                "activation": self.config.activation,
-                "device": _device_of(self.policy_model),
-                "num_params_total": num_params_total,
-                "num_params_trainable": num_params_trainable,
-            },
-            "Config": config_dict,
-        })
-
-        # Ask for confirmation before any heavy setup (keep prior prints grouped)
-        # Before prompting, suggest better defaults if we detect mismatches
-        self._maybe_warn_observation_policy_mismatch()
-
-        # Prompt if user wants to start training
-        start_training = prompt_confirm("Start training?", default=True, quiet=self.config.quiet)
-        return start_training
+    
     
     # TODO: get this out of here
     def _maybe_warn_observation_policy_mismatch(self):
@@ -377,7 +347,7 @@ class BaseAgent(pl.LightningModule):
         import wandb
 
         # Create the wandb logger, attach to the existing run if present
-        project_name = self.config.project_id if self.config.project_id else BaseAgent._sanitize_name(self.config.env_id)
+        project_name = self.config.project_id if self.config.project_id else sanitize_name(self.config.env_id)
         experiment_name = f"{self.config.algo_id}-{self.config.seed}"
         wandb_logger = WandbLogger(
             project=project_name,
@@ -439,6 +409,7 @@ class BaseAgent(pl.LightningModule):
             EarlyStoppingCallback,
             EndOfTrainingReportCallback,
             ConsoleSummaryCallback,
+            PrefitPresentationCallback,
             ModelCheckpointCallback,
             MonitorMetricsCallback,
             WandbVideoLoggerCallback,
@@ -447,6 +418,9 @@ class BaseAgent(pl.LightningModule):
 
         # Initialize callbacks list
         callbacks = []
+
+        # Present config and confirm start at fit start
+        callbacks.append(PrefitPresentationCallback())
 
         # In case eval warmup is active, add a callback to enable validation only after warmup
         if self.config.eval_warmup_epochs > 0: 
@@ -572,21 +546,7 @@ class BaseAgent(pl.LightningModule):
             lr=self.config.policy_lr, # TODO: is this taking annealing into account?
         )
 
-    def _ensure_wandb_run(self):
-        # If run is not initialized, initialize it
-        import wandb
-        run = wandb.run
-        if run is None:
-            from dataclasses import asdict
-            project_name = self.config.project_id if self.config.project_id else sanitize_name(self.config.env_id)
-            run = wandb.init(project=project_name, config=asdict(self.config))
-        
-        # Ensure run has desired name
-        run_name = f"{self.config.algo_id}-{run.id}"
-        if run.name != run_name: run.name = run_name
-
-        # Return run
-        return run
+    
 
     def _log_hyperparameters(self):
         metrics = {

@@ -8,6 +8,7 @@ from .monitor_metrics import MonitorMetricsCallback
 from .wandb_video_logger import WandbVideoLoggerCallback
 from .warmup_eval import WarmupEvalCallback
 from .console_summary import ConsoleSummaryCallback
+from .prefit_presentation import PrefitPresentationCallback
 
 __all__ = [
     "ModelCheckpointCallback", 
@@ -18,4 +19,5 @@ __all__ = [
     "WarmupEvalCallback",
     "MonitorMetricsCallback",
     "ConsoleSummaryCallback",
+    "PrefitPresentationCallback",
 ]

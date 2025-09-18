@@ -61,6 +61,25 @@ def _maybe_merge_wandb_config(config, *, wandb_sweep_flag: bool, cli_max_timeste
     return config
 
 
+def _ensure_wandb_run_initialized(config) -> None:
+    """Ensure a W&B run exists before agent construction.
+
+    - If running under a W&B Sweep, `_maybe_merge_wandb_config` already called
+      `wandb.init`, so this becomes a no-op.
+    - Otherwise, initialize a run with the project's name and full config.
+    """
+    import wandb  # lazy import to keep non-W&B paths light
+
+    # If a run is already active (e.g., sweep agent), do nothing
+    if wandb.run is not None: return
+
+    # Otherwise create a fresh run using project and full config
+    from utils.formatting import sanitize_name
+    project_name = config.project_id if getattr(config, "project_id", None) else sanitize_name(config.env_id)
+    wandb.init(project=project_name, config=asdict(config))
+
+
+# TODO: make this code respect CODING_PRINCIPLES.md
 def launch_training_from_args(args) -> None:
     """End-to-end training launcher extracted from train.py.
 
@@ -99,6 +118,9 @@ def launch_training_from_args(args) -> None:
     # Set global RNG seed for reproducibility
     set_random_seed(config.seed)
 
+    # Ensure a W&B run exists (sweep-or-regular) before building the agent
+    _ensure_wandb_run_initialized(config)
+
     # Create the agent and kick off learning
     from agents import build_agent
 
@@ -126,4 +148,3 @@ def launch_training_from_args(args) -> None:
     if isinstance(reason, str) and reason and not str(reason).endswith(".") and reason != "completed.":
         reason = f"{reason}."
     print(f"Training completed in {human}. Reason: {reason}")
-

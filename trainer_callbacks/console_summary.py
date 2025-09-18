@@ -18,6 +18,9 @@ class ConsoleSummaryCallback(pl.Callback):
     """Render a terminal summary at fit end using the agent's recorder/monitor."""
 
     def on_fit_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+        # Skip summary if training was aborted before it began
+        if getattr(pl_module, "_aborted_before_training", False):
+            return
         # Best-effort guard: only act when required attributes are present
         rec = getattr(pl_module, "metrics_recorder", None)
         mon = getattr(pl_module, "metrics_monitor", None)
@@ -57,4 +60,3 @@ class ConsoleSummaryCallback(pl.Callback):
                     print(f"{metric}: {_count(val)}")
         except Exception:
             pass
-

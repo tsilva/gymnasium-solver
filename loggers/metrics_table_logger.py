@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 from dataclasses import dataclass
 
 import os
@@ -18,7 +18,7 @@ from utils.dict_utils import (
     sort_subkeys_by_priority as sort_grouped_subkeys_by_priority,
 )
 from utils.torch import to_python_scalar as _to_python_scalar
-from utils.metrics_config import MetricsConfig
+from utils.metrics_config import metrics_config
 from utils.formatting import (
     is_number,
     number_to_string
@@ -128,7 +128,8 @@ class MetricsTableLogger(LightningLoggerBase):
 
     def log_metrics(self, metrics: dict[str, Any], step: Optional[int] = None) -> None:
         assert metrics, "Metrics cannot be empty"
-        
+        metrics_config.assert_metrics_within_bounds(merged)
+
         # Convert values to basic Python scalars for rendering/validation 
         # and discard non-namespace keys (eg: epoch injected by Lightning)
         simple: Dict[str, Any] = {k: _to_python_scalar(v) for k, v in dict(metrics).items() if "/" in k}
@@ -137,8 +138,6 @@ class MetricsTableLogger(LightningLoggerBase):
         # keep their last values when printing.
         merged: Dict[str, Any] = dict(self.previous_metrics)
         merged.update(simple)
-
-        # TODO: assert metrics within bounds
 
         # Render the metrics table
         self._render_table(merged)
@@ -166,10 +165,9 @@ class MetricsTableLogger(LightningLoggerBase):
         prev_snapshot = self._prev if self._prev is not None else self.previous_metrics
 
         # Pre-validate against configured delta rules (rules are defined per bare metric name)
-        for full_key, curr_val in metrics.items():
-            # Expect namespaced keys: ns/sub
-            if "/" not in full_key:
-                continue
+        for full_key, current_value in metrics.items():
+            # Ensure keys are properly namespaced and valid
+            assert metrics_config.is_valid_fullkey(full_key), f"Invalid metric key '{full_key}'"
 
             # Lookup previous value for the same full key
             if full_key not in prev_snapshot:
@@ -179,20 +177,20 @@ class MetricsTableLogger(LightningLoggerBase):
 
             # If either is non-numeric, we don't compute a delta
             prev_val = prev_snapshot[full_key]
-            if not (is_number(curr_val) and is_number(prev_val)):
+            if not (is_number(current_value) and is_number(prev_val)):
                 deltas[full_key] = ("", None)
                 continue
 
             # Apply delta rule if one exists for the bare metric name
-            bare_key = MetricsConfig.subkey_from_full(full_key)
+            bare_key = metrics_config.subkey_from_fullkey(full_key)
             rule_fn = self.metric_delta_rules.get(bare_key)
             if rule_fn is not None:
-                assert rule_fn(prev_val, curr_val), (
-                    f"Delta rule violation for '{full_key}': previous={prev_val}, current={curr_val}."
+                assert rule_fn(prev_val, current_value), (
+                    f"Delta rule violation for '{full_key}': previous={prev_val}, current={current_value}."
                 )
 
             # Compute display delta
-            delta = float(curr_val) - float(prev_val)
+            delta = float(current_value) - float(prev_val)
             if abs(delta) <= self.delta_tol:
                 deltas[full_key] = ("→0", "gray")
                 continue
@@ -250,7 +248,7 @@ class MetricsTableLogger(LightningLoggerBase):
 
     def _sort_key(self, namespace: str, subkey: str) -> Tuple[int, object]:
         """Sorting helper that honours an explicit key priority list."""
-        full_key = MetricsConfig.full_key(namespace, subkey)
+        full_key = metrics_config.fullkey(namespace, subkey)
         priority_index = self._key_priority_map.get(full_key)
         if priority_index is not None:
             return (0, priority_index)
@@ -280,7 +278,7 @@ class MetricsTableLogger(LightningLoggerBase):
 
             for metric_name, metric_value in group_metrics.items():
                 key_candidates.append(metric_name)
-                full_key = MetricsConfig.full_key(group_key, metric_name)
+                full_key = metrics_config.full_key(group_key, metric_name)
                 metric_precision = self.metric_precision_map.get(metric_name, 2)
 
                 metric_value_s = number_to_string(metric_value, precision=metric_precision, humanize=True)
@@ -407,7 +405,7 @@ class MetricsTableLogger(LightningLoggerBase):
                 alert_padded = alert_padding_s + alerts_s
 
                 # Resolve row highlight
-                full_key = MetricsConfig.full_key(group_key, metric_name)
+                full_key = metrics_config.fullkey(group_key, metric_name)
                 alert_active = full_key in active_alerts
                 key_cell = f"{metric_name:<{key_width}}"
                 

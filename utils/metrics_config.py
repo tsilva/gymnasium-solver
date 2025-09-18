@@ -8,10 +8,12 @@ singleton so callers don't repeatedly read the file.
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, List
 
 from utils.io import read_yaml
 
+# Reused across helpers to avoid per-call allocations
+_ALLOWED_NAMESPACES = frozenset({"train", "val", "test"})
 
 @dataclass
 class MetricsConfig:
@@ -27,7 +29,6 @@ class MetricsConfig:
 
     def __post_init__(self) -> None:
         self._load()
-
 
     def _load(self) -> None:
         project_root = Path(__file__).parent.parent
@@ -70,8 +71,6 @@ class MetricsConfig:
         # Return the delta rules dictionary
         return delta_rules
 
-    # Note: algorithm-specific metric rules were removed.
-
     def key_priority(self) -> Optional[list]:
         """Preferred key ordering from metrics config (_global.key_priority)."""
         global_cfg = self._get_global_cfg()
@@ -108,33 +107,68 @@ class MetricsConfig:
 
     # Static helpers -----------------------------------------------------
     @staticmethod
-    def full_key(namespace: str, subkey: Optional[str]) -> str:
-        """Build a fully-qualified metric key validating the namespace.
-
-        Namespaces are restricted to one of: "train", "val", "test".
-        Returns "{namespace}/{subkey}" when a subkey is provided; otherwise
-        just the namespace.
-        """
-        allowed = {"train", "val", "test"}
-        assert namespace in allowed, (
-            f"Invalid metrics namespace '{namespace}'. Expected one of: {sorted(allowed)}"
-        )
+    def fullkey(namespace: str, subkey: Optional[str]) -> str:
+        """Build a fully-qualified metric key validating the namespace. """
+        assert namespace in _ALLOWED_NAMESPACES, f"Invalid metrics namespace '{namespace}'. Expected one of: {sorted(_ALLOWED_NAMESPACES)}"
         return f"{namespace}/{subkey}" if subkey else namespace
 
     @staticmethod
-    def subkey_from_full(full_key: str) -> str:
-        """Extract the subkey from a fully-qualified metric key.
-
-        Validates the namespace part is one of: "train", "val", "test".
-        Expects a key in the form "<namespace>/<subkey>" and returns
-        the subkey portion.
-        """
-        assert "/" in full_key, f"Invalid metric key '{full_key}': expected '<namespace>/<subkey>'"
-        namespace, subkey = full_key.split("/", 1)
-        allowed = {"train", "val", "test"}
-        assert namespace in allowed, (
-            f"Invalid metrics namespace '{namespace}'. Expected one of: {sorted(allowed)}"
-        )
+    def subkey_from_fullkey(fullkey: str) -> str:
+        """Extract the subkey from a fully-qualified metric key """
+        assert MetricsConfig.is_valid_fullkey(fullkey), f"Invalid metric key '{fullkey}'"
+        _, subkey = fullkey.split("/", 1)
         return subkey
+
+    @staticmethod
+    def is_valid_fullkey(fullkey: str) -> bool:
+        """Fast check that a metric key is namespaced and valid.
+
+        A valid full key has the shape "<namespace>/<subkey>" where namespace
+        is one of train/val/test and the subkey portion is non-empty.
+        """
+        # Assert key is not empty
+        assert fullkey, "Invalid metric key: empty string"
+
+        # Invalid if no slash in key
+        if "/" not in fullkey: return False
+        
+        # Invalid if no subkey
+        namespace, subkey = fullkey.split("/", 1)
+        if not subkey: return False
+
+        # Invalid if namespace is not in allowed namespaces
+        if not namespace in _ALLOWED_NAMESPACES: return False
+
+        # Valid if all checks pass
+        return True
+
+    def get_metrics_bounds_violations(self, metrics: Dict[str, Any]) -> List[str]:
+        """Get violations of metrics within configured bounds."""
+        bounds_map = self.metric_bounds()
+
+        # Collect out of bounds violations (if any)
+        violations: List[str] = []
+        for fullkey, value in metrics.items():
+            assert self.is_valid_fullkey(fullkey), f"Invalid metric key '{fullkey}'" 
+            
+            # If no bounds, skip
+            subkey = self.subkey_from_fullkey(fullkey)
+            bounds = bounds_map.get(subkey)
+            if not bounds: continue
+            
+            # If value is less than min bound, add violation
+            bounds_min = bounds.get("min")
+            if bounds_min and value < bounds_min: violations.append(f"{fullkey}={value} < min {bounds_min}")
+
+            # If value is greater than max bound, add violation
+            bounds_max = bounds.get("max")
+            if bounds_max and value > bounds_max: violations.append(f"{fullkey}={value} > max {bounds_max}")
+
+        return violations
+
+    def assert_metrics_within_bounds(self, metrics: Dict[str, Any]) -> None:
+        """Assert metrics are within configured bounds."""
+        bound_violations = self.get_metrics_bounds_violations(metrics)
+        raise ValueError("Out-of-bounds metrics: " + "; ".join(bound_violations))
 
 metrics_config = MetricsConfig()

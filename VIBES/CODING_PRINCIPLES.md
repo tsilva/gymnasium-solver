@@ -12,6 +12,8 @@ This companion to `VIBES/ARCHITECTURE_GUIDE.md` captures the high-level principl
 - Provide short docstrings for non-trivial helpers; reserve inline comments for explaining intent or edge cases.
 - Prefer early returns and guard clauses to reduce nesting and keep control flow readable.
 - When grouping related fields, reach for small dataclasses or named tuples rather than loosely structured dicts.
+- Choose descriptive, unabbreviated identifiers over shorthands (e.g., `current_value` over `curr_val`).
+- Provide fast-path boolean validators (e.g., `is_valid_*`) in hot paths and pair them with assert/exception helpers for error reporting.
 
 ### Documentation & configuration
 - Centralize file IO through the shared utilities and keep encoding UTF-8 by default.
@@ -22,11 +24,14 @@ This companion to `VIBES/ARCHITECTURE_GUIDE.md` captures the high-level principl
 - Route new metrics through the established logging surfaces so terminal, CSV, and external loggers stay aligned.
 - Keep console output resilient to non-TTY environments by opting into ANSI/colour only when supported.
 - Favor structured payloads over ad-hoc prints; let higher-level loggers handle presentation.
+- Treat metric keys as namespaced `<train|val|test>/<metric>` and use `utils.metrics_config.metrics_config` helpers for construction/parsing; do not split strings inline.
+- Validate metrics against configured bounds and delta rules at the logging boundary; fail fast on violations.
 
 ### Error handling
 - Fail loudly on invalid state with targeted assertions or specific exceptions; do not swallow errors.
 - Catch exceptions only when the API contract expects it, and re-raise with added context when helpful.
 - Derive deterministic seeds from shared configuration so reproducibility is the default.
+- Use assertions for programmer errors (e.g., malformed metric keys) and `ValueError` for runtime/config-driven validation failures.
 
 ### Testing expectations
 - Add or adjust tests alongside the functionality they cover, mirroring existing test layouts.
@@ -36,6 +41,7 @@ This companion to `VIBES/ARCHITECTURE_GUIDE.md` captures the high-level principl
 ### Performance considerations
 - Reuse buffers and avoid per-step allocations in hot paths to keep training runs efficient.
 - Be mindful of device transfers; operate on tensors where they already live and lean on vectorized operations.
+- Hoist immutable lookup sets/dicts to module scope (e.g., `_ALLOWED_NAMESPACES = frozenset({...})`) to avoid per-call allocations.
 
 ### Collaboration hygiene
 - Keep diffs focused and reviewable, with commit messages that describe the root cause and the fix.

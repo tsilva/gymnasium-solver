@@ -4,7 +4,7 @@
 Inspect the codebase for places where shared behavior can be encapsulated to reduce duplication, while preserving clarity and respecting existing abstractions.
 
 ## Steps
-1. Refresh context: review `README.md`, `VIBES/INTERNALS.md`, `AGENTS.md`, and recent notes (`TODO.md`) to understand current abstractions, extension points, and known tech debt.
+1. Refresh context: review `README.md`, `VIBES/ARCHITECTURE_GUIDE.md`, `AGENTS.md`, and recent notes (`TODO.md`) to understand current abstractions, extension points, and known tech debt.
 2. Build a candidate list of duplicate or near-duplicate logic:
    - Use `rg` to search for repeated identifiers or phrases (e.g., `rollout`, `checkpoint`, `env_wrappers`) across modules.
    - Generate structural hints with `uv run ruff check --select PLR0912,PLR0915,PLR0913` (fallback: `python -m ruff ...`) to flag overly long functions or argument lists that might benefit from helper encapsulation.

@@ -42,6 +42,7 @@ class _TableDimensions:
     alert_width: int
     border: str
 
+# TODO: call this metricstablelogger
 class PrintMetricsLogger(LightningLoggerBase):
     """
     Lightning logger that pretty-prints the latest logged metrics as a
@@ -57,12 +58,10 @@ class PrintMetricsLogger(LightningLoggerBase):
         self,
         *,
         metrics_monitor: MetricsMonitor,
-        metric_precision: Dict[str, int] | None = None,
-        metric_delta_rules: Dict[str, Callable] | None = None,
-        min_val_width: int = 15,
         min_table_width: int = 90,
-        chart_col_width: int | None = None,
-        key_priority: List[str] | None = None,
+        min_value_column_width: int = 15,
+        chart_column_width: int | None = None,
+        key_priority: Iterable[str] | None = None,
     ) -> None:
         """Create a pretty-print logger with sensible defaults.
 
@@ -81,34 +80,31 @@ class PrintMetricsLogger(LightningLoggerBase):
 
         self.metrics_monitor = metrics_monitor
 
-        self.metric_precision = dict(metric_precision or metrics_config.metric_precision_dict())
-        self.metric_delta_rules = dict(metric_delta_rules or  metrics_config.metric_delta_rules())
-        self.min_val_width = int(min_val_width)
+        self.metric_precision = metrics_config.metric_precision_dict()
+        self.metric_delta_rules = metrics_config.metric_delta_rules()
+
+        self.min_val_width = int(min_value_column_width)
         # Enforce a minimum overall table width to reduce jitter from
         # fluctuating value lengths (numbers + deltas + sparklines).
         self.min_table_width = int(min_table_width)
         # Fixed-width charts column; default matches sparkline width
-        self.chart_column_width = int(chart_col_width or 0) if chart_col_width is not None else 0
-        self.key_priority = list(key_priority or list(metrics_config.key_priority()))
-        self._key_priority_map: Dict[str, int] = {key: idx for idx, key in enumerate(self.key_priority)}
+        self.chart_column_width = int(chart_column_width or 0) if chart_column_width is not None else 0
+        resolved_priority = key_priority or metrics_config.key_priority()
+        self.key_priority: Tuple[str, ...] = tuple(resolved_priority)
+        self._key_priority_map: Dict[str, int] = {
+            key: idx for idx, key in enumerate(self.key_priority)
+        }
         self.previous_metrics: Dict[str, Any] = {}
 
         # Highlight/bounds from metrics.yaml
-        _m = metrics_config
-        _hl_cfg = _m.highlight_config()
-        _hl_value_bold_for = _hl_cfg.get('value_bold_metrics', set())
-        _hl_row_for = _hl_cfg.get('row_metrics', set())
-        _hl_row_bg_color = _hl_cfg.get('row_bg_color', 'bg_blue')
-        _hl_row_bold = bool(_hl_cfg.get('row_bold', True))
         # -------- Inlined table printer configuration/state --------
         self.indent: int = 4
-        self.compact_numbers: bool = True
 
         # Enable colors if stdout is a tty
         self.colors_enabled: bool = sys.stdout.isatty()
 
         self.better_when_increasing: Dict[str, bool] = {}
-        self.group_keys_order: Optional[List[str]] = ["train", "val"]
+        self.group_keys_order: Tuple[str, ...] | None = ("train", "val")
         self.group_subkeys_order: bool = True
         self.use_ansi_inplace: bool = False
         self.stream = sys.stdout
@@ -116,13 +112,17 @@ class PrintMetricsLogger(LightningLoggerBase):
         self.metric_precision_map: Dict[str, int] = dict(self.metric_precision)
 
         # Highlight settings (bare metric subkeys)
-        self.style_bold_metrics_set = set(_hl_value_bold_for or {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "epoch"})
-        self.highlight_row_for_set = set(_hl_row_for or {"ep_rew_mean", "ep_rew_last", "ep_rew_best", "total_timesteps"})
-        self.highlight_row_bg_color: str = _hl_row_bg_color or "bg_blue"
-        self.highlight_row_bold: bool = bool(_hl_row_bold)
+        hl_config = metrics_config.highlight_config()
+        hl_value_bold_for = tuple(hl_config['value_bold_metrics'])
+        hl_row_for = tuple(hl_config['row_metrics'])
+        self.style_bold_metrics: Tuple[str, ...] = hl_value_bold_for
+        self.style_bold_metrics_set = frozenset(hl_value_bold_for)
+        self.highlight_row_for: Tuple[str, ...] = hl_row_for
+        self.highlight_row_for_set = frozenset(hl_row_for)
+        self.bgcolor_highlight: str = "bg_blue"
 
         # Bounds-based highlighting
-        self.highlight_bounds_bg_color: str = 'bg_yellow'
+        self.bgcolor_alert: str = 'bg_yellow'
 
         # In-memory history for sparklines (per full metric key)
         self._prev: Optional[Dict[str, Any]] = None
@@ -373,26 +373,6 @@ class PrintMetricsLogger(LightningLoggerBase):
             border=border,
         )
 
-    def _resolve_row_highlight(
-        self,   
-        subkey: str,
-        key_cell: str,
-        alert_active: bool,
-    ) -> Tuple[str, bool, Optional[str]]:
-        highlight = False
-        row_bg_color: Optional[str] = None
-
-        if alert_active:
-            highlight = True
-            row_bg_color = self.highlight_bounds_bg_color
-
-        if not highlight and subkey in self.highlight_row_for_set:
-            if self.highlight_row_bold:
-                key_cell = _ansi(key_cell, "bold", enable=self.colors_enabled)
-            highlight = True
-            row_bg_color = self.highlight_row_bg_color
-
-        return key_cell, highlight, row_bg_color
 
     def _compose_lines(
         self,
@@ -448,8 +428,15 @@ class PrintMetricsLogger(LightningLoggerBase):
                 alert_active = full_key in active_alerts
                 key_cell = f"{metric_name:<{key_width}}"
                 
-                key_cell, highlight, row_bg_color = self._resolve_row_highlight(metric_name, key_cell, alert_active)    
+                if alert_active:
+                    highlight = True
+                    row_bg_color = self.bgcolor_alert
 
+                if not highlight and metric_name in self.highlight_row_for_set:
+                    key_cell = _ansi(key_cell, "bold", enable=self.colors_enabled)
+                    highlight = True
+                    row_bg_color = self.bgcolor_highlight
+                    
                 key_padding_s = " " * self.indent
                 row = (
                     f"| {key_padding_s}{key_cell} | {metric_value_padded_s} | {chart_padded_s} | {alert_padded} |"
@@ -457,7 +444,7 @@ class PrintMetricsLogger(LightningLoggerBase):
 
                 if highlight:
                     enable_bg = self.colors_enabled or alert_active
-                    row = _apply_bg(row, row_bg_color or self.highlight_row_bg_color, enable=enable_bg)
+                    row = _apply_bg(row, row_bg_color or self.bgcolor_highlight, enable=enable_bg)
                     if alert_active and not enable_bg:
                         row = f"⚠️  {row}"
 

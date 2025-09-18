@@ -4,7 +4,7 @@
 Identify modules where responsibilities bleed across layers and refactor them into clearer boundaries.
 
 ## Steps
-1. Review architecture guidance in `VIBES/INTERNALS.md` and recent feature work to understand intended layering (agents, utils, wrappers, scripts).
+1. Review architecture guidance in `VIBES/ARCHITECTURE_GUIDE.md` and recent feature work to understand intended layering (agents, utils, wrappers, scripts).
 2. Scan high-churn modules (`agents/`, `utils/`, `trainer_callbacks/`, `gym_wrappers/`) looking for telltale smells: UI/CLI code inside core logic, file IO inside tight training loops, cross-package imports that violate dependency direction, or mixing config parsing with runtime execution.
 3. Use `rg` to locate suspicious keywords (e.g., `print(`, `os.environ`, `argparse`, `requests`) inside modules that should remain pure or model-focused.
 4. For each candidate violation, confirm the breach by tracing control flow and documenting why the responsibility is misplaced (e.g., agent classes mutating filesystem paths, wrappers managing logging, utils reaching into CLI state).

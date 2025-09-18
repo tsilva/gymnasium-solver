@@ -136,6 +136,13 @@ runs/              # training outputs (checkpoints, videos, logs, config)
 pytest -q
 ```
 
+### 🧑‍💻 Developer tasks
+- **Quality & Debugging**: `run task: bug sweep`, `run task: static analysis`, `run task: tests audit`, `run task: tests upgrade`
+- **Code Health**: `run task: dead code cleanup`, `run task: dry up file`, `run task: encapsulation dry audit`, `run task: separation of concerns audit`
+- **Configuration & Dependencies**: `run task: config consistency audit`, `run task: dependency health audit`, `run task: tune hyperparameters`
+- **Documentation & Developer Experience**: `run task: docs accuracy audit`, `run task: internals audit`, `run task: update readme`
+- **Style & Imports**: `run task: import cleanup`
+
 ### 📄 License
 MIT
 

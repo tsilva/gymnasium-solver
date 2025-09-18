@@ -15,5 +15,5 @@ Increase confidence in critical behaviors by adding or improving automated tests
 ## Notes
 - Use deterministic seeds (`Config.seed`) and lightweight env variants to keep tests fast and reproducible.
 - Prefer unit tests over full training runs unless integration coverage is required to reproduce an issue.
-- Update `README.md` or `INTERNALS.md` only if public-facing expectations change; otherwise keep documentation untouched.
+- Update `README.md` or `VIBES/ARCHITECTURE_GUIDE.md` only if public-facing expectations change; otherwise keep documentation untouched.
 - Capture coverage deltas when feasible (`pytest --cov` or manual accounting) to show progress and highlight remaining blind spots.

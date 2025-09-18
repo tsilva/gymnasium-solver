@@ -3,7 +3,7 @@
 This repository allows autonomous and assisted agents to make changes and answer questions. This document defines the default rules those agents must follow.
 
 ### Start-of-task requirements
-- Before starting any task, read `INTERNALS.md` and `README.md` end-to-end to ensure up-to-date context.
+- Before starting any task or making edits, read `VIBES/ARCHITECTURE_GUIDE.md`, `VIBES/CODING_PRINCIPLES.md`, and `README.md` end-to-end to ensure up-to-date context.
 - Agent helper docs now live under `VIBES/`, with task playbooks in `VIBES/tasks/`.
 - Predefined tasks live in `VIBES/tasks/`; `run task: <name>` looks for a matching markdown file (e.g., `run task: find separation of concerns` loads `VIBES/tasks/separation_of_concerns_audit.md`).
 - Any prompt that begins with `!TASK: <name>` always refers to a single markdown file in `VIBES/tasks/`. Normalize `<name>` (lowercase, spaces → underscores, strip punctuation) to locate the file and execute every instruction it contains.
@@ -44,7 +44,7 @@ This repository allows autonomous and assisted agents to make changes and answer
 - **Explain why**: In the edit summary, include a one-line root-cause statement and why this is the minimal, correct fix.
 
 ### Documentation maintenance
-- After completing any task, update `INTERNALS.md` and `README.md` with relevant changes. If no updates are needed, leave them untouched.
+- After completing any task, update `VIBES/ARCHITECTURE_GUIDE.md` and `README.md` with relevant changes. If no updates are needed, leave them untouched, and never modify `VIBES/CODING_PRINCIPLES.md` unless explicitly instructed by the user.
 
 ### Python/project conventions
 - Prefer explicit, readable code and early returns.

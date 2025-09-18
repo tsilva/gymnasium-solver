@@ -4,7 +4,7 @@
 Reduce duplication within a single module by extracting shared behavior into clear helpers while keeping the file cohesive and readable.
 
 ## Steps
-1. Prep context: reread `README.md`, `VIBES/INTERNALS.md`, and any notes in `AGENTS.md` / `TODO.md` that mention the target module. Run `git status` to confirm a clean baseline and skim existing tests for the file.
+1. Prep context: reread `README.md`, `VIBES/ARCHITECTURE_GUIDE.md`, and any notes in `AGENTS.md` / `TODO.md` that mention the target module. Run `git status` to confirm a clean baseline and skim existing tests for the file.
 2. Map the duplication: open the file, mark repeated blocks, and use `rg --context 3 "<key phrase>" <file>` (or structural search in the IDE) to verify every occurrence you plan to unify. Capture how each variant differs (inputs, conditionals, side effects).
 3. Design the extraction: look for existing helpers or utilities elsewhere in the codebase that already provide the shared behavior; prefer reusing or lightly extending them when they fit. When no suitable helper exists, decide on the minimal new helper (function, small dataclass, or inline utility) that captures the shared behavior without over-generalizing. Write down the interface (args, expected behavior, returned data) and note any invariants or exceptions it should enforce.
 4. Implement carefully: introduce the helper, refactor call sites one at a time, and keep related logic adjacent so future readers can trace the flow. Preserve existing formatting, logging, and error handling; only touch lines needed for the refactor. Add short docstrings or comments when intent is not obvious.

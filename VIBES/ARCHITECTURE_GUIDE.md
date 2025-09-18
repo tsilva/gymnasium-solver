@@ -1,6 +1,6 @@
-## Internals
+## Architecture Guide
 
-High-signal reference for maintainers and agents. Read this before making changes.
+High-signal reference for maintainers and agents. Read this alongside `VIBES/CODING_PRINCIPLES.md` before making changes.
 
 ### IO Helpers
 - JSON and YAML file IO is centralized in `utils/io.py`.
@@ -124,5 +124,5 @@ trainer_callbacks/# metrics dispatch, warmup gating, checkpointing, early stoppi
 gym_envs/         # custom environment implementations (e.g., MultiArmedBandit)
 config/           # environment YAML configs
 runs/             # run outputs: config.json, checkpoints/, videos/, metrics.csv, run.log
-VIBES/            # agent helper docs (INTERNALS, task playbooks)
+VIBES/            # agent helper docs (Architecture Guide, task playbooks)
 ```

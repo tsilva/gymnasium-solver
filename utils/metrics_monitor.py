@@ -15,6 +15,7 @@ class MetricsMonitor:
         self.metrics_recorder = metrics_recorder
         self.monitor_fns: Dict[str, List[Callable[[], Optional[str]]]] = {}
         self.active_alerts: Dict[str, List[str]] = {}
+        self.alerts_counter: Dict[str, int] = {}
 
     # ----- registration -----
     def register(self, key: str, monitor_fn: Callable[[], Optional[str]]) -> None:
@@ -45,6 +46,10 @@ class MetricsMonitor:
                 # Add alert to list
                 metrics_alerts.setdefault(metric, []).append(msg)
 
+                # Count the number of times this alert was raised during training
+                self.alerts_counter.setdefault(metric, 0)
+                self.alerts_counter[metric] += 1
+
         # For each metric, add to active alerts if alerts
         # are present, if no alerts, remove previous alerts
         add_alerts = {}
@@ -68,3 +73,6 @@ class MetricsMonitor:
 
     def get_active_alerts(self) -> Dict[str, List[str]]:
         return dict(self.active_alerts)
+
+    def get_alerts_counter(self) -> Dict[str, int]:
+        return dict(self.alerts_counter)

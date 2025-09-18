@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Iterable, Callable
 
 import torch
 import torch.nn.functional as F
@@ -144,60 +144,109 @@ class PPO(BaseAgent):
         })
 
     def get_metric_monitor_fns(self):
-        return (
-            (f"train/approx_kl", self._monitor_approx_kl_oob),
-            (f"train/clip_fraction", self._monitor_clip_fraction_oob),
-            (f"train/explained_variance", self._monitor_explained_variance_oob),
-        )
-    
-    # TODO: consider deploying these metric monitors as bundles, these bundles are classes that can be registered with one call, and this way we can register a base bundle, plus algo specific bundles, in this case, a MetricAlertsPPO bundle, this way they don't have to live as PPO algo methods 
-    def _monitor_approx_kl_oob(self, metric: str, metric_values: List[Tuple[int, float]]):
-        alert = {}
-        
-        _, last_value = metric_values[-1]
-        
-        min_threshold, max_threshold = 1e-3, 5e-2
-        if last_value < min_threshold: 
-            alert['message'] = f"< {min_threshold} is very low; updates may be too weak"
-            alert['tip'] = "Increase the learning rate or decrease the clip range"
-        if last_value > max_threshold: 
-            alert['message'] = f"> {max_threshold} is high; updates may be too aggressive"
-            alert['tip'] = "Decrease the learning rate or increase the clip range"
+        # PPO now registers metric monitors via a bundle at fit start.
+        # Keep this empty to avoid double-registration.
+        return ()
 
-        alert = alert if alert else None
+    def on_fit_start(self):
+        super().on_fit_start()
+        # Register PPO-specific metric monitors as a bundle
+        self.metrics_monitor.register_bundle(MetricAlertsPPO(self))
+
+
+class MetricMonitorBundle:
+    """Interface for metric monitor bundles.
+
+    Implementations should return an iterable of (metric_key, monitor_fn)
+    where monitor_fn has signature (metric: str, values: List[Tuple[int, float]]) -> dict | None.
+    """
+
+    def get_monitor_fns(self) -> Iterable[Callable]:
+        # Auto-register any bound method starting with `_monitor`
+        fns: list[Callable] = []
+        for name in dir(self):
+            if not name.startswith("_monitor"):
+                continue
+            fn = getattr(self, name)
+            if callable(fn):
+                fns.append(fn)
+        return tuple(fns)
+
+
+class MetricAlertsPPO(MetricMonitorBundle):
+    """PPO-specific metric alert bundle.
+
+    Encapsulates alert monitors for KL, clip fraction, and explained variance.
+    """
+
+    def __init__(self, agent) -> None:
+        self.agent = agent
+
+    def get_monitor_fns(self) -> Iterable[Callable]:
+        return super().get_monitor_fns()
+
+    def _monitor_approx_kl_oob(self, history: dict):
+        alert = {}
+        metric_key = "train/approx_kl"
+        metric_values = history.get(metric_key)
+        if not metric_values:
+            return None
+        _, last_value = metric_values[-1]
+
+        min_threshold, max_threshold = 1e-3, 5e-2
+        if last_value < min_threshold:
+            alert["message"] = f"< {min_threshold} is very low; updates may be too weak"
+            alert["tip"] = "Increase the learning rate or decrease the clip range"
+        if last_value > max_threshold:
+            alert["message"] = f"> {max_threshold} is high; updates may be too aggressive"
+            alert["tip"] = "Decrease the learning rate or increase the clip range"
+
+        if not alert:
+            return None
+        alert["metric"] = metric_key
         return alert
 
-    def _monitor_clip_fraction_oob(self, metric: str, metric_values: List[Tuple[int, float]]):
+    def _monitor_clip_fraction_oob(self, history: dict):
         alert = {}
-
+        metric_key = "train/clip_fraction"
+        metric_values = history.get(metric_key)
+        if not metric_values:
+            return None
         _, last_value = metric_values[-1]
 
         min_threshold, max_threshold = 0.05, 0.5
-        if last_value < min_threshold: 
-            alert['message'] = f"< {min_threshold} is very low; likely under-updating"
-            alert['tip'] = "Increase the learning rate or decrease the clip range"
-        if last_value > max_threshold: 
-            alert['message'] = f"> {max_threshold} is very high; many updates are clipped"
-            alert['tip'] = "Decrease the learning rate or increase the clip range"
+        if last_value < min_threshold:
+            alert["message"] = f"< {min_threshold} is very low; likely under-updating"
+            alert["tip"] = "Increase the learning rate or decrease the clip range"
+        if last_value > max_threshold:
+            alert["message"] = f"> {max_threshold} is very high; many updates are clipped"
+            alert["tip"] = "Decrease the learning rate or increase the clip range"
 
-        alert = alert if alert else None
+        if not alert:
+            return None
+        alert["metric"] = metric_key
         return alert
 
-    def _monitor_explained_variance_oob(self, metric: str, metric_values: List[Tuple[int, float]]):
+    def _monitor_explained_variance_oob(self, history: dict):
         alert = {}
+        metric_key = "train/explained_variance"
+        metric_values = history.get(metric_key)
+        if not metric_values:
+            return None
         _, last_value = metric_values[-1]
 
-        p = self._calc_training_progress()
-
+        p = self.agent._calc_training_progress()
         is_mid_training = 0.33 <= p < 0.66
-        is_late_training = p >= 0.66    
+        is_late_training = p >= 0.66
         min_threshold, max_threshold = 0.2, 0.5
-        if is_mid_training and last_value < min_threshold: 
-            alert['message'] = f"< {min_threshold} is low for mid-training"
-            alert['tip'] = "Increase the learning rate or decrease the clip range"
-        elif is_late_training and last_value < max_threshold: 
-            alert['message'] = f"< {max_threshold} is low for late training"
-            alert['tip'] = "Increase the learning rate or decrease the clip range"
+        if is_mid_training and last_value < min_threshold:
+            alert["message"] = f"< {min_threshold} is low for mid-training"
+            alert["tip"] = "Increase the learning rate or decrease the clip range"
+        elif is_late_training and last_value < max_threshold:
+            alert["message"] = f"< {max_threshold} is low for late training"
+            alert["tip"] = "Increase the learning rate or decrease the clip range"
 
-        alert = alert if alert else None
+        if not alert:
+            return None
+        alert["metric"] = metric_key
         return alert

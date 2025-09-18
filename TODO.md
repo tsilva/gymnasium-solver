@@ -1,7 +1,5 @@
-- SOC: Moved end-of-training console summary/alerts from BaseAgent to a dedicated callback (trainer_callbacks/console_summary.py).
-- SOC: Added compatibility alias module loggers/print_metrics_logger.py so tests import path matches implementation.
-- SOC: Consider moving wandb initialization out of BaseAgent._ensure_wandb_run into train.py (or pass run_id/run ref into agent) to reduce infra coupling.
-- SOC: Consider moving pre-fit config summary/prompt from BaseAgent._prompt_user_start_training into a presentation callback.
+- REFACTOR: Consider moving wandb initialization out of BaseAgent._ensure_wandb_run into train.py (or pass run_id/run ref into agent) to reduce infra coupling.
+- REFACTOR: Move pre-fit config summary/prompt from BaseAgent._prompt_user_start_training into a presentation callback.
 - must sort by alert id not by metric
 - FEAT: count how many times each alert triggered, couple that with predefined recommendations on what to tune
 - FEAT: prefix metrics (eg: time/epoch, time/step, etc., env/obs_mean, env/obs_std, env/)

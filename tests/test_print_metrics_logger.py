@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import io
 
-from loggers.print_metrics_logger import MetricsTableLogger
+from loggers.metrics_table_logger import MetricsTableLogger
 from utils.logging import strip_ansi_codes
 from utils.metrics_monitor import MetricsMonitor
 from utils.metrics_recorder import MetricsRecorder

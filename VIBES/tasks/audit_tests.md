@@ -7,7 +7,7 @@ Exercise every automated test target and document failures or flakiness with pre
 1. Run the full suite (`pytest -q` unless a project-specific command is documented); capture the full failure output for each failing test case.
 2. For each failure, determine whether the test expectation is wrong or product code has regressed. Do not patch code. Collect a minimal reproduction, suspected root cause, and impacted files/symbols.
 3. Add `TEST:` items for test-side fixes (fixtures/assertions/helpers) and `BUG:` items for product defects. Each entry should include:
-   - Exact file paths and symbols (e.g., `tests/test_print_metrics_logger.py::test_sorted_metrics`).
+   - Exact file paths and symbols (e.g., `tests/test_metrics_table_logger.py::test_sorted_metrics`).
    - Proposed minimal change and acceptance criteria.
 4. Optionally re-run targeted tests to confirm reproductions remain consistent. Do not implement fixes during this audit.
 5. Summarize the work: list flagged bugs and test issues, and link to the corresponding `TODO.md` entries.

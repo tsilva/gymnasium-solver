@@ -71,7 +71,7 @@ def test_print_logger_preserves_sticky_values_between_calls():
 
 def test_print_logger_trigger_alert_highlight_persists_and_clears():
     logger, buf = _make_logger()
-    logger.color = False  # simulate non-TTY; alert highlighting should still force color
+    logger.colors_enabled = False  # simulate non-TTY; alert highlighting should still force color
     logger.metrics_monitor.active_alerts = {
         "train/ep_rew_mean": ["training reward below threshold"],
     }

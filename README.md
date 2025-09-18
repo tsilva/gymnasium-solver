@@ -42,6 +42,9 @@ python train.py --config_id "CartPole-v1:reinforce" -q
 
 # Uses train.py default (Bandit-v0:ppo) when --config_id is omitted
 python train.py -q
+
+# Override max timesteps without editing YAML
+python train.py CartPole-v1:ppo --max-steps 5000
 ```
 - **Play a trained policy** 🎮 (auto-loads best/last checkpoint from a run):
 ```bash

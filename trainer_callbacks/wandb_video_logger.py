@@ -2,6 +2,7 @@
 
 import threading
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
 
@@ -10,6 +11,12 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 import wandb
+
+
+@dataclass
+class _PhaseState:
+    pending: set[str] = field(default_factory=set)
+    root: Path | None = None
 
 
 class WandbVideoLoggerCallback(pl.Callback):
@@ -36,6 +43,8 @@ class WandbVideoLoggerCallback(pl.Callback):
         files).
     """
 
+    PHASE_DIRS: dict[str, str] = {"train": "train", "val": "val"}
+
     def __init__(
         self,
         *,
@@ -54,28 +63,27 @@ class WandbVideoLoggerCallback(pl.Callback):
         self.min_age_sec = float(min_age_sec)
 
         self._seen: set[str] = set()
-        self._pending_train: set[str] = set()
-        self._pending_eval: set[str] = set()
+        self._phases: dict[str, _PhaseState] = {
+            name: _PhaseState() for name in self.PHASE_DIRS
+        }
         self._lock = threading.Lock()
         self._observer = None
         self._handler = None
-        self._train_root: Path | None = None
-        self._eval_root: Path | None = None
         self._trainer = None
 
     # --------- path helpers --------------------------------------------------
-    def _resolve_roots(self, run_dir: str) -> tuple[Path, Path]:
-        """Resolve the actual directories to watch/log under for train and eval."""
+    def _resolve_roots(self, run_dir: str) -> dict[str, Path]:
+        """Resolve the actual directories to watch/log under for each phase."""
         base_root = (
             self.media_root
             if self.media_root.is_absolute()
             else Path(run_dir) / self.media_root
         )
-        
-        train_root = (base_root / "train").resolve()
-        eval_root = (base_root / "val").resolve()
-        
-        return train_root, eval_root
+
+        return {
+            name: (base_root / dir_name).resolve()
+            for name, dir_name in self.PHASE_DIRS.items()
+        }
 
     def _under_root(self, p: Path, root: Path) -> bool:
         """Return True if path p is under root (both resolved/absolute)."""
@@ -87,44 +95,66 @@ class WandbVideoLoggerCallback(pl.Callback):
         except ValueError:
             return False
 
+    def _set_roots(self, roots: dict[str, Path]):
+        for name, root in roots.items():
+            state = self._phases.get(name)
+            if state:
+                state.root = Path(root).resolve()
+
+    def _phase_for_path(self, path: Path) -> str | None:
+        resolved = Path(path).resolve()
+        for name, state in self._phases.items():
+            root = state.root
+            if root and self._under_root(resolved, root):
+                return name
+        return None
+
+    def _add_pending(self, prefix: str, path: Path):
+        state = self._phases.get(prefix)
+        if not state:
+            return
+        with self._lock:
+            state.pending.add(str(Path(path).resolve()))
+
+    def _queue_pending(self, path: Path):
+        prefix = self._phase_for_path(path)
+        if prefix:
+            self._add_pending(prefix, path)
+
+    def _enqueue_existing_media(self):
+        with self._lock:
+            for name, state in self._phases.items():
+                root = state.root
+                if not root or not root.exists():
+                    continue
+                for p in root.rglob("*"):
+                    if p.is_file() and p.suffix.lower() in self.exts:
+                        state.pending.add(str(p.resolve()))
+
     # --------- watchdog wiring ----------------------------------------------
-    def _start_watch(self, train_root: Path, eval_root: Path):
+    def _start_watch(self, roots: dict[str, Path]):
         if self._observer:
             return
 
         # If watchdog isn't available, skip live watching; we'll scan on epoch end
         if Observer is None or FileSystemEventHandler is None:
-            self._train_root = train_root.resolve()
-            self._eval_root = eval_root.resolve()
+            self._set_roots({name: Path(root).resolve() for name, root in roots.items()})
             return
 
-        train_root = train_root.resolve()
-        eval_root = eval_root.resolve()
+        resolved_roots = {name: Path(root).resolve() for name, root in roots.items()}
+        self._set_roots(resolved_roots)
 
         # Do NOT create directories here; only watch ones that already exist
-        train_exists = train_root.exists()
-        eval_exists = eval_root.exists()
-        if not train_exists and not eval_exists:
-            # Still record intended roots for later checks
-            self._train_root = train_root
-            self._eval_root = eval_root
+        exists_map = {name: root.exists() for name, root in resolved_roots.items()}
+        if not any(exists_map.values()):
             return
-
-        self._train_root = train_root
-        self._eval_root = eval_root
 
         outer = self
 
         class CreatedOrMovedInHandler(FileSystemEventHandler):
             def _maybe_add(self, p: Path):
                 if p.suffix.lower() in outer.exts:
-                    resolved_p = p.resolve()
-                    with outer._lock:
-                        # Determine which pending set to add to based on path
-                        if outer._under_root(resolved_p, train_root):
-                            outer._pending_train.add(str(resolved_p))
-                        elif outer._under_root(resolved_p, eval_root):
-                            outer._pending_eval.add(str(resolved_p))
+                    outer._queue_pending(p.resolve())
 
             def on_created(self, event):
                 if event.is_directory:
@@ -137,21 +167,10 @@ class WandbVideoLoggerCallback(pl.Callback):
                     return
                 src = Path(event.src_path).resolve()
                 dst = Path(event.dest_path).resolve()
+                dst_phase = outer._phase_for_path(dst)
+                src_phase = outer._phase_for_path(src)
 
-                def _is_under(path: Path, base: Path) -> bool:
-                    try:
-                        path.relative_to(base)
-                        return True
-                    except ValueError:
-                        return False
-
-                # Check if moved into either train or eval roots
-                dst_in_train = _is_under(dst, train_root)
-                src_in_train = _is_under(src, train_root)
-                dst_in_eval = _is_under(dst, eval_root)
-                src_in_eval = _is_under(src, eval_root)
-
-                if (dst_in_train and not src_in_train) or (dst_in_eval and not src_in_eval):
+                if dst_phase and dst_phase != src_phase:
                     self._maybe_add(dst)
 
             # Pick up writers that only modify an existing file.
@@ -164,13 +183,14 @@ class WandbVideoLoggerCallback(pl.Callback):
         self._observer = Observer()
 
         # Watch existing directories only
-        if train_exists:
-            self._observer.schedule(self._handler, str(train_root), recursive=True)
-        if eval_exists:
-            self._observer.schedule(self._handler, str(eval_root), recursive=True)
+        scheduled = False
+        for name, root in resolved_roots.items():
+            if exists_map.get(name):
+                self._observer.schedule(self._handler, str(root), recursive=True)
+                scheduled = True
 
         # Start observer only if at least one directory is scheduled
-        if train_exists or eval_exists:
+        if scheduled:
             self._observer.start()
         else:
             # Clean up if nothing to watch
@@ -181,7 +201,10 @@ class WandbVideoLoggerCallback(pl.Callback):
         if self._observer:
             self._observer.stop()
             self._observer.join()
-            self._observer = self._handler = self._train_root = self._eval_root = None
+            self._observer = None
+            self._handler = None
+        for state in self._phases.values():
+            state.root = None
 
     # --------- Lightning hooks ----------------------------------------------
     def on_fit_start(self, trainer, *_):
@@ -190,8 +213,8 @@ class WandbVideoLoggerCallback(pl.Callback):
         # Start early so we don't miss files during the first epoch.
         run = getattr(wandb, "run", None)
         if run:
-            train_root, eval_root = self._resolve_roots(run.dir)
-            self._start_watch(train_root, eval_root)
+            roots = self._resolve_roots(run.dir)
+            self._start_watch(roots)
 
     def on_train_epoch_end(self, trainer, *_):
         self._process(trainer, "train")
@@ -213,6 +236,8 @@ class WandbVideoLoggerCallback(pl.Callback):
 
     # --------- core ----------------------------------------------------------
     def _process(self, trainer, prefix: str):
+        if trainer is None:
+            return
         # Only proceed if a W&B run is active
         run = getattr(wandb, "run", None)
         if not run:
@@ -220,36 +245,19 @@ class WandbVideoLoggerCallback(pl.Callback):
 
         # Start watcher if it hasn't been started yet (e.g., validation-only run)
         if not self._observer:
-            train_root, eval_root = self._resolve_roots(run.dir)
-            self._start_watch(train_root, eval_root)
-            # One-time fallback: if roots exist and observer just started or roots exist
-            # but we chose not to start observer (e.g., only one exists), pick up existing files
-            tr_exists = train_root.exists()
-            ev_exists = eval_root.exists()
-            if tr_exists or ev_exists:
-                with self._lock:
-                    if tr_exists:
-                        for p in Path(train_root).rglob("*"):
-                            if p.is_file() and p.suffix.lower() in self.exts:
-                                self._pending_train.add(str(p.resolve()))
-                    if ev_exists:
-                        for p in Path(eval_root).rglob("*"):
-                            if p.is_file() and p.suffix.lower() in self.exts:
-                                self._pending_eval.add(str(p.resolve()))
+            roots = self._resolve_roots(run.dir)
+            self._start_watch(roots)
+            self._enqueue_existing_media()
 
-        if self._train_root is None or self._eval_root is None:
+        state = self._phases.get(prefix)
+        if not state or state.root is None:
             return
 
         # Pull and clear pending paths for the appropriate phase
         with self._lock:
-            if prefix == "train":
-                paths = {Path(p) for p in self._pending_train}
-                self._pending_train.clear()
-                current_root = self._train_root
-            else:  # eval
-                paths = {Path(p) for p in self._pending_eval}
-                self._pending_eval.clear()
-                current_root = self._eval_root
+            paths = {Path(p) for p in state.pending}
+            state.pending.clear()
+            current_root = state.root
 
         if not paths:
             return
@@ -271,11 +279,7 @@ class WandbVideoLoggerCallback(pl.Callback):
             age = now - max(st.st_mtime, getattr(st, "st_ctime", st.st_mtime))
             if age < self.min_age_sec:
                 # Re-queue; next _process will pick it up
-                with self._lock:
-                    if prefix == "train":
-                        self._pending_train.add(str(rp))
-                    else:
-                        self._pending_eval.add(str(rp))
+                self._add_pending(prefix, rp)
                 continue
             fresh.append(rp)
 

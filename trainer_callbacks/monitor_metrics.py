@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import List
 
 import pytorch_lightning as pl
+
 
 class MonitorMetricsCallback(pl.Callback):
 

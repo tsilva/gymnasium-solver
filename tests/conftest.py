@@ -11,7 +11,6 @@ from typing import Any, Dict, List
 
 import torch
 
-
 # --- Minimal pytorch_lightning shim ---------------------------------------------------------
 if "pytorch_lightning" not in sys.modules:
     pl = types.ModuleType("pytorch_lightning")

@@ -1,7 +1,7 @@
-from click import Option
+from typing import List, Tuple
+
 import torch
 import torch.nn.functional as F
-from typing import List, Tuple
 
 from utils.policy_factory import build_policy_from_env_and_config
 from utils.torch import assert_detached

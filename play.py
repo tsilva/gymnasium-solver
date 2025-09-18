@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 import platform
-import argparse
-from pathlib import Path
 
 from utils.environment import build_env_from_config
+from utils.policy_factory import load_policy_model_from_checkpoint
 from utils.rollouts import RolloutCollector
 from utils.run import Run
-from utils.policy_factory import load_policy_model_from_checkpoint
+
 
 def main():
     # Parse command line arguments

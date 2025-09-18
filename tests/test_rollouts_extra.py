@@ -3,16 +3,13 @@ import pytest
 import torch
 
 from utils.rollouts import (
-    _build_idx_map_from_valid_mask,
-    _build_valid_mask_and_index_map,
-    _non_terminal_float_mask,
-    _real_terminal_mask,
-    _normalize_advantages,
-    compute_batched_mc_returns,
-    convert_returns_to_full_episode,
-    RunningStats,
     RollingWindow,
     RolloutCollector,
+    RunningStats,
+    _build_idx_map_from_valid_mask,
+    _build_valid_mask_and_index_map,
+    _normalize_advantages,
+    compute_batched_mc_returns,
 )
 
 

@@ -5,8 +5,9 @@ from typing import NamedTuple, Optional, Tuple
 import numpy as np
 import torch
 
-from utils.torch import _device_of, inference_ctx
 from utils.policy_ops import policy_act, policy_predict_values
+from utils.torch import _device_of, inference_ctx
+
 
 def _to_np(t: torch.Tensor, dtype: np.dtype) -> np.ndarray:
     return t.detach().cpu().numpy().astype(dtype, copy=False)

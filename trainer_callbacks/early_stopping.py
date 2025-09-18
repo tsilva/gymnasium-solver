@@ -8,7 +8,9 @@ when the cumulative timesteps reach a configured limit.
 from __future__ import annotations
 
 import pytorch_lightning as pl
+
 from utils.formatting import format_metric_value
+
 
 class EarlyStoppingCallback(pl.Callback):
     """Generic early-stopping via metric threshold.

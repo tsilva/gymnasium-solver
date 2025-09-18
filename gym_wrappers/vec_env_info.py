@@ -1,6 +1,8 @@
-from gymnasium import Env
 from typing import Optional
+
+from gymnasium import Env
 from stable_baselines3.common.vec_env.base_vec_env import VecEnvWrapper
+
 from gym_wrappers.env_info import EnvInfoWrapper
 
 

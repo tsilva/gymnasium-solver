@@ -1,7 +1,7 @@
 from typing import Any, Optional
 
-import numpy as np
 import gymnasium as gym
+import numpy as np
 
 
 class PixelObservationWrapper(gym.ObservationWrapper):

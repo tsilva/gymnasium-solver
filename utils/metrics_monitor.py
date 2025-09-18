@@ -1,6 +1,7 @@
-from typing import Dict, Callable, Optional, List
+from typing import Callable, Dict, List, Optional
 
-from .metrics_recorder import MetricsRecorder   
+from .metrics_recorder import MetricsRecorder
+
 
 class MetricsMonitor:
     """Lightweight registry of metric monitor functions with helpers for common checks.

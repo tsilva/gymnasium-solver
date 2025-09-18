@@ -1,6 +1,9 @@
 from __future__ import annotations
-from typing import Callable, Dict, Mapping, MutableMapping
+
+from typing import Dict, Mapping
+
 from .dict_utils import prefix_dict_keys
+
 
 class MetricsBuffer:
     """

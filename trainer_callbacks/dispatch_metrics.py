@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytorch_lightning as pl
 
+
 class DispatchMetricsCallback(pl.Callback):
 
     def on_train_epoch_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:

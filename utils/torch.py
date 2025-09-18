@@ -6,8 +6,8 @@ Contains helpers that operate on torch modules, devices, and inference context.
 from __future__ import annotations
 
 import itertools
-from contextlib import contextmanager
 import math
+from contextlib import contextmanager
 from typing import Any
 
 import torch

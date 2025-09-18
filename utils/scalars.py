@@ -7,8 +7,8 @@ scalar-valued entries for safe serialization/logging.
 
 from __future__ import annotations
 
-from typing import Any, Dict
 import numbers
+from typing import Any, Dict
 
 import numpy as np
 import torch

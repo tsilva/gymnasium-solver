@@ -5,7 +5,7 @@ High-signal reference for maintainers and agents. Read this before making change
 ### IO Helpers
 - JSON and YAML file IO is centralized in `utils/io.py`.
   - Use `read_json(path)` / `write_json(path, data, indent=2, ensure_ascii=False, ...)`.
-  - Use `read_yaml(path)` / `write_yaml(path, data)`.
+  - Use `read_yaml(path)` for YAML reads (write helpers intentionally omitted).
   - All functions use UTF-8 encoding by default for both reads and writes.
 
 ### Top-level flow

@@ -1,12 +1,12 @@
 import pytorch_lightning as pl
 
-from utils.io import write_json
-from utils.timings_tracker import TimingsTracker
-from utils.metrics_recorder import MetricsRecorder
 from utils.decorators import must_implement
-from utils.reports import print_terminal_ascii_summary
 from utils.formatting import sanitize_name
+from utils.io import write_json
 from utils.metrics_monitor import MetricsMonitor
+from utils.metrics_recorder import MetricsRecorder
+from utils.reports import print_terminal_ascii_summary
+from utils.timings_tracker import TimingsTracker
 
 CHECKPOINT_PATH = "checkpoints/"
 STAGES = ["train", "val", "test"]
@@ -319,9 +319,9 @@ class BaseAgent(pl.LightningModule):
         trainer.fit(self)
     
     def _prompt_user_start_training(self):
-        from utils.user import prompt_confirm
         from utils.logging import display_config_summary
         from utils.torch import _device_of
+        from utils.user import prompt_confirm
 
         num_params_total = int(sum(p.numel() for p in self.policy_model.parameters()))
         num_params_trainable = int(sum(p.numel() for p in self.policy_model.parameters() if p.requires_grad))
@@ -390,9 +390,11 @@ class BaseAgent(pl.LightningModule):
     # -------------------------
   
     def _build_trainer_loggers__wandb(self):
-        import wandb
         from dataclasses import asdict
+
         from pytorch_lightning.loggers import WandbLogger
+
+        import wandb
 
         # Create the wandb logger, attach to the existing run if present
         project_name = self.config.project_id if self.config.project_id else BaseAgent._sanitize_name(self.config.env_id)
@@ -451,13 +453,13 @@ class BaseAgent(pl.LightningModule):
         """Assemble trainer callbacks, with an optional end-of-training report."""
         # Lazy imports to avoid heavy deps at module import time
         from trainer_callbacks import (
-            MonitorMetricsCallback,
             DispatchMetricsCallback,
-            ModelCheckpointCallback,
-            WandbVideoLoggerCallback,
-            EndOfTrainingReportCallback,
             EarlyStoppingCallback,
-            WarmupEvalCallback
+            EndOfTrainingReportCallback,
+            ModelCheckpointCallback,
+            MonitorMetricsCallback,
+            WandbVideoLoggerCallback,
+            WarmupEvalCallback,
         )
 
         # Initialize callbacks list

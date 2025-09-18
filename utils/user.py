@@ -1,5 +1,6 @@
 import sys
 
+
 def prompt_confirm(prompt: str, default: bool = True, quiet: bool = False) -> bool:
     """Prompt user with yes/no. Defaults on empty, non-interactive, EOF, or quiet mode."""
     

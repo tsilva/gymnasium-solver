@@ -1,6 +1,7 @@
 """Small dictionary helpers used across the project."""
 
-from typing import Any, Dict, Iterable, Mapping, List
+from typing import Any, Dict, Iterable, List, Mapping
+
 
 def prefix_dict_keys(data: dict, prefix: str) -> dict:
     """Return a copy of data with keys prefixed by '<prefix>/'."""

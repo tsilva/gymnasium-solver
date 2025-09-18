@@ -12,6 +12,7 @@ from typing import Tuple
 import torch
 from torch import Tensor
 
+
 @torch.inference_mode()
 def policy_act(
     model: torch.nn.Module,

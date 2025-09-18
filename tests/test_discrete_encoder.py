@@ -1,6 +1,6 @@
 import gymnasium as gym
-from gymnasium import spaces
 import numpy as np
+from gymnasium import spaces
 
 from gym_wrappers.discrete_encoder import DiscreteEncoder
 

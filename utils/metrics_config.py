@@ -8,8 +8,10 @@ singleton so callers don't repeatedly read the file.
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional, Callable
+from typing import Any, Callable, Dict, Optional
+
 from utils.io import read_yaml
+
 
 @dataclass
 class MetricsConfig:

@@ -1,7 +1,9 @@
 from __future__ import annotations
+
+import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Mapping, Optional, Union
-import time
+
 
 def _now_ns() -> int:
     return time.perf_counter_ns()

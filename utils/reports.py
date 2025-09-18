@@ -1,5 +1,6 @@
 from typing import Iterable, List
-from utils.logging import format_section_header, format_section_footer
+
+from utils.logging import format_section_footer, format_section_header
 
 
 def downsample(seq: Iterable[float], target: int) -> List[float]:

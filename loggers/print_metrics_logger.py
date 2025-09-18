@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Callable, List, Iterable, Tuple, Mapping
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from dataclasses import dataclass
 
 import os
@@ -100,9 +100,6 @@ class PrintMetricsLogger(LightningLoggerBase):
         _hl_row_for = _hl_cfg.get('row_metrics', set())
         _hl_row_bg_color = _hl_cfg.get('row_bg_color', 'bg_blue')
         _hl_row_bold = bool(_hl_cfg.get('row_bold', True))
-        _metric_bounds = _m.metric_bounds()
-        self._metric_bounds = dict(_metric_bounds)
-
         # -------- Inlined table printer configuration/state --------
         self.indent: int = 4
         self.compact_numbers: bool = True
@@ -125,7 +122,6 @@ class PrintMetricsLogger(LightningLoggerBase):
         self.highlight_row_bold: bool = bool(_hl_row_bold)
 
         # Bounds-based highlighting
-        self.metric_bounds_map: Dict[str, Dict[str, float]] = dict(self._metric_bounds or {})
         self.highlight_bounds_bg_color: str = 'bg_yellow'
 
         # In-memory history for sparklines (per full metric key)
@@ -280,13 +276,6 @@ class PrintMetricsLogger(LightningLoggerBase):
     def _subkey_from_full(full_key: str) -> str:
         return full_key.rsplit("/", 1)[-1]
 
-    def _bounds_for_metric(self, full_key: str) -> Optional[Mapping[str, Any]]:
-        bounds = self.metric_bounds_map.get(full_key)
-        if bounds:
-            return bounds
-        subkey = self._subkey_from_full(full_key)
-        return self.metric_bounds_map.get(subkey)
-
     def _sort_key(self, namespace: str, subkey: str) -> Tuple[int, object]:
         """Sorting helper that honours an explicit key priority list."""
         full_key = self._full_key(namespace, subkey)
@@ -294,13 +283,6 @@ class PrintMetricsLogger(LightningLoggerBase):
         if priority_index is not None:
             return (0, priority_index)
         return (1, subkey.lower())
-
-    def _sort_grouped_metrics(self, grouped_metrics: Dict[str, Dict[str, Any]]) -> List[str]:
-        group_keys = list(grouped_metrics.keys())
-        if not self.group_keys_order: return sorted(group_keys)
-        pref = [key for key in self.group_keys_order if key in group_keys]
-        rest = sorted(key for key in group_keys if key not in self.group_keys_order)
-        return pref + rest
 
     def _prepare_sections(
         self,

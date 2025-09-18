@@ -9,15 +9,17 @@ from __future__ import annotations
 
 import csv
 import json
+import numbers
 import time
 from dataclasses import asdict, is_dataclass
-import numbers
 from pathlib import Path
 from string import Template
 from typing import Any, Dict, Tuple
 
 import pytorch_lightning as pl
+
 from utils.metrics_config import metrics_config
+
 
 class EndOfTrainingReportCallback(pl.Callback):
     def __init__(self, *, filename: str = "report.md"):

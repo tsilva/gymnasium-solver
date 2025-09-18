@@ -1,11 +1,12 @@
 """Configuration loading for environment YAML and legacy hyperparams."""
 
-from dataclasses import asdict, dataclass, field, MISSING
+from dataclasses import MISSING, asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
 
 from utils.io import read_yaml, write_json
+
 
 @dataclass
 class Config:

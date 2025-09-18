@@ -1,5 +1,4 @@
 import gymnasium as gym
-import numpy as np
 
 
 class VizDoom_RewardShaper(gym.Wrapper):
@@ -63,5 +62,4 @@ class VizDoom_RewardShaper(gym.Wrapper):
         info["shaping_reward"] = info.get("shaping_reward", 0.0) + shaping
 
         return obs, reward + shaping, terminated, truncated, info
-
 

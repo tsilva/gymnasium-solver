@@ -1,12 +1,10 @@
-from pathlib import Path
-
-import pytest
-
 import importlib.util
 import sys
 import types
-
+from pathlib import Path
 from pathlib import Path as _P
+
+import pytest
 
 # Load the real ModelCheckpointCallback directly from file to avoid the
 # test stub that injects a dummy module in sys.modules.

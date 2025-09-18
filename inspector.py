@@ -8,17 +8,18 @@ Run via: python inspector.py [args]
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
-from typing import Any, Dict, List, Tuple
-
-import numpy as np
-import torch
 
 # Avoid macOS AppKit main-thread violations when environments initialize
 # Pygame/SDL from Gradio worker threads. Using the headless SDL drivers
 # prevents Cocoa window/menu initialization on non-main threads.
 import os
 import platform
+from pathlib import Path
+from typing import Any, Dict, List, Tuple
+
+import numpy as np
+import torch
+
 if platform.system() == "Darwin":
     os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
     os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
@@ -33,11 +34,11 @@ PLAY_ICON = "\u25B6"  # ▶
 PAUSE_ICON = "\u23F8"  # ⏸
 
 from utils.policy_factory import load_policy_model_from_checkpoint
-from utils.run import Run, list_run_ids
 from utils.rollouts import (
-    compute_batched_mc_returns,
     compute_batched_gae_advantages_and_returns,
+    compute_batched_mc_returns,
 )
+from utils.run import Run, list_run_ids
 
 
 def compute_mc_returns(rewards: np.ndarray, gamma: float) -> np.ndarray:

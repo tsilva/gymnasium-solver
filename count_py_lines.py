@@ -18,7 +18,6 @@ import os
 import sys
 from typing import Iterable, List, Sequence, Tuple
 
-
 # Directories to exclude during traversal
 EXCLUDE_DIRS: set[str] = {
     ".git",

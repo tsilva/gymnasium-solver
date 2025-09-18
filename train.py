@@ -1,9 +1,11 @@
-import os
-import wandb
 import argparse
+import os
 from dataclasses import asdict
-from utils.config import load_config, Config
+
 from stable_baselines3.common.utils import set_random_seed
+
+import wandb
+from utils.config import Config, load_config
 from utils.formatting import format_duration
 
 

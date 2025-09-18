@@ -1,9 +1,10 @@
+import torch
+
 from utils.policy_factory import build_policy
 from utils.torch import assert_detached
 
 from .base_agent import BaseAgent
 
-import torch
 
 class REINFORCE(BaseAgent):
     

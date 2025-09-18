@@ -103,8 +103,8 @@ def main() -> None:
         )
         raise
 
-    import minari
     import gymnasium as gym
+    import minari
 
     print(f"Loading Minari dataset: {args.dataset_id}")
     dataset = minari.load_dataset(args.dataset_id, download=True)

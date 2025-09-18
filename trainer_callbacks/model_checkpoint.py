@@ -1,15 +1,15 @@
 """Checkpoint management utilities for model saving and resuming training."""
 
 from pathlib import Path
-import torch
-
-from utils.io import write_json
-from utils.scalars import only_scalar_values
-from utils.filesystem import update_symlink
+from typing import Any
 
 import pytorch_lightning as pl
-from typing import Any, Dict
-        
+import torch
+
+from utils.filesystem import update_symlink
+from utils.io import write_json
+from utils.scalars import only_scalar_values
+
 
 class ModelCheckpointCallback(pl.Callback):
     """Custom checkpoint callback that handles all model checkpointing logic including resume."""
@@ -105,8 +105,17 @@ class ModelCheckpointCallback(pl.Callback):
         if is_best:
             self.best_value = float(metric_value)
             self.best_epoch = epoch
-            # TODO: log best epoch instead
-            print(f"New best model: epoch={epoch}; {self.metric}={float(metric_value):.4f}")
+
+            # Record the best checkpoint metadata without printing from the callback layer.
+            best_metrics = {
+                "checkpoint/best_epoch": float(epoch),
+                "checkpoint/best_metric_value": float(metric_value),
+            }
+            recorder = getattr(pl_module, "metrics_recorder", None)
+            if recorder is not None:
+                recorder.record("val", best_metrics)
+
+            pl_module.log_dict({f"val/{k}": v for k, v in best_metrics.items()}, logger=True, on_step=False, on_epoch=True)
 
         """Handle training completion summary and ensure symlinks are consistent."""
         # Ensure `last.*` symlinks reflect the final checkpointed epoch

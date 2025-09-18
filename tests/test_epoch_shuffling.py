@@ -1,6 +1,7 @@
+from types import SimpleNamespace
+
 import pytest
 import torch
-from types import SimpleNamespace
 
 
 @pytest.mark.unit

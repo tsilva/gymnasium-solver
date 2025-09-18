@@ -23,13 +23,13 @@ and attaches available mp4 videos as repo assets so they appear as preview media
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import os
 from pathlib import Path
-from typing import Optional, List, Tuple
-import importlib
-from utils.io import read_json, read_yaml
+from typing import List, Optional, Tuple
 
+from utils.io import read_json, read_yaml
 
 RUNS_DIR = Path("runs")
 

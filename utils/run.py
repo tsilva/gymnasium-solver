@@ -17,7 +17,6 @@ from typing import Dict, List, Optional, Tuple
 
 from utils.io import read_json
 
-
 RUNS_ROOT = Path("runs")
 BEST_CKPT_NAMES = {"best.ckpt", "best_checkpoint.ckpt"}
 LAST_CKPT_NAMES = {"last.ckpt", "last_checkpoint.ckpt"}

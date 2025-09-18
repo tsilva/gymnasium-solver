@@ -5,9 +5,9 @@ Small, reusable helpers for working with files and symlinks in a portable way.
 
 from __future__ import annotations
 
-from pathlib import Path
 import os
 import shutil
+from pathlib import Path
 
 
 def update_symlink(link_path: Path, target_path: Path) -> None:

@@ -20,7 +20,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 DEFAULT_ARGS = ["-m", "gpt-5", "-c", "model_reasoning_effort=high"]
 
 

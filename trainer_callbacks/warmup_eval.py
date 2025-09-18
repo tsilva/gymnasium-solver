@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytorch_lightning as pl
 
+
 class WarmupEvalCallback(pl.Callback):
     def __init__(self, *, warmup_epochs: int, eval_freq_epochs: int):
         self.warmup_epochs = warmup_epochs

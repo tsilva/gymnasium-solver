@@ -2,8 +2,8 @@ import os
 from contextlib import contextmanager
 from typing import Optional, Tuple
 
-import numpy as np
 import gymnasium as gym
+import numpy as np
 from gymnasium import logger
 
 

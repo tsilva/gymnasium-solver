@@ -4,10 +4,9 @@ from pathlib import Path
 from typing import List, Tuple
 
 from utils.env_info_schema import validate_env_info
-from utils.io import read_yaml, read_json
+from utils.io import read_json, read_yaml
 
 try:
-    import json
     from jsonschema import Draft202012Validator
     JSONSCHEMA_AVAILABLE = True
 except ImportError:  # pragma: no cover

@@ -15,10 +15,10 @@ Dependencies: `wandb`, `wandb-workspaces` (declared in project deps).
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Sequence
-import os
 
 
 @dataclass
@@ -118,8 +118,8 @@ def _build_sections(key_metrics: Optional[Sequence[str]], *, key_panels_per_sect
     accordion and a single 'val' accordion) to keep the dashboard tidy.
     """
     # Import locally to keep this module import-safe when deps are missing during tests
-    from wandb_workspaces import workspaces as ws
     import wandb_workspaces.reports.v2.interface as wr
+    from wandb_workspaces import workspaces as ws
 
     # Panels should align to the same step metric Lightning/W&B use for this
     # project. Runs log with `define_metric("*", step_metric="train/total_timesteps")`
@@ -203,8 +203,8 @@ def create_or_update_workspace(req: WorkspaceRequest) -> str:
 
     try:
         # Workspaces and panel primitives
-        from wandb_workspaces import workspaces as ws
         import wandb_workspaces.reports.v2.interface as wr  # noqa: F401 - ensure importable
+        from wandb_workspaces import workspaces as ws
     except Exception as e:
         raise ImportError("wandb-workspaces is required. pip install wandb-workspaces") from e
 

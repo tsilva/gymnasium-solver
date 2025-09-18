@@ -6,8 +6,8 @@ and light type checks. Keep dependencies minimal and fail-safe.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, Optional, Tuple
 import numbers
+from typing import Any
 
 
 def is_number(x: Any) -> bool:

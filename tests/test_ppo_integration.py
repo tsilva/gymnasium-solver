@@ -1,5 +1,5 @@
 import sys
-from types import SimpleNamespace, ModuleType
+from types import ModuleType, SimpleNamespace
 
 import numpy as np
 import pytest

@@ -1,5 +1,7 @@
-from gym_wrappers.env_wrapper_registry import EnvWrapperRegistry
 from gymnasium import logger as gym_logger
+
+from gym_wrappers.env_wrapper_registry import EnvWrapperRegistry
+
 
 def is_alepy_env_id(env_id: str) -> bool:
     return env_id.lower().startswith("ale/")
@@ -56,6 +58,7 @@ def _build_env_alepy__ram(env_id, obs_type, render_mode, **env_kwargs):
 
 def _build_env_vizdoom(env_id, obs_type, render_mode, **env_kwargs):
     import re
+
     from gym_wrappers.vizdoom import VizDoomEnv
     scenario = env_id.replace("VizDoom-", "").replace("-v0", "").replace("-v1", "").replace("-", "_")
     scenario = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', scenario)
@@ -121,8 +124,9 @@ def build_env(
         DummyVecEnv,
         SubprocVecEnv,
         VecFrameStack,
-        VecNormalize
+        VecNormalize,
     )
+
     from gym_wrappers.env_info import EnvInfoWrapper
     from gym_wrappers.env_video_recorder import EnvVideoRecorder
     from gym_wrappers.vec_env_info import VecEnvInfoWrapper

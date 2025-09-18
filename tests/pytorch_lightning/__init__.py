@@ -8,11 +8,11 @@ This file lives under tests/ so it doesn't pollute the main codebase.
 """
 from __future__ import annotations
 
-from types import SimpleNamespace, ModuleType
+import sys
+from types import ModuleType, SimpleNamespace
 from typing import Any, Dict, List
 
 import torch
-import sys
 
 
 class LightningModule(torch.nn.Module):

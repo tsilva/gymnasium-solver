@@ -84,15 +84,3 @@ class MetricsRecorder:
         buffer = MetricsBuffer()
         self._buffers[namespace] = buffer
         return buffer
-
-    def get_last_value(self, full_key: str):
-        """Return the last value for the given `full_key`. If the key is not found, return None."""
-        
-        # If history for key is empty, return None (eg: key not found)
-        history = self.history()
-        key_history = history.get(full_key)
-        if not key_history: return None
-
-        # Return last value for key (ignoring timestep)
-        _, last_value = key_history[-1]
-        return last_value

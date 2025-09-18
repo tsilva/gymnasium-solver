@@ -2,9 +2,9 @@
 Comprehensive logging utilities that ensure all stdout output is also logged to files.
 """
 
-import sys
 import os
 import re
+import sys
 import threading
 import time
 from contextlib import contextmanager

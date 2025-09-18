@@ -3,8 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Optional
 
-from pytorch_lightning.loggers.logger import Logger as LightningLoggerBase  # type: ignore
+from pytorch_lightning.loggers.logger import (
+    Logger as LightningLoggerBase,  # type: ignore
+)
+
 from loggers.csv_metrics_logger import CsvMetricsLogger
+
 
 class CsvLightningLogger(LightningLoggerBase):
     """

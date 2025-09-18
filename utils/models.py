@@ -3,13 +3,15 @@
 Includes simple MLP-based Actor-Critic and Policy-only models.
 """
 
-from typing import Iterable, Dict, Union
+from typing import Dict, Union
 
-import torch
-from torch.distributions import Categorical
-import torch.nn as nn
-from .torch import init_model_weights, compute_param_group_grad_norm
 import numpy as np
+import torch
+import torch.nn as nn
+from torch.distributions import Categorical
+
+from .torch import compute_param_group_grad_norm, init_model_weights
+
 
 def resolve_activation(activation_id: str) -> type[nn.Module]:
     key = activation_id.lower()

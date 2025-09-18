@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import csv
+import numbers
 import threading
 import time
 from pathlib import Path
-from queue import Queue, Empty, Full
-from typing import Any, Dict, Optional, List
-import numbers
+from queue import Empty, Full, Queue
+from typing import Any, Dict, List, Optional
 
 
 class CsvMetricsLogger:

@@ -3,7 +3,7 @@ import os
 import shlex
 import subprocess
 import sys
-from typing import Dict, Any
+from typing import Any, Dict
 
 
 def run_single_trial(

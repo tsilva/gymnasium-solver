@@ -43,19 +43,3 @@ def read_yaml(path: PathLike, *, encoding: str = "utf-8") -> Any:
     p = _to_path(path)
     with p.open("r", encoding=encoding) as f: data = yaml.safe_load(f)
     return data
-
-
-def write_yaml(
-    path: PathLike,
-    data: Any,
-    *,
-    encoding: str = "utf-8",
-    ensure_dirs: bool = True,
-    **kwargs,
-) -> None:
-    p = _to_path(path)
-    if ensure_dirs: p.parent.mkdir(parents=True, exist_ok=True)
-    dumper = yaml.safe_dump if kwargs.get("safe", True) else yaml.dump
-    text = dumper(data, **kwargs)
-    p.write_text(text, encoding=encoding)
-

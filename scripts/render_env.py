@@ -1,6 +1,5 @@
 import argparse
 import time
-import traceback
 
 import gymnasium as gym
 

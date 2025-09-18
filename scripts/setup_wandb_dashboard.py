@@ -21,10 +21,11 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from pathlib import Path
 
 # Ensure repo root is on sys.path when running as a script from scripts/
 import sys as _sys
+from pathlib import Path
+
 _repo_root = Path(__file__).resolve().parents[1]
 if str(_repo_root) not in _sys.path:
     _sys.path.insert(0, str(_repo_root))

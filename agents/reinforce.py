@@ -54,7 +54,7 @@ class REINFORCE(BaseAgent):
         # Get the log probabilities for each 
         # action given the current state
         dist, _ = self.policy_model(states)
-        log_probs = dist.log_prob(actions)
+        logprobs = dist.log_prob(actions)
 
         # Scale each action log probability by the monte carlo return for that state;
         # this will boost confident action that lead to high returns more than inconfident 
@@ -66,7 +66,7 @@ class REINFORCE(BaseAgent):
         # (note: we negate the calculation because pytorch optimizers minimize loss, so by minimizing 
         # the value we want to increase, we are maximizing it)
         # Scale each action probability 
-        policy_loss = -(log_probs * policy_targets).mean()
+        policy_loss = -(logprobs * policy_targets).mean()
         
         # Calculate how far the distribution is from being uniform;
         # the less uniform it is the less randomness there is in the policy,
@@ -79,8 +79,8 @@ class REINFORCE(BaseAgent):
         # KL diagnostics between rollout policy (old) and current policy (new)
         # Matches PPO-style on-action KL estimates
         with torch.no_grad():
-            ratio = torch.exp(log_probs - old_logprobs)
-            kl_div = (old_logprobs - log_probs).mean()
+            ratio = torch.exp(logprobs - old_logprobs)
+            kl_div = (old_logprobs - logprobs).mean()
             approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
         
         # The final loss is the sum of the policy loss and the entropy loss;

@@ -401,7 +401,7 @@ class RolloutBuffer:
 
         # TODO: why env major, and can we do env major by default if necessary?
         actions = _flat_env_major_cpu_to_torch(self.actions_buf, torch.int64)
-        logps = _flat_env_major_cpu_to_torch(self.logprobs_buf, torch.float32)
+        logprobs = _flat_env_major_cpu_to_torch(self.logprobs_buf, torch.float32)
         values = _flat_env_major_cpu_to_torch(self.values_buf, torch.float32)
 
         rewards = _flat_env_major_cpu_to_torch(self.rewards_buf, torch.float32)
@@ -424,7 +424,7 @@ class RolloutBuffer:
             actions=actions,
             rewards=rewards,
             dones=dones,
-            log_prob=logps,
+            logprobs=logprobs,
             values=values,
             advantages=advantages,
             returns=returns,

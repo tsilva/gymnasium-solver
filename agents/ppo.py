@@ -1,4 +1,5 @@
 from typing import List, Tuple, Iterable, Callable
+from utils.metrics_monitor import MetricAlert
 
 import torch
 import torch.nn.functional as F
@@ -25,14 +26,13 @@ class PPO(BaseAgent):
         # use type for this? check sb3
         states = batch.observations
         actions = batch.actions
-        old_logprobs = batch.log_prob # TODO: call log_probs
+        old_logprobs = batch.logprobs
         advantages = batch.advantages
         returns = batch.returns
 
         # Assert that the tensors are detached
         assert_detached(states, actions, old_logprobs, advantages, returns)
 
-        # TODO: use util (use pytorch function if available)
         # TODO: perform these ops before calling losses_for_batch?
         # Batch-normalize advantage if requested
         normalize_advantages = self.config.normalize_advantages == "batch"
@@ -182,11 +182,8 @@ class MetricAlertsPPO(MetricMonitorBundle):
     def __init__(self, agent) -> None:
         self.agent = agent
 
-    def get_monitor_fns(self) -> Iterable[Callable]:
-        return super().get_monitor_fns()
-
     def _monitor_approx_kl_oob(self, history: dict):
-        alert = {}
+        alert_msg = None
         metric_key = "train/approx_kl"
         metric_values = history.get(metric_key)
         if not metric_values:
@@ -194,20 +191,20 @@ class MetricAlertsPPO(MetricMonitorBundle):
         _, last_value = metric_values[-1]
 
         min_threshold, max_threshold = 1e-3, 5e-2
+        tip = None
         if last_value < min_threshold:
-            alert["message"] = f"< {min_threshold} is very low; updates may be too weak"
-            alert["tip"] = "Increase the learning rate or decrease the clip range"
+            alert_msg = f"< {min_threshold} is very low; updates may be too weak"
+            tip = "Increase the learning rate or decrease the clip range"
         if last_value > max_threshold:
-            alert["message"] = f"> {max_threshold} is high; updates may be too aggressive"
-            alert["tip"] = "Decrease the learning rate or increase the clip range"
+            alert_msg = f"> {max_threshold} is high; updates may be too aggressive"
+            tip = "Decrease the learning rate or increase the clip range"
 
-        if not alert:
+        if not alert_msg:
             return None
-        alert["metric"] = metric_key
-        return alert
+        return MetricAlert(metric=metric_key, message=alert_msg, tip=tip)
 
     def _monitor_clip_fraction_oob(self, history: dict):
-        alert = {}
+        alert_msg = None
         metric_key = "train/clip_fraction"
         metric_values = history.get(metric_key)
         if not metric_values:
@@ -215,20 +212,20 @@ class MetricAlertsPPO(MetricMonitorBundle):
         _, last_value = metric_values[-1]
 
         min_threshold, max_threshold = 0.05, 0.5
+        tip = None
         if last_value < min_threshold:
-            alert["message"] = f"< {min_threshold} is very low; likely under-updating"
-            alert["tip"] = "Increase the learning rate or decrease the clip range"
+            alert_msg = f"< {min_threshold} is very low; likely under-updating"
+            tip = "Increase the learning rate or decrease the clip range"
         if last_value > max_threshold:
-            alert["message"] = f"> {max_threshold} is very high; many updates are clipped"
-            alert["tip"] = "Decrease the learning rate or increase the clip range"
+            alert_msg = f"> {max_threshold} is very high; many updates are clipped"
+            tip = "Decrease the learning rate or increase the clip range"
 
-        if not alert:
+        if not alert_msg:
             return None
-        alert["metric"] = metric_key
-        return alert
+        return MetricAlert(metric=metric_key, message=alert_msg, tip=tip)
 
     def _monitor_explained_variance_oob(self, history: dict):
-        alert = {}
+        alert_msg = None
         metric_key = "train/explained_variance"
         metric_values = history.get(metric_key)
         if not metric_values:
@@ -239,14 +236,14 @@ class MetricAlertsPPO(MetricMonitorBundle):
         is_mid_training = 0.33 <= p < 0.66
         is_late_training = p >= 0.66
         min_threshold, max_threshold = 0.2, 0.5
+        tip = None
         if is_mid_training and last_value < min_threshold:
-            alert["message"] = f"< {min_threshold} is low for mid-training"
-            alert["tip"] = "Increase the learning rate or decrease the clip range"
+            alert_msg = f"< {min_threshold} is low for mid-training"
+            tip = "Increase the learning rate or decrease the clip range"
         elif is_late_training and last_value < max_threshold:
-            alert["message"] = f"< {max_threshold} is low for late training"
-            alert["tip"] = "Increase the learning rate or decrease the clip range"
+            alert_msg = f"< {max_threshold} is low for late training"
+            tip = "Increase the learning rate or decrease the clip range"
 
-        if not alert:
+        if not alert_msg:
             return None
-        alert["metric"] = metric_key
-        return alert
+        return MetricAlert(metric=metric_key, message=alert_msg, tip=tip)

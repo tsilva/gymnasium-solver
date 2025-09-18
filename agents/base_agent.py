@@ -32,7 +32,7 @@ class BaseAgent(pl.LightningModule):
 
         # Metrics recorder aggregates per-epoch metrics (train/eval) and maintains
         # a step-aware numeric history for terminal summaries.
-        self.metrics_recorder = MetricsRecorder(step_key="train/total_timesteps")
+        self.metrics_recorder = MetricsRecorder()
 
         # Create metrics monitor registry (eg: used for metric alerts)
         self.metrics_monitor = MetricsMonitor(self.metrics_recorder)
@@ -395,8 +395,9 @@ class BaseAgent(pl.LightningModule):
         ) if wandb.run is None else WandbLogger(log_model=True)
 
         # Define the common step metric
+        from utils.metrics_config import metrics_config
         wandb_run = wandb_logger.experiment
-        wandb_run.define_metric("*", step_metric="train/total_timesteps")
+        wandb_run.define_metric("*", step_metric=metrics_config.step_key())
 
         # Change the run name to {algo_id}-{run_id}
         wandb_run.name = f"{self.config.algo_id}-{wandb_run.id}"
@@ -485,9 +486,9 @@ class BaseAgent(pl.LightningModule):
         ))
 
         # If defined in config, early stop after reaching a certain number of timesteps
-        if self.config.max_timesteps: callbacks.append(
-            EarlyStoppingCallback("train/total_timesteps", self.config.max_timesteps)
-        )
+        if self.config.max_timesteps:
+            from utils.metrics_config import metrics_config
+            callbacks.append(EarlyStoppingCallback(metrics_config.step_key(), self.config.max_timesteps))
 
         # If defined in config, early stop when mean training reward reaches a threshold
         train_env = self.get_env("train")

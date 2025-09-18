@@ -291,7 +291,7 @@ class MetricsTableLogger(LightningLoggerBase):
         self,
         grouped_metrics: Dict[str, Dict[str, Any]],
         group_key_order: List[str],
-        active_alerts: Dict[str, Iterable[Dict[str, str]]],
+        active_alerts: Dict[str, Iterable[object]],
         deltas_map: Dict[str, Tuple[str, Optional[str]]],
     ) -> _PreparedSections:
         formatted: Dict[str, Dict[str, str]] = {}
@@ -328,7 +328,18 @@ class MetricsTableLogger(LightningLoggerBase):
                 chart_disp = self._spark_for_key(full_key, self.sparkline_width)
 
                 _alerts = active_alerts.get(full_key, [])
-                alerts_str = " | ".join([alert['message'] for alert in _alerts])
+                def _alert_message(a: object) -> str:
+                    # Supports MetricAlert dataclass and plain strings (tests)
+                    try:
+                        from utils.metrics_monitor import MetricAlert as _MetricAlert
+                        if isinstance(a, _MetricAlert):
+                            return a.message
+                    except Exception:
+                        pass
+                    if isinstance(a, str):
+                        return a
+                    return str(a)
+                alerts_str = " | ".join([_alert_message(alert) for alert in _alerts if _alert_message(alert)])
                 alert_disp = _ansi(f"⚠️  {alerts_str}", "yellow", enable=self.colors_enabled) if alerts_str else ""
 
                 formatted_sub[metric_name] = val_disp
@@ -383,7 +394,7 @@ class MetricsTableLogger(LightningLoggerBase):
         group_key_order: List[str],
         prepared: _PreparedSections,
         dimensions: _TableDimensions,
-        active_alerts: Dict[str, Iterable[str]],
+        active_alerts: Dict[str, Iterable[object]],
     ) -> List[str]:
         lines: List[str] = [""]
         key_width = dimensions.key_width

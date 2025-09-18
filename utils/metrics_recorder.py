@@ -16,7 +16,7 @@ class MetricsRecorder:
     - `update_history` expects fully-prefixed snapshots (e.g., "train/*", "val/*", ...).
 
     Typical usage:
-        rec = MetricsRecorder(step_key="train/total_timesteps")
+        rec = MetricsRecorder()  # uses global step key from metrics config
         rec.record("train", {"loss": 0.2, "lr": 3e-4})
         rec.record("val", {"acc": 0.83})
         epoch_train_means = rec.compute_epoch_means("train")
@@ -24,7 +24,7 @@ class MetricsRecorder:
         rec.update_history({"train/total_timesteps": 1024, "train/loss": 0.2})
     """
 
-    def __init__(self, *, step_key:str) -> None:
+    def __init__(self, *, step_key: str | None = None) -> None:
         self._buffers: MutableMapping[str, MetricsBuffer] = {}
         self._history = MetricsHistory(step_key=step_key)
 

@@ -1,4 +1,5 @@
-from typing import Callable, Dict, List, Optional, Iterable, Tuple, Any
+from typing import Callable, Dict, List, Optional, Iterable, Tuple, Any, Union
+from dataclasses import dataclass
 
 from .metrics_recorder import MetricsRecorder
 
@@ -6,9 +7,9 @@ from .metrics_recorder import MetricsRecorder
 class MetricsMonitor:
     """Lightweight registry of metric monitor functions with helpers for common checks.
 
-    Monitor functions are callables returning either a string message (when the
-    condition is met) or a false-y value otherwise. This class only stores and
-    executes them; registration is up to callers.
+    Monitor functions return a MetricAlert instance (or an iterable of MetricAlert)
+    when a condition is met, or a false-y value otherwise. This class only stores
+    and executes them; registration is up to callers.
     """
 
     def __init__(self, metrics_recorder: MetricsRecorder) -> None:
@@ -16,27 +17,25 @@ class MetricsMonitor:
         self.metrics_recorder = metrics_recorder
         # Map metric key -> list of monitor functions (legacy keyed monitors)
         # Each keyed monitor receives (metric_key, full_history)
-        self.monitor_fns: Dict[str, List[Callable[[str, Dict[str, List[Tuple[int, float]]]], Optional[dict]]]] = {}
+        self.monitor_fns: Dict[str, List[Callable[[str, Dict[str, List[Tuple[int, float]]]], Optional[Union["MetricAlert", Iterable["MetricAlert"]]]]]] = {}
         # Global monitors: functions that decide which metric they apply to.
-        # Each global monitor receives (full_history) and returns an alert dict
-        # containing a 'metric' field with the fully-qualified metric key.
-        self.global_monitor_fns: List[Callable[[Dict[str, List[Tuple[int, float]]]], Optional[dict]]] = []
-        self.active_alerts: Dict[str, List[str]] = {}
+        # Each global monitor receives (full_history) and returns MetricAlert or an iterable of MetricAlert.
+        self.global_monitor_fns: List[Callable[[Dict[str, List[Tuple[int, float]]]], Optional[Union["MetricAlert", Iterable["MetricAlert"]]]]] = []
+        self.active_alerts: Dict[str, List[MetricAlert]] = {}
         self.alerts_counter: Dict[str, int] = {}
 
     # ----- registration -----
-    def register(self, key: str, monitor_fn: Callable[[str, Dict[str, List[Tuple[int, float]]]], Optional[dict]]) -> None:
+    def register(self, key: str, monitor_fn: Callable[[str, Dict[str, List[Tuple[int, float]]]], Optional[Union["MetricAlert", Iterable["MetricAlert"]]]]) -> None:
         """Register a monitor function for a fully-qualified metric key (e.g., train/approx_kl).
 
         Multiple monitor functions can be registered for the same metric key.
         """
         self.monitor_fns.setdefault(key, []).append(monitor_fn)
 
-    def register_fn(self, monitor_fn: Callable[[Dict[str, List[Tuple[int, float]]]], Optional[dict]]) -> None:
+    def register_fn(self, monitor_fn: Callable[[Dict[str, List[Tuple[int, float]]]], Optional[Union["MetricAlert", Iterable["MetricAlert"]]]]) -> None:
         """Register a global monitor function that determines its own metric key.
 
-        Global monitor functions must return an alert dict that includes a
-        'metric' field specifying the fully-qualified metric key.
+        Global monitor functions must return a MetricAlert or an iterable of MetricAlert.
         """
         self.global_monitor_fns.append(monitor_fn)
 
@@ -45,8 +44,8 @@ class MetricsMonitor:
 
         A bundle exposes `get_monitor_fns()` which returns an iterable of
         either (metric_key, monitor_fn) pairs (legacy) or bare monitor
-        callables (preferred). Bare monitors must return alerts containing
-        a 'metric' field.
+        callables (preferred). Bare monitors must return MetricAlert instances
+        (or iterables thereof) that contain the fully-qualified metric key.
         """
         for item in bundle.get_monitor_fns():
             # Support both (key, fn) and bare fn styles
@@ -63,16 +62,14 @@ class MetricsMonitor:
         """Execute monitor functions and return a mapping of key -> list of alert messages."""
 
         # Collect alerts for each metric
-        alerts_by_metric: Dict[str, List[dict]] = {}
+        alerts_by_metric: Dict[str, List[MetricAlert]] = {}
         history = self.metrics_recorder.history()
 
         # 1) Global monitors
         for fn in self.global_monitor_fns:
             alert_obj = fn(history)
             for alert in _iter_alerts(alert_obj):
-                metric_key = alert.get("metric")
-                if not metric_key:
-                    continue
+                metric_key = alert.metric
                 alerts_by_metric.setdefault(metric_key, []).append(alert)
                 self.alerts_counter[metric_key] = self.alerts_counter.get(metric_key, 0) + 1
 
@@ -85,7 +82,7 @@ class MetricsMonitor:
                     # Fallback to signature (history)
                     alert_obj = fn(history)  # type: ignore[misc]
                 for alert in _iter_alerts(alert_obj):
-                    metric_key = alert.get("metric", metric)
+                    metric_key = alert.metric
                     alerts_by_metric.setdefault(metric_key, []).append(alert)
                     self.alerts_counter[metric_key] = self.alerts_counter.get(metric_key, 0) + 1
 
@@ -110,24 +107,41 @@ class MetricsMonitor:
             removed=list(remove_alerts)
         )
 
-    def get_active_alerts(self) -> Dict[str, List[str]]:
+    def get_active_alerts(self) -> Dict[str, List["MetricAlert"]]:
         return dict(self.active_alerts)
 
     def get_alerts_counter(self) -> Dict[str, int]:
         return dict(self.alerts_counter)
 
 
-def _iter_alerts(alert_obj: Any) -> Iterable[dict]:
-    """Normalize a monitor return into an iterable of alert dicts.
+@dataclass(frozen=True)
+class MetricAlert:
+    """Represents a triggered metric alert.
 
-    Accepts None, a single dict, or an iterable of dicts.
+    Fields
+    - metric: fully-qualified key (e.g., 'train/approx_kl')
+    - message: short human-readable description
+    - tip: optional hint to address the alert
+    """
+    metric: str
+    message: str
+    tip: Optional[str] = None
+
+
+def _iter_alerts(alert_obj: Any) -> Iterable["MetricAlert"]:
+    """Normalize a monitor return into an iterable of MetricAlert.
+
+    Accepts None, a single MetricAlert, or an iterable of MetricAlert.
     """
     if not alert_obj:
         return ()
-    if isinstance(alert_obj, dict):
+    if isinstance(alert_obj, MetricAlert):
         return (alert_obj,)
-    # Best-effort: assume iterable of dicts
     try:
-        return tuple(x for x in alert_obj if isinstance(x, dict))
+        result: List[MetricAlert] = []
+        for x in alert_obj:
+            if isinstance(x, MetricAlert):
+                result.append(x)
+        return tuple(result)
     except TypeError:
         return ()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Mapping, Tuple
 
+from .metrics_config import metrics_config
 
 class MetricsHistory:
     """
@@ -12,10 +13,10 @@ class MetricsHistory:
     designated step key (default: "train/total_timesteps").
     """
 
-    def __init__(self, step_key: str = "train/total_timesteps") -> None:
+    def __init__(self) -> None:
         self._history: Dict[str, List[Tuple[int, float]]] = {}
         self._last_step: int = 0
-        self._step_key: str = step_key
+        self._step_key: str = metrics_config.step_key()
 
     def update(self, metrics: Mapping[str, Any]) -> None:
         """

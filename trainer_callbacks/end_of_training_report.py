@@ -214,12 +214,14 @@ class EndOfTrainingReportCallback(pl.Callback):
                 f"- Eval ep_rew_mean (last): {float(key_last_values['val/ep_rew_mean']):.3f}"
             )
 
-        # Sort metric bullets using metrics.yaml key_priority
+        # Sort metric bullets using metrics.yaml key_priority (unnamespaced)
         priority_list = metrics_config.key_priority() or []
         priority_map = {k: i for i, k in enumerate(priority_list)}
 
         def _metric_sort_key(full_key: str) -> Tuple[int, object]:
-            idx = priority_map.get(full_key)
+            # Compare on unnamespaced subkey to support config without prefixes
+            subkey = metrics_config.ensure_unnamespaced_metric(full_key)
+            idx = priority_map.get(subkey)
             if idx is not None:
                 return (0, idx)
             return (1, full_key.lower())
@@ -268,11 +270,13 @@ class EndOfTrainingReportCallback(pl.Callback):
             "train/entropy_loss",
         ]
 
-        priority = metrics_config.key_priority() or []
+        priority = tuple(metrics_config.key_priority() or [])
 
         def _sort_key(k: str) -> tuple[int, object]:
+            # Compare on unnamespaced subkey to support config without prefixes
+            subkey = metrics_config.ensure_unnamespaced_metric(k)
             try:
-                return (0, list(priority).index(k))
+                return (0, list(priority).index(subkey))
             except ValueError:
                 return (1, k.lower())
 

@@ -91,8 +91,15 @@ class MetricsTableLogger(LightningLoggerBase):
         self.chart_column_width = self.sparkline_width
 
         # -- Ordering/prioritization --
+        # Accept unnamespaced priorities from config and expand to full keys
+        # for common namespaces so per-section sorting is preserved.
         self.key_priority: Tuple[str, ...] = tuple(metrics_config.key_priority())
-        self._key_priority_map: Dict[str, int] = {key: idx for idx, key in enumerate(self.key_priority)}
+        _namespaces = ("train", "val", "test")
+        self._key_priority_map: Dict[str, int] = {
+            f"{ns}/{sub}": idx
+            for idx, sub in enumerate(self.key_priority)
+            for ns in _namespaces
+        }
         self.group_keys_order: Tuple[str, ...] | None = ("train", "val")
         self.group_subkeys_order: bool = True
 

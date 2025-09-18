@@ -181,9 +181,6 @@ class VizDoomEnv(gym.Env):
             return self._get_screen()
         return None
 
-    @property
-    def render_mode(self) -> Optional[str]:
-        return self._render_mode
 
     def close(self) -> None:
         self._game.close()

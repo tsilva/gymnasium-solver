@@ -32,10 +32,6 @@ class MetricsCSVLightningLogger(LightningLoggerBase):
     def version(self) -> str | int:  # pragma: no cover - trivial
         return self._version
 
-    @property
-    def experiment(self):  # pragma: no cover - not used
-        return self._experiment
-
     def log_hyperparams(self, params: Any) -> None:  # pragma: no cover - unused
         # Hyperparams are already saved to config.json; no-op here
         return None

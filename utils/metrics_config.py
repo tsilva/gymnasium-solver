@@ -28,9 +28,6 @@ class MetricsConfig:
     def __post_init__(self) -> None:
         self._load()
 
-    @property
-    def config(self) -> Dict[str, Any]:
-        return self._config
 
     def _load(self) -> None:
         project_root = Path(__file__).parent.parent

@@ -127,8 +127,8 @@ class MetricsTableLogger(LightningLoggerBase):
         return None
 
     def log_metrics(self, metrics: dict[str, Any], step: Optional[int] = None) -> None:
-        assert metrics, "Metrics cannot be empty"
-        metrics_config.assert_metrics_within_bounds(merged)
+        assert metrics, "metrics cannot be empty"
+        metrics_config.assert_metrics_within_bounds(metrics)
 
         # Convert values to basic Python scalars for rendering/validation 
         # and discard non-namespace keys (eg: epoch injected by Lightning)
@@ -167,7 +167,7 @@ class MetricsTableLogger(LightningLoggerBase):
         # Pre-validate against configured delta rules (rules are defined per bare metric name)
         for full_key, current_value in metrics.items():
             # Ensure keys are properly namespaced and valid
-            assert metrics_config.is_valid_fullkey(full_key), f"Invalid metric key '{full_key}'"
+            assert metrics_config.is_namespaced_metric(full_key), f"Invalid metric key '{full_key}'"
 
             # Lookup previous value for the same full key
             if full_key not in prev_snapshot:
@@ -182,7 +182,7 @@ class MetricsTableLogger(LightningLoggerBase):
                 continue
 
             # Apply delta rule if one exists for the bare metric name
-            bare_key = metrics_config.subkey_from_fullkey(full_key)
+            bare_key = metrics_config.metric_from_namespaced_metric(full_key)
             rule_fn = self.metric_delta_rules.get(bare_key)
             if rule_fn is not None:
                 assert rule_fn(prev_val, current_value), (
@@ -248,7 +248,7 @@ class MetricsTableLogger(LightningLoggerBase):
 
     def _sort_key(self, namespace: str, subkey: str) -> Tuple[int, object]:
         """Sorting helper that honours an explicit key priority list."""
-        full_key = metrics_config.fullkey(namespace, subkey)
+        full_key = metrics_config.namespaced_metric(namespace, subkey)
         priority_index = self._key_priority_map.get(full_key)
         if priority_index is not None:
             return (0, priority_index)
@@ -278,7 +278,7 @@ class MetricsTableLogger(LightningLoggerBase):
 
             for metric_name, metric_value in group_metrics.items():
                 key_candidates.append(metric_name)
-                full_key = metrics_config.full_key(group_key, metric_name)
+                full_key = metrics_config.namespaced_metric(group_key, metric_name)
                 metric_precision = self.metric_precision_map.get(metric_name, 2)
 
                 metric_value_s = number_to_string(metric_value, precision=metric_precision, humanize=True)
@@ -405,8 +405,8 @@ class MetricsTableLogger(LightningLoggerBase):
                 alert_padded = alert_padding_s + alerts_s
 
                 # Resolve row highlight
-                full_key = metrics_config.fullkey(group_key, metric_name)
-                alert_active = full_key in active_alerts
+                namespaced_metric_name = metrics_config.namespaced_metric(group_key, metric_name)
+                alert_active = namespaced_metric_name in active_alerts
                 key_cell = f"{metric_name:<{key_width}}"
                 
                 highlight = False

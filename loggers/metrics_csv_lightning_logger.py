@@ -9,6 +9,7 @@ from pytorch_lightning.loggers.logger import (
 
 from loggers.metrics_csv_logger import MetricsCSVLogger
 
+# TODO: REFACTOR this file
 
 class MetricsCSVLightningLogger(LightningLoggerBase):
     """

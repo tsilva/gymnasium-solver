@@ -19,6 +19,7 @@ class _PhaseState:
     root: Path | None = None
 
 
+# TODO: REFACTOR this file
 class WandbVideoLoggerCallback(pl.Callback):
     """
     Watches multiple media directories for new files and logs them to Weights & Biases

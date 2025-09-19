@@ -7,9 +7,11 @@ than inside the agent.
 
 import pytorch_lightning as pl
 
+# TODO: move these to this file
 from utils.reports import print_terminal_ascii_summary, print_terminal_ascii_alerts
 
 
+# TODO: call this callback something more appropriate
 class ConsoleSummaryCallback(pl.Callback):
     """Render a terminal summary at fit end using the agent's recorder/monitor."""
 

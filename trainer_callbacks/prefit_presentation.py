@@ -9,6 +9,9 @@ from __future__ import annotations
 import pytorch_lightning as pl
 
 
+# TODO: REFACTOR this file
+
+# TODO: call this callback something else
 class PrefitPresentationCallback(pl.Callback):
     """Display config summary and prompt to start training at fit start.
 

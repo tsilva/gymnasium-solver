@@ -11,42 +11,6 @@ import torch
 import os
 
 
-def find_latest_checkpoint(algo_id: str, env_id: str, checkpoint_dir: str = "checkpoints") -> Optional[Path]:
-    """Find the latest checkpoint for a given algorithm and environment.
-
-    Supports both legacy layout checkpoints/<algo>/<env>/... and run-local
-    checkpoints saved under runs/<run_id>/checkpoints/ when consuming directly.
-    """
-    env_id_clean = env_id.replace('/', '_').replace('\\', '_')
-    checkpoint_path = Path(checkpoint_dir) / algo_id / env_id_clean
-    
-    if not checkpoint_path.exists():
-        return None
-    
-    # Look for checkpoints in order of preference: best -> threshold -> last -> latest timestamped
-    for checkpoint_name in ["best.ckpt", "best_checkpoint.ckpt", "last.ckpt", "last_checkpoint.ckpt"]:
-        checkpoint_file = checkpoint_path / checkpoint_name
-        if checkpoint_file.exists():
-            return checkpoint_file
-    
-    # Look for threshold checkpoints (timestamped)
-    threshold_checkpoints = list(checkpoint_path.glob("threshold-epoch=*-step=*.ckpt"))
-    if threshold_checkpoints:
-        # Sort by modification time and return the latest
-        threshold_checkpoints.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-        return threshold_checkpoints[0]
-    
-    # Look for any timestamped checkpoints (epoch=XX-step=XXXX.ckpt)
-    # Support both legacy epoch=xx-step=yy.ckpt and new epoch=xx.ckpt
-    timestamped_checkpoints = list(checkpoint_path.glob("epoch=*-step=*.ckpt")) or list(checkpoint_path.glob("epoch=*.ckpt"))
-    if timestamped_checkpoints:
-        # Sort by modification time and return the latest
-        timestamped_checkpoints.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-        return timestamped_checkpoints[0]
-    
-    return None
-
-
 def _quiet_mode_enabled() -> bool:
     flag1 = os.environ.get("VIBES_QUIET", "").strip().lower()
     flag2 = os.environ.get("VIBES_DISABLE_CHECKPOINT_LOGS", "").strip().lower()

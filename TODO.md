@@ -2,7 +2,6 @@
 
 ## NEXT
 
-- TODO: dont tie eval_freq_epochs and eval_warmup_epochs to epochs because ppos updates for many epochs; consider changing eval_freq to timesteps so it doesnt depend on n_updates
 
 
 - BUG: training epoch is still running after validation early stop

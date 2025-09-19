@@ -25,6 +25,7 @@ from utils.formatting import (
 )
 from utils.metrics_monitor import MetricsMonitor
 
+# TODO: REFACTOR this file
 @dataclass
 class _PreparedSections:
     formatted: Dict[str, Dict[str, str]]

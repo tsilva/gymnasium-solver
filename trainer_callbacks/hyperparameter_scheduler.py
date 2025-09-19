@@ -7,6 +7,7 @@ import pytorch_lightning as pl
 from utils.schedulers import resolve as resolve_schedule
 
 
+# TODO: REFACTOR this file
 class HyperparameterScheduler(pl.Callback):
     """Callback that updates scheduled hyperparameters at epoch end.
 

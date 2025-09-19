@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 from utils.metrics_config import metrics_config
 
 
-# TODO: refactor this file
+# TODO: REFACTOR this file
 class MetricsCSVLogger:
     """
     High-throughput CSV metrics logger (wide format).

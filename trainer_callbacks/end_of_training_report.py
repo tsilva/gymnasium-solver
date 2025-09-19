@@ -104,7 +104,10 @@ class EndOfTrainingReportCallback(pl.Callback):
         if getattr(pl_module, "_aborted_before_training", False):
             return
         # Resolve run directory
-        run_dir = Path(pl_module.run_manager._run_dir)
+        run_obj = getattr(pl_module, "run", None)
+        if run_obj is None:
+            return
+        run_dir = Path(run_obj.get_run_dir())
         run_dir.mkdir(parents=True, exist_ok=True)
 
         report_path = run_dir / self.filename
@@ -172,7 +175,7 @@ class EndOfTrainingReportCallback(pl.Callback):
         }
 
         # Prepare template variables and render via a Markdown template
-        run_id = getattr(pl_module.run_manager, "run_id", None)
+        run_id = getattr(run_obj, "get_run_id", lambda: None)()
         date_str = time.strftime("%Y-%m-%d %H:%M:%S")
 
         # Optional bullets assembled conditionally

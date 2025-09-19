@@ -3,6 +3,8 @@ from typing import Callable, Iterable, List
 import math
 from statistics import fmean
 
+import pytorch_lightning as pl
+
 from utils.metrics_config import metrics_config
 from utils.metrics_monitor import MetricAlert
 
@@ -77,66 +79,34 @@ class MetricMonitorBundle:
 class CommonMetricAlerts(MetricMonitorBundle):
     """Shared metric tripwires that apply to all algorithms."""
 
-    _DEFAULT_NAN_METRICS: tuple[str, ...] = (
-        "train/loss",
-        "train/entropy",
-        "train/entropy_loss",
-        "train/ep_rew_mean",
-    )
-
     _BOUNDS_SMOOTHING_WINDOW = 5
 
-    def __init__(self, *, nan_metrics: Iterable[str] | None = None) -> None:
+    def __init__(self, pl_module: pl.LightningModule) -> None:
+        self.pl_module = pl_module
         self._step_key = metrics_config.step_key()
-        merged: List[str] = list(self._DEFAULT_NAN_METRICS)
-        if nan_metrics:
-            for metric in nan_metrics:
-                if metric not in merged:
-                    merged.append(metric)
-        self._nan_watchlist: List[str] = merged
-
-    def extend_nan_watchlist(self, metrics: Iterable[str]) -> None:
-        for metric in metrics:
-            if metric not in self._nan_watchlist:
-                self._nan_watchlist.append(metric)
 
     # ---- monitors ----
     def _monitor_step_progress(self, history: dict):
-        series = history.get(self._step_key)
+        if self.pl_module is None:
+            return None
+        step = self.pl_module.current_epoch
+        if step is None:
+            return None
+        step_key = f"{self._step_key}/{step}"
+        series = history.get(step_key)
         if not series or len(series) < 2:
             return None
         _, prev_value = series[-2]
         _, current_value = series[-1]
         if current_value <= prev_value:
-            prev_fmt = self._format_metric_value(self._step_key, float(prev_value))
-            curr_fmt = self._format_metric_value(self._step_key, float(current_value))
+            prev_fmt = self._format_metric_value(step_key, float(prev_value))
+            curr_fmt = self._format_metric_value(step_key, float(current_value))
             return MetricAlert(
-                _id=f"{self._step_key}/stalled",
-                metric=self._step_key,
+                _id=f"{step_key}/stalled",
+                metric=step_key,
                 message=f"did not increase (prev={prev_fmt}, current={curr_fmt})",
                 tip="Verify rollouts are collected each epoch and dataloaders consume new batches.",
             )
-
-    def _monitor_nan_metrics(self, history: dict):
-        alerts: List[MetricAlert] = []
-        for metric in self._nan_watchlist:
-            value = self._latest_metric_value(history, metric)
-            if value is None:
-                continue
-            try:
-                numeric = float(value)
-            except (TypeError, ValueError):
-                continue
-            if math.isnan(numeric) or math.isinf(numeric):
-                alerts.append(
-                    MetricAlert(
-                        _id=f"{metric}/nan_or_inf",
-                        metric=metric,
-                        message="recorded NaN/Inf; training likely diverged",
-                        tip="Inspect gradients, learning rate, and normalization to regain numerical stability.",
-                    )
-                )
-        return alerts or None
 
     # TODO: tag for removal
     def _monitor_config_bounds(self, history: dict):

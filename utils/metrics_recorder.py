@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Mapping, MutableMapping, List
 
+import math
+
 from .metrics_buffer import MetricsBuffer
 from .metrics_history import MetricsHistory
 from .scalars import only_scalar_values
@@ -35,8 +37,14 @@ class MetricsRecorder:
         allocated automatically if it doesn't yet exist.
         """
         assert len(metrics) > 0, "metrics cannot be empty"
-        buffer = self._ensure_buffer(namespace)
+
+        # Convert non-scalar values to scalars (eg: numpy, torch, etc.)
         metrics = only_scalar_values(metrics)
+
+        # Assert values are valid before logging (eg: numeric, not NaN, not Inf)
+        self._assert_valid_values(metrics)
+
+        buffer = self._ensure_buffer(namespace)
         buffer.log(metrics)
 
     # ---- epoch lifecycle ----
@@ -84,3 +92,9 @@ class MetricsRecorder:
         buffer = MetricsBuffer()
         self._buffers[namespace] = buffer
         return buffer
+
+    def _assert_valid_values(self, metrics: Mapping[str, Any]) -> None:
+        for metric, value in metrics.items():
+            assert isinstance(value, (int, float)), f"metric '{metric}' is not a number: {value}"
+            assert not math.isnan(value), f"metric '{metric}' is NaN: {value}"
+            assert not math.isinf(value), f"metric '{metric}' is Inf: {value}"

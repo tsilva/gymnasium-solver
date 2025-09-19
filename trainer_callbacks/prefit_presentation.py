@@ -25,10 +25,10 @@ class PrefitPresentationCallback(pl.Callback):
 
         # Best-effort guards: require expected attributes on the module
         config = getattr(pl_module, "config", None)
-        run_manager = getattr(pl_module, "run_manager", None)
+        run = getattr(pl_module, "run", None)
         policy_model = getattr(pl_module, "policy_model", None)
         get_env = getattr(pl_module, "get_env", None)
-        if not all([config, run_manager, policy_model, callable(get_env)]):
+        if not all([config, run, policy_model, callable(get_env)]):
             return
 
         # Compute model parameter counts
@@ -73,7 +73,7 @@ class PrefitPresentationCallback(pl.Callback):
         # Present summary
         display_config_summary({
             "Run": {
-                "run_id": getattr(run_manager, "get_run_id", lambda: None)(),
+                "run_id": getattr(run, "get_run_id", lambda: None)(),
             },
             "Environment": env_block,
             "Model": model_block,
@@ -96,4 +96,3 @@ class PrefitPresentationCallback(pl.Callback):
             # Provide a clear stop reason and mark abort for downstream guards
             setattr(pl_module, "_early_stop_reason", "User aborted before training.")
             setattr(pl_module, "_aborted_before_training", True)
-

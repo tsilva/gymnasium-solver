@@ -16,7 +16,7 @@ High-signal reference for maintainers and agents. Read this alongside `VIBES/COD
 - **Training loop**: `BaseAgent.train_dataloader()` collects a rollout with `utils.rollouts.RolloutCollector`, builds an index-collate `DataLoader` (`utils.dataloaders`), and Lightning calls `training_step()` which delegates to `losses_for_batch()`; optim is manual (`automatic_optimization=False`).
 - **Eval**: Validation/test hooks reuse each stage's `RolloutCollector.evaluate_episodes(...)`, wrapping the vec env with `env.recorder(...)` (from `VecEnvInfoWrapper`) to optionally capture `epoch=XX.mp4` videos in `runs/<id>/checkpoints/`. Per-epoch metrics flow through the same recorder/logging path as training, and `trainer_callbacks.VideoLoggerCallback` later uploads media from `runs/<id>/videos` when present.
   - For Retro environments (stable-retro), evaluation/test envs are created lazily with `n_envs=1` to avoid multi-emulator-per-process errors, and `evaluate_episodes` stops at the requested episode count (the collector balances episode targets across vec ranks) to prevent overly long runs.
-- **Runs**: `utils.run_manager.RunManager` creates `runs/<id>/`, symlinks `runs/@latest-run`, and manages paths; `BaseAgent` dumps `config.json` and writes `run.log` via `utils.logging.stream_output_to_log`.
+- **Runs**: `utils.run.Run` creates `runs/<id>/`, ensures `checkpoints/`, manages the `@latest-run` symlink, and exposes helpers to create paths; `BaseAgent` dumps `config.json` and writes `run.log` via `utils.logging.stream_output_to_log`.
 - **Checkpoints**: `trainer_callbacks.ModelCheckpointCallback` writes `epoch=<idx>.ckpt` plus a JSON metrics sidecar each eval epoch, tracks the best metric value, and refreshes `best.*` / `last.*` symlinks at the end of training so helpers (e.g., `play.py`) always see the latest artifacts.
 
 ### Configuration model (`utils/config.py`)
@@ -46,7 +46,7 @@ Algo-specific config subclasses:
 
 ### Agents
 - `BaseAgent` (LightningModule):
-  - Creates `train`, `val`, and `test` envs with offset seeds and stage-specific video settings, then builds matching `RolloutCollector`s. Instantiates a `MetricsRecorder` (step key `train/total_timesteps`), a `MetricsMonitor` used for alert hooks, and a `RunManager` for run directory bookkeeping.
+  - Creates `train`, `val`, and `test` envs with offset seeds and stage-specific video settings, then builds matching `RolloutCollector`s. Instantiates a `MetricsRecorder` (step key `train/total_timesteps`), a `MetricsMonitor` used for alert hooks, and a `Run` object for run directory bookkeeping.
 - Manual optimization in `training_step`; per-batch metrics are buffered in the recorder and flushed once per epoch by `trainer_callbacks.DispatchMetricsCallback`, which also updates history and forwards `train/*` / `val/*` snapshots to Lightning loggers. `MetricsMonitor.check()` surfaces alert messages (printed once per epoch), and `loggers.metrics_table_logger.PrintMetricsLogger` renders the console table using `config/metrics.yaml` precision/highlight rules.
   - Tracks best episode rewards via the collector: `train/ep_rew_best` and `val/ep_rew_best` are derived from the running best of `*/ep_rew_mean` and appear in `metrics.csv`, W&B, and the terminal view.
   - Evaluation cadence honors `Config.eval_freq_epochs` and `eval_warmup_epochs`. `WarmupEvalCallback` disables validation until warmup completes, after which `validation_step` drives the collector-based evaluation + optional video capture described earlier.

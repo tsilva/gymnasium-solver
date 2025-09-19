@@ -8,7 +8,7 @@ import pytest
 
 from agents.ppo.ppo_agent import PPOAgent
 from utils.config import PPOConfig
-from utils.run_manager import RunManager
+from utils.run import Run
 
 
 def _make_config(*, target_kl: float | None) -> PPOConfig:
@@ -62,7 +62,7 @@ class _DummyPolicy(nn.Module):
 def test_ppo_kl_threshold_skips_remaining_batches(tmp_path):
     config = _make_config(target_kl=0.01)
     agent = PPOAgent(config)
-    agent.run_manager = RunManager(run_id="test-run", base_runs_dir=str(tmp_path))
+    agent.run = Run.create("test-run", runs_root=tmp_path)
 
     # Avoid touching real optimizers / parameters in the test
     agent._backpropagate_and_step = lambda *_, **__: None

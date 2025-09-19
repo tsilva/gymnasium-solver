@@ -15,18 +15,12 @@ class PPOAgent(BaseAgent):
     def __init__(self, config):
         super().__init__(config)
 
-        extra_nan_metrics = (
-            "train/policy_loss",
-            "train/value_loss",
-            "train/clip_fraction",
-            "train/approx_kl",
-            "train/explained_variance",
-        )
-        self._common_metric_alerts.extend_nan_watchlist(extra_nan_metrics)
-
         # Set initial clip range (starts as config value, then updated by scheduler)
         self.clip_range = config.clip_range
-        self._kl_stop_triggered = False
+        self.target_kl = config.target_kl
+
+        # Register PPO-specific metric monitors
+        self.metrics_monitor.register_bundle(PPOAlerts(self))
 
     def build_models(self):
         train_env = self.get_env("train")
@@ -117,17 +111,8 @@ class PPOAgent(BaseAgent):
             kl_div = (old_logprobs - new_logprobs).mean()
             approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
             explained_var = 1 - torch.var(returns - values_pred) / torch.var(returns)
-
-        target_kl = getattr(self.config, "target_kl", None)
-        kl_exceeded = False
-        if target_kl is not None:
-            approx_kl_value = float(approx_kl.detach())
-            if approx_kl_value > target_kl:
-                self._kl_stop_triggered = True
-                kl_exceeded = True
-
-        # Log all metrics (will be avarages and flushed by end of epoch)
-        self.metrics_recorder.record("train", {
+        
+        metrics = {
             'loss': loss.detach(),
             'policy_loss': policy_loss.detach(),
             'entropy_loss': entropy_loss.detach(),
@@ -138,25 +123,23 @@ class PPOAgent(BaseAgent):
             'clip_fraction': clip_fraction.detach(),
             'kl_div': kl_div.detach(),
             'approx_kl': approx_kl.detach(),
-            'explained_variance': explained_var.detach(),
-            'kl_stop_triggered': float(kl_exceeded),
-        })
+            'explained_variance': explained_var.detach()
+        }
 
-        return loss
-    
-    def training_step(self, batch, batch_idx):
-        if self.config.target_kl is not None and self._kl_stop_triggered:
-            self.metrics_recorder.record("train", {'kl_stop_triggered': 1.0})
-            return None
+        # In case the KL divergence exceeded the target, stop training on this epoch
+        if self.target_kl is not None:
+            approx_kl_value = float(approx_kl.detach())
+            metrics['kl_stop_triggered'] = 1 if approx_kl_value > self.target_kl else 0
 
-        loss = self.losses_for_batch(batch, batch_idx)
-        self._backpropagate_and_step(loss)
-        return None
+        # Log all metrics (will be avarages and flushed by end of epoch)
+        self.metrics_recorder.record("train", metrics)
 
-    def on_train_epoch_start(self):
-        self._kl_stop_triggered = False
-        super().on_train_epoch_start()
-
+        early_stop_epoch = metrics.get('kl_stop_triggered') == 1
+        return dict(
+            loss=loss,
+            early_stop_epoch=early_stop_epoch,
+        )
+        
     # TODO: should schedulers be callbacks?
     # TODO: find a way to not have to inherit this
     def _update_schedules(self):
@@ -174,9 +157,3 @@ class PPOAgent(BaseAgent):
         self.metrics_recorder.record("train", {
             'clip_range': new_clip_range
         })
-
-    def on_fit_start(self):
-        super().on_fit_start()
-        
-        # Register PPO-specific metric monitors as a bundle
-        self.metrics_monitor.register_bundle(PPOAlerts(self))

@@ -6,6 +6,7 @@ from utils.io import write_json
 from utils.metric_bundles import CommonMetricAlerts
 from utils.metrics_monitor import MetricsMonitor
 from utils.metrics_recorder import MetricsRecorder
+from utils.run import Run
 from utils.timings_tracker import TimingsTracker
 
 CHECKPOINT_PATH = "checkpoints/"
@@ -19,6 +20,10 @@ class BaseAgent(pl.LightningModule):
         # Define which hyperparameters are saved along 
         # with module checkpoints (default to all kwargs)
         self.save_hyperparameters()
+
+        # Flag to indicate if an early stop was triggered
+        # on this epoch (eg: KL divergence exceeded target)
+        self._early_stop_epoch = False
 
         # Store experiment configuration
         self.config = config
@@ -37,11 +42,12 @@ class BaseAgent(pl.LightningModule):
 
         # Create metrics monitor registry (eg: used for metric alerts)
         self.metrics_monitor = MetricsMonitor(self.metrics_recorder)
-        self._common_metric_alerts = CommonMetricAlerts()
+        self._common_metric_alerts = CommonMetricAlerts(self)
         self.metrics_monitor.register_bundle(self._common_metric_alerts)
 
-        # TODO: take another look at RunManager vs Run concerns
-        self.run_manager = None
+        # Run context accessor (manages run directory and paths)
+        # Ensure attribute exists early to avoid AttributeError from Torch's __getattr__ wrapper
+        self.run: Run | None = None
 
         # Build the environments
         for stage in STAGES: self.build_env(stage)
@@ -150,6 +156,7 @@ class BaseAgent(pl.LightningModule):
         # Build efficient index-collate dataloader backed by 
         # MultiPassRandomSampler (allows showing same data N times 
         # per epoch without suffering lightning's epoch turnover costs)
+        # TODO: don't use inline imports unless it really makes a big difference, scan entire codebase for this
         from utils.dataloaders import build_index_collate_loader_from_collector
         from utils.random import get_global_torch_generator
         generator = get_global_torch_generator(self.config.seed)
@@ -183,11 +190,24 @@ class BaseAgent(pl.LightningModule):
             self._trajectories = train_collector.collect()
 
     def training_step(self, batch, batch_idx):
+        # In case an early stop was triggered, skip batch
+        if self._early_stop_epoch:
+            return None
+
         # Calculate batch losses
-        losses = self.losses_for_batch(batch, batch_idx)
+        result = self.losses_for_batch(batch, batch_idx)
+        
+        # TODO: are we sure this stops training on this rollout? remember how we are training multiple epochs on the same rollout
+        # In case an early stop was triggered (eg: KL divergence exceeded 
+        # target, then don't train any more on this rollout, collect a new one)
+        early_stop_epoch = result["early_stop_epoch"]
+        if early_stop_epoch:
+            self._early_stop_epoch = True
+            return None
 
         # Backpropagate losses and update model
         # parameters according to computed gradients
+        losses = result["loss"]
         self._backpropagate_and_step(losses)
 
         # We purposely return None here to avoid
@@ -222,7 +242,9 @@ class BaseAgent(pl.LightningModule):
 
         # Run evaluation with optional recording
         val_env = self.get_env("val")
-        checkpoint_dir = self.run_manager.ensure_path(CHECKPOINT_PATH)
+        if self.run is None:
+            raise RuntimeError("Run must be initialised before validation_step")
+        checkpoint_dir = self.run.ensure_path(CHECKPOINT_PATH)
         video_path = str(checkpoint_dir / f"epoch={self.current_epoch:02d}.mp4")
         with val_env.recorder(video_path, record_video=record_video):
             # Evaluate using the validation rollout collector to avoid redundant helpers
@@ -257,7 +279,7 @@ class BaseAgent(pl.LightningModule):
 
         # Record final evaluation video and save associated metrics JSON next to it
         test_env = self.get_env("test")
-        checkpoint_dir = self.run_manager.ensure_path(CHECKPOINT_PATH)
+        checkpoint_dir = self.run.ensure_path(CHECKPOINT_PATH)
         video_path = checkpoint_dir / "final.mp4"
         with test_env.recorder(str(video_path), record_video=True):
             test_collector = self.get_rollout_collector("test")
@@ -269,10 +291,9 @@ class BaseAgent(pl.LightningModule):
             write_json(json_path, final_metrics)
     
     def learn(self):
-        assert self.run_manager is None, "learn() should only be called once at the start of training"
+        assert self.run is None, "learn() should only be called once at the start of training"
 
         from utils.logging import stream_output_to_log
-        from utils.run_manager import RunManager
 
         # Expect a W&B run to be initialized by the launcher (train.py)
         try:
@@ -286,14 +307,16 @@ class BaseAgent(pl.LightningModule):
                 "No active W&B run found. Initialize via train.py or call wandb.init() before agent.learn()."
             )
 
-        self.run_manager = RunManager(run.id)
+        # Initialize run directory management and convenience Run accessor
+        # Initialize run directory (creates runs/<id>/, checkpoints/, and @latest-run symlink)
+        self.run = Run.create(run_id=run.id)
         
         # Save configuration to run directory
-        config_path = self.run_manager.ensure_path("config.json")
+        config_path = self.run.ensure_path("config.json")
         self.config.save_to_json(config_path)
         
         # Set up comprehensive logging using run-specific logs directory
-        log_path = self.run_manager.ensure_path("run.log")
+        log_path = self.run.ensure_path("run.log")
         with stream_output_to_log(log_path): self._learn()
 
     def _learn(self):
@@ -375,7 +398,7 @@ class BaseAgent(pl.LightningModule):
 
     def _build_trainer_loggers__csv(self):
         from loggers.metrics_csv_lightning_logger import MetricsCSVLightningLogger
-        csv_path = self.run_manager.ensure_path("metrics.csv")
+        csv_path = self.run.ensure_path("metrics.csv")
         # TODO: queue_size?
         csv_logger = MetricsCSVLightningLogger(csv_path=str(csv_path))
         return csv_logger
@@ -440,7 +463,7 @@ class BaseAgent(pl.LightningModule):
         callbacks.append(DispatchMetricsCallback())
 
         # Checkpointing: save best/last models and metrics
-        checkpoint_dir = self.run_manager.ensure_path(CHECKPOINT_PATH)
+        checkpoint_dir = self.run.ensure_path(CHECKPOINT_PATH)
         callbacks.append(ModelCheckpointCallback(
             checkpoint_dir=checkpoint_dir,
             metric="val/ep_rew_mean",
@@ -448,7 +471,7 @@ class BaseAgent(pl.LightningModule):
         ))
 
         # Video logger watches a run-specific media directory lazily (do not create it up-front)
-        video_dir = self.run_manager.get_run_dir() / "videos"
+        video_dir = self.run.get_run_dir() / "videos"
         callbacks.append(WandbVideoLoggerCallback(
             media_root=str(video_dir),
             namespace_depth=1,

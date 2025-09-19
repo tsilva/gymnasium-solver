@@ -31,7 +31,7 @@
 - FEAT: reward shape lunarlander to train faster by penalizing long episodes
 - FEAT: CartPole-v1, create reward shaper that prioritizes centering the pole
 - FEAT: add support for dynamics models (first just train and monitor them, then leverage them for planning)
-- FEAT: support for multi-env rollout collectors (eg: solve multiple envs at once)
+- FEAT: support for multi-env rollout collectors (eg: solve multiple envs at once; eg: train on multiple configs of LunarLander-v3)
 - FEAT: add support for curriculum learning (take same model through N challenges sequentially)
 - FEAT: add support for resuming training from a previous run (must restore optimizer, epoch, etc.)
 - FEAT: add support for publishing run to Hugging Face Hub

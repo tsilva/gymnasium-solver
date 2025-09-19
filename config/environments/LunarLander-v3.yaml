@@ -35,10 +35,13 @@ ppo:
   gae_lambda: 0.98
   gamma: 0.999
   n_epochs: 4
-  policy_lr: 9e-4
+  policy_lr: 5e-4
   ent_coef: 0.01
-  #eval_warmup_epochs: 100
-  eval_freq_epochs: 5
-  eval_recording_freq_epochs: 5
+  # Evaluate every epoch but keep it lightweight
+  eval_warmup_epochs: 50
+  eval_freq_epochs: 10
+  eval_episodes: 10
+  # Record only the first eval video to reduce overhead
+  #eval_recording_freq_epochs: null
   policy_targets: "advantages"
   normalize_advantages: "batch"

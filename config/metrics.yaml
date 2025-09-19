@@ -11,11 +11,11 @@ _global:
   # train/val/test namespaces when ordering per-section.
   # Keys not listed here will follow alphabetically within their section.
   key_priority:
+    - "ep_rew_last"
     - "ep_rew_mean"
     - "ep_rew_best"
-    - "ep_rew_last"
-    - "ep_len_mean"
     - "ep_len_last"
+    - "ep_len_mean"
     - "approx_kl"
     - "clip_fraction"
     - "entropy"

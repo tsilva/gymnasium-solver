@@ -6,6 +6,7 @@ import pytorch_lightning as pl
 from utils.metrics_config import metrics_config
 from utils.metrics_monitor import MetricAlert
 
+# TODO: REFACTOR this file
 
 class MetricMonitorBundle:
     """Interface for metric monitor bundles.
@@ -160,3 +161,67 @@ class CoreMetricAlerts(MetricMonitorBundle):
                 )
 
         return alerts or None
+
+    def _monitor_entropy_collapse(self, history: dict):
+        """Detect rapid/early collapse in policy entropy across algorithms.
+
+        Compares the recent smoothed entropy to an early-training baseline
+        (first N steps where N is the smoothing window from PPOAlerts/Core).
+        Triggers when the recent average falls below a small fraction of the
+        early average, signaling premature determinism and loss of exploration.
+        """
+        metric_key = "train/entropy"
+        series = self._metric_series(history, metric_key)
+
+        # Use the same smoothing window as other bounds checks
+        window = self._BOUNDS_SMOOTHING_WINDOW
+
+        # Require enough history to form early and recent windows
+        if not series or len(series) < (2 * window):
+            return None
+
+        try:
+            early_vals = [float(v) for _, v in series[:window]]
+        except (TypeError, ValueError):
+            early_vals = []
+        if not early_vals:
+            return None
+
+        early_avg = fmean(early_vals)
+        if early_avg <= 0.0:
+            return None
+
+        current_avg = self._windowed_metric_mean(history, metric_key, window=window)
+        if current_avg is None:
+            return None
+
+        try:
+            current = float(current_avg)
+        except (TypeError, ValueError):
+            return None
+
+        # Trigger if recent entropy is a small fraction of the early baseline
+        ratio = current / early_avg if early_avg else 1.0
+        collapse_ratio_threshold = 0.25  # recent <= 25% of early baseline
+
+        if ratio < collapse_ratio_threshold:
+            early_fmt = self._format_metric_value(metric_key, early_avg)
+            # Include both smoothed and latest values for context
+            smoothed_fmt = self._format_metric_value(metric_key, current)
+            latest_val = self._latest_metric_value(history, metric_key)
+            latest_suffix = ""
+            try:
+                if latest_val is not None:
+                    latest_fmt = self._format_metric_value(metric_key, float(latest_val))
+                    latest_suffix = f" (latest {latest_fmt})"
+            except (TypeError, ValueError):
+                latest_suffix = ""
+
+            return MetricAlert(
+                _id=f"{metric_key}/collapse",
+                metric=metric_key,
+                message=f"{window}-step avg {smoothed_fmt}{latest_suffix} vs early {early_fmt} (ratio {ratio:.2f})",
+                tip="Increase entropy bonus (hp/ent_coef) or reduce over-updating (epochs/lr).",
+            )
+
+        return None

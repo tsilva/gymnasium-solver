@@ -24,13 +24,12 @@ def main():
     is_wsl = ("microsoft" in platform.release().lower()) or ("WSL_INTEROP" in os.environ)
     if is_wsl: os.environ.setdefault("SDL_RENDER_DRIVER", "software")
 
-    # Load checkpoint
-    run = Run.from_id(args.run_id)
-    ckpt_path = run.best_checkpoint_path
-    config = run.load_config()
-    print(f"Using checkpoint: {ckpt_path}")
+    # Load run
+    run = Run.load(args.run_id)
+    assert run.best_checkpoint_path is not None, "run has no best checkpoint"
 
     # Build a single-env environment with human rendering
+    config = run.load_config()
     env = build_env_from_config(
         config,
         n_envs=1,
@@ -39,7 +38,7 @@ def main():
     )
 
     # Load configuration 
-    policy_model, _ = load_policy_model_from_checkpoint(ckpt_path, env, config)
+    policy_model, _ = load_policy_model_from_checkpoint(run.best_checkpoint_path, env, config)
 
     # Initialize rollout collector with training-time hyperparams
     collector = RolloutCollector(

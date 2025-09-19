@@ -1,6 +1,8 @@
 import wandb
 import pytorch_lightning as pl
-
+import torch.nn as nn
+from typing import Dict, List, Any
+from utils.rollouts import RolloutCollector, RolloutTrajectory
 from utils.decorators import must_implement
 from utils.formatting import sanitize_name
 from utils.io import write_json
@@ -9,12 +11,22 @@ from utils.metrics_monitor import MetricsMonitor
 from utils.metrics_recorder import MetricsRecorder
 from utils.run import Run
 from utils.timings_tracker import TimingsTracker
+from utils.config import Config
 
-CHECKPOINT_PATH = "checkpoints/"
 STAGES = ["train", "val", "test"]
 
 class BaseAgent(pl.LightningModule):
     
+    run: Run
+    config: Config
+    policy_model: nn.Module
+    _envs: Dict[str, Any]
+    _rollout_collectors: Dict[str, RolloutCollector]
+    _trajectories: List[RolloutTrajectory]
+    _early_stop_epoch: bool
+    _fit_elapsed_seconds: float
+    _final_stop_reason: str
+
     def __init__(self, config):
         super().__init__()
 
@@ -22,16 +34,20 @@ class BaseAgent(pl.LightningModule):
         # with module checkpoints (default to all kwargs)
         self.save_hyperparameters()
 
-        # Flag to indicate if an early stop was triggered
-        # on this epoch (eg: KL divergence exceeded target)
-        self._early_stop_epoch = False
-
-        # Store experiment configuration
-        self.config = config
-
         # Disable automatic optimization to allow manual optimization, namely for tuning 
         # multiple models with different optimizers (eg: independent policy and value models)
         self.automatic_optimization = False
+
+        # Initialize instance attributes
+        self.config = config
+        self.run = None
+        self.policy_model = None
+        self._envs = {}
+        self._rollout_collectors = {}
+        self._trajectories = []
+        self._early_stop_epoch = False
+        self._fit_elapsed_seconds = 0.0
+        self._final_stop_reason = ""
 
         # Initialize timing tracker for training 
         # loop performance measurements
@@ -47,10 +63,6 @@ class BaseAgent(pl.LightningModule):
         # Register bundle of metric alerts that apply to all algorithms
         core_metric_alerts = CoreMetricAlerts(self)
         self.metrics_monitor.register_bundle(core_metric_alerts)
-
-        # Run context accessor (manages run directory and paths)
-        # Ensure attribute exists early to avoid AttributeError from Torch's __getattr__ wrapper
-        self.run: Run | None = None
 
         # Build the environments
         for stage in STAGES: self.build_env(stage)
@@ -284,8 +296,7 @@ class BaseAgent(pl.LightningModule):
 
         # Record final evaluation video and save associated metrics JSON next to it
         test_env = self.get_env("test")
-        checkpoint_dir = self.run._ensure_path(self.run.checkpoints_dir)
-        video_path = checkpoint_dir / "final.mp4"
+        video_path = self.run.checkpoints_dir / "final.mp4"
         with test_env.recorder(str(video_path), record_video=True):
             test_collector = self.get_rollout_collector("test")
             final_metrics = test_collector.evaluate_episodes(
@@ -302,7 +313,7 @@ class BaseAgent(pl.LightningModule):
 
         # Initialize run directory management and convenience Run accessor
         # Initialize run directory (creates runs/<id>/, checkpoints/, and @latest-run symlink)
-        self.run = Run(
+        self.run = Run.create(
             run_id=wandb.run.id,
             config=self.config
         )
@@ -390,7 +401,7 @@ class BaseAgent(pl.LightningModule):
     def _build_trainer_loggers__csv(self):
         from loggers.metrics_csv_lightning_logger import MetricsCSVLightningLogger
         # TODO: queue_size?
-        csv_path = self.run._ensure_path(self.run.metrics_path) # TODO: pass run inside logger?
+        csv_path = self.run.ensure_metrics_path() # TODO: pass run inside logger?
         csv_logger = MetricsCSVLightningLogger(csv_path=str(csv_path))
         return csv_logger
     
@@ -458,9 +469,8 @@ class BaseAgent(pl.LightningModule):
             callbacks.append(HyperparameterScheduler())
 
         # Checkpointing: save best/last models and metrics
-        checkpoint_dir = self.run.ensure_checkpoints_dir()
         callbacks.append(ModelCheckpointCallback( # TODO: pass run
-            checkpoint_dir=checkpoint_dir,
+            run=self.run,
             metric="val/ep_rew_mean",
             mode="max"
         ))

@@ -2,6 +2,7 @@
 
 ## NEXT
 
+- BUG: videos not being recorded to run
 - TEST: is wandb reporting same metrics as table?
 - TEST: is table showing correct metrics?
 - BUG: checkpoint jsons not storing correct metrics

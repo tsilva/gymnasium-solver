@@ -12,62 +12,61 @@ Usage:
 from __future__ import annotations
 
 import os
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
-
 from utils.config import Config
+from typing import Dict, List
+
 from utils.io import read_json
 
+LAST_RUN_DIR = Path("runs/@last")
 RUNS_DIR = Path("runs")
-LATEST_SYMLINK_NAMES = ("@latest-run")
-BEST_CKPT_NAMES = {"best.ckpt"}
-LAST_CKPT_NAMES = {"last.ckpt"}
 
+# TODO: move this to a more appropriate util location
+def _symlink_to_dir(symlink_path: Path, target_dir: Path):
+    if os.path.islink(symlink_path): os.unlink(symlink_path)
+    symlink_path.symlink_to(target_dir.resolve(), target_is_directory=True)
 
-def list_run_ids(runs_dir: Path = RUNS_DIR) -> List[str]:
-    """Return run directory names sorted by modified time (newest first)."""
-
-    if not runs_dir.exists():
-        return []
-
-    run_dirs = [
-        path
-        for path in runs_dir.iterdir()
-        if path.is_dir() and not path.is_symlink() and path.name not in {"@latest-run", "latest-run"}
-    ]
-
-    run_dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-    return [p.name for p in run_dirs]
-
+# TODO: rename to RunDir
 @dataclass(frozen=True)
 class Run:
-    run_dir: Path = RUNS_DIR
-    checkpoints_dir: Path
-
-    def __init__(self, 
-        run_id: str,
-        config: Config,
-        *,
-        ensure_checkpoints: bool = True,
-        update_latest_symlink: bool = True
-    ) -> None:
-        # Save configuration to run directory
-        config_path = self._ensure_path("config.json")
-        config.save_to_json(config_path)
+    run_id: str
+    run_dir: str
+    read_only: bool
 
     @staticmethod
-    def _set_latest_symlink(runs_root: Path, run_id: str) -> None:
-        runs_root.mkdir(parents=True, exist_ok=True)
-        for link_name in LATEST_SYMLINK_NAMES:
-            link_path = runs_root / link_name
-            if link_path.exists() or link_path.is_symlink():
-                link_path.unlink()
-            link_path.symlink_to(Path(run_id))
+    def _resolve_run_dir(run_id: str) -> Path:
+        return RUNS_DIR / run_id
+    
+    @classmethod
+    def create(cls, run_id: str, config: Config) -> Run:
+        # Ensure rundir exists
+        run_dir = cls._resolve_run_dir(run_id)
+        run_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Symlink latest-run to this run dir (latest created)
+        # TODO: extract symlink creation util
+        if os.path.islink(LAST_RUN_DIR): os.unlink(LAST_RUN_DIR)
+        LAST_RUN_DIR.symlink_to(run_dir.resolve(), target_is_directory=True)
+        
+        # Save config to run dir
+        config_path = run_dir / "config.json"
+        config.save_to_json(config_path)
+
+        # Create and return run
+        return cls(run_id, run_dir, read_only=False)
+
+    @classmethod
+    def load(cls, run_id: str) -> Run:
+        run_dir = cls._resolve_run_dir(run_id)
+        if not run_dir.exists(): raise FileNotFoundError(f"run directory not found: {run_dir}")
+        return cls(run_id, run_dir, read_only=True)
 
     @property
     def id(self) -> str:
-        return self.run_dir.name
+        assert self.run_id == self.run_dir.name, f"run_id {self.run_id} != run_dir.name {self.run_dir.name}"
+        return self.run_id
 
     @property
     def config_path(self) -> Path:
@@ -98,95 +97,36 @@ class Run:
         return self._ensure_path(self.video_dir)
 
     @property
-    def best_checkpoint_path(self) -> Path | None:
-        path = self.checkpoints_dir / "best.ckpt"
-        if not path.exists(): return None
-        return path
+    def last_checkpoint_dir(self) -> Path:
+        return self.checkpoints_dir / "@last"
 
-    def _ensure_path(self, path: str | Path) -> Path:
-        """Ensure that the relative path (or directory) exists under the run."""
-
-        rel_path = Path(path)
-        full_path = self.run_dir / rel_path
-        target_dir = full_path if not full_path.suffix else full_path.parent
-        target_dir.mkdir(parents=True, exist_ok=True)
-        return full_path
-
-    def ensure_latest_symlink(self) -> None:
-        """Force-update the latest-run symlink to point at this run."""
-
-        self._set_latest_symlink(self.runs_root, self.id)
+    @property
+    def best_checkpoint_dir(self) -> Path:
+        return self.checkpoints_dir / "@best"
 
     def load_config(self):
-        """Load the run's config into a utils.config.Config instance."""
-        from utils.config import Config
         data: Dict = read_json(self.config_path)
         return Config.build_from_dict(data)
 
-    def checkpoint_choices(self) -> Tuple[List[str], Dict[str, Path], Optional[str]]:
-        """Return (labels, mapping, default_label) for available checkpoints."""
+    def checkpoint_dir_for_epoch(self, epoch: int) -> Path:
+        return self.checkpoints_dir / f"epoch={epoch:02d}"
 
-        ckpt_dir = self.checkpoints_dir
-        if not ckpt_dir.exists():
-            return [], {}, None
+    def save_checkpoint(self, epoch: int, source_dir: Path, is_best=False) -> None:
+        # Move provided data to target checkpoint dir
+        # (run manager doesn't need to know what this data is)
+        checkpoint_dir = self.checkpoint_dir_for_epoch(epoch)
+        shutil.move(source_dir, checkpoint_dir)
 
-        files = [p for p in ckpt_dir.glob("*.ckpt") if p.is_file()]
-        if not files:
-            return [], {}, None
+        # Symlink as last checkpoint
+        _symlink_to_dir(self.last_checkpoint_dir, checkpoint_dir)
 
-        def _score(path: Path) -> Tuple[int, float]:
-            name = path.name
-            if name in BEST_CKPT_NAMES:
-                return (0, -path.stat().st_mtime)
-            if name in LAST_CKPT_NAMES:
-                return (1, -path.stat().st_mtime)
-            return (2, -path.stat().st_mtime)
+        # If best checkpoint, symlink as best checkpoint
+        if is_best: _symlink_to_dir(self.best_checkpoint_dir, checkpoint_dir)
 
-        files.sort(key=_score)
-
-        labels: List[str] = []
-        mapping: Dict[str, Path] = {}
-        for path in files:
-            label = path.name
-            if label in BEST_CKPT_NAMES:
-                label = f"{label} (best)"
-            elif label in LAST_CKPT_NAMES:
-                label = f"{label} (last)"
-            labels.append(label)
-            mapping[label] = path
-
-        default_label = None
-        for label in labels:
-            if label.startswith("best"):
-                default_label = label
-                break
-        if default_label is None:
-            default_label = labels[0]
-
-        return labels, mapping, default_label
-
-    def resolve_checkpoint(self, label: Optional[str]) -> Path:
-        """Resolve a checkpoint label or filename to a concrete checkpoint path."""
-
-        labels, mapping, default_label = self.checkpoint_choices()
-        if not mapping:
-            raise FileNotFoundError(f"No checkpoints found under: {self.checkpoints_dir}")
-
-        if label is None:
-            assert default_label is not None
-            return mapping[default_label]
-
-        if label in mapping:
-            return mapping[label]
-
-        # Accept raw filenames (without the "(best)/(last)" suffix)
-        for display_label, path in mapping.items():
-            if Path(display_label).name == label:
-                return path
-
-        candidate = self.checkpoints_dir / label
-        if candidate.exists():
-            return candidate
-
-        raise ValueError(f"Unknown checkpoint label '{label}'. Available: {list(mapping.keys())}")
-
+    def _ensure_path(self, path: str | Path) -> Path:
+        rel_path = Path(path)
+        full_path = rel_path if self.run_dir in rel_path.parents else self.run_dir / rel_path
+        target_dir = full_path if not full_path.suffix else full_path.parent
+        if self.read_only and not target_dir.exists(): raise FileNotFoundError(f"Path not found: {target_dir}")
+        else: target_dir.mkdir(parents=True, exist_ok=True)
+        return full_path

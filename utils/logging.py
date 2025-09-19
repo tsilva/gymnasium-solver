@@ -1,5 +1,10 @@
 """
 Comprehensive logging utilities that ensure all stdout output is also logged to files.
+
+Opt-out: set environment variable `VIBES_DISABLE_SESSION_LOGS=1` to disable
+both file creation and stdout/stderr redirection performed by these helpers.
+This is useful when you want a clean console without side-effect log files
+under `logs/` or to avoid appending headers during ad-hoc play sessions.
 """
 
 import os
@@ -358,12 +363,19 @@ def get_log_manager() -> Optional[LogFileManager]:
 
 @contextmanager
 def stream_output_to_log(log_file_path: str):
+    # Allow disabling via env var while keeping the contextmanager API stable
+    if _session_logging_disabled():
+        # Yield None; caller rarely uses the handle. No redirection performed.
+        yield None
+        return
+
     log_file = open(log_file_path, 'w', encoding='utf-8', buffering=1)
     with StreamRedirector(log_file, redirect_stdout=True, redirect_stderr=True):
         try:
             yield log_file
         finally:
-            if log_file and not log_file.closed: log_file.close()
+            if log_file and not log_file.closed:
+                log_file.close()
 
 
 @contextmanager
@@ -374,6 +386,25 @@ def capture_all_output(config=None, *, log_dir: str = "logs", max_log_files: int
     Creates a log directory if needed and rotates old logs based on max_log_files.
     Yields the opened log file handle for optional direct writes.
     """
+    # If disabled, avoid creating a file and don't redirect; still yield a sink
+    if _session_logging_disabled():
+        # Use an OS-level sink so callers that explicitly write to the handle
+        # (e.g., tests or config dumps) do not error but produce no output.
+        try:
+            sink = open(os.devnull, 'w', encoding='utf-8')
+        except Exception:
+            # Fallback: yield stdout if /dev/null is not available
+            sink = sys.stdout
+        try:
+            yield sink
+        finally:
+            try:
+                if sink not in (sys.stdout, sys.stderr) and hasattr(sink, 'close'):
+                    sink.close()
+            except Exception:
+                pass
+        return
+
     # Prepare manager and create a new log file for this session
     manager = LogFileManager(log_dir=log_dir, max_log_files=max_log_files)
     log_file = manager.create_log_file(config)
@@ -458,3 +489,7 @@ def display_config_summary(data_json: dict, *, width: int = 60) -> None:
             output_lines.append(_create_kv_line(key, value))
         #output_lines.append(ansi(banner_char * width, "bright_magenta", enable=use_color))
     print("\n".join(output_lines))
+# Helper: check if session file logging is disabled via environment variable
+def _session_logging_disabled() -> bool:
+    flag = os.environ.get("VIBES_DISABLE_SESSION_LOGS", "").strip().lower()
+    return flag in {"1", "true", "yes", "on"}

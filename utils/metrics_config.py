@@ -100,7 +100,7 @@ class MetricsConfig:
         highlight_cfg = global_cfg["highlight"]
         return highlight_cfg
 
-    def step_key(self) -> str:
+    def total_timesteps_key(self) -> str:
         """Return the canonical step metric key from metrics config."""
         global_cfg = self._get_global_cfg()
         key = global_cfg["step_key"]

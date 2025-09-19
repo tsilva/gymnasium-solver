@@ -35,6 +35,15 @@ class EarlyStoppingCallback(pl.Callback):
         self.threshold = threshold
 
     def on_train_epoch_end(self, trainer, pl_module) -> None:
+        self._maybe_stop(trainer, pl_module)
+
+    def on_validation_epoch_end(self, trainer, pl_module) -> None:
+        self._maybe_stop(trainer, pl_module)
+
+    def _maybe_stop(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
+        # Trainer already signaled to stop, nothing to do
+        if trainer.should_stop: return
+        
         # If value is not available yet, do nothing
         value = trainer.logged_metrics.get(self.metric_key)
         if value is None: return
@@ -44,17 +53,17 @@ class EarlyStoppingCallback(pl.Callback):
         _should_stop_min = self.mode == "min" and value <= self.threshold
         should_stop = _should_stop_max or _should_stop_min
         if not should_stop: return
-        
+
         # Threshold reached, signal Trainer to stop
         trainer.should_stop = True
-        
+
         # Print reason with metrics.yaml-based formatting
         comp_op = ">=" if self.mode == "max" else "<="
-        v_str = format_metric_value(self.metric_key, float(value))
-        thr_str = format_metric_value(self.metric_key, float(self.threshold))
-        early_stop_reason = f"'{self.metric_key}': {v_str} {comp_op} {thr_str}."
+        value_s = format_metric_value(self.metric_key, float(value))
+        threshold_s = format_metric_value(self.metric_key, float(self.threshold))
+        early_stop_reason = f"'{self.metric_key}': {value_s} {comp_op} {threshold_s}."
         print(f"Early stopping! {early_stop_reason}")
 
-        # Store the reason in the module so that it is 
+        # Store the reason in the module so that it is
         # available for the end of training report
         pl_module._early_stop_reason = early_stop_reason

@@ -16,7 +16,7 @@ class MetricsHistory:
     def __init__(self) -> None:
         self._history: Dict[str, List[Tuple[int, float]]] = {}
         self._last_step: int = 0
-        self._step_key: str = metrics_config.step_key()
+        self._step_key: str = metrics_config.total_timesteps_key()
 
     def update(self, metrics: Mapping[str, Any]) -> None:
         """

@@ -1,9 +1,14 @@
-"""Checkpoint management utilities for model saving and resuming training."""
+"""Checkpoint management utilities for model saving and resuming training.
+
+Set environment variable `VIBES_QUIET=1` (or `VIBES_DISABLE_CHECKPOINT_LOGS=1`)
+to suppress informational prints emitted during checkpoint loading.
+"""
 
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 import torch
+import os
 
 
 def find_latest_checkpoint(algo_id: str, env_id: str, checkpoint_dir: str = "checkpoints") -> Optional[Path]:
@@ -42,6 +47,12 @@ def find_latest_checkpoint(algo_id: str, env_id: str, checkpoint_dir: str = "che
     return None
 
 
+def _quiet_mode_enabled() -> bool:
+    flag1 = os.environ.get("VIBES_QUIET", "").strip().lower()
+    flag2 = os.environ.get("VIBES_DISABLE_CHECKPOINT_LOGS", "").strip().lower()
+    return flag1 in {"1", "true", "yes", "on"} or flag2 in {"1", "true", "yes", "on"}
+
+
 def load_checkpoint(checkpoint_path: Path, agent, resume_training: bool = True) -> Dict[str, Any]:
     """
     Load a checkpoint and optionally resume training state.
@@ -57,7 +68,8 @@ def load_checkpoint(checkpoint_path: Path, agent, resume_training: bool = True) 
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
     
-    print(f"Loading checkpoint from {checkpoint_path}")
+    if not _quiet_mode_enabled():
+        print(f"Loading checkpoint from {checkpoint_path}")
     checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
     
     # Load model state
@@ -88,13 +100,14 @@ def load_checkpoint(checkpoint_path: Path, agent, resume_training: bool = True) 
     best_reward = checkpoint.get('best_eval_reward', 'unknown')
     current_reward = checkpoint.get('current_eval_reward', 'unknown')
     
-    print(f"Checkpoint loaded:")
-    print(f"  Epoch: {epoch}")
-    print(f"  Total timesteps: {total_timesteps}")
-    print(f"  Best eval reward: {best_reward}")
-    print(f"  Current eval reward: {current_reward}")
-    print(f"  Is best: {checkpoint.get('is_best', False)}")
-    print(f"  Is threshold: {checkpoint.get('is_threshold', False)}")
+    if not _quiet_mode_enabled():
+        print(f"Checkpoint loaded:")
+        print(f"  Epoch: {epoch}")
+        print(f"  Total timesteps: {total_timesteps}")
+        print(f"  Best eval reward: {best_reward}")
+        print(f"  Current eval reward: {current_reward}")
+        print(f"  Is best: {checkpoint.get('is_best', False)}")
+        print(f"  Is threshold: {checkpoint.get('is_threshold', False)}")
     
     return checkpoint
 

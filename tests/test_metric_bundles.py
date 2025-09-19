@@ -24,7 +24,7 @@ def _collect_alerts(bundle, history: dict) -> List:
 
 def test_common_alerts_flag_nan_metric():
     recorder = MetricsRecorder()
-    step_key = metrics_config.step_key()
+    step_key = metrics_config.total_timesteps_key()
     recorder.update_history({
         step_key: 128,
         "train/loss": float("nan"),
@@ -41,7 +41,7 @@ def test_common_alerts_flag_nan_metric():
 
 def test_common_alerts_detect_step_stall():
     recorder = MetricsRecorder()
-    step_key = metrics_config.step_key()
+    step_key = metrics_config.total_timesteps_key()
     recorder.update_history({step_key: 256})
     monitor = MetricsMonitor(recorder)
     monitor.register_bundle(CoreMetricAlerts())
@@ -57,7 +57,7 @@ def test_common_alerts_detect_step_stall():
 
 def test_common_alerts_guard_config_bounds():
     recorder = MetricsRecorder()
-    step_key = metrics_config.step_key()
+    step_key = metrics_config.total_timesteps_key()
     recorder.update_history({
         step_key: 512,
         "train/clip_fraction": 1.5,

@@ -9,6 +9,7 @@ import torch
 
 from utils.run import Run
 from utils.io import write_json
+from utils.metrics_serialization import prepare_metrics_for_json
 from utils.scalars import only_scalar_values
 
 class ModelCheckpointCallback(pl.Callback):
@@ -69,5 +70,8 @@ class ModelCheckpointCallback(pl.Callback):
             tmp_dir = Path(tmp_dir)
             # TODO: softcode, let agent decide what to save
             torch.save({"model_state_dict": agent.policy_model.state_dict()}, tmp_dir / "policy.ckpt")
-            write_json(tmp_dir / "metrics.json", metrics)
+
+            # Serialize metrics with configured precision and key priority
+            json_metrics = prepare_metrics_for_json(metrics)
+            write_json(tmp_dir / "metrics.json", json_metrics)
             self.run.save_checkpoint(epoch, tmp_dir, is_best=is_best)

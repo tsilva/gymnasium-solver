@@ -83,7 +83,7 @@ class CoreMetricAlerts(MetricMonitorBundle):
 
     def __init__(self, pl_module: pl.LightningModule) -> None:
         self.pl_module = pl_module
-        self._step_key = metrics_config.step_key()
+        self._step_key = metrics_config.total_timesteps_key()
 
     # ---- monitors ----
     def _monitor_step_progress(self, history: dict):

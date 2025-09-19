@@ -2,13 +2,14 @@
 
 ## NEXT
 
-- BUG: checkpoint jsons not storing correct metrics
-- TEST: is wandb reporting same metrics as table?
-- TEST: is table showing correct metrics?
-
-- BUG: wandb run is being logged even when training is not started, bold terminal
-- TODO: optimal single metric for best training (samples/reward)
 - TODO: dont tie eval_freq_epochs and eval_warmup_epochs to epochs because ppos updates for many epochs; consider changing eval_freq to timesteps so it doesnt depend on n_updates
+
+
+- BUG: training epoch is still running after validation early stop
+- BUG: checkpoint jsons not storing correct metrics
+- TEST: do checkpoint metrics / table / wandb match?
+- REFACTOR: schedulers should be callbacks
+- BUG: wandb run is being logged even when training is not started, bold terminal
 - FEAT: prefix metrics (eg: time/epoch, time/step, etc., env/obs_mean, env/obs_std, env/)
 - FEAT: make boot and shutdown times faster
 - FEAT: wandb bug may caused by lack of .finish()

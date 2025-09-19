@@ -127,7 +127,7 @@ def _build_sections(key_metrics: Optional[Sequence[str]], *, key_panels_per_sect
     # workspace charts immediately render instead of showing "No metrics yet" when
     # the default "Step" column is missing from history tables.
     from utils.metrics_config import metrics_config  # type: ignore
-    default_x = metrics_config.step_key()
+    default_x = metrics_config.total_timesteps_key()
     sections = []
     runset = _maybe_build_runset(wr, entity=entity, project=project, run_id=select_run_id)
 

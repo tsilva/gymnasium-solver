@@ -172,6 +172,16 @@ Requires a logged-in W&B session (`wandb login`) or `WANDB_API_KEY` set.
   - Use `--key-panels-per-section N` to control how many “Key Metrics” panels appear per section.
   - Default workspace name is "<project> View". Override with `--name`.
 
+### 🔇 Silencing logs
+To suppress creation of session log files and banner/config dumps to `logs/` (useful for ad‑hoc play sessions), set:
+```
+export VIBES_DISABLE_SESSION_LOGS=1
+```
+To silence verbose checkpoint load prints, set:
+```
+export VIBES_QUIET=1   # or: VIBES_DISABLE_CHECKPOINT_LOGS=1
+```
+
 ### 🧪 Tests
 ```bash
 pytest -q

@@ -8,7 +8,10 @@ from pathlib import Path
 from queue import Empty, Full, Queue
 from typing import Any, Dict, List, Optional
 
+from utils.metrics_config import metrics_config
 
+
+# TODO: refactor this file
 class MetricsCSVLogger:
     """
     High-throughput CSV metrics logger (wide format).
@@ -72,13 +75,14 @@ class MetricsCSVLogger:
 
         row = {
             "time": t,
-            "total_timesteps": step,
-            "epoch": epoch,
+            # Respect configured precision for counters (precision=0 -> int)
+            "total_timesteps": self._coerce_by_precision("total_timesteps", step),
+            "epoch": self._coerce_by_precision("epoch", epoch),
         }
         for name, value in metrics.items():
             if not self._is_number(value):
                 continue
-            row[str(name)] = float(value)
+            row[str(name)] = self._coerce_by_precision(str(name), value)
 
         # Nothing to write
         if len(row) == len(self._base_fields):
@@ -195,6 +199,38 @@ class MetricsCSVLogger:
             if isinstance(v, numbers.Number):
                 return float(v)
         return None
+
+    @staticmethod
+    def _round_float(value: float, precision: int) -> float:
+        try:
+            return round(float(value), int(precision))
+        except Exception:
+            return float(value)
+
+    def _coerce_by_precision(self, metric_key_or_bare: str, value: Any) -> Any:
+        """Coerce a numeric metric to int when precision=0, else rounded float.
+
+        Accepts either namespaced keys (e.g., "train/total_timesteps") or bare
+        names (e.g., "total_timesteps"). Non-numeric or None values are returned
+        as-is so the CSV writer can handle blanks appropriately.
+        """
+        if value is None or not self._is_number(value):
+            return value
+
+        try:
+            precision = int(metrics_config.precision_for_metric(metric_key_or_bare))
+        except Exception:
+            precision = 2
+
+        if precision == 0:
+            # Cast to int to avoid trailing .0 in CSV (e.g., 3 instead of 3.0)
+            try:
+                return int(round(float(value)))
+            except Exception:
+                return int(float(value))
+        else:
+            # Keep as float but round to configured precision
+            return self._round_float(float(value), precision)
 
     # -------- file/header helpers --------
     def _read_existing_header(self, path: Path) -> Optional[List[str]]:

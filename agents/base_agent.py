@@ -300,7 +300,8 @@ class BaseAgent(pl.LightningModule):
                 deterministic=self.config.eval_deterministic,
             )
             json_path = video_path.with_suffix(".json")
-            write_json(json_path, final_metrics)
+            from utils.metrics_serialization import prepare_metrics_for_json
+            write_json(json_path, prepare_metrics_for_json(final_metrics))
     
     def learn(self):
         assert self.run is None, "learn() should only be called once at the start of training"
@@ -383,7 +384,7 @@ class BaseAgent(pl.LightningModule):
         # Define the common step metric
         from utils.metrics_config import metrics_config
         wandb_run = wandb_logger.experiment
-        wandb_run.define_metric("*", step_metric=metrics_config.step_key())
+        wandb_run.define_metric("*", step_metric=metrics_config.total_timesteps_key())
 
         # Change the run name to {algo_id}-{run_id}
         wandb_run.name = f"{self.config.algo_id}-{wandb_run.id}"
@@ -479,9 +480,9 @@ class BaseAgent(pl.LightningModule):
         ))
 
         # If defined in config, early stop after reaching a certain number of timesteps
-        if self.config.max_timesteps:
-            from utils.metrics_config import metrics_config
-            callbacks.append(EarlyStoppingCallback(metrics_config.step_key(), self.config.max_timesteps))
+        if self.config.max_timesteps: callbacks.append(
+            EarlyStoppingCallback("train/total_timesteps", self.config.max_timesteps)
+        )
 
         # If defined in config, early stop when mean training reward reaches a threshold
         train_env = self.get_env("train")

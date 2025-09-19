@@ -1,6 +1,6 @@
 import time
 from collections import deque
-from typing import NamedTuple, Optional, Tuple
+from typing import List, NamedTuple, Optional, Tuple
 
 import numpy as np
 import torch
@@ -1029,6 +1029,15 @@ class RolloutCollector():
             "baseline_mean": baseline_mean,
             "baseline_std": baseline_std
         }
+
+    def pop_recent_episodes(self) -> List[Tuple[int, float, int, bool]]:
+        """Return and clear episodes finished since the last pop."""
+        recent = getattr(self, "_recent_episodes", None)
+        if not recent:
+            return []
+        episodes = list(recent)
+        self._recent_episodes = []
+        return episodes
 
     def get_action_histogram_counts(self, reset: bool = False):
         """Return a copy of the cumulative discrete action counts histogram.

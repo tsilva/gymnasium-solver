@@ -92,3 +92,35 @@ def test_ppo_alerts_explained_variance_high():
     alerts = _collect_alerts(bundle, history)
     alert_ids = {alert._id for alert in alerts}
     assert "train/explained_variance/too_high" in alert_ids
+
+
+def test_ppo_alerts_clip_fraction_spike_not_flagged_by_average():
+    bundle = PPOAlerts(agent=None)
+    history = {
+        "train/clip_fraction": [
+            (1, 0.02),
+            (2, 0.02),
+            (3, 0.02),
+            (4, 0.8),
+        ]
+    }
+
+    alerts = _collect_alerts(bundle, history)
+    alert_ids = {alert._id for alert in alerts}
+    assert "train/clip_fraction/oob_max" not in alert_ids
+
+
+def test_ppo_alerts_clip_fraction_high_average_triggers():
+    bundle = PPOAlerts(agent=None)
+    history = {
+        "train/clip_fraction": [
+            (1, 0.62),
+            (2, 0.58),
+            (3, 0.61),
+            (4, 0.64),
+        ]
+    }
+
+    alerts = _collect_alerts(bundle, history)
+    alert_ids = {alert._id for alert in alerts}
+    assert "train/clip_fraction/oob_max" in alert_ids

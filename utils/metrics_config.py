@@ -127,8 +127,18 @@ class MetricsConfig:
 
     def bounds_for_metric(self, metric_name: str) -> Dict[str, float]:
         metric_name = self.ensure_unnamespaced_metric(metric_name)
-        bounds = self._config.get(metric_name, {}).get("bounds")
-        return bounds
+        metric_cfg = self._config.get(metric_name, {})
+        bounds = metric_cfg.get("bounds")
+        if bounds:
+            return bounds
+
+        fallback: Dict[str, float] = {}
+        if "min" in metric_cfg:
+            fallback["min"] = float(metric_cfg["min"])
+        if "max" in metric_cfg:
+            fallback["max"] = float(metric_cfg["max"])
+
+        return fallback or None
 
     def delta_rules_for_metric(self, metric_name: str) -> Callable:
         metric_name = self.ensure_unnamespaced_metric(metric_name)

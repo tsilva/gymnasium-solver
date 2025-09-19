@@ -108,6 +108,7 @@ class PPOAgent(BaseAgent):
 
         # Calculate additional metrics for logging
         # (don't compute gradients during these calculations)
+        # NOTE: the reason why a KL early stop would help is that KL divergence measures drift in the whole action distribution, not just the selected actions (like the clipping)
         with torch.no_grad():
             # Measure how many log probs moved beyond the trusted region (average of how many samples are outside the allowed range)
             clip_fraction = ((ratio < 1.0 - self.clip_range) | (ratio > 1.0 + self.clip_range)).float().mean()

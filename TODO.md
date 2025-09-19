@@ -1,35 +1,19 @@
-- FEAT: make metric triggers smooth value by averaging over last N epochs
-- FEAT: percentage of epochs oob
-- BUG: play first episode reward = 0
-- TODO: dont tie eval_freq_epochs and eval_warmup_epochs to epochs because ppos updates for many epochs
+# TODO
+
+## NEXT
+
+- BUG: wandb run is being logged even when training is not started, bold terminal
+- TODO: optimal single metric for best training (samples/reward)
+- TODO: dont tie eval_freq_epochs and eval_warmup_epochs to epochs because ppos updates for many epochs; consider changing eval_freq to timesteps so it doesnt depend on n_updates
 - FEAT: prefix metrics (eg: time/epoch, time/step, etc., env/obs_mean, env/obs_std, env/)
 - FEAT: make boot and shutdown times faster
 - FEAT: wandb bug may caused by lack of .finish()
+- FEAT: add kl early stopping to PPO
 - BUG: can't inspect bandit training
 - BUG: W&B workspace redundant print
-- FEAT: add autotuner worklflow (check wandb logs)
-- FEAT: use codex-cli to debug runs
 - FEAT: add normalization support 
-- FEAT: add sweeping support
-- TODO: how is pongv5 determinism enforce
-- TODO: run pongv5 sweep
-- REFACTOR: simplify CNN policy creation, test manually first
-- BUG: restore grayscaling / resizing logic; think how to unify with atari preprocessing (probably just inspect internals and extract)
-- FEAT: add kl early stopping to PPO
-- BUG: fix cnn policy training, in separate file create env and inspect traversing layers
-- FEAT: overridable rollout collector factory methods instead of extra parameter method
+- TEST: are sweeps still working?
 - BUG: reset optimizer on learning rate changes
-- TODO: beat lunarlander with ppo and only then with reinforce (trun[cate episode lengths for faster training)
-- REFACTOR: consider changing eval_freq to timesteps so it doesnt depend on n_updates
-- FEAT: figure out if I should log variance instead of std
-- TODO: x metric cant be total timesteps because that increases with parallelization.... must be n_updates? index by epoch? or add updates metric?
-- TODO: optimal single metric for best training (samples/reward)
-- TODO: add kl divergence metric to reinforce
-- FEAT: ensure we can see baseline advantages in inspector.py
-- BUG: PPO can solve FrozenLake-v1, but REINFORCE cannot. REINFORCE is likely not implemented correctly.
-- TASK: solve Pong-v5_objects, then propagate to other envs
-- BUG: run is being logged even when training is not started, bold terminal
-- https://github.com/kenjyoung/MinAtar
 - Add support for resuming training runs, this requires loading hyperparameters and schedulers to be timestep based; must also start from last timestep
 - Change config files so that they only say their mention algo_id in experiment name
 - TODO: compare atari breakout fps vs rlzoosb3
@@ -59,14 +43,22 @@
 - https://cs.stanford.edu/people/karpathy/reinforcejs/index.html
 - https://alazareva.github.io/rl_playground/
 - FEAT: log results to huggingface
-- FEAT: Write wandb diagnostics script, use claude desktop to debug
 - FEAT: support continuous environments
 - FEAT: support for multi-env rollout collectors
 - FEAT: add curriculum learning support
 - FEAT: add multitask heads support (eg: Atari, Sega Genesis) -- consider large output space
-- Ask agent for next learning steps/tasks (prompt file)
-- REFACTOR: add type hints where applicable
-- FEAT: add [Minari support](https://minari.farama.org/)
-- REFACTOR: unify wrapper-chain traversal in gym_wrappers/env_info.py:_find_wrapper, gym_wrappers/vec_video_recorder.py:_find_env_wrapper, and the base-env walk in gym_wrappers/env_video_recorder.py.__init__ by extracting a shared helper (e.g., gym_wrappers/utils.py:find_wrapper); keep behaviors identical so existing video/info wrapper paths and tests continue to pass.
 - REFACTOR: consolidate single-trajectory return/advantage helpers by moving run_inspect.py:compute_mc_returns and run_inspect.py:compute_gae_advantages_and_returns onto shared utilities next to utils/rollouts.py:compute_batched_mc_returns/compute_batched_gae_advantages_and_returns; acceptance: inspector outputs stay the same and rollout-related tests remain green.
 - REFACTOR: deduplicate YAML config discovery by reusing Config loader logic between scripts/smoke_test_envs.py:_collect_env_config_map/_resolve_inheritance and utils/config.py:Config.build_from_yaml via a shared utility (e.g., utils/config_loader.collect_raw_configs); acceptance: both callers produce identical config maps without manual field lists and existing config-selection tests still pass.
+
+## WISHLIST
+ 
+- TASK: solve Pong-v5_objects, get max reward
+- TASK: solve Taxi-v3 with PPO, training stalls for unknown reasons
+- FEAT: add support for continuous environments (eg: LunarLanderContinuous-v2)
+- FEAT: add A2C support
+- FEAT: add [Minari](https://minari.farama.org/) support
+- FEAT: add support for image environment training (eg: CNNs + preprocessing + atari preprocessing)
+- FEAT: agent hyperparam autotuner (eg: with codex-cli)
+- FEAT: reward shape lunarlander to train faster by penalizing long episodes
+- FEAT: CartPole-v1, create reward shaper that prioritizes centering the pole
+- FEAT: add support for dynamics models (first just train and monitor them, then leverage them for planning)

@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List, Optional, Iterable, Tuple, Any, Union
+from typing import Callable, Dict, List, Optional, Iterable, Tuple, Any, Union, Set
 from dataclasses import dataclass
 
 from .metrics_recorder import MetricsRecorder
@@ -35,7 +35,8 @@ class MetricsMonitor:
         # Each global monitor receives (full_history) and returns MetricAlert or an iterable of MetricAlert.
         self.monitor_fns: List[Callable[[Dict[str, List[Tuple[int, float]]]], Optional[Union["MetricAlert", Iterable["MetricAlert"]]]]] = []
         self.active_alerts: Dict[str, List[MetricAlert]] = {}
-        self.alerts_counter: Dict[str, int] = {}
+        self.alerts_counter: Dict[str, Dict[str, Any]] = {}
+        self.total_epochs_seen: int = 0
 
     def register_bundle(self, bundle: "MetricMonitorBundle") -> None:
         """Register all monitor functions from a bundle in one call.
@@ -50,11 +51,14 @@ class MetricsMonitor:
             self.monitor_fns.append(monitor_fn)
 
     # ----- execution -----
-    def check(self) -> Dict[str, List[str]]:
+    def check(self, epoch: Optional[int] = None) -> Dict[str, List[str]]:
         """Execute monitor functions and return a mapping of key -> list of alert messages."""
 
         # Collect alerts for each metric
         metric_alerts_map: Dict[str, List[MetricAlert]] = {}
+
+        if epoch is not None:
+            self.total_epochs_seen = max(self.total_epochs_seen, epoch + 1)
 
         # 1) Global monitors
         history = self.metrics_recorder.history()
@@ -64,7 +68,14 @@ class MetricsMonitor:
             if not isinstance(alerts, list): alerts = [alerts]
             for alert in alerts:
                 metric_alerts_map.setdefault(alert.metric, []).append(alert)
-                self.alerts_counter.setdefault(alert._id, dict(alert=alert, count=0))["count"] += 1
+                counter = self.alerts_counter.setdefault(
+                    alert._id,
+                    dict(alert=alert, count=0, epochs=set())
+                )
+                counter["count"] += 1
+                epochs: Set[int] = counter.setdefault("epochs", set())
+                if epoch is not None:
+                    epochs.add(epoch)
             
         # For each metric, add to active alerts if alerts
         # are present, if no alerts, remove previous alerts
@@ -90,6 +101,24 @@ class MetricsMonitor:
     def get_active_alerts(self) -> Dict[str, List["MetricAlert"]]:
         return dict(self.active_alerts)
 
-    def get_alerts_by_frequency(self) -> List["MetricAlert"]:
-        return sorted(self.alerts_counter.values(), key=lambda x: x["count"], reverse=True)
+    def get_alerts_by_frequency(self) -> List[Dict[str, Any]]:
+        summaries: List[Dict[str, Any]] = []
+        for data in self.alerts_counter.values():
+            epochs_set: Set[int] = data.get("epochs") or set()
+            summaries.append(
+                dict(
+                    alert=data["alert"],
+                    count=data["count"],
+                    epoch_count=len(epochs_set),
+                    epochs=tuple(sorted(epochs_set)),
+                )
+            )
 
+        return sorted(
+            summaries,
+            key=lambda x: (x["epoch_count"], x["count"]),
+            reverse=True,
+        )
+
+    def get_total_epochs(self) -> int:
+        return self.total_epochs_seen

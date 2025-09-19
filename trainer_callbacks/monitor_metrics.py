@@ -8,7 +8,7 @@ import pytorch_lightning as pl
 class MonitorMetricsCallback(pl.Callback):
 
     def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
-        alerts = pl_module.metrics_monitor.check()
+        alerts = pl_module.metrics_monitor.check(epoch=trainer.current_epoch)
         added_alerts = alerts["added"]
         removed_alerts = alerts["removed"]
         self._record_alerts_as_metrics(pl_module, added_alerts, removed_alerts)

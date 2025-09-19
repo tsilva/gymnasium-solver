@@ -28,5 +28,5 @@ class ConsoleSummaryCallback(pl.Callback):
 
         # Print alerts
         freq_alerts = metrics_monitor.get_alerts_by_frequency()
-        if freq_alerts: print_terminal_ascii_alerts(freq_alerts)
-
+        total_epochs = metrics_monitor.get_total_epochs()
+        if freq_alerts: print_terminal_ascii_alerts(freq_alerts, total_epochs=total_epochs)

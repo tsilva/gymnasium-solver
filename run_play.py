@@ -52,19 +52,28 @@ def main():
     # TODO: do we need this extra collect?
     # Initialize obs on first collect; keep collecting until target episodes reached
     target_eps = max(1, int(args.episodes))
-    start_eps = collector.total_episodes
     print(f"Playing {target_eps} episode(s) with render_mode='human'...")
 
     # Collect episodes until target episodes reached
-    while (collector.total_episodes - start_eps) < target_eps:
+    reported_episodes = 0
+    while reported_episodes < target_eps:
         _ = collector.collect(deterministic=args.deterministic)
-        m = collector.get_metrics()
-        played = collector.total_episodes - start_eps
-        played = min(played, target_eps) # NOTE: collector may collect more episodes than requested
-        print(
-            f"[episodes {played}/{target_eps}] last_rew={m.get('ep_rew_last', 0):.2f} "
-            f"mean_rew={m.get('ep_rew_mean', 0):.2f} fps={m.get('rollout_fps', 0):.1f}"
-        )
+        finished_eps = collector.pop_recent_episodes()
+        if not finished_eps:
+            continue  # Keep collecting until we finish a full episode
+
+        for _env_idx, ep_rew, _ep_len, _was_timeout in finished_eps:
+            if reported_episodes >= target_eps:
+                break
+
+            reported_episodes += 1
+            metrics = collector.get_metrics()
+            mean_rew = metrics.get('ep_rew_mean', 0)
+            fps = metrics.get('rollout_fps', 0)
+            print(
+                f"[episodes {reported_episodes}/{target_eps}] last_rew={ep_rew:.2f} "
+                f"mean_rew={mean_rew:.2f} fps={fps:.1f}"
+            )
 
     print("Done.")
 

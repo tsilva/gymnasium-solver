@@ -1,4 +1,4 @@
-from typing import Iterable, List
+from typing import Iterable, List, Dict, Any, Optional
 
 from utils.logging import format_section_footer, format_section_header
 
@@ -117,11 +117,16 @@ def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48
             print("(no numeric metrics to summarize)")
         print(format_section_footer(width=width))
 
-def print_terminal_ascii_alerts(freq_alerts: List[dict], width: int = 48): 
+def print_terminal_ascii_alerts(
+    freq_alerts: List[Dict[str, Any]],
+    total_epochs: Optional[int] = None,
+    width: int = 48,
+) -> None:
     """Print an ASCII alert summary.
 
     Args:
-        freq_alerts: List of MetricAlert objects.
+        freq_alerts: List of MetricAlert summaries.
+        total_epochs: Total number of training epochs observed.
         width: Width of the section header.
 
     Returns:
@@ -130,8 +135,20 @@ def print_terminal_ascii_alerts(freq_alerts: List[dict], width: int = 48):
     print("\n" + format_section_header("Metric Alerts".upper(), width=width))
     for freq_alert in freq_alerts:
         alert = freq_alert["alert"]
-        count = freq_alert["count"]
-        print(f"\n- `{alert._id}` ocurred `{count}` times during training:")
+        epoch_count = freq_alert.get("epoch_count", freq_alert.get("count", 0))
+        total = total_epochs or 0
+        frequency_repr: str
+        if total > 0:
+            percentage = (epoch_count / total) * 100
+            percent_str = (
+                f"{int(percentage)}%"
+                if percentage.is_integer()
+                else f"{percentage:.1f}%"
+            )
+            frequency_repr = f"{epoch_count}/{total} ({percent_str})"
+        else:
+            frequency_repr = str(epoch_count)
+        print(f"\n- `{alert._id}` triggered in `{frequency_repr}` epochs of training:")
         print(f"  - message: {alert.message}") 
         print(f"  - tip: {alert.tip}")
     print(format_section_footer(width=width))

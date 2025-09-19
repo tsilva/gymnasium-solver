@@ -158,3 +158,43 @@ def test_rollout_collector_deterministic_actions_and_shapes():
     'ep_rew_last', 'ep_len_last', 'ep_rew_mean', 'ep_len_mean', 'reward_mean', 'reward_std', 'obs_mean', 'obs_std'
     ]:
         assert k in m
+
+
+@pytest.mark.unit
+def test_rollout_collector_pop_recent_episodes_returns_and_clears():
+    class SingleStepVecEnv:
+        def __init__(self):
+            self.num_envs = 1
+            self._obs = np.zeros((1, 1), dtype=np.float32)
+            self._episode_id = 0
+            self._step_in_episode = 0
+
+        def reset(self):
+            self._step_in_episode = 0
+            return self._obs.copy()
+
+        def step(self, actions):
+            self._step_in_episode += 1
+            reward = float(self._episode_id + 1)
+            info = {'episode': {'r': reward, 'l': self._step_in_episode}}
+            self._episode_id += 1
+            self._step_in_episode = 0
+            next_obs = self._obs.copy()
+            rewards = np.array([reward], dtype=np.float32)
+            dones = np.array([True], dtype=bool)
+            infos = [info]
+            return next_obs, rewards, dones, infos
+
+    env = SingleStepVecEnv()
+    policy = DeterministicPolicy()
+    collector = RolloutCollector(env, policy, n_steps=3, use_gae=False, normalize_advantages=False)
+
+    collector.collect()
+
+    recent = collector.pop_recent_episodes()
+    assert len(recent) == 3
+    rewards = [episode[1] for episode in recent]
+    assert rewards == [1.0, 2.0, 3.0]
+
+    # Subsequent calls should return an empty list
+    assert collector.pop_recent_episodes() == []

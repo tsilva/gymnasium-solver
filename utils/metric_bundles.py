@@ -1,6 +1,7 @@
 from typing import Callable, Iterable, List
 
 import math
+from statistics import fmean
 
 from utils.metrics_config import metrics_config
 from utils.metrics_monitor import MetricAlert
@@ -29,7 +30,50 @@ class MetricMonitorBundle:
             fns.append(fn)
         return tuple(fns)
 
+    # ---- shared helpers ----
+    def _metric_series(self, history: dict, metric_key: str):
+        return history.get(metric_key) or []
 
+    def _latest_metric_value(self, history: dict, metric_key: str):
+        series = self._metric_series(history, metric_key)
+        if not series:
+            return None
+        _, value = series[-1]
+        return value
+
+    def _windowed_metric_mean(
+        self,
+        history: dict,
+        metric_key: str,
+        *,
+        window: int | None = None,
+    ) -> float | None:
+        series = self._metric_series(history, metric_key)
+        if not series:
+            return None
+
+        if not window or window <= 0:
+            window = len(series)
+
+        values = []
+        for _, raw in series[-window:]:
+            try:
+                values.append(float(raw))
+            except (TypeError, ValueError):
+                continue
+
+        if not values:
+            return None
+
+        return fmean(values)
+
+    def _format_metric_value(self, metric_key: str, value: float) -> str:
+        precision = metrics_config.precision_for_metric(metric_key)
+        format_str = f"{{:.{precision}f}}"
+        return format_str.format(float(value))
+
+
+# TODO: call core
 class CommonMetricAlerts(MetricMonitorBundle):
     """Shared metric tripwires that apply to all algorithms."""
 
@@ -39,6 +83,8 @@ class CommonMetricAlerts(MetricMonitorBundle):
         "train/entropy_loss",
         "train/ep_rew_mean",
     )
+
+    _BOUNDS_SMOOTHING_WINDOW = 5
 
     def __init__(self, *, nan_metrics: Iterable[str] | None = None) -> None:
         self._step_key = metrics_config.step_key()
@@ -53,19 +99,6 @@ class CommonMetricAlerts(MetricMonitorBundle):
         for metric in metrics:
             if metric not in self._nan_watchlist:
                 self._nan_watchlist.append(metric)
-
-    # ---- helpers ----
-    def _latest_metric_value(self, history: dict, metric_key: str):
-        series = history.get(metric_key)
-        if not series:
-            return None
-        _, value = series[-1]
-        return value
-
-    def _format_metric_value(self, metric_key: str, value: float) -> str:
-        precision = metrics_config.precision_for_metric(metric_key)
-        format_str = f"{{:.{precision}f}}"
-        return format_str.format(value)
 
     # ---- monitors ----
     def _monitor_step_progress(self, history: dict):
@@ -105,16 +138,10 @@ class CommonMetricAlerts(MetricMonitorBundle):
                 )
         return alerts or None
 
+    # TODO: tag for removal
     def _monitor_config_bounds(self, history: dict):
         alerts: List[MetricAlert] = []
-        for metric, series in history.items():
-            if not series:
-                continue
-            _, raw_value = series[-1]
-            try:
-                value = float(raw_value)
-            except (TypeError, ValueError):
-                continue
+        for metric in history.keys():
             bounds = metrics_config.bounds_for_metric(metric)
             if not bounds:
                 continue
@@ -122,26 +149,44 @@ class CommonMetricAlerts(MetricMonitorBundle):
             min_bound = bounds.get("min")
             max_bound = bounds.get("max")
 
-            if min_bound is not None and value < float(min_bound):
+            avg_value = self._windowed_metric_mean(
+                history,
+                metric,
+                window=self._BOUNDS_SMOOTHING_WINDOW,
+            )
+            if avg_value is None:
+                continue
+
+            latest_value = self._latest_metric_value(history, metric)
+            latest_fmt: str | None = None
+            if latest_value is not None:
+                try:
+                    latest_fmt = self._format_metric_value(metric, float(latest_value))
+                except (TypeError, ValueError):
+                    latest_fmt = None
+
+            avg_fmt = self._format_metric_value(metric, avg_value)
+            window_label = f"{self._BOUNDS_SMOOTHING_WINDOW}-step avg"
+            latest_suffix = f" (latest {latest_fmt})" if latest_fmt else ""
+
+            if min_bound is not None and avg_value < float(min_bound):
                 min_fmt = self._format_metric_value(metric, float(min_bound))
-                val_fmt = self._format_metric_value(metric, value)
                 alerts.append(
                     MetricAlert(
                         _id=f"{metric}/below_min",
                         metric=metric,
-                        message=f"{val_fmt} < configured min {min_fmt}",
+                        message=f"{window_label} {avg_fmt} < configured min {min_fmt}{latest_suffix}",
                         tip="Reduce aggressiveness (e.g., learning rate, clipping) or review reward scaling.",
                     )
                 )
 
-            if max_bound is not None and value > float(max_bound):
+            if max_bound is not None and avg_value > float(max_bound):
                 max_fmt = self._format_metric_value(metric, float(max_bound))
-                val_fmt = self._format_metric_value(metric, value)
                 alerts.append(
                     MetricAlert(
                         _id=f"{metric}/above_max",
                         metric=metric,
-                        message=f"{val_fmt} > configured max {max_fmt}",
+                        message=f"{window_label} {avg_fmt} > configured max {max_fmt}{latest_suffix}",
                         tip="Adjust hyperparameters or enable stronger regularization to pull the metric back in range.",
                     )
                 )

@@ -8,7 +8,7 @@ than inside the agent.
 import pytorch_lightning as pl
 
 # TODO: move these to this file
-from utils.reports import print_terminal_ascii_summary, print_terminal_ascii_alerts
+from utils.reports import print_terminal_ascii_alerts, print_terminal_ascii_summary
 
 
 # TODO: call this callback something more appropriate

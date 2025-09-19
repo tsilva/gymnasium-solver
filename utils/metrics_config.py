@@ -8,7 +8,7 @@ singleton so callers don't repeatedly read the file.
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, List
+from typing import Any, Callable, Dict, List, Optional
 
 from utils.io import read_yaml
 

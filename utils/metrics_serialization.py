@@ -6,14 +6,17 @@ to the configured key_priority across common namespaces.
 
 from __future__ import annotations
 
+import numbers
 from collections import OrderedDict
 from typing import Any, Dict, Iterable
 
-import numbers
-
 from utils.dict_utils import (
     group_by_namespace as _group_by_namespace,
+)
+from utils.dict_utils import (
     order_namespaces as _order_namespaces,
+)
+from utils.dict_utils import (
     sort_subkeys_by_priority as _sort_subkeys_by_priority,
 )
 from utils.metrics_config import metrics_config

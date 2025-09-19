@@ -7,10 +7,11 @@ from typing import Any
 import pytorch_lightning as pl
 import torch
 
-from utils.run import Run
 from utils.io import write_json
 from utils.metrics_serialization import prepare_metrics_for_json
+from utils.run import Run
 from utils.scalars import only_scalar_values
+
 
 class ModelCheckpointCallback(pl.Callback):
     """Custom checkpoint callback that handles all model checkpointing logic including resume."""

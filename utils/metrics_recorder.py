@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping, MutableMapping, List
-
 import math
+from typing import Any, Dict, List, Mapping, MutableMapping
 
 from .metrics_buffer import MetricsBuffer
 from .metrics_history import MetricsHistory

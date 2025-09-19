@@ -1,6 +1,7 @@
-from typing import Iterable, List, Dict, Any, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from utils.logging import format_section_footer, format_section_header
+
 
 def downsample(seq: Iterable[float], target: int) -> List[float]:
     """Uniformly downsample a sequence to a target length (best-effort).

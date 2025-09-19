@@ -1,5 +1,5 @@
-from io import StringIO
 from contextlib import redirect_stdout
+from io import StringIO
 
 from utils.metrics_monitor import MetricAlert
 from utils.reports import print_terminal_ascii_alerts

@@ -1,17 +1,19 @@
-import wandb
+from typing import Any, Dict, List
+
 import pytorch_lightning as pl
 import torch.nn as nn
-from typing import Dict, List, Any
-from utils.rollouts import RolloutCollector, RolloutTrajectory
+import wandb
+
+from utils.config import Config
 from utils.decorators import must_implement
 from utils.formatting import sanitize_name
 from utils.io import write_json
 from utils.metric_bundles import CoreMetricAlerts
 from utils.metrics_monitor import MetricsMonitor
 from utils.metrics_recorder import MetricsRecorder
+from utils.rollouts import RolloutCollector, RolloutTrajectory
 from utils.run import Run
 from utils.timings_tracker import TimingsTracker
-from utils.config import Config
 
 STAGES = ["train", "val", "test"]
 
@@ -367,9 +369,8 @@ class BaseAgent(pl.LightningModule):
     def _build_trainer_loggers__wandb(self):
         from dataclasses import asdict
 
-        from pytorch_lightning.loggers import WandbLogger
-
         import wandb
+        from pytorch_lightning.loggers import WandbLogger
 
         # Create the wandb logger, attach to the existing run if present
         project_name = self.config.project_id if self.config.project_id else sanitize_name(self.config.env_id)
@@ -430,15 +431,15 @@ class BaseAgent(pl.LightningModule):
         """Assemble trainer callbacks, with an optional end-of-training report."""
         # Lazy imports to avoid heavy deps at module import time
         from trainer_callbacks import (
+            ConsoleSummaryCallback,  # TODO; call this something else
             DispatchMetricsCallback,
             EarlyStoppingCallback,
-            ConsoleSummaryCallback, # TODO; call this something else
-            PrefitPresentationCallback,
+            HyperparameterScheduler,
             ModelCheckpointCallback,
             MonitorMetricsCallback,
+            PrefitPresentationCallback,
             WandbVideoLoggerCallback,
             WarmupEvalCallback,
-            HyperparameterScheduler,
         )
 
         # Initialize callbacks list

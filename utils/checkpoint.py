@@ -4,11 +4,11 @@ Set environment variable `VIBES_QUIET=1` (or `VIBES_DISABLE_CHECKPOINT_LOGS=1`)
 to suppress informational prints emitted during checkpoint loading.
 """
 
+import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import torch
-import os
 
 
 def _quiet_mode_enabled() -> bool:

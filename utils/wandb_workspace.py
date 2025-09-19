@@ -219,7 +219,6 @@ def create_or_update_workspace(req: WorkspaceRequest) -> str:
 
     try:
         # Workspaces and panel primitives
-        import wandb_workspaces.reports.v2.interface as wr  # noqa: F401 - ensure importable
         from wandb_workspaces import workspaces as ws
     except Exception as e:
         raise ImportError("wandb-workspaces is required. pip install wandb-workspaces") from e

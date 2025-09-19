@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 from typing import Optional
 
-from gymnasium import Env, error
+from gymnasium import error
 from stable_baselines3.common.vec_env.base_vec_env import VecEnv, VecEnvWrapper
 
 from gym_wrappers.env_video_recorder import EnvVideoRecorder

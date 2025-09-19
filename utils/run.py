@@ -20,13 +20,16 @@ from typing import Dict, List
 
 from utils.io import read_json
 
-LAST_RUN_DIR = Path("runs/@last")
+LAST_RUN_DIR = Path("runs/@last") # TODO: use constant  
 RUNS_DIR = Path("runs")
 
 # TODO: move this to a more appropriate util location
 def _symlink_to_dir(symlink_path: Path, target_dir: Path):
     if os.path.islink(symlink_path): os.unlink(symlink_path)
     symlink_path.symlink_to(target_dir.resolve(), target_is_directory=True)
+
+def list_run_ids() -> List[str]:
+    return [p.name for p in RUNS_DIR.iterdir() if p.is_dir()]
 
 # TODO: rename to RunDir
 @dataclass(frozen=True)
@@ -70,39 +73,39 @@ class Run:
 
     @property
     def config_path(self) -> Path:
-        return self.run_dir / "config.json"
+        return self.run_dir / "config.json" # TODO: use constant
         
     def ensure_config_path(self) -> Path:
         return self._ensure_path(self.config_path)
 
     @property
     def metrics_path(self) -> Path:
-        return self.run_dir / "metrics.csv"
+        return self.run_dir / "metrics.csv" # TODO: use constant
 
     def ensure_metrics_path(self) -> Path:
         return self._ensure_path(self.metrics_path)
 
     @property
     def checkpoints_dir(self) -> Path:
-        return self.run_dir / "checkpoints"
+        return self.run_dir / "checkpoints" # TODO: use constant
 
     def ensure_checkpoints_dir(self) -> Path:
         return self._ensure_path(self.checkpoints_dir)
 
     @property
     def video_dir(self) -> Path:
-        return self.run_dir / "videos"
+        return self.run_dir / "videos" # TODO: use constant
 
     def ensure_video_dir(self) -> Path:
         return self._ensure_path(self.video_dir)
 
     @property
     def last_checkpoint_dir(self) -> Path:
-        return self.checkpoints_dir / "@last"
+        return self.checkpoints_dir / "@last" # TODO: USE CONSTANT
 
     @property
     def best_checkpoint_dir(self) -> Path:
-        return self.checkpoints_dir / "@best"
+        return self.checkpoints_dir / "@best" # TODO: USE CONSTANT
 
     def load_config(self):
         data: Dict = read_json(self.config_path)
@@ -118,6 +121,9 @@ class Run:
     def checkpoint_dir_for_epoch(self, epoch: int) -> Path:
         file_prefix = self._file_prefix_for_epoch(epoch)
         return self.checkpoints_dir / file_prefix
+
+    def list_checkpoints(self) -> List[str]:
+        return [p.name for p in self.checkpoints_dir.iterdir() if p.is_dir()]
 
     def save_checkpoint(self, epoch: int, source_dir: Path, is_best=False) -> None:
         # Move provided data to target checkpoint dir

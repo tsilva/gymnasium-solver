@@ -15,7 +15,7 @@ from utils.run import Run
 def main():
     # Parse command line arguments
     p = argparse.ArgumentParser(description="Play a trained agent using RolloutCollector (human render)")
-    p.add_argument("--run-id", default="@last", help="Run ID to load (defaults to @latest-run)")
+    p.add_argument("--run-id", default="@last", help="Run ID to load (defaults to @latest-run)") # TODO: remove @last harcode (this is a Run SOC)
     p.add_argument("--episodes", type=int, default=10, help="Number of episodes to play")
     p.add_argument("--deterministic", action="store_true", help="Use deterministic actions (mode/argmax)")
     args = p.parse_args()

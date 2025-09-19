@@ -113,14 +113,11 @@ def run_episode(
     deterministic: bool = False,
     max_steps: int = 1000,
 ) -> Tuple[List[np.ndarray], List[np.ndarray] | None, List[np.ndarray] | None, List[Dict[str, Any]], Dict[str, Any]]:
-    run = Run.from_id(run_id)
+    run = Run.load(run_id)
     config = run.load_config()
 
-    labels, _, default_label = run.checkpoint_choices()
-    if not labels:
-        raise FileNotFoundError("No checkpoints found for this run")
-    selected_label = checkpoint_label or default_label
-    ckpt_path = run.resolve_checkpoint(selected_label)
+    #labels, _, default_label = run.list_checkpoints(), {}, "@best"
+    checkpoint_path = run.checkpoints_dir / checkpoint_label
 
     from utils.environment import build_env_from_config
 
@@ -131,7 +128,7 @@ def run_episode(
         subproc=False,
     )
 
-    policy_model, ckpt_data = load_policy_model_from_checkpoint(ckpt_path, env, config)
+    policy_model, ckpt_data = load_policy_model_from_checkpoint(checkpoint_path / "policy.ckpt", env, config) # TODO: SOC violation; this is a Run SOC
 
     # Load action labels from vec env wrapper if available
     action_labels: List[str] | None = None
@@ -198,7 +195,7 @@ def run_episode(
         if isinstance(metrics_dict, dict):
             checkpoint_metrics_summary["metrics"] = metrics_dict
     # Sidecar JSON
-    sidecar = ckpt_path.with_suffix(".json")
+    sidecar = checkpoint_path / "metrics.json"
     if sidecar.exists():
         with open(sidecar, "r", encoding="utf-8") as f:
             sidecar_metrics = json.load(f)
@@ -499,7 +496,7 @@ def run_episode(
         "steps": t,
         "env_id": config.env_id,
         "algo_id": config.algo_id,
-        "checkpoint_name": Path(ckpt_path).name,
+        "checkpoint_name": Path(checkpoint_path).name,
         "env_spec": env_spec_summary,
         "model_spec": model_spec_summary,
         "checkpoint_metrics": checkpoint_metrics_summary,
@@ -513,10 +510,8 @@ def build_ui(default_run_id: str = "@latest-run"):
     initial_run = default_run_id if default_run_id else (runs[0] if runs else "@latest-run")
 
     def _checkpoint_choices_for_run(run_identifier: str):
-        try:
-            return Run.from_id(run_identifier).checkpoint_choices()
-        except FileNotFoundError:
-            return [], {}, None
+        checkpoints = Run.load(run_identifier).list_checkpoints()
+        return checkpoints, {}, "@best"
 
     labels, _, default_label = _checkpoint_choices_for_run(initial_run)
 
@@ -903,7 +898,7 @@ def build_ui(default_run_id: str = "@latest-run"):
 
 def main():
     parser = argparse.ArgumentParser(description="Gradio app to inspect a run's checkpoints visually.")
-    parser.add_argument("--run-id", type=str, default="@latest-run", help="Run ID under runs/ (default: @latest-run)")
+    parser.add_argument("--run-id", type=str, default="@last", help="Run ID under runs/ (default: @last)") # TODO: remove @last harcode (this is a Run SOC)
     parser.add_argument("--port", type=int, default=7860)
     parser.add_argument("--host", type=str, default="127.0.0.1")
     parser.add_argument("--share", action="store_true", help="Enable Gradio share link")

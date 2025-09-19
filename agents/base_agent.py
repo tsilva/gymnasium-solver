@@ -190,7 +190,7 @@ class BaseAgent(pl.LightningModule):
             self._trajectories = train_collector.collect()
 
     def training_step(self, batch, batch_idx):
-        # In case an early stop was triggered, skip batch
+        # In case an early stop was triggered (eg: KL divergence exceeded target), skip batch
         if self._early_stop_epoch:
             return None
 

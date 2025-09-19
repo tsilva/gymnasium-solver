@@ -15,7 +15,7 @@ from utils.run import Run
 def main():
     # Parse command line arguments
     p = argparse.ArgumentParser(description="Play a trained agent using RolloutCollector (human render)")
-    p.add_argument("--run-id", default="@latest-run", help="Run ID to load (defaults to @latest-run)")
+    p.add_argument("--run-id", default="@last", help="Run ID to load (defaults to @latest-run)")
     p.add_argument("--episodes", type=int, default=10, help="Number of episodes to play")
     p.add_argument("--deterministic", action="store_true", help="Use deterministic actions (mode/argmax)")
     args = p.parse_args()
@@ -26,7 +26,7 @@ def main():
 
     # Load run
     run = Run.load(args.run_id)
-    assert run.best_checkpoint_path is not None, "run has no best checkpoint"
+    assert run.best_checkpoint_dir is not None, "run has no best checkpoint"
 
     # Build a single-env environment with human rendering
     config = run.load_config()
@@ -38,7 +38,8 @@ def main():
     )
 
     # Load configuration 
-    policy_model, _ = load_policy_model_from_checkpoint(run.best_checkpoint_path, env, config)
+    # TODO: we should be loading the agent and having it run the episode
+    policy_model, _ = load_policy_model_from_checkpoint(run.best_checkpoint_dir / "policy.ckpt", env, config)
 
     # Initialize rollout collector with training-time hyperparams
     collector = RolloutCollector(

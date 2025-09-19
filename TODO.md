@@ -2,6 +2,7 @@
 
 ## NEXT
 
+- BUG: CartPole-v1 not converging
 - BUG: videos not being recorded to run
 - TEST: is wandb reporting same metrics as table?
 - TEST: is table showing correct metrics?

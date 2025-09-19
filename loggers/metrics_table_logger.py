@@ -1,29 +1,32 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Optional, Tuple
-from dataclasses import dataclass
-
 import os
 import sys
+from dataclasses import dataclass
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from pytorch_lightning.loggers.logger import Logger as LightningLoggerBase  # type: ignore
+from pytorch_lightning.loggers.logger import (
+    Logger as LightningLoggerBase,  # type: ignore
+)
 
+from utils.dict_utils import (
+    group_by_namespace as group_dict_by_key_namespace,
+)
+from utils.dict_utils import (
+    order_namespaces as order_grouped_namespaces,
+)
+from utils.dict_utils import (
+    sort_subkeys_by_priority as sort_grouped_subkeys_by_priority,
+)
+from utils.formatting import is_number, number_to_string
 from utils.logging import ansi as _ansi
 from utils.logging import apply_ansi_background as _apply_bg
 from utils.logging import strip_ansi_codes as _strip_ansi
-from utils.reports import sparkline as _sparkline
-from utils.dict_utils import (
-    group_by_namespace as group_dict_by_key_namespace,
-    order_namespaces as order_grouped_namespaces,
-    sort_subkeys_by_priority as sort_grouped_subkeys_by_priority,
-)
-from utils.torch import to_python_scalar as _to_python_scalar
 from utils.metrics_config import metrics_config
-from utils.formatting import (
-    is_number,
-    number_to_string
-)
 from utils.metrics_monitor import MetricsMonitor
+from utils.reports import sparkline as _sparkline
+from utils.torch import to_python_scalar as _to_python_scalar
+
 
 # TODO: REFACTOR this file
 @dataclass

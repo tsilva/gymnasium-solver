@@ -95,7 +95,7 @@ def main() -> None:
     args = parse_args()
 
     try:
-        import minari  # noqa: F401
+        import minari
     except ImportError:
         print(
             "Minari is required. Install with: pip install \"minari[all]\"",
@@ -104,7 +104,6 @@ def main() -> None:
         raise
 
     import gymnasium as gym
-    import minari
 
     print(f"Loading Minari dataset: {args.dataset_id}")
     dataset = minari.load_dataset(args.dataset_id, download=True)

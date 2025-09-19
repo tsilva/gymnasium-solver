@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import pytorch_lightning as pl
 
-
 # TODO: REFACTOR this file
 
 # TODO: call this callback something else
@@ -22,6 +21,7 @@ class PrefitPresentationCallback(pl.Callback):
     def on_fit_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:  # type: ignore[override]
         # Lazy imports to keep module load light
         from dataclasses import asdict
+
         from utils.logging import display_config_summary
         from utils.torch import _device_of
         from utils.user import prompt_confirm

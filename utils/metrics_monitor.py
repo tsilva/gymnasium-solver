@@ -1,7 +1,8 @@
-from typing import Callable, Dict, List, Optional, Iterable, Tuple, Any, Union, Set
 from dataclasses import dataclass
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 from .metrics_recorder import MetricsRecorder
+
 
 @dataclass(frozen=True)
 class MetricAlert:

@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Mapping, Tuple
 
 from .metrics_config import metrics_config
 
+
 class MetricsHistory:
     """
     Lightweight numeric metrics history for terminal summaries.

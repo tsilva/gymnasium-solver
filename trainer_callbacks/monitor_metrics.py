@@ -4,6 +4,7 @@ from typing import List
 
 import pytorch_lightning as pl
 
+
 class MonitorMetricsCallback(pl.Callback):
 
     def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:

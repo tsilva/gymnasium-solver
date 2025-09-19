@@ -6,10 +6,10 @@ with explicit UTF-8 encoding across the codebase.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, Union
 
-import json
 import yaml
 
 PathLike = Union[str, Path]

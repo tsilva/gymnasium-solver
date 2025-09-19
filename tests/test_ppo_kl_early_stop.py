@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
 import torch
 import torch.nn as nn
-import pytest
 
 from agents.ppo.ppo_agent import PPOAgent
 from utils.config import PPOConfig

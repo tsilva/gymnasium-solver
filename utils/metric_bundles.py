@@ -1,7 +1,5 @@
-from typing import Callable, Iterable, List
-
-import math
 from statistics import fmean
+from typing import Callable, Iterable, List
 
 import pytorch_lightning as pl
 

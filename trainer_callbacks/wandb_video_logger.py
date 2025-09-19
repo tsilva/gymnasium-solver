@@ -7,10 +7,9 @@ from pathlib import Path
 from typing import Iterable
 
 import pytorch_lightning as pl
+import wandb
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
-
-import wandb
 
 
 @dataclass

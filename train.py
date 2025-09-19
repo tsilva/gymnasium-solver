@@ -1,5 +1,7 @@
 import argparse
+
 from utils.train_launcher import launch_training_from_args
+
 
 def main():
     # Parse command line arguments

@@ -35,6 +35,7 @@ def _init_wandb_sweep(config):
     """
     # Import locally to keep module import light for tests and non-W&B flows
     import wandb
+
     from utils.config import Config
 
     base = asdict(config)
@@ -108,6 +109,7 @@ def launch_training_from_args(args) -> None:
     post-training reporting.
     """
     from stable_baselines3.common.utils import set_random_seed
+
     from utils.config import load_config
     from utils.formatting import format_duration
     from utils.wandb_workspace import create_or_update_workspace_for_current_run

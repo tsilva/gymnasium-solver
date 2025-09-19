@@ -45,7 +45,7 @@ from utils.rollouts import RolloutCollector
 
 # SB3 imports (optional)
 try:
-    import torch.nn as nn  # noqa: F401
+    import torch.nn as nn
     from stable_baselines3 import PPO
     from stable_baselines3.common.callbacks import BaseCallback
     _HAS_SB3 = True

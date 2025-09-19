@@ -15,9 +15,9 @@ import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from utils.config import Config
 from typing import Dict, List
 
+from utils.config import Config
 from utils.io import read_json
 
 LAST_RUN_DIR = Path("runs/@last") # TODO: use constant  

@@ -133,26 +133,40 @@ def _build_sections(key_metrics: Optional[Sequence[str]], *, key_panels_per_sect
     runset = _maybe_build_runset(wr, entity=entity, project=project, run_id=select_run_id)
 
     if key_metrics:
-        # Respect original namespaces: build a single accordion per top-level ns
-        by_ns = {"train": [], "val": []}
-        for m in key_metrics:
-            if not isinstance(m, str):
-                continue
-            if "/" in m:
-                ns, _rest = m.split("/", 1)
-            else:
-                ns = ""
-            if ns in by_ns:
-                by_ns[ns].append(m)
+        # Treat key_priority as unnamespaced subkeys and expand across
+        # common namespaces so ordering is preserved per-section.
+        # If a key is already properly namespaced (e.g., "train/foo"),
+        # normalize it to the target namespace by reusing its subkey only.
+        def _expand_for_namespace(ns: str, keys: Sequence[str]) -> list[str]:
+            expanded: list[str] = []
+            seen: set[str] = set()
+            for k in keys:
+                if not isinstance(k, str):
+                    continue
+                # If already a valid namespaced metric, strip namespace
+                # and reapply the target namespace to use the same order
+                # across sections.
+                subkey = k
+                try:
+                    if metrics_config.is_namespaced_metric(k):
+                        _, subkey = k.split("/", 1)
+                except Exception:
+                    subkey = k
+                full = f"{ns}/{subkey}"
+                if full not in seen:
+                    expanded.append(full)
+                    seen.add(full)
+            return expanded
 
-        # Train section
-        if by_ns["train"]:
-            train_panels = [_make_panel(wr.LinePlot, title=k, x=default_x, y=[k], runset=runset) for k in by_ns["train"]]
+        train_keys = _expand_for_namespace("train", key_metrics)
+        val_keys = _expand_for_namespace("val", key_metrics)
+
+        if train_keys:
+            train_panels = [_make_panel(wr.LinePlot, title=k, x=default_x, y=[k], runset=runset) for k in train_keys]
             sections.append(ws.Section(name="train", is_open=True, panels=train_panels))
 
-        # Validation section
-        if by_ns["val"]:
-            val_panels = [_make_panel(wr.LinePlot, title=k, x=default_x, y=[k], runset=runset) for k in by_ns["val"]]
+        if val_keys:
+            val_panels = [_make_panel(wr.LinePlot, title=k, x=default_x, y=[k], runset=runset) for k in val_keys]
             sections.append(ws.Section(name="val", is_open=True, panels=val_panels))
 
     # Diagnostics + Videos sections

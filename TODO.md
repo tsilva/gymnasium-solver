@@ -16,9 +16,10 @@
 
 ## WISHLIST
 
+- FEAT: add env normalization support 
+- FEAT: add observation/action noise support
 - FEAT: dispatch maintenance tasks with codex on cloud (night shift)
 - FEAT: improve scheduling support (more generic, ability to define start/end and annealing schedule; NOTE: reset optimizer on learning rate changes?)
-- FEAT: add env normalization support 
 - FEAT: autotune n_envs (check tune_nenvs.md)
 - FEAT: add LLM review support to inspector.py
 - TASK: solve Pong-v5_objects, get max reward

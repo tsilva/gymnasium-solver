@@ -37,6 +37,14 @@ def main():
         render_mode="human" # TODO: force n_envs when render_mode is human
     )
 
+    # Attach a live observation bar printer for interactive play (vector-level wrapper)
+    try:
+        from gym_wrappers.vec_obs_printer import VecObsBarPrinter
+        env = VecObsBarPrinter(env, bar_width=40, env_index=0, enable=True, target_episodes=args.episodes)
+    except Exception:
+        # Non-fatal: continue without the visualizer if the wrapper fails to attach
+        pass
+
     # Load configuration 
     # TODO: we should be loading the agent and having it run the episode
     policy_model, _ = load_policy_model_from_checkpoint(run.best_checkpoint_dir / "policy.ckpt", env, config)

@@ -80,10 +80,6 @@ def strip_ansi_codes(text: str) -> str:
     relying on TeeStream internals.
     """
     return TeeStream._strip_ansi_codes(text)
-    
-    def __getattr__(self, name):
-        """Delegate other attributes to the original stream."""
-        return getattr(self.original_stream, name)
 
 
 class LogFileManager:
@@ -215,10 +211,6 @@ class StreamRedirector:
                 self.tee_stderr.close()
         except Exception:
             pass
-
-
-# Global log file manager instance
-_log_manager = None
 
 
 def _color_enabled(stream=None) -> bool:
@@ -356,10 +348,6 @@ def format_section_footer(*, width: int = 60, use_color: bool | None = None) -> 
         use_color = _color_enabled()
     banner_char = "━" if use_color else "="
     return ansi(banner_char * width, "bright_magenta", enable=use_color)
-
-def get_log_manager() -> Optional[LogFileManager]:
-    """Get the global log manager instance."""
-    return _log_manager
 
 @contextmanager
 def stream_output_to_log(log_file_path: str):

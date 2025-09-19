@@ -440,7 +440,6 @@ def publish_run(
     run_id: Optional[str],
     repo_id: Optional[str],
     private: bool = False,
-    allow_create: bool = True,
 ) -> str:
     run_dir = resolve_run_dir(run_id)
     meta = extract_run_metadata(run_dir)

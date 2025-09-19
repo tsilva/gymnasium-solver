@@ -21,7 +21,6 @@ class MetricsCSVLightningLogger(LightningLoggerBase):
     def __init__(self, *, csv_path: str | Path, queue_size: int = 10000) -> None:
         self._name = "csv"
         self._version = "0"
-        self._experiment = None
         self._csv = MetricsCSVLogger(csv_path, queue_size=queue_size)
 
     # --- Lightning Logger API ---

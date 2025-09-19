@@ -75,9 +75,6 @@ class Run:
     def config_path(self) -> Path:
         return self.run_dir / "config.json" # TODO: use constant
         
-    def ensure_config_path(self) -> Path:
-        return self._ensure_path(self.config_path)
-
     @property
     def metrics_path(self) -> Path:
         return self.run_dir / "metrics.csv" # TODO: use constant
@@ -88,9 +85,6 @@ class Run:
     @property
     def checkpoints_dir(self) -> Path:
         return self.run_dir / "checkpoints" # TODO: use constant
-
-    def ensure_checkpoints_dir(self) -> Path:
-        return self._ensure_path(self.checkpoints_dir)
 
     @property
     def video_dir(self) -> Path:

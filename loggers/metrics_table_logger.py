@@ -108,8 +108,6 @@ class MetricsTableLogger(LightningLoggerBase):
         self.delta_tol: float = 1e-12
         # Highlight behavior is resolved on-the-fly via helper methods that
         # consult the metrics config lazily (avoids upfront extraction/copy).
-        self._highlight_value_bold_cache: Optional[frozenset[str]] = None
-        self._highlight_row_metrics_cache: Optional[frozenset[str]] = None
         self.bgcolor_highlight: str = "bg_blue"
         self.bgcolor_alert: str = "bg_yellow"
         self.better_when_increasing: Dict[str, bool] = {}
@@ -249,14 +247,6 @@ class MetricsTableLogger(LightningLoggerBase):
             if not self.use_ansi_inplace:
                 os.system('cls' if os.name == 'nt' else 'clear')
             print(text, file=self.stream)
-
-    def _sort_key(self, namespace: str, subkey: str) -> Tuple[int, object]:
-        """Sorting helper that honours an explicit key priority list."""
-        full_key = metrics_config.add_namespace_to_metric(namespace, subkey)
-        priority_index = self._key_priority_map.get(full_key)
-        if priority_index is not None:
-            return (0, priority_index)
-        return (1, subkey.lower())
 
     def _prepare_sections(
         self,

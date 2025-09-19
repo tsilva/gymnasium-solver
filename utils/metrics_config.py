@@ -39,10 +39,6 @@ class MetricsConfig:
     def _get_global_cfg(self) -> Dict[str, Any]:
         return self._config["_global"]
 
-    def _get_metrics(self) -> Dict[str, Any]:
-        metrics = [(name, value) for name, value in self._config.items() if not name.startswith("_") and isinstance(value, dict)]
-        return metrics
-
     @staticmethod
     def add_namespace_to_metric(namespace: str, subkey: Optional[str]) -> str:
         """Build a fully-qualified metric name validating the namespace. """
@@ -93,12 +89,6 @@ class MetricsConfig:
         dupes = [x for x in set(key_priority) if key_priority.count(x) > 1]
         assert len(dupes) == 0, f"key_priority must be a list of unique values, found duplicates: {dupes}"
         return key_priority
-
-    def highlight_config(self) -> Dict[str, Any]:
-        """Return highlight configuration for metrics table from metrics.yaml."""
-        global_cfg = self._get_global_cfg() 
-        highlight_cfg = global_cfg["highlight"]
-        return highlight_cfg
 
     def total_timesteps_key(self) -> str:
         """Return the canonical step metric key from metrics config."""

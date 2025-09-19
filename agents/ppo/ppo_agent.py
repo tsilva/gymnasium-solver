@@ -15,9 +15,8 @@ class PPOAgent(BaseAgent):
     def __init__(self, config):
         super().__init__(config)
 
-        # Set initial clip range (starts as config value, then updated by scheduler)
+        # Set mutable PPO parameters (eg: schedulable parameters)
         self.clip_range = config.clip_range
-        self.target_kl = config.target_kl
 
         # Register PPO-specific metric monitors
         self.metrics_monitor.register_bundle(PPOAlerts(self))
@@ -27,6 +26,9 @@ class PPOAgent(BaseAgent):
         self.policy_model = build_policy_from_env_and_config(train_env, self.config)
 
     def losses_for_batch(self, batch, batch_idx):
+        # Retrieve immutable PPO parameters
+        target_kl = self.config.target_kl
+
         # use type for this? check sb3
         states = batch.observations
         actions = batch.actions
@@ -127,14 +129,16 @@ class PPOAgent(BaseAgent):
         }
 
         # In case the KL divergence exceeded the target, stop training on this epoch
-        if self.target_kl is not None:
+        early_stop_epoch = False
+        if target_kl is not None:
             approx_kl_value = float(approx_kl.detach())
-            metrics['kl_stop_triggered'] = 1 if approx_kl_value > self.target_kl else 0
+            early_stop_epoch = approx_kl_value > self.target_kl
+            metrics['kl_stop_triggered'] = 1 if early_stop_epoch else 0
 
         # Log all metrics (will be avarages and flushed by end of epoch)
         self.metrics_recorder.record("train", metrics)
 
-        early_stop_epoch = metrics.get('kl_stop_triggered') == 1
+        # Return result for training step
         return dict(
             loss=loss,
             early_stop_epoch=early_stop_epoch,

@@ -16,6 +16,7 @@
 
 ## WISHLIST
 
+- FEAT: add LunarLander-v3 randomization wrapper
 - FEAT: add env normalization support 
 - FEAT: add observation/action noise support
 - FEAT: dispatch maintenance tasks with codex on cloud (night shift)

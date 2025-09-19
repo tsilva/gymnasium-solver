@@ -1,4 +1,5 @@
 from typing import Any, Dict, Iterable, List, Optional
+import math
 
 from utils.logging import format_section_footer, format_section_header
 
@@ -24,24 +25,48 @@ def sparkline(values: Iterable[float], width: int) -> str:
     # If no values or width is less than or equal to 0, return an empty string
     blocks = "▁▂▃▄▅▆▇█"
     values = list(values)
-    if not values or width <= 0: return ""
+    if not values or width <= 0:
+        return ""
 
-    # If the minimum and maximum values are the same, return a horizontal line
-    vmin = min(values)
-    vmax = max(values)
-    if vmax == vmin: return "─" * max(1, min(width, len(values)))
+    # Compute range using only finite values to avoid NaNs from inf/-inf
+    finite_values = [v for v in values if isinstance(v, (int, float)) and math.isfinite(v)]
+    if not finite_values:
+        # Nothing renderable
+        return ""
 
-    # Downsample the values to the desired width
+    vmin = min(finite_values)
+    vmax = max(finite_values)
+    if vmax == vmin:
+        # Flat line when all finite values are equal
+        return "─" * max(1, min(width, len(values)))
+
+    # Downsample to target width for rendering
     data = downsample(values, max(1, width))
-    out = []
-    rng = (vmax - vmin) or 1.0
-    
-    # Convert the values to blocks
-    for v in data:
-        idx = int((v - vmin) / rng * (len(blocks) - 1))
-        out.append(blocks[max(0, min(idx, len(blocks) - 1))])
+    out: List[str] = []
+    rng = vmax - vmin
+    if rng <= 0 or not math.isfinite(rng):
+        rng = 1.0
 
-    # Return the joined blocks
+    # Map value to block index, handling non-finite gracefully
+    for v in data:
+        if not isinstance(v, (int, float)) or not math.isfinite(v):
+            # Map -inf to lowest block, +inf to highest block, NaN to space
+            if isinstance(v, float) and math.isinf(v):
+                idx = 0 if v < 0 else (len(blocks) - 1)
+                out.append(blocks[idx])
+            else:
+                out.append(" ")
+            continue
+
+        # Normalize and clamp
+        norm = (v - vmin) / rng
+        if not math.isfinite(norm):
+            out.append(" ")
+            continue
+        norm = max(0.0, min(1.0, norm))
+        idx = int(norm * (len(blocks) - 1))
+        out.append(blocks[idx])
+
     return "".join(out)
 
 

@@ -10,14 +10,13 @@ gamma: 0.999
 ppo:
   algo_id: ppo
   n_envs: 16
-  n_steps: 128
-  n_epochs: 10
+  n_steps: 1024
   batch_size: 0.25
-  policy_lr: 3e-4
+  n_epochs: 10
+  policy_lr: 1e-4
 
 reinforce:
   algo_id: reinforce
-  max_timesteps: 2e6
   n_envs: 8
   n_steps: 1024
   batch_size: 0.25

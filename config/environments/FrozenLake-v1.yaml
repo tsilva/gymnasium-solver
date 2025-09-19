@@ -1,0 +1,32 @@
+# FrozenLake-v1 deterministic challenge configurations
+# TODO: reward shape to receive -1 on movement
+# TODO: override reward threshold for deterministic
+
+env_id: FrozenLake-v1
+env_kwargs:
+  is_slippery: true
+  map_name: "4x4"
+env_wrappers:
+  - id: DiscreteEncoder
+    encoding: array
+eval_episodes: 10
+eval_freq_epochs: 10
+eval_recording_freq_epochs: 10
+
+# SOLVED: 122k timesteps
+ppo:
+  n_envs: 8
+  algo_id: ppo
+  n_steps: 512
+  batch_size: 0.25
+  n_epochs: 10
+  policy_lr: 9e-3
+  hidden_dims: [64]
+
+reinforce:
+  algo_id: reinforce
+  max_timesteps: 2e5
+  n_steps: 512
+  batch_size: 64
+  policy_lr: 0.005
+  hidden_dims: [64]

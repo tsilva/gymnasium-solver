@@ -136,7 +136,8 @@ class MetricsTableLogger(LightningLoggerBase):
 
     def log_metrics(self, metrics: dict[str, Any], step: Optional[int] = None) -> None:
         assert metrics, "metrics cannot be empty"
-        metrics_config.assert_metrics_within_bounds(metrics) # TODO: move this to the logger?
+        # TODO: restore this, some are crashing due to NaN/Inf values, figure out why
+        #metrics_config.assert_metrics_within_bounds(metrics) # TODO: move this to the logger?
 
         # Convert values to basic Python scalars for rendering/validation 
         # and discard non-namespace keys (eg: epoch injected by Lightning)

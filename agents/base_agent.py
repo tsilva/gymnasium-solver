@@ -41,6 +41,7 @@ class BaseAgent(pl.LightningModule):
         # a step-aware numeric history for terminal summaries.
         self.metrics_recorder = MetricsRecorder()
 
+        # TODO: review this
         # Create metrics monitor registry (eg: used for metric alerts)
         self.metrics_monitor = MetricsMonitor(self.metrics_recorder)
         self._common_metric_alerts = CommonMetricAlerts(self)
@@ -422,8 +423,7 @@ class BaseAgent(pl.LightningModule):
         from trainer_callbacks import (
             DispatchMetricsCallback,
             EarlyStoppingCallback,
-            EndOfTrainingReportCallback,
-            ConsoleSummaryCallback,
+            ConsoleSummaryCallback, # TODO; call this something else
             PrefitPresentationCallback,
             ModelCheckpointCallback,
             MonitorMetricsCallback,
@@ -457,7 +457,7 @@ class BaseAgent(pl.LightningModule):
             callbacks.append(HyperparameterScheduler())
 
         # Checkpointing: save best/last models and metrics
-        checkpoint_dir = self.run._ensure_path(self.run.checkpoints_dir)
+        checkpoint_dir = self.run.ensure_checkpoints_dir()
         callbacks.append(ModelCheckpointCallback( # TODO: pass run
             checkpoint_dir=checkpoint_dir,
             metric="val/ep_rew_mean",
@@ -465,9 +465,9 @@ class BaseAgent(pl.LightningModule):
         ))
 
         # Video logger watches a run-specific media directory lazily (do not create it up-front)
-        video_dir = self.run.get_run_dir() / "videos"
+        video_dir = self.run.ensure_video_dir()
         callbacks.append(WandbVideoLoggerCallback(
-            media_root=str(video_dir),
+            media_root=video_dir,
             namespace_depth=1,
         ))
 
@@ -489,9 +489,6 @@ class BaseAgent(pl.LightningModule):
         if self.config.early_stop_on_eval_threshold: callbacks.append(
             EarlyStoppingCallback("val/ep_rew_mean", reward_threshold)
         )
-
-        # When training ends, write a report describing on the training went
-        callbacks.append(EndOfTrainingReportCallback(filename="report.md"))
 
         # Also print a terminal summary and alerts recap at the end of training
         callbacks.append(ConsoleSummaryCallback())

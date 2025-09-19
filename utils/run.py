@@ -73,20 +73,35 @@ class Run:
     def config_path(self) -> Path:
         return self.run_dir / "config.json"
         
+    def ensure_config_path(self) -> Path:
+        return self._ensure_path(self.config_path)
+
     @property
     def metrics_path(self) -> Path:
         return self.run_dir / "metrics.csv"
+
+    def ensure_metrics_path(self) -> Path:
+        return self._ensure_path(self.metrics_path)
 
     @property
     def checkpoints_dir(self) -> Path:
         return self.run_dir / "checkpoints"
 
-    # Compatibility helpers for call-sites still using RunManager-style APIs
-    def get_run_dir(self) -> Path:
-        return self.run_dir
+    def ensure_checkpoints_dir(self) -> Path:
+        return self._ensure_path(self.checkpoints_dir)
 
-    def get_run_id(self) -> str:
-        return self.id
+    @property
+    def video_dir(self) -> Path:
+        return self.run_dir / "videos"
+
+    def ensure_video_dir(self) -> Path:
+        return self._ensure_path(self.video_dir)
+
+    @property
+    def best_checkpoint_path(self) -> Path | None:
+        path = self.checkpoints_dir / "best.ckpt"
+        if not path.exists(): return None
+        return path
 
     def _ensure_path(self, path: str | Path) -> Path:
         """Ensure that the relative path (or directory) exists under the run."""
@@ -107,15 +122,6 @@ class Run:
         from utils.config import Config
         data: Dict = read_json(self.config_path)
         return Config.build_from_dict(data)
-
-    @property
-    def best_checkpoint_path(self) -> Optional[Path]:
-        """Return the best checkpoint path when present."""
-        for name in BEST_CKPT_NAMES:
-            candidate = self.checkpoints_dir / name
-            if candidate.exists():
-                return candidate
-        return None
 
     def checkpoint_choices(self) -> Tuple[List[str], Dict[str, Path], Optional[str]]:
         """Return (labels, mapping, default_label) for available checkpoints."""

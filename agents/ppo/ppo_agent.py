@@ -130,7 +130,7 @@ class PPOAgent(BaseAgent):
         early_stop_epoch = False
         if target_kl is not None:
             approx_kl_value = float(approx_kl.detach())
-            early_stop_epoch = approx_kl_value > self.target_kl
+            early_stop_epoch = approx_kl_value > target_kl
             metrics['kl_stop_triggered'] = 1 if early_stop_epoch else 0
 
         # Log all metrics (will be avarages and flushed by end of epoch)

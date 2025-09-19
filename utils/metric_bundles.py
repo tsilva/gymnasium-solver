@@ -76,7 +76,7 @@ class MetricMonitorBundle:
 
 
 # TODO: call core
-class CommonMetricAlerts(MetricMonitorBundle):
+class CoreMetricAlerts(MetricMonitorBundle):
     """Shared metric tripwires that apply to all algorithms."""
 
     _BOUNDS_SMOOTHING_WINDOW = 5

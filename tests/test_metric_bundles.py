@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Iterable, List
 
 from agents.ppo.ppo_alerts import PPOAlerts
-from utils.metric_bundles import CommonMetricAlerts
+from utils.metric_bundles import CoreMetricAlerts
 from utils.metrics_config import metrics_config
 from utils.metrics_monitor import MetricsMonitor
 from utils.metrics_recorder import MetricsRecorder
@@ -30,7 +30,7 @@ def test_common_alerts_flag_nan_metric():
         "train/loss": float("nan"),
     })
     monitor = MetricsMonitor(recorder)
-    monitor.register_bundle(CommonMetricAlerts())
+    monitor.register_bundle(CoreMetricAlerts())
 
     result = monitor.check()
 
@@ -44,7 +44,7 @@ def test_common_alerts_detect_step_stall():
     step_key = metrics_config.step_key()
     recorder.update_history({step_key: 256})
     monitor = MetricsMonitor(recorder)
-    monitor.register_bundle(CommonMetricAlerts())
+    monitor.register_bundle(CoreMetricAlerts())
 
     # Simulate another epoch without additional progress
     recorder.update_history({step_key: 256})
@@ -63,7 +63,7 @@ def test_common_alerts_guard_config_bounds():
         "train/clip_fraction": 1.5,
     })
     monitor = MetricsMonitor(recorder)
-    monitor.register_bundle(CommonMetricAlerts())
+    monitor.register_bundle(CoreMetricAlerts())
 
     result = monitor.check()
 

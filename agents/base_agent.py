@@ -4,7 +4,7 @@ import pytorch_lightning as pl
 from utils.decorators import must_implement
 from utils.formatting import sanitize_name
 from utils.io import write_json
-from utils.metric_bundles import CommonMetricAlerts
+from utils.metric_bundles import CoreMetricAlerts
 from utils.metrics_monitor import MetricsMonitor
 from utils.metrics_recorder import MetricsRecorder
 from utils.run import Run
@@ -41,11 +41,12 @@ class BaseAgent(pl.LightningModule):
         # a step-aware numeric history for terminal summaries.
         self.metrics_recorder = MetricsRecorder()
 
-        # TODO: review this
         # Create metrics monitor registry (eg: used for metric alerts)
         self.metrics_monitor = MetricsMonitor(self.metrics_recorder)
-        self._common_metric_alerts = CommonMetricAlerts(self)
-        self.metrics_monitor.register_bundle(self._common_metric_alerts)
+
+        # Register bundle of metric alerts that apply to all algorithms
+        core_metric_alerts = CoreMetricAlerts(self)
+        self.metrics_monitor.register_bundle(core_metric_alerts)
 
         # Run context accessor (manages run directory and paths)
         # Ensure attribute exists early to avoid AttributeError from Torch's __getattr__ wrapper

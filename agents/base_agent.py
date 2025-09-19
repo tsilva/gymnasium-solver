@@ -257,12 +257,7 @@ class BaseAgent(pl.LightningModule):
 
         # Run evaluation with optional recording
         val_env = self.get_env("val")
-        if self.run is None:
-            raise RuntimeError("Run must be initialised before validation_step")
-
-            
-        checkpoint_dir = self.run._ensure_path(self.run.checkpoints_dir)
-        video_path = str(checkpoint_dir / f"epoch={self.current_epoch:02d}.mp4")
+        video_path = self.run.video_path_for_epoch(self.current_epoch)
         with val_env.recorder(video_path, record_video=record_video):
             # Evaluate using the validation rollout collector to avoid redundant helpers
             val_collector = self.get_rollout_collector("val")
@@ -294,6 +289,7 @@ class BaseAgent(pl.LightningModule):
         self._fit_elapsed_seconds = float(time_elapsed)
         self._final_stop_reason = self._early_stop_reason
 
+        # TODO; consider pros/cons of testing vs ensuring a final val when training finishes (less code to maintain)
         # Record final evaluation video and save associated metrics JSON next to it
         test_env = self.get_env("test")
         video_path = self.run.checkpoints_dir / "final.mp4"

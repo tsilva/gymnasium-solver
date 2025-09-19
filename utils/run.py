@@ -108,14 +108,28 @@ class Run:
         data: Dict = read_json(self.config_path)
         return Config.build_from_dict(data)
 
+    def _file_prefix_for_epoch(self, epoch: int) -> str:
+        return f"epoch={epoch:02d}"
+
+    def video_path_for_epoch(self, epoch: int) -> Path:
+        file_prefix = self._file_prefix_for_epoch(epoch)
+        return self.video_dir / f"{file_prefix}.mp4"
+
     def checkpoint_dir_for_epoch(self, epoch: int) -> Path:
-        return self.checkpoints_dir / f"epoch={epoch:02d}"
+        file_prefix = self._file_prefix_for_epoch(epoch)
+        return self.checkpoints_dir / file_prefix
 
     def save_checkpoint(self, epoch: int, source_dir: Path, is_best=False) -> None:
         # Move provided data to target checkpoint dir
         # (run manager doesn't need to know what this data is)
         checkpoint_dir = self.checkpoint_dir_for_epoch(epoch)
         shutil.move(source_dir, checkpoint_dir)
+
+        # TODO: SOC violation; run needs to be aware that videos exist
+        # TODO: it would be optimal if we only actually rendered videos from the best evals
+        # Copy epoch files from video folder to checkpoint dir
+        video_path = self.video_path_for_epoch(epoch)
+        if os.path.exists(video_path): shutil.copy(video_path, checkpoint_dir)
 
         # Symlink as last checkpoint
         _symlink_to_dir(self.last_checkpoint_dir, checkpoint_dir)

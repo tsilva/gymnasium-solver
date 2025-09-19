@@ -60,6 +60,7 @@ ppo:
   normalize_advantages: "rollout"
   eval_warmup_epochs: 50
   eval_freq_epochs: 15
-  early_stop_on_train_threshold: True
-  #early_stop_on_eval_threshold: True
+  #early_stop_on_train_threshold: True
+  early_stop_on_eval_threshold: True
+  eval_recording_freq_epochs: 15
   #frame_stack: 2 # TODO: not converging faster with frame stacking here, why?

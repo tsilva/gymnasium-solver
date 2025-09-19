@@ -11,43 +11,21 @@ Usage:
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from utils.io import read_json, write_json
+from utils.config import Config
+from utils.io import read_json
 
-RUNS_ROOT = Path("runs")
-LATEST_SYMLINK_NAMES = ("@latest-run", "latest-run")
-BEST_CKPT_NAMES = {"best.ckpt", "best_checkpoint.ckpt"}
-LAST_CKPT_NAMES = {"last.ckpt", "last_checkpoint.ckpt"}
-
-
-def _resolve_run_dir(run_id: str, runs_dir: Path = RUNS_ROOT) -> Path:
-    """Resolve a run identifier (including @latest-run) to a concrete directory."""
-
-    if run_id in {"@latest-run", "latest-run"}:
-        for link_name in LATEST_SYMLINK_NAMES:
-            link_path = runs_dir / link_name
-            if link_path.is_symlink():
-                target = link_path.resolve()
-                if target.exists():
-                    return target
-            elif link_path.exists():
-                return link_path
-        raise FileNotFoundError("@latest-run symlink not found")
-
-    run_path = runs_dir / run_id
-    if run_path.is_symlink():
-        resolved = run_path.resolve()
-        if resolved.exists():
-            return resolved
-    if run_path.exists():
-        return run_path
-    raise FileNotFoundError(f"Run directory not found: {run_path}")
+RUNS_DIR = Path("runs")
+LATEST_SYMLINK_NAMES = ("@latest-run")
+BEST_CKPT_NAMES = {"best.ckpt"}
+LAST_CKPT_NAMES = {"last.ckpt"}
 
 
-def list_run_ids(runs_dir: Path = RUNS_ROOT) -> List[str]:
+def list_run_ids(runs_dir: Path = RUNS_DIR) -> List[str]:
     """Return run directory names sorted by modified time (newest first)."""
 
     if not runs_dir.exists():
@@ -64,49 +42,19 @@ def list_run_ids(runs_dir: Path = RUNS_ROOT) -> List[str]:
 
 @dataclass(frozen=True)
 class Run:
-    run_dir: Path
-    runs_root: Path = RUNS_ROOT
+    run_dir: Path = RUNS_DIR
+    checkpoints_dir: Path
 
-    @staticmethod
-    def _normalise_root(runs_root: Path | str) -> Path:
-        root = Path(runs_root)
-        return root if root.is_absolute() else Path(root)
-
-    @classmethod
-    def create(
-        cls,
+    def __init__(self, 
         run_id: str,
-        runs_root: Path | str = RUNS_ROOT,
+        config: Config,
         *,
         ensure_checkpoints: bool = True,
-        update_latest_symlink: bool = True,
-    ) -> "Run":
-        """Instantiate a Run for `run_id`, ensuring required directories exist.
-
-        The returned Run points at ``runs_root/run_id`` and optionally updates the
-        ``@latest-run`` symlink to reference the new run.
-        """
-
-        root = cls._normalise_root(runs_root)
-        run_dir = root / run_id
-        run_dir.mkdir(parents=True, exist_ok=True)
-        if ensure_checkpoints:
-            (run_dir / "checkpoints").mkdir(parents=True, exist_ok=True)
-        if update_latest_symlink:
-            cls._set_latest_symlink(root, run_id)
-        return cls(run_dir=run_dir, runs_root=root)
-
-    @classmethod
-    def from_id(cls, run_id: str, runs_root: Path | str = RUNS_ROOT) -> "Run":
-        run_path = _resolve_run_dir(run_id, Path(runs_root))
-        return cls(run_dir=run_path, runs_root=Path(runs_root))
-
-    @classmethod
-    def from_wandb_run(cls, *, wandb_run, runs_root: Path | str = RUNS_ROOT) -> "Run":
-        run_id = getattr(wandb_run, "id")
-        if not run_id:
-            raise ValueError("wandb_run.id must be set to create a Run")
-        return cls.create(run_id, runs_root=runs_root)
+        update_latest_symlink: bool = True
+    ) -> None:
+        # Save configuration to run directory
+        config_path = self._ensure_path("config.json")
+        config.save_to_json(config_path)
 
     @staticmethod
     def _set_latest_symlink(runs_root: Path, run_id: str) -> None:
@@ -122,6 +70,14 @@ class Run:
         return self.run_dir.name
 
     @property
+    def config_path(self) -> Path:
+        return self.run_dir / "config.json"
+        
+    @property
+    def metrics_path(self) -> Path:
+        return self.run_dir / "metrics.csv"
+
+    @property
     def checkpoints_dir(self) -> Path:
         return self.run_dir / "checkpoints"
 
@@ -132,7 +88,7 @@ class Run:
     def get_run_id(self) -> str:
         return self.id
 
-    def ensure_path(self, path: str | Path) -> Path:
+    def _ensure_path(self, path: str | Path) -> Path:
         """Ensure that the relative path (or directory) exists under the run."""
 
         rel_path = Path(path)
@@ -145,24 +101,6 @@ class Run:
         """Force-update the latest-run symlink to point at this run."""
 
         self._set_latest_symlink(self.runs_root, self.id)
-
-    def save_json(self, data: Dict, filename: str = "config.json") -> Path:
-        path = self.ensure_path(filename)
-        write_json(path, data)
-        return path
-
-    def save_config(self, data: Dict, filename: str = "config.json") -> Path:
-        """Backward-compatible wrapper around :meth:`save_json`."""
-
-        return self.save_json(data, filename)
-
-    @property
-    def config_path(self) -> Path:
-        """Return config.json path under the run directory."""
-        p = self.run_dir / "config.json"
-        if p.exists():
-            return p
-        raise FileNotFoundError(f"config.json not found under run: {self.run_dir}")
 
     def load_config(self):
         """Load the run's config into a utils.config.Config instance."""
@@ -246,4 +184,3 @@ class Run:
 
         raise ValueError(f"Unknown checkpoint label '{label}'. Available: {list(mapping.keys())}")
 
-    

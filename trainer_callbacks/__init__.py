@@ -9,6 +9,7 @@ from .wandb_video_logger import WandbVideoLoggerCallback
 from .warmup_eval import WarmupEvalCallback
 from .console_summary import ConsoleSummaryCallback
 from .prefit_presentation import PrefitPresentationCallback
+from .hyperparameter_scheduler import HyperparameterScheduler
 
 __all__ = [
     "ModelCheckpointCallback", 
@@ -20,4 +21,5 @@ __all__ = [
     "MonitorMetricsCallback",
     "ConsoleSummaryCallback",
     "PrefitPresentationCallback",
+    "HyperparameterScheduler",
 ]

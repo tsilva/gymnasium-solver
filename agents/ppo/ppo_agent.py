@@ -1,5 +1,3 @@
-from typing import List, Tuple, Iterable, Callable
-
 import torch
 import torch.nn.functional as F
 
@@ -151,10 +149,12 @@ class PPOAgent(BaseAgent):
         self._update_schedules__clip_range()
 
     def _update_schedules__clip_range(self):
-        if self.config.clip_range_schedule != 'linear': return
-
+        from utils.schedulers import resolve as resolve_schedule
+        sched_fn = resolve_schedule(self.config.clip_range_schedule)
+        if sched_fn is None:
+            return
         progress = self._calc_training_progress()
-        new_clip_range = max(self.config.clip_range * (1.0 - progress), 0.0)
+        new_clip_range = float(sched_fn(float(self.config.clip_range), progress))
         self.clip_range = new_clip_range
 
         # Log scheduled clip_range under train namespace

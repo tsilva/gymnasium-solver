@@ -1,3 +1,4 @@
+import wandb
 import pytorch_lightning as pl
 
 from utils.decorators import must_implement
@@ -217,8 +218,8 @@ class BaseAgent(pl.LightningModule):
         return None
 
     def on_train_epoch_end(self):
-        # Update schedules
-        self._update_schedules()
+        # Scheduling moved to HyperparameterScheduler callback
+        pass
         
     def val_dataloader(self):
         # TODO: should I just do rollouts here?
@@ -244,7 +245,9 @@ class BaseAgent(pl.LightningModule):
         val_env = self.get_env("val")
         if self.run is None:
             raise RuntimeError("Run must be initialised before validation_step")
-        checkpoint_dir = self.run.ensure_path(CHECKPOINT_PATH)
+
+            
+        checkpoint_dir = self.run._ensure_path(self.run.checkpoints_dir)
         video_path = str(checkpoint_dir / f"epoch={self.current_epoch:02d}.mp4")
         with val_env.recorder(video_path, record_video=record_video):
             # Evaluate using the validation rollout collector to avoid redundant helpers
@@ -279,7 +282,7 @@ class BaseAgent(pl.LightningModule):
 
         # Record final evaluation video and save associated metrics JSON next to it
         test_env = self.get_env("test")
-        checkpoint_dir = self.run.ensure_path(CHECKPOINT_PATH)
+        checkpoint_dir = self.run._ensure_path(self.run.checkpoints_dir)
         video_path = checkpoint_dir / "final.mp4"
         with test_env.recorder(str(video_path), record_video=True):
             test_collector = self.get_rollout_collector("test")
@@ -295,28 +298,16 @@ class BaseAgent(pl.LightningModule):
 
         from utils.logging import stream_output_to_log
 
-        # Expect a W&B run to be initialized by the launcher (train.py)
-        try:
-            import wandb  # lazy import; training requires wandb
-        except Exception as e:
-            raise ImportError("wandb is required for training. Install with `pip install wandb`.") from e
-
-        run = getattr(wandb, "run", None)
-        if run is None:
-            raise RuntimeError(
-                "No active W&B run found. Initialize via train.py or call wandb.init() before agent.learn()."
-            )
-
         # Initialize run directory management and convenience Run accessor
         # Initialize run directory (creates runs/<id>/, checkpoints/, and @latest-run symlink)
-        self.run = Run.create(run_id=run.id)
+        self.run = Run(
+            run_id=wandb.run.id,
+            config=self.config
+        )
         
-        # Save configuration to run directory
-        config_path = self.run.ensure_path("config.json")
-        self.config.save_to_json(config_path)
-        
+        # TODO: create run context (with run, do log handling inside)
         # Set up comprehensive logging using run-specific logs directory
-        log_path = self.run.ensure_path("run.log")
+        log_path = self.run._ensure_path("run.log")
         with stream_output_to_log(log_path): self._learn()
 
     def _learn(self):
@@ -336,8 +327,6 @@ class BaseAgent(pl.LightningModule):
 
         # Train the agent
         trainer.fit(self)
-    
-    
     
     # TODO: get this out of here
     def _maybe_warn_observation_policy_mismatch(self):
@@ -398,8 +387,8 @@ class BaseAgent(pl.LightningModule):
 
     def _build_trainer_loggers__csv(self):
         from loggers.metrics_csv_lightning_logger import MetricsCSVLightningLogger
-        csv_path = self.run.ensure_path("metrics.csv")
         # TODO: queue_size?
+        csv_path = self.run._ensure_path(self.run.metrics_path) # TODO: pass run inside logger?
         csv_logger = MetricsCSVLightningLogger(csv_path=str(csv_path))
         return csv_logger
     
@@ -440,6 +429,7 @@ class BaseAgent(pl.LightningModule):
             MonitorMetricsCallback,
             WandbVideoLoggerCallback,
             WarmupEvalCallback,
+            HyperparameterScheduler,
         )
 
         # Initialize callbacks list
@@ -462,9 +452,13 @@ class BaseAgent(pl.LightningModule):
         # Metrics dispatcher: aggregates epoch metrics and logs to Lightning
         callbacks.append(DispatchMetricsCallback())
 
+        # Hyperparameter scheduling (lr, clip_range, etc.)
+        if (self.config.policy_lr_schedule is not None) or (self.config.clip_range_schedule is not None):
+            callbacks.append(HyperparameterScheduler())
+
         # Checkpointing: save best/last models and metrics
-        checkpoint_dir = self.run.ensure_path(CHECKPOINT_PATH)
-        callbacks.append(ModelCheckpointCallback(
+        checkpoint_dir = self.run._ensure_path(self.run.checkpoints_dir)
+        callbacks.append(ModelCheckpointCallback( # TODO: pass run
             checkpoint_dir=checkpoint_dir,
             metric="val/ep_rew_mean",
             mode="max"
@@ -549,9 +543,12 @@ class BaseAgent(pl.LightningModule):
 
     # TODO: generalize scheduling support
     def _update_schedules__policy_lr(self):
-        if self.config.policy_lr_schedule != "linear": return
+        from utils.schedulers import resolve as resolve_schedule
+        sched_fn = resolve_schedule(self.config.policy_lr_schedule)
+        if sched_fn is None:
+            return
         progress = self._calc_training_progress()
-        new_policy_lr = max(self.config.policy_lr * (1.0 - progress), 0.0)
+        new_policy_lr = float(sched_fn(float(self.config.policy_lr), progress))
         self._change_optimizers_policy_lr(new_policy_lr)
         # TODO: should I do this here or every epoch?
         # Log scheduled LR under train namespace
@@ -571,8 +568,6 @@ class BaseAgent(pl.LightningModule):
             optimizer=self.config.optimizer,
             lr=self.config.policy_lr, # TODO: is this taking annealing into account?
         )
-
-    
 
     def _log_hyperparameters(self):
         metrics = {

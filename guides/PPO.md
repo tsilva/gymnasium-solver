@@ -113,7 +113,7 @@ Run 2×2×2 grid with 3 seeds each:
 - **Unstable / oscillating returns:** ↑N_total, ↓lr, ↓epochs, ↑ε.  
 - **No learning / flat returns:** ↑lr, ↑epochs, ↑entropy bonus, or ↑N_total for sparse rewards.  
 - **Value loss explodes / bad EV:** ↓lr, ↑N_total, check normalization.  
-- **KL spikes / early collapse:** set `target_kl = 0.02–0.05` (early stop), ↓lr/epochs.  
+- **KL spikes / early collapse:** set `target_kl = 0.02–0.05` in the PPO config to stop extra minibatch epochs once KL drifts too far, ↓lr/epochs.  
 - **Too slow wall-clock:** ↓n_steps (keep `N_total` via ↑num_envs), ↑minibatch_size.  
 
 ---

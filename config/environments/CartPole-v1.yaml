@@ -55,6 +55,7 @@ ppo:
   n_epochs: 20
   gae_lambda: 0.8
   clip_range: 0.2
+  target_kl: 0.03
   policy_lr: 1e-3 # NOTE: policy_lr = 1e-4 + clip_range 0.2  leads to explained_variance < -1, investigating this will help learn more about PPO
   normalize_advantages: "rollout"
   eval_warmup_epochs: 50
@@ -62,4 +63,3 @@ ppo:
   early_stop_on_train_threshold: True
   #early_stop_on_eval_threshold: True
   #frame_stack: 2 # TODO: not converging faster with frame stacking here, why?
-

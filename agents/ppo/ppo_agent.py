@@ -26,6 +26,7 @@ class PPOAgent(BaseAgent):
 
         # Set initial clip range (starts as config value, then updated by scheduler)
         self.clip_range = config.clip_range
+        self._kl_stop_triggered = False
 
     def build_models(self):
         train_env = self.get_env("train")
@@ -117,6 +118,14 @@ class PPOAgent(BaseAgent):
             approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
             explained_var = 1 - torch.var(returns - values_pred) / torch.var(returns)
 
+        target_kl = getattr(self.config, "target_kl", None)
+        kl_exceeded = False
+        if target_kl is not None:
+            approx_kl_value = float(approx_kl.detach())
+            if approx_kl_value > target_kl:
+                self._kl_stop_triggered = True
+                kl_exceeded = True
+
         # Log all metrics (will be avarages and flushed by end of epoch)
         self.metrics_recorder.record("train", {
             'loss': loss.detach(),
@@ -129,11 +138,25 @@ class PPOAgent(BaseAgent):
             'clip_fraction': clip_fraction.detach(),
             'kl_div': kl_div.detach(),
             'approx_kl': approx_kl.detach(),
-            'explained_variance': explained_var.detach()
+            'explained_variance': explained_var.detach(),
+            'kl_stop_triggered': float(kl_exceeded),
         })
 
         return loss
     
+    def training_step(self, batch, batch_idx):
+        if self.config.target_kl is not None and self._kl_stop_triggered:
+            self.metrics_recorder.record("train", {'kl_stop_triggered': 1.0})
+            return None
+
+        loss = self.losses_for_batch(batch, batch_idx)
+        self._backpropagate_and_step(loss)
+        return None
+
+    def on_train_epoch_start(self):
+        self._kl_stop_triggered = False
+        super().on_train_epoch_start()
+
     # TODO: should schedulers be callbacks?
     # TODO: find a way to not have to inherit this
     def _update_schedules(self):

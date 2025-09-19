@@ -358,6 +358,9 @@ class Config:
             raise ValueError("seed must be a positive integer.")
         if self.policy_lr is not None and not (self.policy_lr > 0):
             raise ValueError("policy_lr must be a positive float when set.")
+        target_kl = getattr(self, "target_kl", None)
+        if target_kl is not None and not (target_kl > 0):
+            raise ValueError("target_kl must be a positive float when set.")
         if self.ent_coef is not None and not (self.ent_coef >= 0):
             raise ValueError("ent_coef must be a non-negative float when set.")
         if self.n_epochs is not None and not (self.n_epochs > 0):
@@ -421,6 +424,7 @@ class PPOConfig(Config):
     gamma: float = 0.99
     gae_lambda: float = 0.95
     clip_range: float = 0.2
+    target_kl: Optional[float] = None
     ent_coef: float = 0.0
     vf_coef: float = 0.5
     max_grad_norm: float = 0.5

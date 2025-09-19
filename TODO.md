@@ -2,11 +2,10 @@
 
 ## NEXT
 
-- BUG: CartPole-v1 not converging
-- BUG: videos not being recorded to run
+- BUG: checkpoint jsons not storing correct metrics
 - TEST: is wandb reporting same metrics as table?
 - TEST: is table showing correct metrics?
-- BUG: checkpoint jsons not storing correct metrics
+
 - BUG: wandb run is being logged even when training is not started, bold terminal
 - TODO: optimal single metric for best training (samples/reward)
 - TODO: dont tie eval_freq_epochs and eval_warmup_epochs to epochs because ppos updates for many epochs; consider changing eval_freq to timesteps so it doesnt depend on n_updates

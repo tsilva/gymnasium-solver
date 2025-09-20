@@ -18,17 +18,7 @@ def _quiet_mode_enabled() -> bool:
 
 
 def load_checkpoint(checkpoint_path: Path, agent, resume_training: bool = True) -> Dict[str, Any]:
-    """
-    Load a checkpoint and optionally resume training state.
-    
-    Args:
-        checkpoint_path: Path to the checkpoint file
-        agent: The agent to load the checkpoint into
-        resume_training: Whether to resume training state (optimizer, epoch, etc.)
-        
-    Returns:
-        Dictionary with checkpoint metadata
-    """
+    """Load a checkpoint and optionally restore optimizer/RNG/state."""
     if not checkpoint_path.exists():
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
     

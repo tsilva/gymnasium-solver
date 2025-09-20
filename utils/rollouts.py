@@ -131,19 +131,7 @@ def convert_returns_to_full_episode(
     dones: np.ndarray,
     timeouts: np.ndarray,
 ) -> np.ndarray:
-    """Convert reward-to-go returns into full-episode returns (in-place).
-
-    For each env column, makes all timesteps within the same episode segment
-    share the segment's initial return (i.e., a constant across the segment).
-
-    Args:
-        returns: Array of shape (T, N) containing reward-to-go returns.
-        dones: Boolean array (T, N) of done flags.
-        timeouts: Boolean array (T, N) of timeout flags used to determine real terminals.
-
-    Returns:
-        The modified `returns` array with per-episode constant returns.
-    """
+    """Convert reward-to-go returns to per-episode constants in-place."""
     real_terminal = _real_terminal_mask(dones, timeouts)
     T, n_envs = returns.shape if returns.size > 0 else (0, 0)
     for j in range(n_envs):
@@ -1040,14 +1028,7 @@ class RolloutCollector():
         return episodes
 
     def get_action_histogram_counts(self, reset: bool = False):
-        """Return a copy of the cumulative discrete action counts histogram.
-
-        Args:
-            reset: If True, zero the internal counters after returning the copy.
-
-        Returns:
-            np.ndarray | None: 1D array of counts per discrete action index, or None if no actions seen yet.
-        """
+        """Return a copy of discrete action counts (optionally reset internal counters)."""
         counts = self._action_counts
         if counts is None: return None
         out = counts.copy()

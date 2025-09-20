@@ -71,13 +71,7 @@ def sparkline(values: Iterable[float], width: int) -> str:
 
 
 def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48, per_metric_cap: int = 2000):
-    """Print an ASCII sparkline summary of recorded numeric metrics.
-
-    Args:
-        max_metrics: Maximum number of metrics to print to avoid long outputs.
-        width: Target width of sparklines.
-        per_metric_cap: Safety cap (ignored here but kept for future trimming consistency).
-    """
+    """Print a compact ASCII sparkline summary of numeric metrics."""
 
     # Prefer train/* then eval/* then others for readability
     keys = sorted(history.keys(), key=lambda k: (0 if k.startswith("train/") else 1 if k.startswith("val/") else 2, k))
@@ -148,16 +142,7 @@ def print_terminal_ascii_alerts(
     total_epochs: Optional[int] = None,
     width: int = 48,
 ) -> None:
-    """Print an ASCII alert summary.
-
-    Args:
-        freq_alerts: List of MetricAlert summaries.
-        total_epochs: Total number of training epochs observed.
-        width: Width of the section header.
-
-    Returns:
-        None
-    """
+    """Print an ASCII alert summary."""
     print("\n" + format_section_header("Metric Alerts".upper(), width=width))
     for freq_alert in freq_alerts:
         alert = freq_alert["alert"]

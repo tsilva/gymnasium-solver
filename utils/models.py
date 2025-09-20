@@ -73,11 +73,7 @@ class BaseModel(nn.Module):
     """
 
     def compute_grad_norms(self) -> Dict[str, float]:
-        """Compute gradient norms for different parameter groups.
-
-        Returns:
-            Dict mapping group names to their gradient norms. Default: 'all'.
-        """
+        """Compute gradient norms for named parameter groups (default: 'all')."""
         all_params = list(self.parameters())
         return {"grad_norm/all": compute_param_group_grad_norm(all_params)}
 

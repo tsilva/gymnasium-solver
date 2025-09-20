@@ -39,13 +39,7 @@ class TimingsTracker:
         *,
         values: Optional[Mapping[str, Any]] = None,
     ) -> None:
-        """Start a marker and associate a baseline counter value.
-
-        Args:   
-            name: Marker identifier.
-            values: Baseline counter value at the start (generic, any unit).    
-            values: Mapping of baseline counters for multi-metric throughput.
-        """
+        """Start a marker and record baseline counter values."""
         marker_ns = _now_ns()
 
         # Discard non-numeric values
@@ -66,15 +60,7 @@ class TimingsTracker:
         *,
         values_now: Mapping[str, Any],
     ) -> Union[float, Dict[str, float]]:
-        """Compute throughput of an arbitrary counter since the marker started.
-
-        Args:
-            marker_id: Marker identifier.
-            values_now: Current value of the counter (generic, any unit).
-
-        Returns:
-            Counter units per second since the marker started (float or dict).
-        """
+        """Compute per-second throughput since marker start from current counters."""
         marker = self.markers[marker_id]
 
         values_now_numeric = numeric_values(values_now)

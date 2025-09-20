@@ -1,8 +1,4 @@
-"""Pre-fit presentation and confirmation callback.
-
-Moves the config summary and interactive prompt out of BaseAgent
-into a presentation-focused callback that runs at fit start.
-"""
+"""Callback to present a config summary and confirm training start."""
 
 from __future__ import annotations
 
@@ -12,11 +8,7 @@ import pytorch_lightning as pl
 
 # TODO: call this callback something else
 class PrefitPresentationCallback(pl.Callback):
-    """Display config summary and prompt to start training at fit start.
-
-    If the user declines, sets trainer.should_stop and marks the module so that
-    downstream teardown (e.g., videos/report) can choose to skip work.
-    """
+    """Show a config summary at fit start and prompt to continue."""
 
     def on_fit_start(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:  # type: ignore[override]
         # Lazy imports to keep module load light

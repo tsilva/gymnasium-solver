@@ -1,20 +1,4 @@
-"""Unified benchmark for custom RolloutCollector vs Stable-Baselines3 collector.
-
-This script runs both implementations under the same config/env and compares
-throughput (steps-per-second). It reuses common setup and timing logic to
-avoid duplication.
-
-Examples:
-  - Fixed number of rollouts per implementation (default both):
-      python scripts/benchmark_collectors.py --config CartPole-v1_ppo --rollouts 50
-
-  - Fixed benchmark duration per implementation:
-      python scripts/benchmark_collectors.py --config CartPole-v1_ppo --duration 10
-
-  - Run only one implementation:
-      python scripts/benchmark_collectors.py --only custom
-      python scripts/benchmark_collectors.py --only sb3
-"""
+"""Benchmark custom RolloutCollector vs SB3 under the same config/env and compare throughput."""
 from __future__ import annotations
 
 import argparse

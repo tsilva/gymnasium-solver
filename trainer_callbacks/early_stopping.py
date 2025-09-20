@@ -13,14 +13,7 @@ from utils.formatting import format_metric_value
 
 
 class EarlyStoppingCallback(pl.Callback):
-    """Generic early-stopping via metric threshold.
-
-    Args:
-        metric_key: Full metric name to monitor (e.g., "train/total_timesteps").
-        mode: One of {"max", "min"}. For "max", training stops when value >= threshold.
-              For "min", training stops when value <= threshold.
-        threshold: Numeric threshold to trigger stop. If None, callback is inert.
-    """
+    """Early-stop when a monitored metric crosses a threshold (min/max)."""
 
     def __init__(
         self,

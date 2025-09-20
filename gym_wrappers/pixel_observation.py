@@ -5,11 +5,7 @@ import numpy as np
 
 
 class PixelObservationWrapper(gym.ObservationWrapper):
-    """Minimal pixel observation wrapper for Gymnasium.
-
-    Replaces observations with RGB frames from env.render().
-    Requires the base env to be created with render_mode='rgb_array'.
-    """
+    """Replace observations with RGB frames; requires render_mode='rgb_array'."""
 
     def __init__(self, env: gym.Env, *, pixels_only: bool = True, render_kwargs: Optional[dict] = None):
         super().__init__(env)

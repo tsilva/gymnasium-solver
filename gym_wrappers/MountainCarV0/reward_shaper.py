@@ -3,20 +3,7 @@ import numpy as np
 
 
 class MountainCarV0_RewardShaper(gym.Wrapper):
-    """
-    Reward shaping wrapper for MountainCar-v0 to help with convergence.
-    
-    The original MountainCar has sparse rewards:
-    - +100 for reaching the goal (position >= 0.5)
-    - -1 for each step otherwise
-    
-    This wrapper adds dense shaping rewards based on:
-    1. Position progress toward goal (rightward movement)
-    2. Velocity in the right direction 
-    3. Height gained on the mountain
-    
-    The shaping rewards are designed to be potential-based to maintain optimality.
-    """
+    """Potential-based dense rewards for MountainCar-v0 (position, velocity, height)."""
     
     def __init__(self, env, position_reward_scale=100.0, velocity_reward_scale=10.0, height_reward_scale=50.0):
         super().__init__(env)

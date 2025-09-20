@@ -22,13 +22,7 @@ class ModelCheckpointCallback(pl.Callback):
         metric: str,
         mode: str = "max",
     ):
-        """Initialize the checkpoint callback.
-
-        Args:
-            run: Run object to save checkpoints to
-            metric: Metric key to monitor in `trainer.logged_metrics`
-            mode: 'max' or 'min' for the monitored metric
-        """
+        """Initialize checkpointing for the monitored metric."""
 
         # Store attributes
         self.run = run

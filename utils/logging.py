@@ -108,15 +108,7 @@ class LogFileManager:
                     pass  # Ignore errors if file is already gone
     
     def create_log_file(self, config=None) -> TextIO:
-        """
-        Create a new log file with a timestamp and optional config info.
-        
-        Args:
-            config: Optional configuration object to include in filename
-            
-        Returns:
-            File handle for the log file
-        """
+        """Create a timestamped log file (optionally namespaced by config)."""
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         
         if config and hasattr(config, 'algo_id') and hasattr(config, 'env_id'):
@@ -454,12 +446,7 @@ def log_config_details(config, file: Optional[TextIO] = None) -> None:
 
 
 def display_config_summary(data_json: dict, *, width: int = 60) -> None:
-    """Display structured configuration data in a formatted, colored banner layout.
-    
-    Args:
-        data_json: Dictionary where keys are section titles and values are key-value pairs
-        width: Width of the display banner (default: 60)
-    """
+    """Display structured config data with colored, bannered sections."""
     use_color = _color_enabled()
     banner_char = "━" if use_color else "="
 

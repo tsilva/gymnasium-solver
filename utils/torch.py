@@ -97,17 +97,7 @@ def _activation_instance_from_spec(spec: "str | type[nn.Module] | nn.Module") ->
 
 
 def assert_detached(*tensors: torch.Tensor) -> bool:
-    """Assert that all tensors are detached from the computation graph.
-    
-    Args:
-        *tensors: Variable number of tensors to check
-        
-    Returns:
-        True if all tensors are detached
-        
-    Raises:
-        AssertionError: If any tensor still requires gradients or is connected to a computation graph
-    """
+    """Assert tensors are detached from the computation graph."""
     for t in tensors:
         assert not t.requires_grad, "Tensor still requires grad"
         assert t.grad_fn is None, "Tensor is still connected to a computation graph"
@@ -115,16 +105,7 @@ def assert_detached(*tensors: torch.Tensor) -> bool:
 
 
 def compute_param_group_grad_norm(params):
-    """Compute L2 norm of gradients for a parameter iterable.
-
-    Ignores parameters with None gradients. Returns 0.0 if no grads present.
-    
-    Args:
-        params: Iterable of parameters to compute gradient norm for
-        
-    Returns:
-        float: L2 norm of all gradients, or 0.0 if no gradients present
-    """
+    """Compute L2 grad norm over params; ignore None grads (0.0 if none)."""
     total_sq = 0.0
     has_grad = False
     for p in params:
@@ -163,22 +144,7 @@ def init_model_weights(
     policy_heads: "list[nn.Module] | tuple[nn.Module, ...] | None" = None,
     value_heads: "list[nn.Module] | tuple[nn.Module, ...] | None" = None,
 ) -> None:
-    """Initialize weights of a model with sensible RL defaults.
-
-    Rules:
-    - Hidden Linear/Conv layers: orthogonal init with gain inferred from the
-      immediately following activation (if found in a Sequential), otherwise
-      based on ``default_activation``.
-    - Policy heads (e.g., action logits): orthogonal with small gain 0.01.
-    - Value heads: orthogonal with gain 1.0.
-    - All biases are zero-initialized.
-
-    Parameters
-    - model: the root module to initialize
-    - default_activation: used when the post-activation cannot be inferred
-    - policy_heads: sequence of head modules treated as policy outputs
-    - value_heads: sequence of head modules treated as value outputs
-    """
+    """Initialize model weights for RL: orthogonal layers, small policy head gain, unit value head gain."""
 
     policy_heads = tuple(policy_heads or ())
     value_heads = tuple(value_heads or ())

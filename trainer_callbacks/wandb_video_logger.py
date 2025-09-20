@@ -20,28 +20,7 @@ class _PhaseState:
 
 # TODO: REFACTOR this file
 class WandbVideoLoggerCallback(pl.Callback):
-    """
-    Watches multiple media directories for new files and logs them to Weights & Biases
-    on epoch end. Supports separate directories for train and eval videos.
-
-    Parameters
-    ----------
-    media_root : str
-        Base directory that will contain media subdirectories. If relative, it is 
-        resolved under the current W&B run directory (wandb.run.dir). If absolute, 
-        it is used as-is.
-    exts : Iterable[str]
-        File extensions to log (e.g., [".mp4", ".gif", ".png", ".jpg"]).
-    namespace_depth : int
-        Number of leading path parts (relative to media_root/train or media_root/eval) 
-        to use as the W&B key (e.g., "episodes" for videos in train/episodes/ or eval/episodes/).
-    include_modified : bool
-        If True, also treat file modifications as "new" (useful for writers
-        that stream bytes to an already-created file).
-    min_age_sec : float
-        Minimum file age before logging (helps avoid reading partially-written
-        files).
-    """
+    """Watch media dirs for new videos/images and log them to Weights & Biases on epoch end."""
 
     PHASE_DIRS: dict[str, str] = {"train": "train", "val": "val"}
 

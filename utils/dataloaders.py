@@ -10,11 +10,7 @@ from .samplers import MultiPassRandomSampler
 
 
 def build_dummy_loader(*, n_samples: int = 1, sample_dim: int = 1, batch_size: int = 1, num_workers: int = 0) -> DataLoader:
-    """Return a trivial DataLoader that satisfies frameworks expecting one.
-
-    Useful when the validation loop doesn't consume DataLoader data and drives
-    evaluation procedurally (e.g., via environment rollouts inside validation_step).
-    """
+    """Return a trivial DataLoader for frameworks that expect one."""
     dummy_data = torch.zeros(n_samples, sample_dim)
     dummy_target = torch.zeros(n_samples, sample_dim)
     dataset = TensorDataset(dummy_data, dummy_target)
@@ -34,17 +30,7 @@ def build_index_collate_loader_from_collector(
     persistent_workers: bool = False,
     prefetch_factor: Optional[int] = None,
 ) -> DataLoader:
-    """Efficient DataLoader for trajectory tensors using index-collate.
-
-    It wraps the dataset length with an index-only Dataset and uses a custom
-    collate_fn that slices all rollout tensors once per batch via the provided
-    collector.
-
-    Parameters
-    - collector: RolloutCollector with `slice_trajectories(traj, idxs)`
-    - trajectories: collected rollout data to be sliced by indices
-    - num_passes: number of full passes (independent permutations) per epoch
-    """
+    """Efficient DataLoader for trajectory tensors using index-collate."""
     # Resolve trajectories (if a getter is provided, prefer dynamic fetch)
     _traj = trajectories_getter() if trajectories_getter is not None else trajectories
     if _traj is None:

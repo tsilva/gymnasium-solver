@@ -6,18 +6,7 @@ from gymnasium import spaces
 
 
 class DiscreteEncoder(gym.ObservationWrapper):
-    """
-    Unified encoder for discrete observations.
-
-    Supports three encodings:
-    - 'array':  shape (1,), integer dtype from Discrete space
-    - 'binary': shape (ceil(log2(n)),), float32 0/1 bits
-    - 'onehot': shape (n,), float32 one-hot vector
-
-    Args:
-        env: Base environment with a Discrete observation space
-        encoding: 'array' | 'binary' | 'onehot' (default: 'binary')
-    """
+    """Encode Discrete observations as array, binary bits, or one‑hot vectors."""
 
     def __init__(self, env, encoding: str = "binary"):
         super().__init__(env)
@@ -73,4 +62,3 @@ class DiscreteEncoder(gym.ObservationWrapper):
             vec = np.zeros(self.observation_space.shape[0], dtype=np.float32)
             vec[int(observation)] = 1.0
             return vec
-

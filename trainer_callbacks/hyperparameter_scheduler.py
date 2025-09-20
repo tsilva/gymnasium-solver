@@ -9,12 +9,7 @@ from utils.schedulers import resolve as resolve_schedule
 
 # TODO: REFACTOR this file
 class HyperparameterScheduler(pl.Callback):
-    """Callback that updates scheduled hyperparameters at epoch end.
-
-    Supports:
-      - policy_lr (optimizer param groups)
-      - clip_range (PPO-specific attribute on the module)
-    """
+    """Update scheduled hyperparameters (policy_lr, clip_range) at epoch end."""
 
     def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:  # noqa: D401
         cfg = getattr(pl_module, "config", None)
@@ -62,4 +57,3 @@ class HyperparameterScheduler(pl.Callback):
             pl_module.metrics_recorder.record("train", metrics)
         except Exception:
             pass
-

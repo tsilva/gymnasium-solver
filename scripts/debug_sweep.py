@@ -12,11 +12,7 @@ def run_single_trial(
     use_offline: bool = True,
     quiet: bool = True,
 ) -> int:
-    """Run a single sweep-like trial locally for debugging.
-
-    This sets environment variables so that train.py runs in sweep-merge mode
-    and applies overrides via WANDB_SWEEP_OVERRIDES without needing a W&B Agent.
-    """
+    """Run a local trial emulating a W&B sweep by merging overrides into train.py."""
     env = os.environ.copy()
 
     # Make wandb behave offline unless explicitly disabled
@@ -58,5 +54,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
 

@@ -1,9 +1,4 @@
-"""Early stopping callback, decoupled from evaluation.
-
-This callback inspects the latest metrics exposed by the Trainer and decides
-when to stop training based on a simple threshold rule. By default, it stops
-when the cumulative timesteps reach a configured limit.
-"""
+"""Early stopping callback for threshold-based stop conditions (decoupled from eval)."""
 
 from __future__ import annotations
 

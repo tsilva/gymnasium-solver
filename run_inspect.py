@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""
-Inspector application logic.
-
-Run via: python inspector.py [args]
-"""
+"""Inspector application logic (run via: python inspector.py [args])."""
 
 from __future__ import annotations
 
@@ -42,11 +38,7 @@ from utils.run import Run, list_run_ids
 
 
 def compute_mc_returns(rewards: np.ndarray, gamma: float) -> np.ndarray:
-    """Compute discounted Monte Carlo returns for a single trajectory.
-
-    Delegates to the batched implementation with batch size 1 for consistency
-    with training-time logic.
-    """
+    """Compute discounted Monte Carlo returns for a single trajectory (batch size 1 wrapper)."""
     rewards = np.asarray(rewards, dtype=np.float32)
     rewards_b = rewards.reshape(-1, 1)
     T = rewards_b.shape[0]
@@ -65,10 +57,7 @@ def compute_gae_advantages_and_returns(
     gamma: float,
     gae_lambda: float,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Compute GAE(λ) advantages and returns for a single (T,) trajectory.
-
-    Uses the batched implementation with batch size 1 to mirror collector behavior.
-    """
+    """Compute GAE(λ) advantages and returns for a single (T,) trajectory (batch size 1 wrapper)."""
     values_b = np.asarray(values, dtype=np.float32).reshape(-1, 1)
     rewards_b = np.asarray(rewards, dtype=np.float32).reshape(-1, 1)
     dones_b = np.asarray(dones, dtype=bool).reshape(-1, 1)

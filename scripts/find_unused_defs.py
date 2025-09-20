@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""
-Heuristic finder for potentially unused Python functions/methods in this repo.
-
-Notes:
-- Treat dunder methods as used (never flagged).
-- Consider any reference in tests as usage (tests import public API).
-- For class methods, look for either `.name` or `Class.name` textual references.
-- For module-level functions, look for `name(` textual references.
-- This is conservative and may miss dynamic usages; review before deletion.
-"""
+"""Heuristic finder for potentially unused Python functions/methods in this repo."""
 
 from __future__ import annotations
 

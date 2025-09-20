@@ -82,7 +82,7 @@ def main() -> int:
         data = yaml.load(p.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
             continue
-        before = yaml.dump(data, sys.stdout.__class__()) if False else None  # no-op
+        # Removed unused debug dump; keep function side-effect free
         # Walk all top-level challenge configs
         for k, v in list(data.items()):
             if isinstance(v, dict):

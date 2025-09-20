@@ -1,24 +1,4 @@
-"""
-Publish a training run's artifacts (config, checkpoints, logs, metrics, videos) to Hugging Face Hub.
-
-Usage:
-    python publish.py --run-id <run_id> [--repo <org_or_user/repo-name>] [--private]
-
-Behavior:
-    - If --run-id is omitted, the latest run (runs/@latest-run) is used.
-    - If --repo is omitted, we publish to a repo named after the run's config id
-        under your user/org namespace: <owner>/<config_id>.
-    - Checkpoints and logs are uploaded under artifacts/. Only the best video
-        (best.mp4, or legacy best_checkpoint.mp4) is included under artifacts/videos and attached at the
-        repo root as preview.mp4, which is embedded in the README for live preview on the Hub.
-
-Authentication:
-    - Ensure you are logged in: from a shell, run `huggingface-cli login` once, or set HF_TOKEN env var.
-
-This script creates (or reuses) a model repo on the HF Hub and pushes the run directory contents
-under an "artifacts/" folder preserving structure. It also generates a README model card summarizing the run
-and attaches available mp4 videos as repo assets so they appear as preview media.
-"""
+"""Publish a run's artifacts to the Hugging Face Hub with a simple model card and preview video."""
 
 from __future__ import annotations
 
@@ -95,13 +75,7 @@ def resolve_run_dir(run_id: Optional[str]) -> Path:
 
 
 def _detect_config_id_from_run(run_dir: Path, cfg: dict) -> Optional[str]:
-    """Best-effort extraction of a human-friendly config identifier used to run training.
-
-    Priority:
-      1) configs/config_id.txt (if present, single line ID)
-      2) configs/config.json -> field 'config_id' (if present)
-      3) Fallback to f"{env_id}_{algo_id}" when both are available
-    """
+    """Infer a human-friendly config_id from run files or env+algo fallback."""
     # 1) explicit text file written by training pipeline (optional)
     cfg_id_path = run_dir / "configs" / "config_id.txt"
     if cfg_id_path.exists():
@@ -124,11 +98,7 @@ def _detect_config_id_from_run(run_dir: Path, cfg: dict) -> Optional[str]:
 
 
 def _find_videos_for_run(run_dir: Path) -> List[Path]:
-    """Find video files for the given run.
-
-    Primary location: runs/<id>/videos/**/*.mp4
-    Fallback: wandb/*/files/runs/<id>/videos/**/*.mp4
-    """
+    """Find run videos under runs/<id>/videos or mirrored W&B paths."""
     videos: List[Path] = []
     local_videos_root = run_dir / "videos"
     if local_videos_root.exists():
@@ -169,14 +139,7 @@ def _find_videos_for_run(run_dir: Path) -> List[Path]:
 
 
 def _find_best_video_for_run(run_dir: Path) -> Optional[Path]:
-    """Locate the canonical best evaluation video for the run.
-
-    Preference order:
-      1) runs/<id>/videos/eval/best.mp4 (new)
-      2) runs/<id>/videos/eval/episodes/best_checkpoint.mp4 (legacy)
-      3) Any discovered best.mp4/best_checkpoint.mp4 under videos/**
-    Returns the path if found, else None.
-    """
+    """Locate the canonical best evaluation video for the run (new or legacy paths)."""
     # Prefer the canonical new location under the run directory first
     canonical_new = run_dir / "videos" / "val" / "best.mp4"
     if canonical_new.exists():
@@ -257,11 +220,7 @@ def extract_run_metadata(run_dir: Path) -> dict:
 
 
 def _guess_config_id_from_environments(env_id: str, algo_id: str) -> Optional[str]:
-    """Search config/environments for a config_id matching env_id+algo_id.
-
-    Supports both legacy (mapping of ids) and new per-file style (base at root + variants).
-    Skips files ending with .new.yaml.
-    """
+    """Search config/environments for a config_id matching env_id+algo_id (legacy and new styles)."""
     root = Path(__file__).parent
     env_dir = root / "config" / "environments"
     candidates: List[str] = []
@@ -327,11 +286,7 @@ def infer_repo_name(meta: dict, run_dir: Path, explicit: Optional[str]) -> str:
 
 
 def build_model_card(meta: dict, run_dir: Path) -> str:
-    """Build a README.md model card with a valid YAML front matter block.
-
-    Includes license, library, tags, and a minimal model-index section so the Hub
-    doesn't warn about missing metadata. Also embeds a video preview when available.
-    """
+    """Build a minimal README model card with YAML front matter and optional preview video."""
     cfg = meta.get("config", {})
     algo = cfg.get("algo_id", "unknown")
     env_id = cfg.get("env_id", "unknown")

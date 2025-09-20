@@ -27,8 +27,6 @@ class DispatchMetricsCallback(pl.Callback):
         rollout_collector = pl_module.get_rollout_collector(stage)
         rollout_metrics = rollout_collector.get_metrics()
         # TODO: review this, causes issues for "val" stage
-        #total_episodes = rollout_metrics.get("total_episodes", 0)
-        #if total_episodes == 0: return
 
         # Calculate timing metrics
         time_elapsed = pl_module.timings.seconds_since("on_fit_start")

@@ -27,11 +27,7 @@ def _non_terminal_float_mask(dones: np.ndarray, timeouts: Optional[np.ndarray]) 
 
 
 def _build_idx_map_from_valid_mask(valid_mask_flat: np.ndarray) -> Optional[np.ndarray]:
-    """Vectorized map from each position to the nearest previous valid index.
-
-    Any positions before the first valid entry map to the first valid index to
-    keep the dataset length stable. Returns None when there are no valid entries.
-    """
+    """Map each position to the nearest previous valid index; None if no valid entries."""
     valid_mask_flat = np.asarray(valid_mask_flat, dtype=bool)
     if not valid_mask_flat.any():
         return None
@@ -48,16 +44,7 @@ def _build_valid_mask_and_index_map(
     dones: np.ndarray,
     timeouts: np.ndarray,
 ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
-    """Build env-major valid mask and index map up to last real terminal.
-
-    - A real terminal is `done and not timeout`.
-    - Marks, for each env, all timesteps up to and including its last real
-      terminal as valid. Steps after the last terminal are considered trailing
-      partial episodes and are masked out.
-    - Returns a tuple of (valid_mask_flat_env_major, idx_map). When there are
-      no valid positions (no real terminals in any env within the slice), both
-      entries are None.
-    """
+    """Build env-major valid mask up to last real terminal and its index map."""
     real_terminal = _real_terminal_mask(dones, timeouts)
     if real_terminal.size == 0:
         return None, None
@@ -76,11 +63,7 @@ def _build_valid_mask_and_index_map(
 
 
 def _flat_env_major(arr: np.ndarray, start: int, end: int) -> np.ndarray:
-    """Flatten a (T, N, ...) slice [start:end) into env-major order 1D array.
-
-    Returns an array shaped (N*T,) for 2D inputs. Higher dims are flattened
-    by the caller as needed after converting to torch.
-    """
+    """Flatten a (T,N,...) slice [start:end) into a (N*T,) env-major 1D array."""
     return arr[start:end].transpose(1, 0).reshape(-1)
 
 def _normalize_returns(returns: np.ndarray, eps: float = 1e-8) -> np.ndarray:
@@ -158,15 +141,7 @@ def compute_batched_gae_advantages_and_returns(
     gamma: float,
     gae_lambda: float,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Compute batched GAE(λ) advantages and returns for (T, N) rollouts.
-
-    - values, rewards, dones, timeouts have shape (T, N)
-    - last_values has shape (N,) and bootstraps the final step per env
-    - bootstrapped_next_values, if provided, has shape (T, N) and is used
-      as the next value at steps that were truncated by a time limit
-      (i.e., where timeouts[t, env] is True).
-    - Returns are computed as advantages + values (PPO target convention).
-    """
+    """Compute batched GAE(λ) advantages and returns for (T, N) rollouts."""
     values = np.asarray(values, dtype=np.float32) # TODO: why this?
     rewards = np.asarray(rewards, dtype=np.float32)
     dones = np.asarray(dones, dtype=bool)
@@ -212,13 +187,7 @@ class RolloutTrajectory(NamedTuple):
 
 
 class RollingWindow:
-    """O(1) rolling-window aggregator with deque semantics for len() and append().
-
-    - Maintains a fixed-size window of recent values.
-    - Tracks running sum for O(1) mean() updates.
-    - Exposes append(value) and __len__ for compatibility with tests that
-      assert on the number of stored items.
-    """
+    """O(1) rolling window with deque semantics and constant-time mean()."""
 
     def __init__(self, maxlen: int):
         if maxlen <= 0: raise ValueError("RollingWindow maxlen must be > 0")
@@ -246,11 +215,7 @@ class RollingWindow:
 
 
 class RunningStats:
-    """Constant-time mean/std aggregates for streaming updates (scalar over values).
-
-    Tracks count, sum, and sum of squares. Avoids per-sample Python overhead by
-    accepting array inputs and updating in vectorized form.
-    """
+    """Constant-time mean/std aggregates for streaming numeric updates."""
 
     def __init__(self) -> None:
         self.count = 0
@@ -276,17 +241,7 @@ class RunningStats:
         return float(np.sqrt(var))
 
 class RolloutBuffer:
-    """
-    Persistent rollout storage to avoid reallocating buffers every collect.
-
-    - Preallocates CPU buffers of size (maxsize, n_envs, ...).
-    - begin_rollout(T) ensures a contiguous slice is available; if not, wraps
-      the write position to 0 so the rollout fits contiguously.
-    - Collector stores per-step data using store_* methods (tensors are
-      converted to NumPy on write; conversion back to torch happens on read).
-    - Provides utilities to flatten a slice into env-major tensors suitable
-      for training.
-    """
+    """Persistent CPU rollout storage with preallocated (maxsize, n_envs, ...) buffers."""
 
     def __init__(
         self, 
@@ -319,10 +274,7 @@ class RolloutBuffer:
         self.size = 0  # number of valid steps currently stored (for info)
 
     def begin_rollout(self, T: int) -> int:
-        """Ensure there is contiguous space for T steps; reset to 0 if needed.
-
-        Returns the starting index where the rollout should write.
-        """
+        """Ensure contiguous space for T steps; wrap to 0 if needed and return start index."""
         # In case the requested rollout size exceeds the buffer maxsize, raise an error
         # (otherwise data from the requested rollout will be overwritten by the rollout itself)
         if T > self.maxsize: raise ValueError(f"Rollout length T={T} exceeds buffer maxsize={self.maxsize}")
@@ -546,10 +498,7 @@ class RolloutCollector():
         return vals.squeeze()
 
     def _bootstrap_timeouts_batch(self, start: int):
-        """Predict values for all truncated terminal observations and write to buffer.
-
-        self.terminal_obs_info contains tuples of (step_idx, env_idx, terminal_obs).
-        """
+        """Predict values for truncated terminals and write to buffer."""
         if not self.terminal_obs_info: return
         # Coerce terminal observations to match buffer obs_shape (e.g., HWC -> CHW)
         exp = tuple(self._buffer.obs_shape)
@@ -598,10 +547,7 @@ class RolloutCollector():
         infos: list,
         step_idx: int
     ) -> None:
-        """Process episode-complete infos for all done envs at a step.
-
-        Updates deques, last-episode stats, and collects timeout terminal observations.
-        """
+        """Process episode-complete infos for all done envs at a step."""
         assert len(done_idxs) > 0, "No done environments at a step"
 
         # Process episode-complete infos for all done envs at a step

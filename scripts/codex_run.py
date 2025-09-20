@@ -1,16 +1,5 @@
 #!/usr/bin/env python3
-"""
-codex_run.py — run Codex CLI with a one-off prompt (Python version).
-
-Usage examples:
-  python codex_run.py --prompt "List security concerns in this repo"
-  python codex_run.py --file prompts/audit.txt
-  echo "Summarize codebase" | python codex_run.py
-
-Notes:
-- Expects the `codex` CLI to be installed and on PATH.
-- Adjust `DEFAULT_ARGS` if your local Codex flags differ.
-"""
+"""Run Codex CLI with a one-off prompt (Python wrapper)."""
 
 from __future__ import annotations
 

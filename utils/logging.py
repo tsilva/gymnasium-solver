@@ -1,11 +1,4 @@
-"""
-Comprehensive logging utilities that ensure all stdout output is also logged to files.
-
-Opt-out: set environment variable `VIBES_DISABLE_SESSION_LOGS=1` to disable
-both file creation and stdout/stderr redirection performed by these helpers.
-This is useful when you want a clean console without side-effect log files
-under `logs/` or to avoid appending headers during ad-hoc play sessions.
-"""
+"""Tee stdout/stderr to log files; disable via VIBES_DISABLE_SESSION_LOGS."""
 
 import os
 import re
@@ -18,10 +11,7 @@ from typing import Optional, TextIO
 
 
 class TeeStream:
-    """
-    A stream wrapper that writes to both the original stream and a log file.
-    Preserves all formatting, colors, and special characters.
-    """
+    """Stream wrapper that writes to the original stream and a log file."""
     
     def __init__(self, original_stream: TextIO, log_file: TextIO):
         self.original_stream = original_stream
@@ -74,18 +64,12 @@ class TeeStream:
 
 # --- Generic console formatting helpers (extracted for reuse) ---
 def strip_ansi_codes(text: str) -> str:
-    """Return text with ANSI escape sequences removed.
-
-    Kept as a standalone helper so non-stream callers can reuse it without
-    relying on TeeStream internals.
-    """
+    """Return text with ANSI escape sequences removed."""
     return TeeStream._strip_ansi_codes(text)
 
 
 class LogFileManager:
-    """
-    Manages log files with automatic rotation and organization.
-    """
+    """Manage log files with simple rotation and naming."""
     
     def __init__(self, log_dir: str = "logs", max_log_files: int = 10):
         self.log_dir = Path(log_dir)
@@ -212,11 +196,7 @@ def _color_enabled(stream=None) -> bool:
 
 
 def ansi(text: str, *styles: str, enable: bool | None = None) -> str:
-    """Wrap text with ANSI styles (supports combos like bold+cyan).
-
-    Styles: red, green, yellow, blue, magenta, cyan, gray, bold, bg_*
-    If enable is None, auto-detect using stdout; when False, returns text untouched.
-    """
+    """Wrap text with ANSI styles; no-op when disabled or no styles."""
     if enable is None:
         enable = _color_enabled()
     if not enable or not styles:
@@ -256,13 +236,7 @@ def ansi(text: str, *styles: str, enable: bool | None = None) -> str:
 
 
 def apply_ansi_background(text: str, bg_style: str, *, enable: bool | None = None) -> str:
-    """Apply a background color to the entire text while preserving nested styles.
-
-    This wraps the string with the background style and re-applies it after any
-    reset sequences to ensure contiguous background across colored segments.
-
-    Example: apply_ansi_background("bold red", "bg_blue")
-    """
+    """Apply a background style across the text while preserving nested styles."""
     if enable is None:
         enable = _color_enabled()
     if not enable or not bg_style:
@@ -296,10 +270,7 @@ def format_kv_line(
     val_color: str = "bright_white",
     enable_color: bool | None = None,
 ) -> str:
-    """Return a single aligned key/value line with colors.
-
-    Example: "-   Key name ..........: Value"
-    """
+    """Return a single aligned key/value line with colors."""
     s_key = f"{key}:"
     if key_width and key_width > 0:
         s_key = f"{s_key:<{key_width+1}}"  # +1 to include colon in width
@@ -307,11 +278,7 @@ def format_kv_line(
 
 
 def format_banner(title: str, *, width: int = 60, char: str = "=") -> str:
-    """Return a centered, single-line banner like '===== Title ====='.
-
-    - Keeps ASCII by default for broad terminal compatibility.
-    - If the title is longer than width, returns the raw title padded with spaces.
-    """
+    """Return a centered, single-line banner for a title."""
     text = f" {title} "
     if width <= 0:
         return text.strip()
@@ -322,20 +289,14 @@ def format_banner(title: str, *, width: int = 60, char: str = "=") -> str:
     return f"{char * left}{text}{char * right}"
 
 def format_section_header(title: str, *, width: int = 60, use_color: bool | None = None) -> str:
-    """Return a colored, centered header line for a section.
-
-    Chooses a heavier banner character when color is enabled for better visuals.
-    """
+    """Return a colored, centered header line for a section."""
     if use_color is None:
         use_color = _color_enabled()
     banner_char = "━" if use_color else "="
     return ansi(format_banner(title, width=width, char=banner_char), "bright_magenta", "bold", enable=use_color)
 
 def format_section_footer(*, width: int = 60, use_color: bool | None = None) -> str:
-    """Return a colored footer line matching the section header style.
-
-    Uses the same banner character selection as the header for consistency.
-    """
+    """Return a colored footer line matching the section header style."""
     if use_color is None:
         use_color = _color_enabled()
     banner_char = "━" if use_color else "="
@@ -360,12 +321,7 @@ def stream_output_to_log(log_file_path: str):
 
 @contextmanager
 def capture_all_output(config=None, *, log_dir: str = "logs", max_log_files: int = 10):
-    """
-    Redirect stdout and stderr to both console and a timestamped log file.
-
-    Creates a log directory if needed and rotates old logs based on max_log_files.
-    Yields the opened log file handle for optional direct writes.
-    """
+    """Redirect stdout/stderr to console and a timestamped log file; yield the file handle."""
     # If disabled, avoid creating a file and don't redirect; still yield a sink
     if _session_logging_disabled():
         # Use an OS-level sink so callers that explicitly write to the handle
@@ -401,10 +357,7 @@ def capture_all_output(config=None, *, log_dir: str = "logs", max_log_files: int
 
 
 def log_config_details(config, file: Optional[TextIO] = None) -> None:
-    """
-    Write human-readable configuration details to the provided file (or stdout).
-    Ensures a recognizable header so tests can assert its presence.
-    """
+    """Write human-readable configuration details to a file (or stdout)."""
     out: TextIO = file or sys.stdout
     color = _color_enabled(out if file is not None else None)
     # Fancy banner using heavier char when coloring

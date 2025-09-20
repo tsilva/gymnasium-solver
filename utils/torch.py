@@ -1,7 +1,4 @@
-"""Torch-related utility helpers.
-
-Contains helpers that operate on torch modules, devices, and inference context.
-"""
+"""Torch utilities for modules, devices, and inference context."""
 
 from __future__ import annotations
 
@@ -16,14 +13,7 @@ import torch.nn as nn
 
 @contextmanager
 def inference_ctx(*modules):
-    """
-    Temporarily puts all passed nn.Module objects in eval mode and disables grad-tracking.
-    Restores their original training flag afterwards.
-
-    Usage:
-        with inference_ctx(actor, critic):
-            ... collect trajectories ...
-    """
+    """Temporarily set modules to eval and disable grads; restore training flags after."""
     # Filter out non-modules and Nones; flatten lists/tuples
     flat = [
         m
@@ -53,10 +43,7 @@ def _device_of(module: torch.nn.Module) -> torch.device:
 
 
 def _gain_for_activation_module(act: nn.Module) -> float | None:
-    """Best-effort gain selection based on an activation module instance.
-
-    Falls back to None if activation is unknown, allowing callers to choose a default.
-    """
+    """Best-effort gain for an activation module; returns None if unknown."""
     if isinstance(act, nn.ReLU):
         return nn.init.calculate_gain("relu")
     if isinstance(act, nn.LeakyReLU):
@@ -121,13 +108,7 @@ def compute_param_group_grad_norm(params):
 
 
 def to_python_scalar(x: Any) -> Any:
-    """Convert tensors or numpy scalars to basic Python scalars when possible.
-
-    - torch.Tensor with numel==1 -> .item()
-    - torch.Tensor with more than one element -> float(mean)
-    - objects with .item() -> item()
-    - otherwise returns the input unchanged
-    """
+    """Convert tensors/numpy scalars to Python scalars; averages multi-element tensors."""
     if isinstance(x, torch.Tensor):
         if x.numel() == 1:
             return x.detach().item()

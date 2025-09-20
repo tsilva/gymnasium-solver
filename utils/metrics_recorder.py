@@ -9,21 +9,7 @@ from .scalars import only_scalar_values
 
 
 class MetricsRecorder:
-    """
-    General-purpose, in-memory metrics recorder with dynamic namespaces.
-
-    - Buffers are created lazily per namespace (e.g., "train", "val", "eval", "test", "foo").
-    - A single `MetricsHistory` is shared across all namespaces and keyed by `step_key`.
-    - `update_history` expects fully-prefixed snapshots (e.g., "train/*", "val/*", ...).
-
-    Typical usage:
-        rec = MetricsRecorder()  # uses global step key from metrics config
-        rec.record("train", {"loss": 0.2, "lr": 3e-4})
-        rec.record("val", {"acc": 0.83})
-        epoch_train_means = rec.compute_epoch_means("train")
-        rec.reset_epoch("train")
-        rec.update_history({"train/total_timesteps": 1024, "train/loss": 0.2})
-    """
+    """In-memory metrics recorder with dynamic namespaces and shared step history."""
 
     def __init__(self) -> None:
         self._buffers: MutableMapping[str, MetricsBuffer] = {}
@@ -31,10 +17,7 @@ class MetricsRecorder:
 
     # ---- hot-path recorder ----
     def record(self, namespace: str, metrics: Mapping[str, Any]) -> None:
-        """
-        Log a metrics mapping into the buffer for `namespace`. The buffer is
-        allocated automatically if it doesn't yet exist.
-        """
+        """Record metrics to a namespace; allocates the buffer if missing."""
         assert len(metrics) > 0, "metrics cannot be empty"
 
         # Convert non-scalar values to scalars (eg: numpy, torch, etc.)
@@ -48,29 +31,19 @@ class MetricsRecorder:
 
     # ---- epoch lifecycle ----
     def reset_epoch(self, namespace: str) -> None:
-        """
-        Clear the buffer for `namespace`.
-        If the namespace doesn't exist yet, this is a no-op.
-        """
+        """Clear the namespace buffer (no-op if missing)."""
         buffer = self._ensure_buffer(namespace)
         buffer.clear()
 
     def compute_epoch_means(self, namespace: str) -> Dict[str, float]:
-        """
-        Compute mean values for the given `namespace`. If the namespace doesn't
-        exist or has no data, an empty dict is returned.
-        """
+        """Compute mean values for a namespace; returns {} when empty."""
         buffer = self._ensure_buffer(namespace)
         means = dict(buffer.means())
         return means
 
     # ---- history ----
     def update_history(self, snapshot: Mapping[str, Any]) -> None:
-        """
-        Update the shared step-aware history from a fully-prefixed snapshot.
-        Example:
-            {"train/total_timesteps": 2048, "train/loss": 0.15, "val/acc": 0.84}
-        """
+        """Update step-aware history from a fully-prefixed snapshot."""
         assert len(snapshot) > 0, "snapshot cannot be empty"
 
         self._history.update(snapshot)

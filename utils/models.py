@@ -1,7 +1,4 @@
-"""Neural network model utilities.
-
-Includes simple MLP-based Actor-Critic and Policy-only models.
-"""
+"""Neural network utilities (MLP policy and actor-critic)."""
 
 from typing import Dict, Union
 
@@ -30,7 +27,7 @@ def resolve_activation(activation_id: str) -> type[nn.Module]:
 
 
 def build_mlp(input_shape: Union[tuple[int, ...], int], hidden_dims: tuple[int, ...], activation:str):
-    """ Create a stack of sequential linear layers with the given activation function. """
+    """Build an MLP stack with the given activation."""
     is_int = type(input_shape) in [int, np.int32, np.int64]
     assert is_int or len(input_shape) == 1, "Input shape must be 1D"
     
@@ -66,11 +63,7 @@ def build_mlp(input_shape: Union[tuple[int, ...], int], hidden_dims: tuple[int, 
 
 
 class BaseModel(nn.Module):
-    """Base module with gradient-norm reporting.
-
-    Default implementation computes a single group over all parameters.
-    Subclasses can override to expose finer-grained groups.
-    """
+    """Base module with gradient-norm reporting (single 'all' group by default)."""
 
     def compute_grad_norms(self) -> Dict[str, float]:
         """Compute gradient norms for named parameter groups (default: 'all')."""

@@ -1,9 +1,4 @@
-"""Forward-only policy operations.
-
-Provides small helpers that operate on policies that implement a single
-forward(obs) -> (Distribution, Optional[value]) interface. Centralizing these
-keeps model classes minimal and moves action/value logic out to call sites.
-"""
+"""Forward-only helpers for policies with forward(obs)->(dist, optional value)."""
 
 from __future__ import annotations
 
@@ -20,13 +15,7 @@ def policy_act(
     *,
     deterministic: bool = False,
 ) -> Tuple[Tensor, Tensor, Tensor]:
-    """Compute action, log-prob, and value using only forward().
-
-    - Samples from the distribution unless deterministic=True, in which case
-      it uses the distribution mode (argmax for Categorical).
-    - If the model has no value head (returns None), a zero tensor is returned
-      for the value prediction with shape (batch,).
-    """
+    """Compute action, log-prob, and value via forward(); zeros when value head absent."""
 
     dist, value = model(obs)
     if deterministic: actions = dist.mode

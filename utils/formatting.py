@@ -1,8 +1,4 @@
-"""Formatting helpers shared across loggers and reports.
-
-Includes numeric formatting, precision-based value rendering, sort helpers,
-and light type checks. Keep dependencies minimal and fail-safe.
-"""
+"""Formatting helpers for numbers, durations, and safe names."""
 
 from __future__ import annotations
 
@@ -11,10 +7,7 @@ from typing import Any
 
 
 def is_number(x: Any) -> bool:
-    """Return True if x is a numeric type (ints, floats, numpy scalars).
-
-    Note: bool is a subclass of int in Python and will return True here.
-    """
+    """Return True when x is a numeric type (ints, floats, numpy scalars)."""
     return isinstance(x, numbers.Number)
 
 
@@ -44,11 +37,7 @@ def number_to_string(
 
 
 def sanitize_name(name: str) -> str:
-    """Return a path-/project-safe name by replacing separators.
-
-    Replaces forward and back slashes with dashes to avoid unintended
-    directory structures in IDs or project names.
-    """
+    """Return a path-/project-safe name by replacing path separators."""
     return str(name).replace("/", "-").replace("\\", "-")
 
 
@@ -57,14 +46,7 @@ def _plural(n: int, singular: str, plural: str) -> str:
 
 
 def format_duration(seconds: float) -> str:
-    """Return a human-readable duration string for a number of seconds.
-
-    Rules:
-    - < 1 minute: show seconds with 2 decimals (e.g., "8.98 seconds").
-    - < 1 hour: show minutes and seconds (e.g., "12 minutes 5 seconds").
-    - < 1 day: show hours, minutes, and seconds (e.g., "1 hour 02 minutes 03 seconds").
-    - >= 1 day: show days, hours, minutes, and seconds.
-    """
+    """Return a human-readable duration string for seconds (minutes/hours/days as needed)."""
     try:
         s = max(0.0, float(seconds))
     except Exception:
@@ -111,12 +93,7 @@ def format_duration(seconds: float) -> str:
 
 
 def format_metric_value(metric_key_or_bare: str, value: Any) -> str:
-    """Format a metric value according to precision in metrics.yaml.
-
-    Accepts either a namespaced key like "val/ep_rew_mean" or a bare metric
-    name like "ep_rew_mean". Falls back to precision=2 when unknown.
-    Always humanizes magnitudes (k, M, B) for large values.
-    """
+    """Format a metric value using metrics.yaml precision (humanizes large magnitudes)."""
     try:
         from utils.metrics_config import metrics_config
         bare = str(metric_key_or_bare).rsplit("/", 1)[-1]

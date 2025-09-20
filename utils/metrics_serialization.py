@@ -1,8 +1,4 @@
-"""Helpers to serialize metrics dictionaries consistently.
-
-Applies numeric precision from metrics.yaml and orders keys according
-to the configured key_priority across common namespaces.
-"""
+"""Serialize metrics dicts with configured precision and stable key ordering."""
 
 from __future__ import annotations
 
@@ -27,12 +23,7 @@ def _is_number(x: Any) -> bool:
 
 
 def _coerce_by_precision(metric_key_or_bare: str, value: Any) -> Any:
-    """Coerce numeric value following precision rules.
-
-    - precision == 0 => int(round(value))
-    - precision > 0  => float rounded to the given decimals
-    Non-numeric or None values are returned unchanged.
-    """
+    """Coerce numeric values per metrics.yaml precision; pass through non-numerics."""
     if value is None or not _is_number(value):
         return value
 
@@ -105,4 +96,3 @@ def prepare_metrics_for_json(
             ordered[full_key] = _coerce_by_precision(full_key, value)
 
     return dict(ordered)
-

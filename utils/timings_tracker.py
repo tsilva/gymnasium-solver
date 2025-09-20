@@ -25,11 +25,7 @@ class Marker:
 
 @dataclass
 class TimingsTracker:
-    """Utility to track elapsed time and compute throughput of arbitrary counters.
-
-    Backwards compatible with the previous step-only API via `steps`/`steps_now`
-    and `throughput_since`, which is now an alias for generic throughput.
-    """
+    """Track elapsed time and compute per-second throughput for arbitrary counters."""
 
     markers: Dict[str, Marker] = field(default_factory=dict)
 

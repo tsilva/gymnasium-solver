@@ -1,10 +1,4 @@
-"""Metrics configuration utilities (singleton-backed).
-
-Loads and parses `config/metrics.yaml` exactly once and exposes helpers to
-query derived views (precision, delta rules, bounds, highlights, etc.).
-Free functions are kept for backward compatibility and now delegate to the
-singleton so callers don't repeatedly read the file.
-"""
+"""Singleton-backed utilities for metrics.yaml precision, bounds, and keys."""
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -17,12 +11,7 @@ _ALLOWED_NAMESPACES = frozenset({"train", "val", "test"})
 
 @dataclass
 class MetricsConfig:
-    """Singleton-style accessor for metrics.yaml-derived data.
-
-    The underlying YAML file is loaded once at initialization. All query
-    methods operate on the cached dictionary. The file is assumed immutable
-    for the lifetime of the process.
-    """
+    """Singleton accessor for metrics.yaml-derived precision, bounds, and rules."""
 
     config_dir: str = "config"
     _config: Dict[str, Any] = field(init=False, default_factory=dict)
@@ -54,11 +43,7 @@ class MetricsConfig:
 
     @staticmethod
     def is_namespaced_metric(metric_name: str) -> bool:
-        """Fast check that a metric name is namespaced and valid.
-
-        A valid metric name has the shape "<namespace>/<subkey>" where namespace
-        is one of train/val/test and the subkey portion is non-empty.
-        """
+        """Return True for "<namespace>/<subkey>" where namespace in {train,val,test}."""
         # Assert key is not empty
         assert metric_name, "Invalid metric key: empty string"
 

@@ -2,8 +2,8 @@ from typing import Any, Dict, List
 
 import pytorch_lightning as pl
 import torch.nn as nn
-import wandb
 
+import wandb
 from utils.config import Config
 from utils.decorators import must_implement
 from utils.formatting import sanitize_name
@@ -369,8 +369,9 @@ class BaseAgent(pl.LightningModule):
     def _build_trainer_loggers__wandb(self):
         from dataclasses import asdict
 
-        import wandb
         from pytorch_lightning.loggers import WandbLogger
+
+        import wandb
 
         # Create the wandb logger, attach to the existing run if present
         project_name = self.config.project_id if self.config.project_id else sanitize_name(self.config.env_id)

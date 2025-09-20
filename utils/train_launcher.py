@@ -35,7 +35,6 @@ def _init_wandb_sweep(config):
     """
     # Import locally to keep module import light for tests and non-W&B flows
     import wandb
-
     from utils.config import Config
 
     base = asdict(config)

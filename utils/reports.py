@@ -1,5 +1,5 @@
-from typing import Any, Dict, Iterable, List, Optional
 import math
+from typing import Any, Dict, Iterable, List, Optional
 
 from utils.logging import format_section_footer, format_section_header
 

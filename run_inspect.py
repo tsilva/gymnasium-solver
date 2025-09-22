@@ -129,7 +129,7 @@ def run_episode(
     # Collect environment spec for summary tabs (VecInfoWrapper exposes safe helpers)
     env_spec_obj = env.get_spec() if hasattr(env, "get_spec") else None
     reward_range = env.get_reward_range() if hasattr(env, "get_reward_range") else None
-    reward_threshold = env.get_reward_threshold() if hasattr(env, "get_reward_threshold") else None
+    reward_threshold = env.get_return_threshold() if hasattr(env, "get_return_threshold") else None
     observation_space_str = str(getattr(env, "observation_space", None))
     action_space_str = str(getattr(env, "action_space", None))
     env_spec_summary: Dict[str, Any] = {

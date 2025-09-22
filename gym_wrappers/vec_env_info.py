@@ -1,73 +1,30 @@
-from typing import Optional
-
+from typing import Any
 from stable_baselines3.common.vec_env.base_vec_env import VecEnvWrapper
-
-
-# TODO: CLEANUP this file
 
 class VecEnvInfoWrapper(VecEnvWrapper):
     """
-    VecEnv helper that exposes environment metadata from the first underlying env.
+    VecEnv helper that proxies unknown method calls to the first underlying env
+    (index 0) via VecEnv.env_method. Works for SubprocVecEnv and DummyVecEnv.
 
-    Works with both DummyVecEnv (has `envs`) and SubprocVecEnv (no direct access)
-    by delegating calls via `env_method` to the wrapped single-environment
-    EnvInfoWrapper inside each worker.
+    Known methods/attributes defined on this wrapper (or parents) behave
+    normally. Only *missing* attributes are proxied.
     """
 
     # ---- VecEnv overrides -------------------------------------------------
-    def reset(self):
+    def reset(self) -> Any:
         return self.venv.reset()
 
-    def step_wait(self):
+    def step_wait(self) -> Any:
         return self.venv.step_wait()
 
-    # ---- Internal helpers -------------------------------------------------
-    def _call_env(self, method: str, *args, default=None, **kwargs):
-        """Call a method on env index 0 via VecEnv.env_method.
+    # ---- Internal helper --------------------------------------------------
+    def _call_env(self, method: str, *args, **kwargs) -> Any:
+        result = self.venv.env_method(method, *args, indices=[0], **kwargs)
+        return result[0]
 
-        This supports SubprocVecEnv (no `.envs`) and DummyVecEnv alike.
-        Returns the first result or `default` if unavailable.
-        """
-        try:
-            # env_method returns a list, even for a single index
-            result = self.venv.env_method(method, *args, indices=[0], **kwargs)
-            if isinstance(result, (list, tuple)) and result:
-                return result[0]
-            return default
-        except Exception:
-            # Let higher level errors surface when metadata is critical; otherwise
-            # return the provided default for best-effort helpers like fps, etc.
-            if default is not None:
-                return default
-            raise
-
-    # --- public API --------------------------------------------------------
-    def get_id(self):
-        return self._call_env("get_id")
-
-    def get_spec(self):
-        return self._call_env("get_spec")
-
-    def get_reward_threshold(self):
-        return self._call_env("get_reward_treshold")
-
-    def get_reward_range(self):
-        return self._call_env("get_reward_range", default=None)
-
-    def get_return_range(self):
-        return self._call_env("get_return_range", default=None)
-
-    def get_render_fps(self) -> Optional[int]:
-        return self._call_env("get_render_fps", default=None)
-
-    def get_time_limit(self) -> Optional[int]:
-        return self._call_env("get_time_limit", default=None)
-
-    def get_obs_type(self):
-        return self._call_env("get_obs_type", default=None)
-
-    def is_rgb_env(self):
-        return bool(self._call_env("is_rgb_env", default=False))
-
-    def is_ram_env(self):
-        return bool(self._call_env("is_ram_env", default=False))
+    # ---- Dynamic proxying -------------------------------------------------
+    def __getattr__(self, name: str) -> Any:
+        assert not name.startswith("_"), f"Cannot proxy private/dunder name: {name}"
+        def _proxy_method(*args, **kwargs): return self._call_env(name, *args, **kwargs)
+        setattr(self, name, _proxy_method)
+        return _proxy_method

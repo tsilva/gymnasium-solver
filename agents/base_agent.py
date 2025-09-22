@@ -503,12 +503,12 @@ class BaseAgent(pl.LightningModule):
 
         # If defined in config, early stop when mean training reward reaches a threshold
         train_env = self.get_env("train")
-        reward_threshold = train_env.get_reward_threshold()
+        reward_threshold = train_env.get_return_threshold()
         if self.config.early_stop_on_train_threshold: callbacks.append(EarlyStoppingCallback("train/ep_rew_mean", reward_threshold))
 
         # If defined in config, early stop when mean validation reward reaches a threshold
         val_env = self.get_env("val")
-        reward_threshold = val_env.get_reward_threshold()
+        reward_threshold = val_env.get_return_threshold()
         if self.config.early_stop_on_eval_threshold: callbacks.append(EarlyStoppingCallback("val/ep_rew_mean", reward_threshold))
 
         # Also print a terminal summary and alerts recap at the end of training

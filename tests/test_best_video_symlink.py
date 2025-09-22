@@ -63,7 +63,7 @@ class _Agent:
         self.optimizers = lambda: type("O", (), {"state_dict": lambda self: {}})()
         # minimal validation env API
         class _VEnv:
-            def get_reward_threshold(self):
+            def get_return_threshold(self):
                 return None
         self.validation_env = _VEnv()
 

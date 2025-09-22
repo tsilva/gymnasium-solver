@@ -38,7 +38,7 @@ class PrefitPresentationCallback(pl.Callback):
             "obs_type": train_env.get_obs_type(),
             "obs_space": train_env.observation_space,
             "action_space": train_env.action_space,
-            "reward_threshold": train_env.get_reward_threshold(),
+            "reward_threshold": train_env.get_return_threshold(),
             "time_limit": train_env.get_time_limit(),
             "env_wrappers": config_dict.get("env_wrappers", None),
             "env_kwargs": config_dict.get("env_kwargs", None),

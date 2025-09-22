@@ -68,7 +68,7 @@ class EnvInfoWrapper(gym.ObservationWrapper):
         obs_type = self.get_obs_type()
         return obs_type == 'ram'
 
-    def get_reward_treshold(self):
+    def get_return_threshold(self):
         """Backward-compatible threshold accessor.
 
         Prefers returns.threshold_solved when available; falls back to
@@ -85,6 +85,7 @@ class EnvInfoWrapper(gym.ObservationWrapper):
             return rewards['threshold_solved']
         return None
 
+    # TODO: CLEANUP this method
     # Preferred names for external callers
     def get_reward_range(self):
         """Per-step reward range [min, max] when provided in spec.

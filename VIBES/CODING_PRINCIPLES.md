@@ -3,9 +3,11 @@
 This companion to `VIBES/ARCHITECTURE_GUIDE.md` captures the high-level principles we follow when writing or refactoring code. For architecture, data flow, and subsystem ownership, defer to `VIBES/ARCHITECTURE_GUIDE.md`.
 
 ### General principles
+- **Fail fast, break things**: Never preserve backwards compatibility. Make breaking changes and force users to adapt.
 - Respect the config-first workflow: surface behavior through configuration or data models instead of hard-coded branches.
 - Compose before reinventing: reach for existing helpers, registries, and extension points so new work integrates cleanly.
 - Keep edits scoped: change only what the task requires, and avoid opportunistic refactors that mix concerns.
+- **No defensive programming**: Don't add safety checks, validation layers, or compatibility layers. Let the system fail if used incorrectly.
 
 ### Python style
 - Use type hints consistently, including container generics and optional markers where intent matters.
@@ -13,7 +15,8 @@ This companion to `VIBES/ARCHITECTURE_GUIDE.md` captures the high-level principl
 - Prefer early returns and guard clauses to reduce nesting and keep control flow readable.
 - When grouping related fields, reach for small dataclasses or named tuples rather than loosely structured dicts.
 - Choose descriptive, unabbreviated identifiers over shorthands (e.g., `current_value` over `curr_val`).
-- Provide fast-path boolean validators (e.g., `is_valid_*`) in hot paths and pair them with assert/exception helpers for error reporting.
+- **Assert aggressively**: Use assertions for all assumptions, preconditions, and invariants. Let the program crash if anything is unexpected.
+- **No exception handling**: Never catch exceptions unless absolutely required by the API. Let errors propagate up and crash the program.
 
 ### Documentation & configuration
 - Centralize file IO through the shared utilities and keep encoding UTF-8 by default.
@@ -28,10 +31,12 @@ This companion to `VIBES/ARCHITECTURE_GUIDE.md` captures the high-level principl
 - Validate metrics against configured bounds and delta rules at the logging boundary; fail fast on violations.
 
 ### Error handling
-- Fail loudly on invalid state with targeted assertions or specific exceptions; do not swallow errors.
-- Catch exceptions only when the API contract expects it, and re-raise with added context when helpful.
-- Derive deterministic seeds from shared configuration so reproducibility is the default.
-- Use assertions for programmer errors (e.g., malformed metric keys) and `ValueError` for runtime/config-driven validation failures.
+- **Fail fast and fail loud**: Never catch and silence exceptions. Let errors surface immediately and clearly.
+- **No backwards compatibility**: When making changes, break existing code rather than maintaining compatibility. Force users to update their code.
+- **No safeguards or defensive programming**: Don't add try/catch blocks, validation layers, or compatibility shims. Let the system fail if inputs are wrong.
+- **Explicit error propagation**: Never use broad exception handlers (`except Exception:`) or bare `except:` clauses. Catch only specific, expected exceptions and re-raise with context.
+- **Assert liberally**: Use assertions for all preconditions, postconditions, and invariants. Let the program crash if assumptions are violated.
+- **No graceful degradation**: If something can't work correctly, fail immediately rather than falling back to partial functionality.
 
 ### Testing expectations
 - Add or adjust tests alongside the functionality they cover, mirroring existing test layouts.

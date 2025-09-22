@@ -41,7 +41,7 @@ Algo-specific config subclasses:
   - Applies registry wrappers from YAML: `EnvWrapperRegistry.apply` with `{ id: WrapperName, ... }` specs.
 - Observation normalization: `norm_obs == 'static'` uses `VecNormalizeStatic`; `norm_obs == 'rolling'` uses `VecNormalize`. Note: the config field is `normalize_obs` (bool) but the builder currently expects these string values; a boolean `True/False` will not enable normalization.
   - Optional `VecFrameStack` and `VecVideoRecorder`.
-  - Each base env is wrapped with `EnvInfoWrapper`; the returned vec env is wrapped by `VecEnvInfoWrapper`, which exposes helpers like `.recorder(...)`, `get_reward_threshold()`, `get_time_limit()`, and `.is_rgb_env()` used throughout training/eval flows.
+  - Each base env is wrapped with `EnvInfoWrapper`; the returned vec env is wrapped by `VecEnvInfoWrapper`, which exposes helpers like `.recorder(...)`, `get_return_threshold()`, `get_time_limit()`, and `.is_rgb_env()` used throughout training/eval flows.
 - Wrapper registry: `gym_wrappers.__init__` registers `PixelObservationWrapper` and domain wrappers like `PongV5_FeatureExtractor`, reward shapers, etc.
 
 ### Agents

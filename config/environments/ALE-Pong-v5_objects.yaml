@@ -18,10 +18,11 @@ reinforce:
 
 ppo:
   algo_id: ppo
-  n_envs: 32
+  n_envs: 16
+  subproc: true
   vf_coef: 0.7
   n_steps: 256
-  batch_size: 2048 
+  batch_size: 0.25 
   n_epochs: 6
   ent_coef: 0.006
   clip_range: lin_0.2 

@@ -14,8 +14,16 @@ class EnvInfoWrapper(gym.ObservationWrapper):
         super().__init__(env)
         self._obs_type = kwargs.get('obs_type', None)
 
+    def _get_root_env(self):
+        current = self
+        while isinstance(current, gym.Env):
+            if not hasattr(current, "env"): break
+            current = current.env
+        return current
+
     def get_id(self):
-        return self.env.spec.id
+        root_env = self._get_root_env()
+        return root_env.spec.id
 
     def _get_spec__file(self):
         env_id = self.get_id()
@@ -26,7 +34,8 @@ class EnvInfoWrapper(gym.ObservationWrapper):
         return spec
 
     def _get_spec__env(self):
-        return asdict(self.env.spec)
+        root_env = self._get_root_env()
+        return asdict(root_env.spec)
 
     def get_spec(self):
         _file_spec = self._get_spec__file()
@@ -44,7 +53,6 @@ class EnvInfoWrapper(gym.ObservationWrapper):
     def is_ram_env(self):
         obs_type = self.get_obs_type()
         return obs_type == 'ram'
-
 
     def get_reward_treshold(self):
         spec = self.get_spec()

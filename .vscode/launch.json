@@ -56,8 +56,22 @@
       ],
       "console": "integratedTerminal",
       "env": {}
+    },
+    {
+      "name": "Debug: train.py (ALE-Pong-v5_objects:ppo)",
+      "type": "python",
+      "request": "launch",
+      "program": "train.py",
+      "args": [
+        "--config_id",
+        "ALE-Pong-v5_objects:ppo"
+      ],
+      "console": "integratedTerminal",
+      "env": {}
     }
   ]
 }
+
+
 
 

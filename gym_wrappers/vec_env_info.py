@@ -3,6 +3,8 @@ from typing import Optional
 from stable_baselines3.common.vec_env.base_vec_env import VecEnvWrapper
 
 
+# TODO: CLEANUP this file
+
 class VecEnvInfoWrapper(VecEnvWrapper):
     """
     VecEnv helper that exposes environment metadata from the first underlying env.
@@ -48,6 +50,12 @@ class VecEnvInfoWrapper(VecEnvWrapper):
 
     def get_reward_threshold(self):
         return self._call_env("get_reward_treshold")
+
+    def get_reward_range(self):
+        return self._call_env("get_reward_range", default=None)
+
+    def get_return_range(self):
+        return self._call_env("get_return_range", default=None)
 
     def get_render_fps(self) -> Optional[int]:
         return self._call_env("get_render_fps", default=None)

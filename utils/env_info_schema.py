@@ -41,6 +41,7 @@ class EnvInfo:
     action_space: Optional[Mapping[str, Any]] = None
     observation_space: Optional[Mapping[str, Any]] = None
     rewards: Optional[Mapping[str, Any]] = None
+    returns: Optional[Mapping[str, Any]] = None
     defaults: Optional[Mapping[str, Any]] = None
     versions: Optional[Mapping[str, Any]] = None
     modes: Optional[ChoiceBlock] = None
@@ -55,6 +56,7 @@ class EnvInfo:
             "action_space",
             "observation_space",
             "rewards",
+            "returns",
             "defaults",
             "versions",
             "modes",
@@ -69,6 +71,7 @@ class EnvInfo:
             action_space=data.get("action_space"),
             observation_space=data.get("observation_space"),
             rewards=data.get("rewards"),
+            returns=data.get("returns"),
             defaults=data.get("defaults"),
             versions=data.get("versions"),
             modes=modes,
@@ -178,6 +181,7 @@ class EnvInfo:
             else:
                 if not _is_number_or_str(rng[0]) or not _is_number_or_str(rng[1]):
                     errors.append(("rewards.range", "values must be numbers or strings"))
+        # threshold_solved moved to returns; keep backward-compatible check
         if "threshold_solved" in spec and not _is_number_or_str(spec.get("threshold_solved")):
             errors.append(("rewards.threshold_solved", "must be a number or string"))
         if "components" in spec:
@@ -191,6 +195,22 @@ class EnvInfo:
                     else:
                         if "name" not in comp or not isinstance(comp.get("name"), str):
                             errors.append((f"rewards.components[{idx}].name", "must be a string"))
+        return errors
+
+    @staticmethod
+    def _validate_returns(spec: Any) -> List[ValidationError]:
+        errors: List[ValidationError] = []
+        if not isinstance(spec, Mapping):
+            return [("returns", "must be a mapping")]
+        if "range" in spec:
+            rng = spec.get("range")
+            if not isinstance(rng, Sequence) or len(rng) != 2:
+                errors.append(("returns.range", "must be a 2-element list"))
+            else:
+                if not _is_number_or_str(rng[0]) or not _is_number_or_str(rng[1]):
+                    errors.append(("returns.range", "values must be numbers or strings"))
+        if "threshold_solved" in spec and not _is_number_or_str(spec.get("threshold_solved")):
+            errors.append(("returns.threshold_solved", "must be a number or string"))
         return errors
 
     @staticmethod
@@ -248,6 +268,8 @@ class EnvInfo:
             errors.extend(self._validate_observation_space(self.observation_space))
         if self.rewards is not None:
             errors.extend(self._validate_rewards(self.rewards))
+        if self.returns is not None:
+            errors.extend(self._validate_returns(self.returns))
         if self.defaults is not None:
             errors.extend(self._validate_defaults(self.defaults))
         if self.versions is not None:

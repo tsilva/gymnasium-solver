@@ -2,7 +2,7 @@
 
 ## NEXT
 
-- CHECK: does pong objects provide velocity
+- BUG: bandit training not running due to missing spec
 - FEAT: add observation labels for pong objects spec
 - FEAT: add support for scheduler min
 - BUG: alerts are not making into table logger

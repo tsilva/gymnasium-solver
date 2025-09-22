@@ -20,6 +20,9 @@ observation_space:
 
 rewards:
   per_step: +1
+  range: [0, 1]
+
+returns:
   episodic: number of steps balanced (max 500)
   range: [0, 500]
   threshold_solved: 475

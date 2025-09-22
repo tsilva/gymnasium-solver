@@ -16,18 +16,21 @@ observation_space:
       shape: [8]
       dtype: float32
       components:
-        - {name: Player.y, range: [-4.8, 4.8]}
-        - {name: Player.dy, range: [-inf, inf]}
-        - {name: Enemy.y, range: [-4.8, 4.8]}
-        - {name: Enemy.dy, range: [-inf, inf]}
-        - {name: Ball.x, range: [-4.8, 4.8]}
-        - {name: Ball.y, range: [-4.8, 4.8]}
-        - {name: Ball.dx, range: [-4.8, 4.8]}
-        - {name: Ball.dy, range: [-4.8, 4.8]}
+        - {name: Player.y,  range: [0.0, 1.0]}
+        - {name: Player.dy, range: [0.0, 1.0]}
+        - {name: Enemy.y,   range: [0.0, 1.0]}
+        - {name: Enemy.dy,  range: [0.0, 1.0]}
+        - {name: Ball.x,    range: [0.0, 1.0]}
+        - {name: Ball.y,    range: [0.0, 1.0]}
+        - {name: Ball.dx,   range: [0.0, 1.0]}
+        - {name: Ball.dy,   range: [0.0, 1.0]}
 
 rewards:
   per_point: +1/-1
-  episodic: score difference
+  range: [-1, 1]
+
+returns:
+  episodic: score difference (player score - opponent score)
   range: [-21, 21]
   threshold_solved: 19
 

@@ -326,6 +326,7 @@ class Config:
     def get_env_args(self) -> Dict[str, Any]:
         return dict(
             env_id=self.env_id,
+            project_id=self.project_id,
             n_envs=self.n_envs,
             seed=self.seed,
             max_episode_steps=self.max_episode_steps,

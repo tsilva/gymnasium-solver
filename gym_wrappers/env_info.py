@@ -7,12 +7,15 @@ from gymnasium.wrappers import TimeLimit
 from gym_wrappers.utils import find_wrapper
 from utils.io import read_yaml
 
+# TODO: CLEANUP this file
 
 class EnvInfoWrapper(gym.ObservationWrapper):
 
     def __init__(self, env, **kwargs):
         super().__init__(env)
         self._obs_type = kwargs.get('obs_type', None)
+        # Optional: project/challenge id (YAML filename stem) to prefer when resolving specs
+        self._project_id = kwargs.get('project_id', None)
 
     def _get_root_env(self):
         current = self
@@ -26,12 +29,23 @@ class EnvInfoWrapper(gym.ObservationWrapper):
         return root_env.spec.id
 
     def _get_spec__file(self):
-        env_id = self.get_id()
-        env_id = env_id.replace("/", "-") # TODO: extract this to a helper
+        """Load spec YAML, preferring challenge-specific file when available.
+
+        Resolution order:
+        1) config/environments/<project_id>.spec.yaml (when provided)
+        2) config/environments/<env_id>.spec.yaml (env_id '/' → '-')
+        """
+        # 1) Try challenge-specific spec based on project_id (YAML filename stem)
+        if isinstance(self._project_id, str) and self._project_id:
+            spec_path = f"config/environments/{self._project_id}.spec.yaml"
+            if os.path.exists(spec_path):
+                return read_yaml(spec_path)
+
+        # 2) Fallback to environment id-based spec (current strategy)
+        env_id = self.get_id().replace("/", "-")  # normalize ALE/Pong-v5 → ALE-Pong-v5
         spec_path = f"config/environments/{env_id}.spec.yaml"
         assert os.path.exists(spec_path), f"spec file not found: {spec_path}"
-        spec = read_yaml(spec_path)
-        return spec
+        return read_yaml(spec_path)
 
     def _get_spec__env(self):
         root_env = self._get_root_env()
@@ -55,9 +69,61 @@ class EnvInfoWrapper(gym.ObservationWrapper):
         return obs_type == 'ram'
 
     def get_reward_treshold(self):
+        """Backward-compatible threshold accessor.
+
+        Prefers returns.threshold_solved when available; falls back to
+        rewards.threshold_solved for older specs.
+        """
         spec = self.get_spec()
-        rewards = spec['rewards']
-        return rewards['threshold_solved']
+        # New style: prefer returns.threshold_solved
+        returns = spec.get('returns', {}) if isinstance(spec, dict) else {}
+        if isinstance(returns, dict) and 'threshold_solved' in returns:
+            return returns['threshold_solved']
+        # Legacy location: rewards.threshold_solved
+        rewards = spec.get('rewards', {}) if isinstance(spec, dict) else {}
+        if isinstance(rewards, dict) and 'threshold_solved' in rewards:
+            return rewards['threshold_solved']
+        return None
+
+    # Preferred names for external callers
+    def get_reward_range(self):
+        """Per-step reward range [min, max] when provided in spec.
+
+        Looks under rewards.range (per-step). Returns None if unavailable.
+        """
+        try:
+            spec = self.get_spec()
+            rewards = spec.get('rewards') if isinstance(spec, dict) else None
+            if isinstance(rewards, dict):
+                rng = rewards.get('range')
+                if isinstance(rng, (list, tuple)) and len(rng) == 2:
+                    return list(rng)
+        except Exception:
+            pass
+        return None
+
+    def get_return_range(self):
+        """Episodic return range [min, max] when provided in spec.
+
+        Prefers returns.range; falls back to legacy rewards.range when returns
+        section is missing.
+        """
+        try:
+            spec = self.get_spec()
+            returns = spec.get('returns') if isinstance(spec, dict) else None
+            if isinstance(returns, dict):
+                rng = returns.get('range')
+                if isinstance(rng, (list, tuple)) and len(rng) == 2:
+                    return list(rng)
+            # Fallback to legacy location
+            rewards = spec.get('rewards') if isinstance(spec, dict) else None
+            if isinstance(rewards, dict):
+                rng = rewards.get('range')
+                if isinstance(rng, (list, tuple)) and len(rng) == 2:
+                    return list(rng)
+        except Exception:
+            pass
+        return None
 
     def get_time_limit(self):
         # If the time limit wrapper is found, return the max episode steps

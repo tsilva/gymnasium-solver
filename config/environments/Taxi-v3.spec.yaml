@@ -15,5 +15,9 @@ rewards:
   per_step: -1
   successful_dropoff: +20
   illegal_action: -10
+  range: [-10, 20]
+
+returns:
+  episodic: cumulative over episode
   range: [-800, 20]
   threshold_solved: 8

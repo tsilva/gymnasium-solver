@@ -56,12 +56,6 @@
         "range": {
           "$ref": "#/definitions/range2"
         },
-        "threshold_solved": {
-          "oneOf": [
-            { "type": "number" },
-            { "type": "string" }
-          ]
-        },
         "components": {
           "type": "array",
           "items": {
@@ -72,6 +66,19 @@
             },
             "required": ["name"]
           }
+        }
+      }
+    },
+    "returns": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "range": { "$ref": "#/definitions/range2" },
+        "threshold_solved": {
+          "oneOf": [
+            { "type": "number" },
+            { "type": "string" }
+          ]
         }
       }
     },

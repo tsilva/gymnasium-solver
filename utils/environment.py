@@ -101,12 +101,15 @@ def _build_env_gym(env_id, obs_type, render_mode, **env_kwargs):
     import gymnasium as gym
     env = gym.make(env_id, render_mode=render_mode, **env_kwargs)
     return env  
-    
+
+# TODO: CLEAN this up
+
 def build_env(
     env_id, 
     n_envs=1, 
     seed=None, 
     max_episode_steps=None,
+    project_id=None,
     env_wrappers=[], 
     grayscale_obs=False,
     resize_obs=False,
@@ -169,7 +172,8 @@ def build_env(
         #    from gymnasium.wrappers import TimeLimit
         #    env = TimeLimit(env, max_episode_steps=max_episode_steps)
 
-        env = EnvInfoWrapper(env)
+        # Attach metadata wrapper with context (obs_type and project_id)
+        env = EnvInfoWrapper(env, obs_type=obs_type, project_id=project_id)
         if record_video:
             base_env = env
             while hasattr(base_env, "env"):

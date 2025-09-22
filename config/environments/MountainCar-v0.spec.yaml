@@ -18,6 +18,9 @@ observation_space:
 
 rewards:
   per_step: -1
+  range: [-1, 0]
+
+returns:
   episodic: negative of steps to reach goal (lower is worse)
   range: [-200, 0]
   threshold_solved: -110

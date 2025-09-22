@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 import numpy as np
 from stable_baselines3.common.vec_env.base_vec_env import VecEnvWrapper
 
+# TODO: CLEANUP this file
 
 def _term_clear_inplace() -> None:
     # Clear screen and move cursor to home (top-left)
@@ -86,6 +87,8 @@ class VecObsBarPrinter(VecEnvWrapper):
         # Labels and ranges derived from spec, when available
         self._labels: Optional[List[str]] = None
         self._ranges: Optional[List[Tuple[Optional[float], Optional[float]]]] = None
+        # Reward range from spec (lo, hi) when available
+        self._reward_range: Tuple[Optional[float], Optional[float]] = (None, None)
 
         # Dynamic scaling when finite ranges are not available
         self._min_seen: Optional[np.ndarray] = None
@@ -200,6 +203,18 @@ class VecObsBarPrinter(VecEnvWrapper):
             self._labels = labels
             self._ranges = ranges if len(ranges) == len(labels) else None
 
+        # Parse reward range from spec when available
+        try:
+            rewards = spec.get("rewards") if isinstance(spec, dict) else None
+            if isinstance(rewards, dict):
+                rr = rewards.get("range")
+                if isinstance(rr, Sequence) and len(rr) == 2:
+                    lo = _parse_inf(rr[0])
+                    hi = _parse_inf(rr[1])
+                    self._reward_range = (lo, hi)
+        except Exception:
+            pass
+
     def _maybe_init_from_obs(self, obs: np.ndarray) -> None:
         if self._initialized:
             return
@@ -266,6 +281,24 @@ class VecObsBarPrinter(VecEnvWrapper):
         bar = "█" * filled + "·" * empty
         return bar, ratio, (lo_eff, hi_eff)
 
+    def _format_bar_scalar(self, value: float, lo: Optional[float], hi: Optional[float], *, width: Optional[int] = None) -> Tuple[str, float, Tuple[float, float]]:
+        """Format a bar for a single scalar value using provided bounds only.
+
+        Unlike _format_bar, this does not update dynamic observation ranges and is
+        suitable for non-observation quantities such as rewards.
+        """
+        lo_eff = float(lo) if (lo is not None and math.isfinite(float(lo))) else None
+        hi_eff = float(hi) if (hi is not None and math.isfinite(float(hi))) else None
+        if lo_eff is None or hi_eff is None or hi_eff == lo_eff:
+            lo_eff, hi_eff = -1.0, 1.0
+        bw = self._bar_width if width is None else max(1, int(width))
+        ratio = 0.0 if hi_eff == lo_eff else (float(value) - lo_eff) / (hi_eff - lo_eff)
+        ratio = max(0.0, min(1.0, ratio))
+        filled = int(round(ratio * bw))
+        empty = bw - filled
+        bar = "█" * filled + "·" * empty
+        return bar, ratio, (lo_eff, hi_eff)
+
     def _print_obs(
         self,
         obs_full: np.ndarray,
@@ -297,14 +330,8 @@ class VecObsBarPrinter(VecEnvWrapper):
         bar_w = max(10, min(self._bar_width, term_w - label_w - value_w - 10))
         self._bar_width = bar_w
 
-        # Optional status line from rewards/dones
+        # Optional status line (only done flag now; reward shown below as a bar)
         status_parts: List[str] = []
-        if isinstance(rewards, np.ndarray) and rewards.size > 0:
-            try:
-                r = float(rewards[self._env_index])
-                status_parts.append(f"r={r:+.3f}")
-            except Exception:
-                pass
         if isinstance(dones, np.ndarray) and dones.size > 0:
             try:
                 d = bool(dones[self._env_index])
@@ -336,6 +363,21 @@ class VecObsBarPrinter(VecEnvWrapper):
         print(header_main)
         if status:
             print(status)
+
+        # Reward bar (scaled using spec reward range when available)
+        reward_val: Optional[float] = None
+        try:
+            if isinstance(rewards, np.ndarray) and rewards.size > 0:
+                reward_val = float(rewards[self._env_index])
+        except Exception:
+            reward_val = None
+        if reward_val is not None:
+            r_lo, r_hi = self._reward_range
+            r_bar, _r_ratio, (r_lo_eff, r_hi_eff) = self._format_bar_scalar(reward_val, r_lo, r_hi, width=self._bar_width)
+            label_fmt = "reward"[:label_w].ljust(label_w)
+            val_fmt = f"{reward_val:+.4f}".rjust(value_w)
+            r_rng_fmt = f"[{r_lo_eff:+.2f}, {r_hi_eff:+.2f}]"
+            print(f"{label_fmt}  {val_fmt}  {r_bar}  {r_rng_fmt}")
 
         for i in range(dim):
             name = labels[i] if i < len(labels) else f"obs[{i}]"

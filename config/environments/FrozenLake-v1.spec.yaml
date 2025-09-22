@@ -16,4 +16,8 @@ rewards:
   on_goal: +1
   otherwise: 0
   range: [0, 1]
+
+returns:
+  episodic: fraction of successes over episodes (stochastic)
+  range: [0, 1]
   threshold_solved: 0.78

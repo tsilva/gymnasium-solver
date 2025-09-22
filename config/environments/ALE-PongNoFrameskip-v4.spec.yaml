@@ -18,7 +18,10 @@ observation_space:
 
 rewards:
   per_point: +1/-1
-  episodic: score difference
+  range: [-1, 1]
+
+returns:
+  episodic: score difference (player score - opponent score)
   range: [-21, 21]
   threshold_solved: 19
   

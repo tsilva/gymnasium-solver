@@ -15,7 +15,10 @@ from utils.run import Run
 def main():
     # Parse command line arguments
     p = argparse.ArgumentParser(description="Play a trained agent using RolloutCollector (human render)")
-    p.add_argument("--run-id", default="@last", help="Run ID to load (defaults to @latest-run)") # TODO: remove @last harcode (this is a Run SOC)
+    # Default to '@last' which resolves to the most recently created run.
+    # If that run has no best checkpoint yet, we fall back to the most recent
+    # run that does have a best checkpoint.
+    p.add_argument("--run-id", default="@last", help="Run ID under runs/ (default: @last; falls back to latest run with a best checkpoint)")  # TODO: remove @last hardcode (this is a Run SOC)
     p.add_argument("--episodes", type=int, default=10, help="Number of episodes to play")
     p.add_argument("--deterministic", action="store_true", help="Use deterministic actions (mode/argmax)")
     args = p.parse_args()
@@ -45,9 +48,51 @@ def main():
         # Non-fatal: continue without the visualizer if the wrapper fails to attach
         pass
 
-    # Load configuration 
+    # Resolve checkpoint path with graceful fallbacks
+    from pathlib import Path
+
+    def _pick_latest_best_ckpt() -> tuple[Path | None, str | None]:
+        runs_root = Path("runs")
+        candidates: list[Path] = []
+        for p in runs_root.glob("*/checkpoints/@best/policy.ckpt"):
+            try:
+                if p.is_file():
+                    candidates.append(p)
+            except FileNotFoundError:
+                # Broken symlink or race; ignore
+                pass
+        if not candidates:
+            return None, None
+        best = max(candidates, key=lambda p: p.stat().st_mtime)
+        return best, best.parent.parent.parent.name  # runs/<id>/checkpoints/@best/policy.ckpt
+
+    ckpt_path = run.best_checkpoint_dir / "policy.ckpt"
+    if not ckpt_path.exists():
+        # Try last checkpoint within the same run first
+        candidate = run.last_checkpoint_dir / "policy.ckpt"
+        if candidate.exists():
+            ckpt_path = candidate
+        else:
+            # If the user asked for '@last', pick the latest run that has a best checkpoint
+            if args.run_id == "@last":
+                fallback_ckpt, fallback_run_id = _pick_latest_best_ckpt()
+                if fallback_ckpt is not None and fallback_run_id is not None:
+                    print(f"Best checkpoint not found in last run; falling back to runs/{fallback_run_id}.")
+                    run = Run.load(fallback_run_id)
+                    config = run.load_config()
+                    ckpt_path = fallback_ckpt
+                else:
+                    raise FileNotFoundError(
+                        "No checkpoints found. Consider training a model or passing --run-id."
+                    )
+            else:
+                raise FileNotFoundError(
+                    f"Best checkpoint not found for run '{run.id}' at {ckpt_path}."
+                )
+
+    # Load configuration
     # TODO: we should be loading the agent and having it run the episode
-    policy_model, _ = load_policy_model_from_checkpoint(run.best_checkpoint_dir / "policy.ckpt", env, config)
+    policy_model, _ = load_policy_model_from_checkpoint(ckpt_path, env, config)
 
     # Initialize rollout collector with training-time hyperparams
     collector = RolloutCollector(

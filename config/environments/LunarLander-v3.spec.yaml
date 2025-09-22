@@ -25,8 +25,3 @@ observation_space:
 rewards:
   shaping: dense; +100..140 for landing, -100 for crash; small per-step shaping
   threshold_solved: 200
-
-versions:
-  v3: Updated termination/truncation; reproducible seeding; Box2D upgrade
-
-reward_threshold: 200

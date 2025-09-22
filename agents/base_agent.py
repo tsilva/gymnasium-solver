@@ -469,36 +469,20 @@ class BaseAgent(pl.LightningModule):
         # Metrics dispatcher: aggregates epoch metrics and logs to Lightning
         callbacks.append(DispatchMetricsCallback())
 
-        # If policy learning rate scheduler was defined, initialize scheduler callback
-        if self.config.policy_lr_schedule: callbacks.append(
-            HyperparameterSchedulerCallback(
-                schedule=self.config.policy_lr_schedule, 
-                parameter="policy_lr",
-                setter_fn=self._change_optimizers_lr
+        # Auto-wire hyperparameter schedulers: scan config for any *_schedule fields
+        for key, value in vars(self.config).items():
+            if not key.endswith("_schedule") or not value: continue # TODO: extract concern to config
+            param = key[: -len("_schedule")]
+            assert hasattr(self, param), f"Module {self} has no attribute {param}"
+            callbacks.append(
+                HyperparameterSchedulerCallback(
+                    schedule=value,
+                    parameter=param,
+                    setter_fn={
+                        "policy_lr": self._change_optimizers_lr,
+                    }.get(param, None),
+                )
             )
-        )
-
-        # If clip range scheduler was defined, initialize scheduler callback
-        if self.config.clip_range_schedule: callbacks.append(
-            HyperparameterSchedulerCallback(
-                schedule=self.config.clip_range_schedule, 
-                parameter="clip_range"
-            )
-        )
-
-        if self.config.vf_coef_schedule: callbacks.append(
-            HyperparameterSchedulerCallback(
-                schedule=self.config.vf_coef_schedule, 
-                parameter="vf_coef"
-            )
-        )
-        
-        if self.config.ent_coef_schedule: callbacks.append(
-            HyperparameterSchedulerCallback(
-                schedule=self.config.ent_coef_schedule, 
-                parameter="ent_coef"
-            )
-        )
 
         # Checkpointing: save best/last models and metrics
         callbacks.append(ModelCheckpointCallback( # TODO: pass run
@@ -575,9 +559,12 @@ class BaseAgent(pl.LightningModule):
         return training_progress
 
     def _change_optimizers_lr(self, lr):
+        # Keep attribute in sync for logging/inspection
+        self.policy_lr = lr
         optimizers = self.optimizers()
         for opt in optimizers:
-            for pg in opt.param_groups: pg["lr"] = lr
+            for pg in opt.param_groups:
+                pg["lr"] = lr
 
     # TODO: review this method
     def configure_optimizers(self):

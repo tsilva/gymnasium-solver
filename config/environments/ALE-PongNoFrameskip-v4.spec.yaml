@@ -26,13 +26,6 @@ modes:
   values: [0,1]
   default: 0
 
-reward_threshold: 19
-
 difficulties:
   values: [0,1,2,3]
   default: 0
-
-versions:
-  v5: Stickiness restored; no stochastic frame-skip; ALE namespace
-  v4: Stickiness removed
-  v0: Initial release

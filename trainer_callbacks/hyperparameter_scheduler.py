@@ -11,7 +11,12 @@ SCHEDULERS_MAP = {
 }
 
 class HyperparameterSchedulerCallback(pl.Callback):
-    """Update scheduled hyperparameters (eg: policy_lr, clip_range, ent_coef) at epoch end."""
+    """Update scheduled hyperparameters (eg: policy_lr, clip_range, ent_coef) at epoch end.
+
+    Notes:
+    - The schedule is computed from the initial value observed on first use,
+      avoiding compounding updates across epochs.
+    """
    
     def __init__(
         self, 
@@ -26,10 +31,12 @@ class HyperparameterSchedulerCallback(pl.Callback):
         self.parameter = parameter
         self.getter_fn = getter_fn if getter_fn is not None else self._get_parameter_value
         self.setter_fn = setter_fn if setter_fn is not None else self._set_parameter_value
+        self._base_value: Optional[float] = None
 
     def on_train_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:  # noqa: D401rn
-        # Retrieve the current value of the parameter
-        parameter_value = self.getter_fn(pl_module)
+        # Initialize the base value on first use (avoid compounding updates)
+        if self._base_value is None:
+            self._base_value = self.getter_fn(pl_module)
 
         # Calculate the current training progress
         progress = pl_module._calc_training_progress()
@@ -37,8 +44,8 @@ class HyperparameterSchedulerCallback(pl.Callback):
         # Retrieve the selected scheduler function
         scheduler_fn = SCHEDULERS_MAP[self.schedule]
 
-        # Calculate the new value of the parameter based of current progress
-        new_value = scheduler_fn(parameter_value, progress)
+        # Calculate the new value of the parameter based on current progress
+        new_value = scheduler_fn(self._base_value, progress)
 
         # Set the new value of the parameter
         self.setter_fn(pl_module, new_value)

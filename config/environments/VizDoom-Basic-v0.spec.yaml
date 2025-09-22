@@ -24,9 +24,3 @@ rewards:
     - {name: step_penalty, sign: negative}
   threshold_solved: 10
   range: [-10, 100]
-
-versions:
-  v0: Initial wrapper; RGB24 observations; exposes render_mode and frame_skip
-
-
-reward_threshold: 10

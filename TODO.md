@@ -2,6 +2,9 @@
 
 ## NEXT
 
+- CHECK: does pong objects provide velocity
+- FEAT: add observation labels for pong objects spec
+- FEAT: add support for scheduler min
 - BUG: alerts are not making into table logger
 - BUG: training epoch is still running after validation early stop
 - BUG: wandb run is being logged even when training is not started, bold terminal
@@ -39,17 +42,3 @@
 - FEAT: add support for publishing run to Hugging Face Hub
 - FEAT: add support for async eval (to avoid blocking training)
 - FEAT: SEEDRL+PPO
-
-## Task report: cleanup_docstrings (2025-09-20)
-
-- Compressed verbose multi-line docstrings to one-liners across key modules: `utils/logging.py`, `utils/formatting.py`, `utils/torch.py`, `utils/models.py`, `utils/policy_ops.py`, `utils/metrics_serialization.py`, `utils/metrics_config.py`, `utils/metrics_recorder.py`, `utils/rollouts.py`, `trainer_callbacks/early_stopping.py`, `trainer_callbacks/hyperparameter_scheduler.py`, `run_inspect.py`, `run_publish.py`, and scripts under `scripts/`.
-- Removed example/usage blocks and long prose; kept intent-focused summaries only.
-- No `Args/Parameters/Returns/Raises/Examples` sections remain (grep clean).
-- Follow-ups: a few large files still have many helpers with terse docstrings; further trimming could remove trivial restatements if desired, but current pass keeps clarity without noise.
-
-## Task report: cleanup_dead_code (2025-09-20)
-
-- Removed a dead debug line in `scripts/strip_yaml_defaults.py` (an `if False` no-op dump). Root cause: leftover debug scaffold not executed; safe deletion reduces noise.
-- Pruned commented-out early-return lines in `trainer_callbacks/dispatch_metrics.py` that were known to break `val` stage. Root cause: stale guard kept as commented code; minimal removal keeps intent without misleading dead code.
-- Vulture not available (`uv run vulture .` missing). Used `scripts/find_unused_defs.py` + `rg` to audit. Many candidates were false positives due to dynamic hooks (Lightning callbacks, watchdog FS handlers, metric bundles). Left those intact.
-- No functional behavior changes; deferred broader refactors to focused tasks.

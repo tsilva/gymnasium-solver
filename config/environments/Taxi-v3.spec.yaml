@@ -17,8 +17,3 @@ rewards:
   illegal_action: -10
   range: [-800, 20]
   threshold_solved: 8
-
-versions:
-  v3: Deterministic transitions and seeding improvements; clarified termination rules
-
-reward_threshold: 8

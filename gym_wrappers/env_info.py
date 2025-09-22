@@ -56,9 +56,8 @@ class EnvInfoWrapper(gym.ObservationWrapper):
 
     def get_reward_treshold(self):
         spec = self.get_spec()
-        assert 'reward_threshold' in spec, "environment has no reward_threshold."
-        reward_threshold = spec['reward_threshold']
-        return reward_threshold
+        rewards = spec['rewards']
+        return rewards['threshold_solved']
 
     def get_time_limit(self):
         # If the time limit wrapper is found, return the max episode steps

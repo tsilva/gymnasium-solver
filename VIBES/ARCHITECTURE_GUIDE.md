@@ -50,11 +50,11 @@ Algo-specific config subclasses:
 - Manual optimization in `training_step`; per-batch metrics are buffered in the recorder and flushed once per epoch by `trainer_callbacks.DispatchMetricsCallback`, which also updates history and forwards `train/*` / `val/*` snapshots to Lightning loggers. `MetricsMonitor.check()` surfaces alert messages (printed once per epoch), and `loggers.metrics_table_logger.PrintMetricsLogger` renders the console table using `config/metrics.yaml` precision/highlight rules.
   - Tracks best episode rewards via the collector: `train/ep_rew_best` and `val/ep_rew_best` are derived from the running best of `*/ep_rew_mean` and appear in `metrics.csv`, W&B, and the terminal view.
   - Evaluation cadence honors `Config.eval_freq_epochs` and `eval_warmup_epochs`. `WarmupEvalCallback` disables validation until warmup completes, after which `validation_step` drives the collector-based evaluation + optional video capture described earlier.
-  - Schedules: base class handles linear policy LR decay when `policy_lr_schedule == 'linear'` (recorded as `train/policy_lr`); algorithms can extend `_update_schedules()` for additional terms (e.g., PPO clip range).
+  - Schedules: BaseAgent auto-wires any `*_schedule` fields in `Config` to `HyperparameterSchedulerCallback`s. Special setters are used when needed (e.g., `policy_lr` updates both the attribute and optimizer param groups; logged as `train/policy_lr`).
   - Logging: `WandbLogger` derives the project from `env_id`, `CsvLightningLogger` writes `runs/<id>/metrics.csv`, and `PrintMetricsLogger` keeps the terminal table in sync with Lightning's metric stream. Gradients are captured in W&B via `WandbLogger.watch(model, log='gradients', log_freq=100)`.
 - `agents/ppo.PPO`:
   - Builds an actor-critic via `utils.policy_factory.build_policy_from_env_and_config`, computes PPO losses, and defaults to AdamW (configurable through `Config.optimizer`).
-  - Extends scheduling to decay `clip_range` when `clip_range_schedule == 'linear'` and records the scheduled value.
+  - PPO losses consume mutable attrs like `clip_range`, `vf_coef`, and `ent_coef`, so schedules on these fields apply automatically.
   - Registers metric monitors for KL, clip fraction, and explained variance; alerts show up in the console when values leave recommended ranges.
   - Logs gradient norms for `actor_head`, `critic_head`, and `trunk` before clipping/optimizer step (exposed as `train/grad_norm/*`).
 - `agents/reinforce.REINFORCE`:

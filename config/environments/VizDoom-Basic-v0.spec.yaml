@@ -29,3 +29,4 @@ versions:
   v0: Initial wrapper; RGB24 observations; exposes render_mode and frame_skip
 
 
+reward_threshold: 10

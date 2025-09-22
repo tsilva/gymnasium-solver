@@ -3,56 +3,21 @@
 env_id: ALE/Pong-v5
 max_timesteps: 1e7
 obs_type: "objects"
+hidden_dims: [256, 256] 
+eval_freq_epochs: 50 
+eval_episodes: 10  
 env_wrappers:
   - id: PongV5_FeatureExtractor
 
-reinforce:
-  algo_id: reinforce
-  n_envs: 16
-  n_steps: 1024
-  batch_size: 4096
-  policy_lr: 1e-3
-  hidden_dims: [128, 128]
-  eval_freq_epochs: 20 
-  eval_episodes: 10  
-
 ppo:
   algo_id: ppo
-  n_envs: 16
+  n_envs: 20
   subproc: true
-  vf_coef: 0.7
-  n_steps: 256
-  batch_size: 0.25 
-  n_epochs: 6
-  ent_coef: 0.006
-  clip_range: lin_0.2 
-  policy_lr: lin_3e-4 
-  hidden_dims: [256, 256] 
-  eval_freq_epochs: 50 
-  eval_episodes: 10  
-
-# Tuned PPO variant to avoid late-stage plateaus on sticky-actions Pong.
-# Key changes:
-# - Keep LR and clip_range constant (no linear decay) to prevent vanishing updates.
-# - Normalize advantages per rollout to stabilize gradient scales.
-# - Slightly lower entropy and value loss weights for stronger policy signal.
-# - Increase epochs to leverage each rollout more.
-ppo_tuned:
-  algo_id: ppo
-  n_envs: 32
-  n_steps: 256
-  batch_size: 2048
-  n_epochs: 10
-  # Disable LR/clip decay; keep gradients meaningful late in training
-  policy_lr: 1e-1 #3e-4
-  clip_range: 0.01 #0.15
-  # Stronger policy updates, less entropy/critic dominance
-  ent_coef: 0.003
   vf_coef: 0.5
-  hidden_dims: [256, 256]
-  # Stabilize scale of advantages
+  n_epochs: 20
+  n_steps: 1024
+  batch_size: 0.125
+  ent_coef: 0.01
+  clip_range: 0.2
+  policy_lr: 1e-2 # approx_kl = inf if 1e-1
   normalize_advantages: "rollout"
-  # Keep eval cadence
-  eval_freq_epochs: 50
-  eval_episodes: 10
-  subproc: true

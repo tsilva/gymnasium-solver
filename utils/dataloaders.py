@@ -39,6 +39,14 @@ def build_index_collate_loader_from_collector(
     # Determine dataset length from trajectories (observations is authoritative)
     data_len = len(_traj.observations)
 
+    # Assert uniform batch sizes: the last batch must not be smaller.
+    # This ensures consistent shapes and avoids edge cases in training loops.
+    if data_len % int(batch_size) != 0:
+        raise ValueError(
+            f"Batch size must divide rollout size exactly: data_len={data_len}, batch_size={batch_size}. "
+            "Choose a batch_size (or fraction of n_envs*n_steps) that evenly divides the rollout."
+        )
+
     # Always use a MultiPassRandomSampler for index generation
     _sampler = MultiPassRandomSampler(data_len=data_len, num_passes=num_passes, generator=generator)
 

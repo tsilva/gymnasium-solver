@@ -25,3 +25,4 @@ rewards:
 versions:
   v0: Classic control original specification
 
+reward_threshold: -110

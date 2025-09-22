@@ -33,3 +33,5 @@ rewards:
 versions:
   default: Uses stable-retro ROM database; states denote levels (e.g., 'Level1-1').
 
+# No canonical reward threshold; leave unset for early-stopping
+reward_threshold: null

@@ -392,8 +392,17 @@ class Config:
         if self.devices is not None and not (isinstance(self.devices, int) or self.devices == "auto"):
             raise ValueError("devices may be an int, 'auto', or None.")
         if self.n_envs is not None and self.n_steps is not None and self.batch_size is not None:
-            if not (self.batch_size <= self.n_envs * self.n_steps):
-                raise ValueError(f"batch_size ({self.batch_size}) should not exceed n_envs ({self.n_envs}) * n_steps ({self.n_steps}).")
+            rollout_size = self.n_envs * self.n_steps
+            if not (self.batch_size <= rollout_size):
+                raise ValueError(
+                    f"batch_size ({self.batch_size}) should not exceed n_envs ({self.n_envs}) * n_steps ({self.n_steps})."
+                )
+            # Ensure uniform minibatches: batch_size must evenly divide rollout_size
+            if rollout_size % int(self.batch_size) != 0:
+                raise ValueError(
+                    "batch_size must divide (n_envs * n_steps) exactly to yield uniform minibatches: "
+                    f"rollout_size={rollout_size}, batch_size={self.batch_size}."
+                )
         if self.policy_targets is not None and self.policy_targets not in {Config.PolicyTargetsType.returns, Config.PolicyTargetsType.advantages}:  # type: ignore[operator]
             raise ValueError("policy_targets must be 'returns' or 'advantages'.")
 

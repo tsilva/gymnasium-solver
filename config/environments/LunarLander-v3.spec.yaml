@@ -29,3 +29,4 @@ rewards:
 versions:
   v3: Updated termination/truncation; reproducible seeding; Box2D upgrade
 
+reward_threshold: 200

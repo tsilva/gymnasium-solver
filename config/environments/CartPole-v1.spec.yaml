@@ -27,3 +27,4 @@ rewards:
 versions:
   v1: Increased max steps to 500; standardized termination semantics
 
+reward_threshold: 475

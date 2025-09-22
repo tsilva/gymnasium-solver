@@ -2,6 +2,8 @@
 source: https://ale.farama.org/environments/pong/
 description: Control right paddle; score when ball passes opponent, lose when it passes you.
 
+render_fps: 60
+
 action_space:
   discrete: 6
   labels: {0: NOOP, 1: FIRE, 2: RIGHT, 3: LEFT, 4: RIGHTFIRE, 5: LEFTFIRE}
@@ -24,6 +26,8 @@ modes:
   values: [0,1]
   default: 0
 
+reward_threshold: 19
+
 difficulties:
   values: [0,1,2,3]
   default: 0
@@ -32,4 +36,3 @@ versions:
   v5: Stickiness restored; no stochastic frame-skip; ALE namespace
   v4: Stickiness removed
   v0: Initial release
-

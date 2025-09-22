@@ -51,6 +51,12 @@ class BaseAgent(pl.LightningModule):
         self._fit_elapsed_seconds = 0.0
         self._final_stop_reason = ""
 
+        # Initialize schedulable hyperparameters (mutable during training)
+        self.policy_lr = config.policy_lr
+        self.clip_range = config.clip_range
+        self.vf_coef = config.vf_coef
+        self.ent_coef = config.ent_coef
+        
         # Initialize timing tracker for training 
         # loop performance measurements
         self.timings = TimingsTracker()
@@ -435,7 +441,7 @@ class BaseAgent(pl.LightningModule):
             ConsoleSummaryCallback,  # TODO; call this something else
             DispatchMetricsCallback,
             EarlyStoppingCallback,
-            HyperparameterScheduler,
+            HyperparameterSchedulerCallback,
             ModelCheckpointCallback,
             MonitorMetricsCallback,
             PrefitPresentationCallback,
@@ -463,9 +469,36 @@ class BaseAgent(pl.LightningModule):
         # Metrics dispatcher: aggregates epoch metrics and logs to Lightning
         callbacks.append(DispatchMetricsCallback())
 
-        # Hyperparameter scheduling (lr, clip_range, etc.)
-        if (self.config.policy_lr_schedule is not None) or (self.config.clip_range_schedule is not None):
-            callbacks.append(HyperparameterScheduler())
+        # If policy learning rate scheduler was defined, initialize scheduler callback
+        if self.config.policy_lr_schedule: callbacks.append(
+            HyperparameterSchedulerCallback(
+                schedule=self.config.policy_lr_schedule, 
+                parameter="policy_lr",
+                setter_fn=self._change_optimizers_lr
+            )
+        )
+
+        # If clip range scheduler was defined, initialize scheduler callback
+        if self.config.clip_range_schedule: callbacks.append(
+            HyperparameterSchedulerCallback(
+                schedule=self.config.clip_range_schedule, 
+                parameter="clip_range"
+            )
+        )
+
+        if self.config.vf_coef_schedule: callbacks.append(
+            HyperparameterSchedulerCallback(
+                schedule=self.config.vf_coef_schedule, 
+                parameter="vf_coef"
+            )
+        )
+        
+        if self.config.ent_coef_schedule: callbacks.append(
+            HyperparameterSchedulerCallback(
+                schedule=self.config.ent_coef_schedule, 
+                parameter="ent_coef"
+            )
+        )
 
         # Checkpointing: save best/last models and metrics
         callbacks.append(ModelCheckpointCallback( # TODO: pass run
@@ -541,27 +574,10 @@ class BaseAgent(pl.LightningModule):
         training_progress = max(0.0, min(total_steps / max_timesteps, 1.0))
         return training_progress
 
-    def _update_schedules(self):
-        self._update_schedules__policy_lr()
-
-    # TODO: generalize scheduling support
-    def _update_schedules__policy_lr(self):
-        from utils.schedulers import resolve as resolve_schedule
-        sched_fn = resolve_schedule(self.config.policy_lr_schedule)
-        if sched_fn is None:
-            return
-        progress = self._calc_training_progress()
-        new_policy_lr = float(sched_fn(float(self.config.policy_lr), progress))
-        self._change_optimizers_policy_lr(new_policy_lr)
-        # TODO: should I do this here or every epoch?
-        # Log scheduled LR under train namespace
-        self.metrics_recorder.record("train", {"policy_lr": new_policy_lr})
-
-    def _change_optimizers_policy_lr(self, policy_lr):
+    def _change_optimizers_lr(self, lr):
         optimizers = self.optimizers()
-        if not isinstance(optimizers, (list, tuple)): optimizers = [optimizers]
         for opt in optimizers:
-            for pg in opt.param_groups: pg["lr"] = policy_lr
+            for pg in opt.param_groups: pg["lr"] = lr
 
     # TODO: review this method
     def configure_optimizers(self):
@@ -569,14 +585,15 @@ class BaseAgent(pl.LightningModule):
         return build_optimizer(
             params=self.policy_model.parameters(),
             optimizer=self.config.optimizer,
-            lr=self.config.policy_lr, # TODO: is this taking annealing into account?
+            lr=self.policy_lr, # TODO: is this taking annealing into account?
         )
 
     def _log_hyperparameters(self):
         metrics = {
-            "ent_coef": self.config.ent_coef,
-            "clip_range": self.config.clip_range,
-            "policy_lr": self.config.policy_lr,
+            "ent_coef": self.ent_coef,
+            "vf_coef": self.vf_coef,
+            "clip_range": self.clip_range,
+            "policy_lr": self.policy_lr,
         }
         prefixed = {f"hp/{k}": v for k, v in metrics.items()}
         self.metrics_recorder.record("train", prefixed)

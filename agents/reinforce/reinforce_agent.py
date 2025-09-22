@@ -85,7 +85,7 @@ class REINFORCEAgent(BaseAgent):
         
         # The final loss is the sum of the policy loss and the entropy loss;
         # the higher the entropy coefficient the more priority we give to exploration
-        ent_coef = self.config.ent_coef
+        ent_coef = self.ent_coef
         loss = policy_loss + (ent_coef * entropy_loss)
         
         # Log the metrics for monitoring training progress

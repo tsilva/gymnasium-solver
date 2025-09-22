@@ -13,9 +13,6 @@ class PPOAgent(BaseAgent):
     def __init__(self, config):
         super().__init__(config)
 
-        # Set mutable PPO parameters (eg: schedulable parameters)
-        self.clip_range = config.clip_range
-
         # Register PPO-specific metric monitors
         self.metrics_monitor.register_bundle(PPOAlerts(self))
 
@@ -42,9 +39,6 @@ class PPOAgent(BaseAgent):
         normalize_advantages = self.config.normalize_advantages == "batch"
         if normalize_advantages:
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
-
-        ent_coef = self.config.ent_coef
-        vf_coef = self.config.vf_coef
 
         # Infer policy_distribution and value_predictions from the actor critic model
         policy_dist, values_pred = self.policy_model(states)
@@ -97,8 +91,8 @@ class PPOAgent(BaseAgent):
         # Create the final loss value by mixing the different loss terms
         # according to the coefficients we set in the config 
         # (different weights for each loss term)
-        scaled_value_loss = vf_coef * value_loss
-        scaled_entropy_loss = ent_coef * entropy_loss
+        scaled_value_loss = self.vf_coef * value_loss
+        scaled_entropy_loss = self.ent_coef * entropy_loss
         loss = policy_loss + scaled_value_loss + scaled_entropy_loss
 
         # Calculate additional metrics for logging
@@ -142,22 +136,3 @@ class PPOAgent(BaseAgent):
             early_stop_epoch=early_stop_epoch,
         )
         
-    # TODO: should schedulers be callbacks?
-    # TODO: find a way to not have to inherit this
-    def _update_schedules(self):
-        super()._update_schedules()
-        self._update_schedules__clip_range()
-
-    def _update_schedules__clip_range(self):
-        from utils.schedulers import resolve as resolve_schedule
-        sched_fn = resolve_schedule(self.config.clip_range_schedule)
-        if sched_fn is None:
-            return
-        progress = self._calc_training_progress()
-        new_clip_range = float(sched_fn(float(self.config.clip_range), progress))
-        self.clip_range = new_clip_range
-
-        # Log scheduled clip_range under train namespace
-        self.metrics_recorder.record("train", {
-            'clip_range': new_clip_range
-        })

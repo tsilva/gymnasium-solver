@@ -2,8 +2,6 @@
 
 ## NEXT
 
-- BUG: hp/ent_coef not decaying
-- BUG: envinfo not working for pong-v5-objects
 - BUG: alerts are not making into table logger
 - BUG: training epoch is still running after validation early stop
 - BUG: wandb run is being logged even when training is not started, bold terminal

@@ -153,8 +153,14 @@ class Config:
     # The entropy coefficient for the policy (algo defaults in subclasses)
     ent_coef: Optional[float] = None
 
+    # The schedule for the entropy coefficient
+    ent_coef_schedule: Optional[str] = None
+
     # The value function coefficient for the policy (algo defaults in subclasses)
     vf_coef: Optional[float] = None
+    
+    # The schedule for the value function coefficient
+    vf_coef_schedule: Optional[str] = None
 
     # The clip range for the policy (algo defaults in subclasses)
     clip_range: Optional[float] = None

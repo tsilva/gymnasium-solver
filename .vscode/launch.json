@@ -68,6 +68,14 @@
       ],
       "console": "integratedTerminal",
       "env": {}
+    },
+    {
+      "name": "Debug: run_play.py (best)",
+      "type": "python",
+      "request": "launch",
+      "program": "run_play.py",
+      "console": "integratedTerminal",
+      "env": {}
     }
   ]
 }

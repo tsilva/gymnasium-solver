@@ -101,6 +101,14 @@ class Run:
     def best_checkpoint_dir(self) -> Path:
         return self.checkpoints_dir / "@best" # TODO: USE CONSTANT
 
+    @property
+    def best_checkpoint_path(self) -> Path:
+        return self.best_checkpoint_dir / "policy.ckpt" # TODO: USE CONSTANT
+
+    @property
+    def last_checkpoint_path(self) -> Path:
+        return self.last_checkpoint_dir / "policy.ckpt" # TODO: USE CONSTANT
+
     def load_config(self):
         data: Dict = read_json(self.config_path)
         return Config.build_from_dict(data)

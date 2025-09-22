@@ -109,7 +109,6 @@ class BaseAgent(pl.LightningModule):
                 "record_video": True,
                 "record_video_kwargs": {
                     "video_length": 100,
-                    "record_env_idx": 0,
                 },
             },
             # Record truncated video of first env (requires subproc=False, render_mode="rgb_array")
@@ -120,7 +119,6 @@ class BaseAgent(pl.LightningModule):
                 "record_video": True,
                 "record_video_kwargs": {
                     "video_length": None,
-                    "record_env_idx": 0,
                 },
             },
         }

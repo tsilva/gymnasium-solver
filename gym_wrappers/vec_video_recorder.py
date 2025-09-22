@@ -8,6 +8,8 @@ from gym_wrappers.env_video_recorder import EnvVideoRecorder
 from gym_wrappers.utils import find_wrapper
 
 
+# TODO: CLEANUP this file
+
 class VecVideoRecorder(VecEnvWrapper):
     """Proxy VecEnv wrapper that delegates recording to EnvVideoRecorder instances."""
 

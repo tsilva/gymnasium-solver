@@ -145,16 +145,8 @@ def build_env(
     _is_vizdoom_env = is_vizdoom_env_id(env_id)
     _is_stable_retro_env = is_stable_retro_env_id(env_id)
     _is_bandit_env = is_mab_env_id(env_id)
-    
-    env_video_kwargs = {}
-    record_env_idx = 0
-    env_supports_video = False
-    if record_video:
-        env_video_kwargs = dict(record_video_kwargs or {})
-        record_env_idx = env_video_kwargs.pop("record_env_idx", 0)
 
     def env_fn():
-        nonlocal env_supports_video
         # Build the environment using the appropriate factory 
         if _is_alepy_env: env = _build_env_alepy(env_id, obs_type, render_mode, **env_kwargs)
         elif _is_vizdoom_env: env = _build_env_vizdoom(env_id, obs_type, render_mode, **env_kwargs)
@@ -174,35 +166,9 @@ def build_env(
 
         # Attach metadata wrapper with context (obs_type and project_id)
         env = EnvInfoWrapper(env, obs_type=obs_type, project_id=project_id)
-        if record_video:
-            base_env = env
-            while hasattr(base_env, "env"):
-                base_env = getattr(base_env, "env")
 
-            if render_mode and getattr(base_env, "render_mode", None) != render_mode:
-                setattr(base_env, "render_mode", render_mode)
-            if render_mode and getattr(env, "render_mode", None) != render_mode:
-                setattr(env, "render_mode", render_mode)
-
-            metadata = getattr(base_env, "metadata", None)
-            render_modes = []
-            if isinstance(metadata, dict):
-                modes = metadata.get("render_modes")
-                if isinstance(modes, (list, tuple)):
-                    render_modes = list(modes)
-
-            supports_rgb = (render_mode == "rgb_array") and (
-                "rgb_array" in render_modes or hasattr(base_env, "render")
-            )
-
-            if supports_rgb:
-                env = EnvVideoRecorder(env, **env_video_kwargs)
-            else:
-                gym_logger.warning(
-                    "Video recording disabled for %s: render_mode 'rgb_array' not supported.",
-                    getattr(base_env, "__class__", type(base_env)).__name__,
-                )
-            env_supports_video = supports_rgb
+        # Enable video recording if requested
+        if record_video: env = EnvVideoRecorder(env, **record_video_kwargs)
 
         # Return the environment
         return env
@@ -231,11 +197,12 @@ def build_env(
     # Enable frame stacking if requested
     if frame_stack and frame_stack > 1: env = VecFrameStack(env, n_stack=frame_stack)
     
-    # Enable video recording if requested
-    # record_video_kwargs may include: video_length, record_env_idx (to record a single env)
-    if record_video and env_supports_video:
-        env = VecVideoRecorder(env, record_env_idx=record_env_idx)
+    # Enable video recording if requested (proxies 
+    # to the underlying env video recorder)
+    if record_video: env = VecVideoRecorder(env, record_env_idx=0)
 
+    # Wrap with vec env info wrapper that proxies to 
+    # the underlying env info wrapper (first env metadata)
     env = VecEnvInfoWrapper(env)
 
     return env

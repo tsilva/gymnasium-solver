@@ -1,6 +1,13 @@
-"""Early stopping callback for threshold-based stop conditions (decoupled from eval)."""
+"""Early stopping callback for threshold-based stop conditions (decoupled from eval).
+
+If `threshold` is None, the callback becomes a no-op. This allows callers to
+conditionally attach the callback without having to special-case missing
+thresholds upstream.
+"""
 
 from __future__ import annotations
+
+from typing import Optional
 
 import pytorch_lightning as pl
 
@@ -13,7 +20,7 @@ class EarlyStoppingCallback(pl.Callback):
     def __init__(
         self,
         metric_key: str,
-        threshold: float,
+        threshold: Optional[float],
         mode: str = "max",
     ) -> None:
         super().__init__()
@@ -31,14 +38,17 @@ class EarlyStoppingCallback(pl.Callback):
     def _maybe_stop(self, trainer: pl.Trainer, pl_module: pl.LightningModule) -> None:
         # Trainer already signaled to stop, nothing to do
         if trainer.should_stop: return
+
+        # If no threshold was provided, this callback is disabled
+        if self.threshold is None: return
         
         # If value is not available yet, do nothing
         value = trainer.logged_metrics.get(self.metric_key)
         if value is None: return
 
         # If threshold wasn't reached yet then return (do nothing)
-        _should_stop_max = self.mode == "max" and value >= self.threshold
-        _should_stop_min = self.mode == "min" and value <= self.threshold
+        _should_stop_max = self.mode == "max" and float(value) >= self.threshold
+        _should_stop_min = self.mode == "min" and float(value) <= self.threshold
         should_stop = _should_stop_max or _should_stop_min
         if not should_stop: return
 

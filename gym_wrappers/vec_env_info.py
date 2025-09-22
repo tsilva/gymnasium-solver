@@ -47,7 +47,6 @@ class VecEnvInfoWrapper(VecEnvWrapper):
         return self._call_env("get_spec")
 
     def get_reward_threshold(self):
-        # Note: underlying EnvInfoWrapper exposes get_reward_treshold (sic)
         return self._call_env("get_reward_treshold")
 
     def get_render_fps(self) -> Optional[int]:

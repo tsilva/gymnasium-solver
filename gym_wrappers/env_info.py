@@ -27,10 +27,10 @@ class EnvInfoWrapper(gym.ObservationWrapper):
 
     def _get_spec__file(self):
         env_id = self.get_id()
+        env_id = env_id.replace("/", "-") # TODO: extract this to a helper
         spec_path = f"config/environments/{env_id}.spec.yaml"
-        if not os.path.exists(spec_path):
-            return {}
-        spec = read_yaml(spec_path) or {}
+        assert os.path.exists(spec_path), f"spec file not found: {spec_path}"
+        spec = read_yaml(spec_path)
         return spec
 
     def _get_spec__env(self):
@@ -56,6 +56,7 @@ class EnvInfoWrapper(gym.ObservationWrapper):
 
     def get_reward_treshold(self):
         spec = self.get_spec()
+        assert 'reward_threshold' in spec, "environment has no reward_threshold."
         reward_threshold = spec['reward_threshold']
         return reward_threshold
 

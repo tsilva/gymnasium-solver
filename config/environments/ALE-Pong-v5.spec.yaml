@@ -21,6 +21,9 @@ rewards:
   episodic: score difference
   range: [-21, 21]
   threshold_solved: 19
+
+reward_threshold: 19
+
 modes:
   values: [0,1]
   default: 0

@@ -1,64 +1,66 @@
 from typing import Optional
 
-from gymnasium import Env
 from stable_baselines3.common.vec_env.base_vec_env import VecEnvWrapper
-
-from gym_wrappers.env_info import EnvInfoWrapper
 
 
 class VecEnvInfoWrapper(VecEnvWrapper):
+    """
+    VecEnv helper that exposes environment metadata from the first underlying env.
+
+    Works with both DummyVecEnv (has `envs`) and SubprocVecEnv (no direct access)
+    by delegating calls via `env_method` to the wrapped single-environment
+    EnvInfoWrapper inside each worker.
+    """
+
+    # ---- VecEnv overrides -------------------------------------------------
     def reset(self):
         return self.venv.reset()
 
     def step_wait(self):
         return self.venv.step_wait()
 
-    def _get_nth_env(self, n: int):
-        return self.venv.envs[n]
+    # ---- Internal helpers -------------------------------------------------
+    def _call_env(self, method: str, *args, default=None, **kwargs):
+        """Call a method on env index 0 via VecEnv.env_method.
 
-    def _get_env_wrapper(self, env: Env, wrapper_class):
-        current_env = env
-        while isinstance(current_env, Env):
-            if isinstance(current_env, wrapper_class): return current_env
-            if not hasattr(current_env, "env"): break
-            current_env = current_env.env
-        return None
+        This supports SubprocVecEnv (no `.envs`) and DummyVecEnv alike.
+        Returns the first result or `default` if unavailable.
+        """
+        try:
+            # env_method returns a list, even for a single index
+            result = self.venv.env_method(method, *args, indices=[0], **kwargs)
+            if isinstance(result, (list, tuple)) and result:
+                return result[0]
+            return default
+        except Exception:
+            # Let higher level errors surface when metadata is critical; otherwise
+            # return the provided default for best-effort helpers like fps, etc.
+            if default is not None:
+                return default
+            raise
 
-    def _get_env_info_wrapper(self):
-        env = self._get_nth_env(0)
-        info_wrapper = self._get_env_wrapper(env, EnvInfoWrapper)
-        return info_wrapper
-
-    # --- public API ----------------------------------------------------------
-
+    # --- public API --------------------------------------------------------
     def get_id(self):
-        base = self._get_env_info_wrapper()
-        return base.get_id()
+        return self._call_env("get_id")
 
     def get_spec(self):
-        base = self._get_env_info_wrapper()
-        return base.get_spec()
+        return self._call_env("get_spec")
 
     def get_reward_threshold(self):
-        base = self._get_env_info_wrapper()
-        return base.get_reward_treshold()
+        # Note: underlying EnvInfoWrapper exposes get_reward_treshold (sic)
+        return self._call_env("get_reward_treshold")
 
     def get_render_fps(self) -> Optional[int]:
-        base = self._get_env_info_wrapper()
-        return base.get_render_fps()
+        return self._call_env("get_render_fps", default=None)
 
     def get_time_limit(self) -> Optional[int]:
-        base = self._get_env_info_wrapper()
-        return base.get_time_limit()
+        return self._call_env("get_time_limit", default=None)
 
     def get_obs_type(self):
-        base = self._get_env_info_wrapper()
-        return base.get_obs_type()
+        return self._call_env("get_obs_type", default=None)
 
     def is_rgb_env(self):
-        base = self._get_env_info_wrapper()
-        return base.is_rgb_env()
+        return bool(self._call_env("is_rgb_env", default=False))
 
     def is_ram_env(self):
-        base = self._get_env_info_wrapper()
-        return base.is_ram_env()
+        return bool(self._call_env("is_ram_env", default=False))

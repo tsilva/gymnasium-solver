@@ -2,6 +2,7 @@
 
 ## NEXT
 
+- TODO: create smoke test where all available envs are trained for 1000 steps
 - TODO: cleanup pong feature extractor
 - FEAT: center pong observations around 0, then after confirming superiority, remove feature and provide same featureset through normalization wrapper
 - BUG: bandit training not running due to missing spec

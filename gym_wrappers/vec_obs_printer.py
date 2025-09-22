@@ -89,6 +89,8 @@ class VecObsBarPrinter(VecEnvWrapper):
         self._ranges: Optional[List[Tuple[Optional[float], Optional[float]]]] = None
         # Reward range from spec (lo, hi) when available
         self._reward_range: Tuple[Optional[float], Optional[float]] = (None, None)
+        # Cached time limit (max episode steps), if available via env info
+        self._time_limit: Optional[int] = None
 
         # Dynamic scaling when finite ranges are not available
         self._min_seen: Optional[np.ndarray] = None
@@ -363,6 +365,24 @@ class VecObsBarPrinter(VecEnvWrapper):
         print(header_main)
         if status:
             print(status)
+
+        # Episode timestep progress bar, if time limit is known
+        if self._time_limit is None:
+            try:
+                if hasattr(self.venv, "get_time_limit"):
+                    tl = self.venv.get_time_limit()
+                    if isinstance(tl, (int, float)) and tl and int(tl) > 0:
+                        self._time_limit = int(tl)
+            except Exception:
+                self._time_limit = None
+        if isinstance(self._time_limit, int) and self._time_limit > 0:
+            steps = int(self._current_ep_len)
+            total = int(self._time_limit)
+            t_bar, _t_ratio, (_t_lo, _t_hi) = self._format_bar_scalar(steps, 0, total, width=self._bar_width)
+            label_fmt = "timestep"[:label_w].ljust(label_w)
+            val_fmt = f"{steps}/{total}".rjust(value_w)
+            t_rng_fmt = f"[0, {total}]"
+            print(f"{label_fmt}  {val_fmt}  {t_bar}  {t_rng_fmt}")
 
         # Reward bar (scaled using spec reward range when available)
         reward_val: Optional[float] = None

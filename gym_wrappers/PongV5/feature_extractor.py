@@ -2,6 +2,8 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
+# TODO: CLEANUP this file
+
 # Deterministic normalization constants to keep features in [0,1]
 # Screen dimensions for Atari Pong (overshoot-safe denominators)
 SCREEN_W: float = 160.0
@@ -82,6 +84,9 @@ class PongV5_FeatureExtractor(gym.ObservationWrapper):
 
     def observation(self, observation):
         vec = pong_state_vector(self.env.objects, include_hud=self.include_hud)
+        
+        # TODO: review clipping, consider using assertion instead
+        #assert np.all(vec > 0.0) and np.all(vec < 1.0)
 
         if self.clip:
             # Check before clipping

@@ -2,6 +2,7 @@
 
 ## NEXT
 
+- TODO: cleanup pong feature extractor
 - FEAT: center pong observations around 0, then after confirming superiority, remove feature and provide same featureset through normalization wrapper
 - BUG: bandit training not running due to missing spec
 - FEAT: add support for scheduler min

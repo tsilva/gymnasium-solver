@@ -19,7 +19,7 @@ ppo:
   n_epochs: 20
   n_steps: 1024
   batch_size: 0.125
-  ent_coef: 0.0
+  ent_coef: 0.005
   clip_range: 0.2
   policy_lr: 1e-2 # approx_kl = inf if 1e-1
   normalize_advantages: "rollout"

@@ -2,8 +2,8 @@
 
 ## NEXT
 
+- FEAT: center pong observations around 0, then after confirming superiority, remove feature and provide same featureset through normalization wrapper
 - BUG: bandit training not running due to missing spec
-- FEAT: add observation labels for pong objects spec
 - FEAT: add support for scheduler min
 - BUG: alerts are not making into table logger
 - BUG: training epoch is still running after validation early stop

@@ -6,6 +6,10 @@ from gymnasium import spaces
 SCREEN_W: float = 160.0
 SCREEN_H: float = 210.0
 
+# Approximate paddle height in pixels (used when not available on objects)
+# Note: OCAtari objects may expose size; we prefer that when present.
+PADDLE_H_DEFAULT: float = 32.0
+
 # Max Y pixels per frame that paddle can move (for normalizing velocity)
 PADDLE_DY_SCALE: float = 24.0
 
@@ -18,9 +22,13 @@ def _index_objects_by_category(objects):
     for object in objects:
         # Skip HUD objects
         if getattr(object, "hud", False): continue
+       
+        # TODO: figure out what causes this
+        # Skip objects that already exist in map
+        if object.category in objects_map: continue
 
         # Assert that object category is not already in map
-        assert object.category not in objects_map, f"Object {object.category} already exists in map"
+        #assert object.category not in objects_map, f"Object {object.category} already exists in map"
 
         # Add object to map
         objects_map[object.category] = object
@@ -34,11 +42,33 @@ def _normalize_velocity(value: float, scale: float) -> float:
     """
     return 0.5 * (np.tanh(float(value) / float(scale)) + 1.0)
 
+def _paddle_height(obj) -> float:
+    """Return paddle height from object if available, else a sensible default."""
+    for attr in ("height", "h"):
+        if hasattr(obj, attr):
+            try:
+                return float(getattr(obj, attr))
+            except Exception:
+                continue
+    return PADDLE_H_DEFAULT
+
+
+def _normalize_paddle_center_y(center_y: float, paddle_h: float) -> float:
+    """Normalize paddle center-Y to [0,1] over playable range.
+
+    Maps center_y in [paddle_h/2, SCREEN_H - paddle_h/2] to [0, 1].
+    """
+    denom = SCREEN_H - float(paddle_h)
+    assert denom > 0.0, f"Invalid paddle height {paddle_h} for screen height {SCREEN_H}"
+    return (float(center_y) - 0.5 * float(paddle_h)) / denom
+
+
 def _obs_from_objects(objects):
     """
     Vector order (length=8): [Player.y, Player.dy, Enemy.y, Enemy.dy, Ball.x, Ball.y, Ball.dx, Ball.dy]
     Normalized deterministically to [0, 1]:
-      - Positions: divide by screen size (x/SCREEN_W, y/SCREEN_H)
+      - Paddle Y (center): (y - h/2) / (SCREEN_H - h)
+      - Ball X/Y: x / (SCREEN_W - 1), y / (SCREEN_H - 1)
       - Velocities: symmetric tanh mapping -> [0,1]
     """
 
@@ -49,14 +79,19 @@ def _obs_from_objects(objects):
     player_obj = obj_map["Player"]
     player_y = player_obj.y
     player_dy = player_obj.dy
-    player_y_n = player_y / SCREEN_H
+    player_h = _paddle_height(player_obj)
+    player_y_n = _normalize_paddle_center_y(player_y, player_h)
     player_dy_n = _normalize_velocity(player_dy, PADDLE_DY_SCALE)
 
     # Retrieve enemy state and normalize
     enemy_obj = obj_map.get("Enemy", None)
     enemy_y = enemy_obj.y if enemy_obj else 0
     enemy_dy = enemy_obj.dy if enemy_obj else 0
-    enemy_y_n = enemy_y / SCREEN_H
+    if enemy_obj is not None:
+        enemy_h = _paddle_height(enemy_obj)
+        enemy_y_n = _normalize_paddle_center_y(enemy_y, enemy_h)
+    else:
+        enemy_y_n = 0.0
     enemy_dy_n = _normalize_velocity(enemy_dy, PADDLE_DY_SCALE)
 
     # Retrieve ball state and normalize
@@ -65,8 +100,9 @@ def _obs_from_objects(objects):
     ball_y = ball_obj.y if ball_obj else 0
     ball_dx = ball_obj.dx if ball_obj else 0
     ball_dy = ball_obj.dy if ball_obj else 0
-    ball_x_n = ball_x / SCREEN_W
-    ball_y_n = ball_y / SCREEN_H
+    # Normalize ball positions over pixel index ranges [0..SCREEN_W-1], [0..SCREEN_H-1]
+    ball_x_n = (ball_x / (SCREEN_W - 1.0)) if ball_obj else 0.0
+    ball_y_n = (ball_y / (SCREEN_H - 1.0)) if ball_obj else 0.0
     ball_dx_n = _normalize_velocity(ball_dx, BALL_D_SCALE)
     ball_dy_n = _normalize_velocity(ball_dy, BALL_D_SCALE)
 

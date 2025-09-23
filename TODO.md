@@ -2,7 +2,10 @@
 
 ## NEXT
 
-- TODO: cleanup pong feature extractor
+- FEAT: make pong feature extractor zero centered
+- FEAT: consider passing velocity magnitudes as extra obs info
+- FEAT: add env normalization support (use that instead of normalization from feature extractor)
+
 - BUG: bandit env crashes because it tries to record
 - TODO: create smoke test where all available envs are trained for 1000 steps
 - FEAT: center pong observations around 0, then after confirming superiority, remove feature and provide same featureset through normalization wrapper
@@ -23,7 +26,6 @@
 ## WISHLIST
 
 - FEAT: add LunarLander-v3 randomization wrapper
-- FEAT: add env normalization support 
 - FEAT: add observation/action noise support
 - FEAT: dispatch maintenance tasks with codex on cloud (night shift)
 - FEAT: improve scheduling support (more generic, ability to define start/end and annealing schedule; NOTE: reset optimizer on learning rate changes?)

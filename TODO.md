@@ -2,6 +2,8 @@
 
 ## NEXT
 
+- BUG: env smoke tests not passing
+- FEAT: when running with debugger force n_envs=1 and subproc=false
 - FEAT: make charts indexed by effective timesteps so that I can compare performance of N_ENVS vs less envs
 - FEAT: make pong feature extractor zero centered
 - FEAT: consider passing velocity magnitudes as extra obs info

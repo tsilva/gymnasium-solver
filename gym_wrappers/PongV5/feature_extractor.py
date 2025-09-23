@@ -42,17 +42,6 @@ def _normalize_velocity(value: float, scale: float) -> float:
     """
     return float(np.tanh(float(value) / float(scale)))
 
-def _paddle_height(obj) -> float:
-    """Return paddle height from object if available, else a sensible default."""
-    for attr in ("height", "h"):
-        if hasattr(obj, attr):
-            try:
-                return float(getattr(obj, attr))
-            except Exception:
-                continue
-    return PADDLE_H_DEFAULT
-
-
 def _normalize_paddle_center_y(center_y: float, paddle_h: float) -> float:
     """Normalize paddle center-Y to [-1,1] over playable range.
 
@@ -80,7 +69,7 @@ def _obs_from_objects(objects):
     player_obj = obj_map["Player"]
     player_y = player_obj.y
     player_dy = player_obj.dy
-    player_h = _paddle_height(player_obj)
+    player_h = player_obj.h
     player_y_n = _normalize_paddle_center_y(player_y, player_h)
     player_dy_n = _normalize_velocity(player_dy, PADDLE_DY_SCALE)
 
@@ -89,7 +78,7 @@ def _obs_from_objects(objects):
     enemy_y = enemy_obj.y if enemy_obj else 0
     enemy_dy = enemy_obj.dy if enemy_obj else 0
     if enemy_obj is not None:
-        enemy_h = _paddle_height(enemy_obj)
+        enemy_h = enemy_obj.h
         enemy_y_n = _normalize_paddle_center_y(enemy_y, enemy_h)
     else:
         enemy_y_n = 0.0

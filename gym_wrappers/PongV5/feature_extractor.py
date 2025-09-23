@@ -116,7 +116,9 @@ def _obs_from_objects(
       - Ball X/Y: center-based. X over [w/2..SCREEN_W - w/2] and
         Y over [PLAYFIELD_Y_MIN + h/2 .. PLAYFIELD_Y_MAX - h/2], each with a
         small margin, mapped linearly to [-1,1]
-      - Velocities: symmetric tanh mapping -> [-1,1]
+      - Velocities (dx, dy): expressed in the same normalized coordinate
+        system as positions so that, when consecutive frames are available,
+        x_t+1 ≈ x_t + dx and y_t+1 ≈ y_t + dy.
       - Ball.visible flag: +1 if ball is visible/present, -1 if absent
     """
 
@@ -179,13 +181,44 @@ def _obs_from_objects(
         ball_y_n = float(last_ball_y_n) if last_ball_y_n is not None else 0.0
 
     if ball_visible:
-        ball_dx_n = _normalize_velocity(ball_dx, BALL_D_SCALE)
-        ball_dy_n = _normalize_velocity(ball_dy, BALL_D_SCALE)
+        # Compute velocities in normalized coordinates so that
+        # delta(position_normalized) == velocity_normalized.
+        if last_ball_x_n is not None and last_ball_y_n is not None:
+            ball_dx_n = float(ball_x_n) - float(last_ball_x_n)
+            ball_dy_n = float(ball_y_n) - float(last_ball_y_n)
+        else:
+            # First visible frame: approximate using pixel velocities scaled to normalized units
+            # using the same denominators used for positions above.
+            # Guard denominators: if not previously defined (invisible path), estimate using
+            # nominal ball size of 2px.
+            if ball_obj:
+                w = float(getattr(ball_obj, "w", 2.0))
+                h = float(getattr(ball_obj, "h", 2.0))
+            else:
+                w = 2.0
+                h = 2.0
+            x_lo = 0.0 + 0.5 * w - margin_y
+            x_hi = SCREEN_W - 0.5 * w + margin_y
+            x_denom = x_hi - x_lo
+            y_lo = min_y + 0.5 * h - margin_y
+            y_hi = max_y - 0.5 * h + margin_y
+            y_denom = y_hi - y_lo
+            assert x_denom > 0.0 and y_denom > 0.0
+            ball_dx_n = 2.0 * float(ball_dx) / float(x_denom)
+            ball_dy_n = 2.0 * float(ball_dy) / float(y_denom)
     else:
         # Use last-seen normalized velocities if provided; fallback to 0.0
         ball_dx_n = float(last_ball_dx_n) if last_ball_dx_n is not None else 0.0
         ball_dy_n = float(last_ball_dy_n) if last_ball_dy_n is not None else 0.0
     ball_visible_n = 1.0 if ball_visible else -1.0
+
+    # Invariant: if we have a previous position and current ball is visible,
+    # the normalized position should advance by the normalized velocity.
+    if ball_visible and last_ball_x_n is not None and last_ball_y_n is not None:
+        # Allow tiny numerical slack due to float ops
+        eps = 1e-6
+        assert abs((float(last_ball_x_n) + float(ball_dx_n)) - float(ball_x_n)) <= max(eps, 1e-3)
+        assert abs((float(last_ball_y_n) + float(ball_dy_n)) - float(ball_y_n)) <= max(eps, 1e-3)
 
     # Create state vector and return it
     obs = np.asarray([

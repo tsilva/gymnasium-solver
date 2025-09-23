@@ -13,17 +13,18 @@ observation_space:
   default: state
   variants:
     state:
-      shape: [8]
+      shape: [9]
       dtype: float32
       components:
-        - {name: Player.y,  range: [0.0, 1.0]}
-        - {name: Player.dy, range: [0.0, 1.0]}
-        - {name: Enemy.y,   range: [0.0, 1.0]}
-        - {name: Enemy.dy,  range: [0.0, 1.0]}
-        - {name: Ball.x,    range: [0.0, 1.0]}
-        - {name: Ball.y,    range: [0.0, 1.0]}
-        - {name: Ball.dx,   range: [0.0, 1.0]}
-        - {name: Ball.dy,   range: [0.0, 1.0]}
+        - {name: Player.y,  range: [-1.0, 1.0]}
+        - {name: Player.dy, range: [-1.0, 1.0]}
+        - {name: Enemy.y,   range: [-1.0, 1.0]}
+        - {name: Enemy.dy,  range: [-1.0, 1.0]}
+        - {name: Ball.x,    range: [-1.0, 1.0]}
+        - {name: Ball.y,    range: [-1.0, 1.0]}
+        - {name: Ball.dx,   range: [-1.0, 1.0]}
+        - {name: Ball.dy,   range: [-1.0, 1.0]}
+        - {name: Ball.visible,   range: [-1.0, 1.0]}
 
 rewards:
   per_point: +1/-1

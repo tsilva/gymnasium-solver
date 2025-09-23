@@ -86,13 +86,16 @@ def _obs_from_objects(objects,
                       max_y: float = PLAYFIELD_Y_MAX,
                       margin_y: float = 2.0):
     """
-    Vector order (length=8): [Player.y, Player.dy, Enemy.y, Enemy.dy, Ball.x, Ball.y, Ball.dx, Ball.dy]
+    Vector order (length=9):
+      [Player.y, Player.dy, Enemy.y, Enemy.dy, Ball.x, Ball.y, Ball.dx, Ball.dy, Ball.visible]
+
     Normalized deterministically to [-1, 1]:
       - Paddle Y (center): over [PLAYFIELD_Y_MIN + h/2, PLAYFIELD_Y_MAX - h/2]
         mapped linearly to [-1,1]
       - Ball X/Y: X over [0..SCREEN_W-1], Y over [PLAYFIELD_Y_MIN..PLAYFIELD_Y_MAX-1]
         mapped linearly to [-1,1]
       - Velocities: symmetric tanh mapping -> [-1,1]
+      - Ball.visible flag: +1 if ball is visible/present, -1 if absent
     """
 
     # Index objects by category for easy lookup
@@ -123,6 +126,7 @@ def _obs_from_objects(objects,
     ball_center_y = _center_y(ball_obj) if ball_obj else 0.0
     ball_dx = ball_obj.dx if ball_obj else 0
     ball_dy = ball_obj.dy if ball_obj else 0
+    ball_visible = (ball_obj is not None) and bool(getattr(ball_obj, "visible", True))
     # Normalize ball positions: X over [0..SCREEN_W-1], Y over Pong playfield using center-Y
     if ball_obj:
         bx01 = ball_x / (SCREEN_W - 1.0)
@@ -141,6 +145,7 @@ def _obs_from_objects(objects,
         ball_y_n = 0.0
     ball_dx_n = _normalize_velocity(ball_dx, BALL_D_SCALE)
     ball_dy_n = _normalize_velocity(ball_dy, BALL_D_SCALE)
+    ball_visible_n = 1.0 if ball_visible else -1.0
 
     # Create state vector and return it
     obs = np.asarray([
@@ -149,14 +154,15 @@ def _obs_from_objects(objects,
         enemy_y_n,
         enemy_dy_n, 
         ball_x_n, ball_y_n, 
-        ball_dx_n, ball_dy_n
+        ball_dx_n, ball_dy_n,
+        ball_visible_n,
     ], dtype=np.float32)
     return obs
 
 # ---- Gymnasium Observation Wrapper ----
 class PongV5_FeatureExtractor(gym.ObservationWrapper):
     """
-    Replaces obs with an 8-dim normalized vector built from OCAtari objects.
+    Replaces obs with a 9-dim normalized vector built from OCAtari objects.
     """
     def __init__(self, env,
                  clip: bool = True,
@@ -172,7 +178,7 @@ class PongV5_FeatureExtractor(gym.ObservationWrapper):
         # When clip=False, features may briefly exceed this range, but most algorithms
         # are tolerant as long as the Box advertises the intended scale.
         self.observation_space = spaces.Box(
-            low=-1.0, high=1.0, shape=(8,), dtype=np.float32
+            low=-1.0, high=1.0, shape=(9,), dtype=np.float32
         )
 
     def observation(self, observation):

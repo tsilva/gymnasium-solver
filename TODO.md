@@ -3,16 +3,10 @@
 ## NEXT
 
 - BUG: env smoke tests not passing
-- FEAT: when running with debugger force n_envs=1 and subproc=false
 - FEAT: make charts indexed by effective timesteps so that I can compare performance of N_ENVS vs less envs
-- FEAT: make pong feature extractor zero centered
-- FEAT: consider passing velocity magnitudes as extra obs info
-- FEAT: add env normalization support (use that instead of normalization from feature extractor)
 - FEAT: track dead relus
 - TEST: empirically verify that initial policy distribution is uniform
 - BUG: bandit env crashes because it tries to record
-- TODO: create smoke test where all available envs are trained for 1000 steps
-- FEAT: center pong observations around 0, then after confirming superiority, remove feature and provide same featureset through normalization wrapper
 - BUG: bandit training not running due to missing spec
 - FEAT: add support for scheduler min
 - BUG: alerts are not making into table logger
@@ -28,8 +22,17 @@
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 - TODO: learn how to read gradient graphs
 
+## Pong-v5_objects
+
+- reduce action space
+- reduce pong hidden dims
+- add support for running step by step in run_play
+- consider passing velocity magnitudes as extra obs info
+- add env normalization support (use that instead of normalization from feature extractor)
+
 ## WISHLIST
 
+- FEAT: add support for run_play to run with random actions and/or user actions
 - FEAT: add LunarLander-v3 randomization wrapper
 - FEAT: add observation/action noise support
 - FEAT: dispatch maintenance tasks with codex on cloud (night shift)

@@ -2,7 +2,7 @@
 
 env_id: ALE/Pong-v5
 obs_type: "objects"
-hidden_dims: [128, 128]
+hidden_dims: [256, 256]
 eval_warmup_epochs: 100
 eval_freq_epochs: 10 
 eval_episodes: 10  
@@ -18,7 +18,7 @@ ppo:
   n_envs: 16
   subproc: true
   vf_coef: 0.5
-  n_epochs: 10 
+  n_epochs: 15 
   n_steps: 1024
   batch_size: 1024 
   ent_coef: 0.005

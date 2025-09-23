@@ -2,7 +2,6 @@
 
 ## NEXT
 
-
 - FEAT: track approx_kl early stops in wandb dashboard
 - FEAT: plot advantage mean/std
 - FEAT: add support for scheduler min and progress decoupled from timesteps, perhaps by specifying percentage -> value tuples and have the scheduler interpolate between those, allowing dynamic linear schedules that perform differently across the training (eg: higher early, lower late)
@@ -59,7 +58,10 @@
 - FEAT: add support for dynamics models (first just train and monitor them, then leverage them for planning)
 - FEAT: support for multi-env rollout collectors (eg: solve multiple envs at once; eg: train on multiple configs of LunarLander-v3)
 - FEAT: add support for curriculum learning (take same model through N challenges sequentially)
-- FEAT: add support for resuming training from a previous run (must restore optimizer, epoch, etc.)
+- FEAT: add support for resuming training from a previous run (must restore optimizer, epoch, etc.; make restoring optimizer conditional, allow restarting with new config hyperparams)
+- FEAT: add support for running sweep from existing run (using previous resume support)
+- FEAT: allow downloading old runs from wandb when not available locally
+- FEAT: zip and upload runs to wandb
 - FEAT: add support for publishing run to Hugging Face Hub
 - FEAT: add support for async eval (to avoid blocking training)
 - FEAT: SEEDRL+PPO

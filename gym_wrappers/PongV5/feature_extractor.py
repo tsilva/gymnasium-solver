@@ -13,11 +13,18 @@ PADDLE_DY_SCALE: float = 24.0
 BALL_D_SCALE: float = 12.0
 
 # ---- helpers from your snippet ----
-def _index_objects_by_category(objects, include_hud: bool = False):
+def _index_objects_by_category(objects):
     objects_map = {}
     for object in objects:
-        if not include_hud and getattr(object, "hud", False): continue
-        if object.category not in objects_map: objects_map[object.category] = object
+        # Skip HUD objects
+        if getattr(object, "hud", False): continue
+
+        # Assert that object category is not already in map
+        assert object.category not in objects_map, f"Object {object.category} already exists in map"
+
+        # Add object to map
+        objects_map[object.category] = object
+
     return objects_map
 
 def _normalize_velocity(value: float, scale: float) -> float:
@@ -27,7 +34,7 @@ def _normalize_velocity(value: float, scale: float) -> float:
     """
     return 0.5 * (np.tanh(float(value) / float(scale)) + 1.0)
 
-def pong_state_vector(objects, include_hud: bool = False):
+def _obs_from_objects(objects):
     """
     Vector order (length=8): [Player.y, Player.dy, Enemy.y, Enemy.dy, Ball.x, Ball.y, Ball.dx, Ball.dy]
     Normalized deterministically to [0, 1]:
@@ -36,7 +43,7 @@ def pong_state_vector(objects, include_hud: bool = False):
     """
 
     # Index objects by category for easy lookup
-    obj_map = _index_objects_by_category(objects, include_hud=include_hud)
+    obj_map = _index_objects_by_category(objects)
 
     # Retrieve player state and normalize
     player_obj = obj_map["Player"]
@@ -64,7 +71,7 @@ def pong_state_vector(objects, include_hud: bool = False):
     ball_dy_n = _normalize_velocity(ball_dy, BALL_D_SCALE)
 
     # Create state vector and return it
-    state_vector = np.asarray([
+    obs = np.asarray([
         player_y_n, 
         player_dy_n, 
         enemy_y_n,
@@ -72,32 +79,28 @@ def pong_state_vector(objects, include_hud: bool = False):
         ball_x_n, ball_y_n, 
         ball_dx_n, ball_dy_n
     ], dtype=np.float32)
-    return state_vector
+    return obs
 
 # ---- Gymnasium Observation Wrapper ----
 class PongV5_FeatureExtractor(gym.ObservationWrapper):
     """
     Replaces obs with an 8-dim normalized vector built from OCAtari objects.
     """
-    def __init__(self, env, include_hud: bool = False, clip: bool = True):
+    def __init__(self, env):
         super().__init__(env)
-        self.include_hud = include_hud
-        self.clip = clip
         # TODO: if not normalized then return correct max values for each feature
         self.observation_space = spaces.Box(
             low=0.0, high=1.0, shape=(8,), dtype=np.float32
         )
 
     def observation(self, observation):
-        vec = pong_state_vector(self.env.objects, include_hud=self.include_hud)
+        # Convert objects to observation vector
+        obs = _obs_from_objects(self.env.objects)
         
-        # TODO: review clipping, consider using assertion instead
-        #assert np.all(vec > 0.0) and np.all(vec < 1.0)
+        # Assert that obs is within [0, 1] and finite and not nan
+        assert np.all(obs >= 0.0), f"Negative values found: {obs}"
+        assert np.all(obs <= 1.0), f"Values above 1 found: {obs}"
+        assert np.all(np.isfinite(obs)), f"Non-finite values found: {obs}"
 
-        if self.clip:
-            # Check before clipping
-            if np.any(vec < 0.0) or np.any(vec > 1.0):
-                print(f"[CLIP] Raw vector out of bounds: {vec}")
-            vec = np.clip(vec, 0.0, 1.0)
-
-        return vec
+        # Return observation
+        return obs

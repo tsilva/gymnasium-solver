@@ -2,6 +2,7 @@
 
 ## Pong-v5_objects
 
+- try debug server
 - BUG: fix duplicate object error in feature extractor
 - FEAT: create action wrapper that maps action indexes into a smaller subset, wrapper must be configurable to receive the pairings, eg: if it receives [3, 2, 1] it must map 0 -> 3, 1 -> 2, 2 -> 1; apply it to this env
 - add env normalization support (use that instead of normalization from feature extractor)

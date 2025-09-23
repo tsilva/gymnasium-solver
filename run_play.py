@@ -19,7 +19,7 @@ def main():
     p = argparse.ArgumentParser(description="Play a trained agent using RolloutCollector (human render)")
     p.add_argument("--run-id", default="@last", help="Run ID under runs/ (default: last run with best checkpoint)")
     p.add_argument("--episodes", type=int, default=10, help="Number of episodes to play")
-    p.add_argument("--deterministic", action="store_true", help="Use deterministic actions (mode/argmax)")
+    p.add_argument("--deterministic", action="store_true", default=False, help="Use deterministic actions (mode/argmax)")
     p.add_argument(
         "--step-by-step",
         dest="step_by_step",

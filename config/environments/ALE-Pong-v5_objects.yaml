@@ -2,7 +2,7 @@
 
 env_id: ALE/Pong-v5
 obs_type: "objects"
-hidden_dims: [256, 256]
+hidden_dims: [32, 32]
 eval_warmup_epochs: 100
 eval_freq_epochs: 10 
 eval_episodes: 10  
@@ -23,5 +23,5 @@ ppo:
   batch_size: 0.25
   ent_coef: 0.005
   clip_range: 0.2
-  policy_lr: 1e-2 # TODO: approx_kl = inf if 1e-1
+  policy_lr: 4e-2 # TODO: approx_kl = inf if 1e-1
   normalize_advantages: "rollout"

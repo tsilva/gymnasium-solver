@@ -145,6 +145,8 @@ class Config:
     max_grad_norm: Optional[float] = None
     
     # The discount factor for the rewards (algo defaults in subclasses)
+    # NOTE: effective horizon is 1 / (1 - gamma), 
+    # consider frameskips (eg: in Pong-v4, frameskip=4, so with gamma=0.99, effective horizon is 1 / (1 - 0.99) * 4 = 100 * 4 = 400)
     gamma: Optional[float] = None
 
     # The lambda parameter for the GAE (algo defaults in subclasses)

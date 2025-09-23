@@ -20,8 +20,16 @@ from typing import Dict, List
 from utils.config import Config
 from utils.io import read_json
 
-LAST_RUN_DIR = Path("runs/@last") # TODO: use constant  
 RUNS_DIR = Path("runs")
+LAST_RUN_DIR = RUNS_DIR / Path("@last")
+VIDEOS_DIR = Path("videos")
+CHECKPOINTS_DIR = Path("checkpoints")
+LAST_CHECKPOINT_DIR = Path("@last")
+BEST_CHECKPOINT_DIR = Path("@best")
+CONFIG_FILENAME = Path("config.json")
+RUN_LOG_FILENAME = Path("run.log")
+METRICS_CSV_FILENAME = Path("metrics.csv")
+POLICY_CHECKPOINT_FILENAME = Path("policy.ckpt")
 
 # TODO: move this to a more appropriate util location
 def _symlink_to_dir(symlink_path: Path, target_dir: Path):
@@ -31,7 +39,6 @@ def _symlink_to_dir(symlink_path: Path, target_dir: Path):
 def list_run_ids() -> List[str]:
     return [p.name for p in RUNS_DIR.iterdir() if p.is_dir()]
 
-# TODO: rename to RunDir
 @dataclass(frozen=True)
 class Run:
     run_id: str
@@ -73,41 +80,41 @@ class Run:
 
     @property
     def config_path(self) -> Path:
-        return self.run_dir / "config.json" # TODO: use constant
+        return self.run_dir / CONFIG_FILENAME
         
     @property
     def metrics_path(self) -> Path:
-        return self.run_dir / "metrics.csv" # TODO: use constant
+        return self.run_dir / METRICS_CSV_FILENAME
 
     def ensure_metrics_path(self) -> Path:
         return self._ensure_path(self.metrics_path)
 
     @property
     def checkpoints_dir(self) -> Path:
-        return self.run_dir / "checkpoints" # TODO: use constant
+        return self.run_dir / CHECKPOINTS_DIR
 
     @property
     def video_dir(self) -> Path:
-        return self.run_dir / "videos" # TODO: use constant
+        return self.run_dir / VIDEOS_DIR
 
     def ensure_video_dir(self) -> Path:
         return self._ensure_path(self.video_dir)
 
     @property
     def last_checkpoint_dir(self) -> Path:
-        return self.checkpoints_dir / "@last" # TODO: USE CONSTANT
+        return self.checkpoints_dir / LAST_CHECKPOINT_DIR
 
     @property
     def best_checkpoint_dir(self) -> Path:
-        return self.checkpoints_dir / "@best" # TODO: USE CONSTANT
+        return self.checkpoints_dir / BEST_CHECKPOINT_DIR
 
     @property
     def best_checkpoint_path(self) -> Path:
-        return self.best_checkpoint_dir / "policy.ckpt" # TODO: USE CONSTANT
+        return self.best_checkpoint_dir / POLICY_CHECKPOINT_FILENAME
 
     @property
     def last_checkpoint_path(self) -> Path:
-        return self.last_checkpoint_dir / "policy.ckpt" # TODO: USE CONSTANT
+        return self.last_checkpoint_dir / POLICY_CHECKPOINT_FILENAME
 
     def load_config(self):
         data: Dict = read_json(self.config_path)

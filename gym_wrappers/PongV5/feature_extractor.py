@@ -74,7 +74,7 @@ def _center_x(obj) -> float:
         return 0.0
     if hasattr(obj, "center") and obj.center is not None:
         return float(obj.center[0])
-    w = float(getattr(obj, "w", 0.0))
+    w = float(getattr(obj, "w", 0.0)) # TODO: don't think this is needed
     x = float(getattr(obj, "x", 0.0))
     return x + 0.5 * w
 

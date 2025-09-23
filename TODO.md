@@ -2,17 +2,20 @@
 
 ## NEXT
 
+- BUG: even though action_mean starts correctly std is not 1
+- BUG: alerts are not making into table logger
 - BUG: env smoke tests not passing
-- FEAT: make charts indexed by effective timesteps so that I can compare performance of N_ENVS vs less envs
+- FEAT: currently charts are indexed by n_envs * n_steps, index only by n_steps so we can compare performance of N_ENVS vs less envs; max_timesteps should also be indexed by that, as well as training progress
+- FEAT: add support for agents to handle their own save/load logic
+
 - FEAT: track dead relus
-- TEST: empirically verify that initial policy distribution is uniform
+- TEST: empirically verify that initial policy distribution is uniform (check if action mean starts at middle of action space and std is 0)
 - BUG: bandit env crashes because it tries to record
 - BUG: bandit training not running due to missing spec
 - FEAT: add support for scheduler min
-- BUG: alerts are not making into table logger
+
 - BUG: training epoch is still running after validation early stop
 - BUG: wandb run is being logged even when training is not started, bold terminal
-- FEAT: make boot and shutdown times faster
 - FEAT: prefix metrics (eg: time/epoch, time/step, etc., env/obs_mean, env/obs_std, env/)
 - BUG: can't inspect bandit training
 - BUG: W&B workspace redundant print
@@ -25,13 +28,15 @@
 ## Pong-v5_objects
 
 - reduce action space
-- reduce pong hidden dims
 - add support for running step by step in run_play
 - consider passing velocity magnitudes as extra obs info
 - add env normalization support (use that instead of normalization from feature extractor)
 
 ## WISHLIST
 
+- FEAT: customize wandb dashboard to make action_mean min/max be computed from the action space defined in the spec, same for obs_mean
+- TASK: solve Pong-v5_objects, get max reward
+- TASK: solve Taxi-v3 with PPO, training stalls for unknown reasons
 - FEAT: add support for run_play to run with random actions and/or user actions
 - FEAT: add LunarLander-v3 randomization wrapper
 - FEAT: add observation/action noise support
@@ -39,8 +44,6 @@
 - FEAT: improve scheduling support (more generic, ability to define start/end and annealing schedule; NOTE: reset optimizer on learning rate changes?)
 - FEAT: autotune n_envs (check tune_nenvs.md)
 - FEAT: add LLM review support to inspector.py
-- TASK: solve Pong-v5_objects, get max reward
-- TASK: solve Taxi-v3 with PPO, training stalls for unknown reasons
 - FEAT: add support for continuous environments (eg: LunarLanderContinuous-v2)
 - FEAT: add A2C support
 - FEAT: add [Minari](https://minari.farama.org/) support

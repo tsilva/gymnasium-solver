@@ -6,6 +6,8 @@ Encapsulates train.py logic so the entrypoint stays minimal.
 from __future__ import annotations
 
 import os
+import sys
+from math import gcd
 from dataclasses import asdict
 from typing import Optional
 
@@ -58,6 +60,50 @@ def _maybe_merge_wandb_config(config, *, wandb_sweep_flag: bool, cli_max_timeste
     config = _init_wandb_sweep(config)
     if cli_max_timesteps is not None:
         config.max_timesteps = cli_max_timesteps
+    return config
+
+
+def _apply_debugger_env_overrides(config):
+    """When a debugger is attached, force single-env, in-process execution.
+
+    Rationale: debuggers and subprocess-based vec envs don't play nicely. To
+    keep breakpoints usable, clamp to `n_envs=1` and `subproc=False`. Also
+    adjust `batch_size` to remain a clean divisor of the rollout size so
+    training proceeds without violating config invariants.
+    """
+    # Detect common debuggers (e.g., pdb, debugpy) via active trace function
+    if sys.gettrace() is None:
+        return config
+
+    # Preserve original values for logging and ratio-based batch recompute
+    orig_n_envs = int(getattr(config, "n_envs", 1) or 1)
+    orig_subproc = getattr(config, "subproc", None)
+    n_steps = int(getattr(config, "n_steps", 1) or 1)
+    orig_batch = int(getattr(config, "batch_size", 1) or 1)
+
+    # Compute original rollout size and batch ratio (batch per rollout)
+    orig_rollout = max(1, int(orig_n_envs) * int(n_steps))
+    ratio = float(orig_batch) / float(orig_rollout) if orig_rollout > 0 else 1.0
+
+    # Apply debugger-safe settings
+    config.n_envs = 1
+    config.subproc = False
+
+    # Recompute batch_size to fit the new rollout while preserving ratio when possible
+    new_rollout = max(1, int(config.n_envs) * int(n_steps))
+    new_batch = max(1, int(new_rollout * ratio))
+    if new_batch > new_rollout:
+        new_batch = new_rollout
+    if new_rollout % new_batch != 0:
+        d = gcd(int(new_rollout), int(new_batch))
+        new_batch = int(d) if int(d) > 0 else 1
+    old_batch = getattr(config, "batch_size", new_batch)
+    config.batch_size = int(new_batch)
+
+    print(
+        f"Debugger detected: forcing n_envs=1, subproc=False; "
+        f"batch_size {old_batch}→{config.batch_size} (was n_envs={orig_n_envs}, subproc={orig_subproc})."
+    )
     return config
 
 
@@ -135,6 +181,9 @@ def launch_training_from_args(args) -> None:
     config = _maybe_merge_wandb_config(
         config, wandb_sweep_flag=bool(getattr(args, "wandb_sweep", False)), cli_max_timesteps=cli_max_timesteps
     )
+
+    # If running under a debugger (e.g., vscode/pycharm/debugpy), clamp vec envs
+    config = _apply_debugger_env_overrides(config)
 
     # Set global RNG seed for reproducibility
     set_random_seed(config.seed)

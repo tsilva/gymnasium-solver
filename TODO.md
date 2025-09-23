@@ -26,6 +26,7 @@
 - FEAT: track output distribution
 - REFACTOR: dont let callbacks inject variables int o
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
+- TODO: learn how to read gradient graphs
 
 ## WISHLIST
 

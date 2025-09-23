@@ -46,6 +46,8 @@ python train.py -q
 # Override max timesteps without editing YAML
 python train.py CartPole-v1:ppo --max-steps 5000
 ```
+
+- Debugging: when a debugger is attached (e.g., VS Code, PyCharm), `train.py` forces `n_envs=1` and `subproc=False` for reliable breakpoints, and adjusts `batch_size` to remain compatible with the new rollout size.
 - **Play a trained policy** 🎮 (auto-loads best/last checkpoint from a run):
 ```bash
 python play.py --run-id @latest-run --episodes 5

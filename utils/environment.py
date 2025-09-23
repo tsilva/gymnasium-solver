@@ -113,7 +113,8 @@ def build_env(
     env_wrappers=[], 
     grayscale_obs=False,
     resize_obs=False,
-    normalize_obs=False, 
+    normalize_obs=False,
+    normalize_reward: bool = False,
     frame_stack=None, 
     obs_type=None,
     render_mode=None,
@@ -190,9 +191,20 @@ def build_env(
     # Expose original env_id on the vectorized env for downstream introspection (e.g., YAML fallbacks)
     setattr(env, "env_id", env_id)
     
-    # Enable observation normalization only for non-image observations
-    if normalize_obs == "static": env = VecNormalizeStatic(env)
-    elif normalize_obs == "rolling": env = VecNormalize(env, norm_obs=normalize_obs)
+    # Observation/Reward normalization (SB3 VecNormalize or static wrapper)
+    # Accepts:
+    # - normalize_obs: False (default), True (SB3 rolling), 'rolling' (SB3), 'static' (bounds-based)
+    # - normalize_reward: False (default) or True (SB3 only)
+    if isinstance(normalize_obs, str) and normalize_obs.lower() == "static":
+        # Static normalization of observations; reward normalization is not supported in this mode
+        env = VecNormalizeStatic(env)
+    else:
+        # Rolling (running mean/std) normalization via SB3 when either obs or reward normalization is requested
+        use_vecnorm_obs = bool(normalize_obs)  # True if normalize_obs is True/'rolling'
+        if isinstance(normalize_obs, str):
+            use_vecnorm_obs = normalize_obs.lower() == "rolling"
+        if use_vecnorm_obs or normalize_reward:
+            env = VecNormalize(env, norm_obs=use_vecnorm_obs, norm_reward=bool(normalize_reward))
 
     # Enable frame stacking if requested
     if frame_stack and frame_stack > 1: env = VecFrameStack(env, n_stack=frame_stack)

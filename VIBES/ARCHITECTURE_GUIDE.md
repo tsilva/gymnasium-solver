@@ -39,7 +39,11 @@ Algo-specific config subclasses:
   - Multi-armed bandits via `gym_envs.mab_env.MultiArmedBanditEnv` when `env_id` matches `Bandit-*` or `Bandit/<name>`.
   - Standard Gymnasium otherwise.
   - Applies registry wrappers from YAML: `EnvWrapperRegistry.apply` with `{ id: WrapperName, ... }` specs.
-- Observation normalization: `norm_obs == 'static'` uses `VecNormalizeStatic`; `norm_obs == 'rolling'` uses `VecNormalize`. Note: the config field is `normalize_obs` (bool) but the builder currently expects these string values; a boolean `True/False` will not enable normalization.
+- Observation normalization: `normalize_obs` supports:
+  - `false` (default): no normalization
+  - `true` or `'rolling'`: SB3 `VecNormalize` running mean/std for observations
+  - `'static'`: bounds-based `VecNormalizeStatic` (observations only)
+  Reward normalization: enable with `normalize_reward: true` (SB3 `VecNormalize`). When `'static'` is selected for observations, reward normalization is ignored.
   - Optional `VecFrameStack` and `VecVideoRecorder`.
   - Each base env is wrapped with `EnvInfoWrapper`; the returned vec env is wrapped by `VecEnvInfoWrapper`, which exposes helpers like `.recorder(...)`, `get_return_threshold()`, `get_time_limit()`, and `.is_rgb_env()` used throughout training/eval flows.
 - Wrapper registry: `gym_wrappers.__init__` registers `PixelObservationWrapper` and domain wrappers like `PongV5_FeatureExtractor`, reward shapers, etc.
@@ -112,7 +116,7 @@ Algo-specific config subclasses:
 - When `eval_freq_epochs` is None or 0, validation is disabled. With warmup (`eval_warmup_epochs > 0`), all epochs up to and including the warmup boundary are skipped; evaluation resumes on the cadence grid (multiples of `eval_freq_epochs`) strictly after warmup. Example: warmup=50, freq=15 -> first eval at E=60 (epoch_idx=59).
 - Use `config.max_timesteps` for progress-based schedules; ensure it’s set for linear decays to have effect.
 - Training CLI uses `--config_id "<env>:<variant>"`; underscore-only IDs like `Env_Variant` are not parsed by `train.py`. Callers must supply an explicit variant when loading configs (either `<env>:<variant>` or `<env>`, `<variant>`), matching the `<project>_<variant>` keys produced when reading YAML.
-- Env normalization: pass `normalize_obs: 'static'|'rolling'` for effect; boolean `True/False` does not enable normalization in `build_env`.
+- Env normalization: pass `normalize_obs: false|true|'rolling'|'static'` and optionally `normalize_reward: true` to enable SB3 normalization; defaults are off.
 
 ### Directory layout
 ```

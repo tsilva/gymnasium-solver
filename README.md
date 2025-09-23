@@ -87,6 +87,7 @@ Key fields: `env_id`, `algo_id`, `n_envs`, `n_steps`, `batch_size`, `max_timeste
 Batch size can be either an absolute integer or a fraction in (0, 1]. If fractional, it is resolved as `batch_size = floor(n_envs * n_steps * fraction)`, with a minimum of 1.
 
 - Advantage normalization: set `normalize_advantages` to `rollout` (normalize once per rollout, SB3-style), `batch` (normalize per mini-batch), or `off`.
+ - Env normalization: set `normalize_obs` to `true` or `'rolling'` to enable SB3 `VecNormalize` for observations, or `'static'` to use bounds-based normalization (observations only). Enable reward normalization with `normalize_reward: true` (SB3). Defaults are off.
 
 REINFORCE options: set `returns_type` to control Monte Carlo returns used for scaling log-probs: `mc:rtg` (reward-to-go; default) or `mc:episode` (classic vanilla: make return constant across each episode segment).
 

@@ -36,11 +36,11 @@ def _index_objects_by_category(objects):
     return objects_map
 
 def _normalize_velocity(value: float, scale: float) -> float:
-    """Map symmetric value in R to [0,1] using tanh with scale.
+    """Map symmetric value in R to [-1, 1] using tanh with scale.
 
-    0 maps to 0.5, extremes saturate to 0/1.
+    0 maps to 0.0, extremes saturate to -1/1.
     """
-    return 0.5 * (np.tanh(float(value) / float(scale)) + 1.0)
+    return float(np.tanh(float(value) / float(scale)))
 
 def _paddle_height(obj) -> float:
     """Return paddle height from object if available, else a sensible default."""
@@ -54,22 +54,23 @@ def _paddle_height(obj) -> float:
 
 
 def _normalize_paddle_center_y(center_y: float, paddle_h: float) -> float:
-    """Normalize paddle center-Y to [0,1] over playable range.
+    """Normalize paddle center-Y to [-1,1] over playable range.
 
-    Maps center_y in [paddle_h/2, SCREEN_H - paddle_h/2] to [0, 1].
+    Maps center_y in [paddle_h/2, SCREEN_H - paddle_h/2] to [-1, 1], with 0 at screen midline.
     """
     denom = SCREEN_H - float(paddle_h)
     assert denom > 0.0, f"Invalid paddle height {paddle_h} for screen height {SCREEN_H}"
-    return (float(center_y) - 0.5 * float(paddle_h)) / denom
+    zero_one = (float(center_y) - 0.5 * float(paddle_h)) / denom
+    return 2.0 * zero_one - 1.0
 
 
 def _obs_from_objects(objects):
     """
     Vector order (length=8): [Player.y, Player.dy, Enemy.y, Enemy.dy, Ball.x, Ball.y, Ball.dx, Ball.dy]
-    Normalized deterministically to [0, 1]:
-      - Paddle Y (center): (y - h/2) / (SCREEN_H - h)
-      - Ball X/Y: x / (SCREEN_W - 1), y / (SCREEN_H - 1)
-      - Velocities: symmetric tanh mapping -> [0,1]
+    Normalized deterministically to [-1, 1]:
+      - Paddle Y (center): (y - h/2) / (SCREEN_H - h) mapped to [-1,1]
+      - Ball X/Y: x / (SCREEN_W - 1), y / (SCREEN_H - 1) mapped to [-1,1]
+      - Velocities: symmetric tanh mapping -> [-1,1]
     """
 
     # Index objects by category for easy lookup
@@ -101,8 +102,14 @@ def _obs_from_objects(objects):
     ball_dx = ball_obj.dx if ball_obj else 0
     ball_dy = ball_obj.dy if ball_obj else 0
     # Normalize ball positions over pixel index ranges [0..SCREEN_W-1], [0..SCREEN_H-1]
-    ball_x_n = (ball_x / (SCREEN_W - 1.0)) if ball_obj else 0.0
-    ball_y_n = (ball_y / (SCREEN_H - 1.0)) if ball_obj else 0.0
+    if ball_obj:
+        bx01 = ball_x / (SCREEN_W - 1.0)
+        by01 = ball_y / (SCREEN_H - 1.0)
+        ball_x_n = 2.0 * bx01 - 1.0
+        ball_y_n = 2.0 * by01 - 1.0
+    else:
+        ball_x_n = 0.0
+        ball_y_n = 0.0
     ball_dx_n = _normalize_velocity(ball_dx, BALL_D_SCALE)
     ball_dy_n = _normalize_velocity(ball_dy, BALL_D_SCALE)
 
@@ -126,15 +133,15 @@ class PongV5_FeatureExtractor(gym.ObservationWrapper):
         super().__init__(env)
         # TODO: if not normalized then return correct max values for each feature
         self.observation_space = spaces.Box(
-            low=0.0, high=1.0, shape=(8,), dtype=np.float32
+            low=-1.0, high=1.0, shape=(8,), dtype=np.float32
         )
 
     def observation(self, observation):
         # Convert objects to observation vector
         obs = _obs_from_objects(self.env.objects)
         
-        # Assert that obs is within [0, 1] and finite and not nan
-        assert np.all(obs >= 0.0), f"Negative values found: {obs}"
+        # Assert that obs is within [-1, 1] and finite and not nan
+        assert np.all(obs >= -1.0), f"Values below -1 found: {obs}"
         assert np.all(obs <= 1.0), f"Values above 1 found: {obs}"
         assert np.all(np.isfinite(obs)), f"Non-finite values found: {obs}"
 

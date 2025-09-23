@@ -87,7 +87,11 @@ class PongV5_RewardShaper(gym.Wrapper):
         return proximity_reward * self.proximity_reward_scale
     
     def _get_ball_state(self):
-        """Extract ball and paddle positions from the environment objects."""
+        """Extract ball and paddle positions from the environment objects.
+
+        For paddles, compute center-Y robustly: prefer `center_y` if present;
+        otherwise assume `y` is the top of the bounding box and add `h/2`.
+        """
         if not hasattr(self.env, 'objects') or not self.env.objects:
             return None, None, None, None, None
             
@@ -106,8 +110,20 @@ class PongV5_RewardShaper(gym.Wrapper):
         enemy = obj_map.get("Enemy", None)
         
         ball_x, ball_y, ball_dx = ball.x, ball.y, ball.dx
-        player_y = player.y if player else 0
-        enemy_y = enemy.y if enemy else 0
+        # Derive paddle center-Y robustly
+        def _center_y(obj):
+            if obj is None:
+                return 0
+            cy = getattr(obj, "center_y", None) if hasattr(obj, "center_y") else None
+            if cy is None:
+                cy = getattr(obj, "centery", None)
+            if cy is None:
+                h = getattr(obj, "h", 32)
+                cy = float(getattr(obj, "y")) + 0.5 * float(h)
+            return cy
+
+        player_y = _center_y(player)
+        enemy_y = _center_y(enemy)
         
         return ball_x, ball_y, ball_dx, player_y, enemy_y
     

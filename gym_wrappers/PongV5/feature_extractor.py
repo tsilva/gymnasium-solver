@@ -6,10 +6,6 @@ from gymnasium import spaces
 SCREEN_W: float = 160.0
 SCREEN_H: float = 210.0
 
-# Approximate paddle height in pixels (used when not available on objects)
-# Note: OCAtari objects may expose size; we prefer that when present.
-PADDLE_H_DEFAULT: float = 32.0
-
 # Max Y pixels per frame that paddle can move (for normalizing velocity)
 PADDLE_DY_SCALE: float = 24.0
 
@@ -47,9 +43,9 @@ def _normalize_paddle_center_y(center_y: float, paddle_h: float) -> float:
 
     Maps center_y in [paddle_h/2, SCREEN_H - paddle_h/2] to [-1, 1], with 0 at screen midline.
     """
-    denom = SCREEN_H - float(paddle_h)
+    denom = SCREEN_H - paddle_h
     assert denom > 0.0, f"Invalid paddle height {paddle_h} for screen height {SCREEN_H}"
-    zero_one = (float(center_y) - 0.5 * float(paddle_h)) / denom
+    zero_one = (center_y - 0.5 * paddle_h) / denom
     return 2.0 * zero_one - 1.0
 
 
@@ -67,19 +63,19 @@ def _obs_from_objects(objects):
 
     # Retrieve player state and normalize
     player_obj = obj_map["Player"]
-    player_y = player_obj.y
-    player_dy = player_obj.dy
     player_h = player_obj.h
-    player_y_n = _normalize_paddle_center_y(player_y, player_h)
+    player_center_y = player_obj.center[1]
+    player_dy = player_obj.dy
+    player_y_n = _normalize_paddle_center_y(player_center_y, player_h)
     player_dy_n = _normalize_velocity(player_dy, PADDLE_DY_SCALE)
 
     # Retrieve enemy state and normalize
     enemy_obj = obj_map.get("Enemy", None)
-    enemy_y = enemy_obj.y if enemy_obj else 0
     enemy_dy = enemy_obj.dy if enemy_obj else 0
     if enemy_obj is not None:
         enemy_h = enemy_obj.h
-        enemy_y_n = _normalize_paddle_center_y(enemy_y, enemy_h)
+        enemy_center_y = enemy_obj.center[1]
+        enemy_y_n = _normalize_paddle_center_y(enemy_center_y, enemy_h)
     else:
         enemy_y_n = 0.0
     enemy_dy_n = _normalize_velocity(enemy_dy, PADDLE_DY_SCALE)

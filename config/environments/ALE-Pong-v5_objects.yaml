@@ -3,7 +3,7 @@
 env_id: ALE/Pong-v5
 obs_type: "objects"
 hidden_dims: [256, 256]
-eval_freq_epochs: 50 
+eval_freq_epochs: 5 
 eval_episodes: 10  
 gamma: 0.99 # TODO: think which one is best
 gae_lambda: 0.95 # TODO: think which one is best

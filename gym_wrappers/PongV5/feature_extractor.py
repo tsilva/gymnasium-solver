@@ -15,14 +15,12 @@ PADDLE_DY_SCALE: float = 24.0
 BALL_D_SCALE: float = 12.0
 
 # ---- helpers from your snippet ----
-def index_objects(objects, include_hud: bool = False):
-    obj_map = {}
-    for o in objects:
-        if not include_hud and getattr(o, "hud", False):
-            continue
-        if o.category not in obj_map:
-            obj_map[o.category] = o
-    return obj_map
+def _index_objects_by_category(objects, include_hud: bool = False):
+    objects_map = {}
+    for object in objects:
+        if not include_hud and getattr(object, "hud", False): continue
+        if object.category not in objects_map: objects_map[object.category] = object
+    return objects_map
 
 def _sym_to_unit(value: float, scale: float) -> float:
     """Map symmetric value in R to [0,1] using tanh with scale.
@@ -39,35 +37,45 @@ def pong_state_vector(objects, include_hud: bool = False):
       - Positions: divide by screen size (x/SCREEN_W, y/SCREEN_H)
       - Velocities: symmetric tanh mapping -> [0,1]
     """
-    obj_map = index_objects(objects, include_hud)
 
-    # Player
-    p = obj_map.get("Player", None)
-    p_y = float(getattr(p, "y", 0.0))
-    p_dy = float(getattr(p, "dy", 0.0))
-    p_y_n = p_y / SCREEN_H
-    p_dy_n = _sym_to_unit(p_dy, PADDLE_DY_SCALE)
+    # Index objects by category for easy lookup
+    obj_map = _index_objects_by_category(objects, include_hud=include_hud)
 
-    # Enemy
-    e = obj_map.get("Enemy", None)
-    e_y = float(getattr(e, "y", 0.0))
-    e_dy = float(getattr(e, "dy", 0.0))
-    e_y_n = e_y / SCREEN_H
-    e_dy_n = _sym_to_unit(e_dy, PADDLE_DY_SCALE)
+    # Retrieve player state and normalize
+    player_obj = obj_map["Player"]
+    player_y = player_obj.y
+    player_dy = player_obj.dy
+    player_y_n = player_y / SCREEN_H
+    player_dy_n = _sym_to_unit(player_dy, PADDLE_DY_SCALE)
 
-    # Ball
-    b = obj_map.get("Ball", None)
-    b_x = float(getattr(b, "x", 0.0))
-    b_y = float(getattr(b, "y", 0.0))
-    b_dx = float(getattr(b, "dx", 0.0))
-    b_dy = float(getattr(b, "dy", 0.0))
-    b_x_n = b_x / SCREEN_W
-    b_y_n = b_y / SCREEN_H
-    b_dx_n = _sym_to_unit(b_dx, BALL_D_SCALE)
-    b_dy_n = _sym_to_unit(b_dy, BALL_D_SCALE)
+    # Retrieve enemy state and normalize
+    enemy_obj = obj_map["Enemy"]
+    enemy_y = enemy_obj.y
+    enemy_dy = enemy_obj.dy
+    enemy_y_n = enemy_y / SCREEN_H
+    enemy_dy_n = _sym_to_unit(enemy_dy, PADDLE_DY_SCALE)
 
-    features = np.asarray([p_y_n, p_dy_n, e_y_n, e_dy_n, b_x_n, b_y_n, b_dx_n, b_dy_n], dtype=np.float32)
-    return features
+    # Retrieve ball state and normalize
+    ball_obj = obj_map["Ball"]
+    ball_x = ball_obj.x
+    ball_y = ball_obj.y
+    ball_dx = ball_obj.dx
+    ball_dy = ball_obj.dy
+    ball_x_n = ball_x / SCREEN_W
+    ball_y_n = ball_y / SCREEN_H
+    ball_dx_n = _sym_to_unit(ball_dx, BALL_D_SCALE)
+    ball_dy_n = _sym_to_unit(ball_dy, BALL_D_SCALE)
+
+    # Create state vector and return it
+    state_vector = np.asarray([
+        player_y_n, 
+        player_dy_n, 
+        enemy_y_n,
+        enemy_dy_n, 
+        ball_x_n, ball_y_n, 
+        ball_dx_n, ball_dy_n
+    ], dtype=np.float32)
+    return state_vector
 
 # ---- Gymnasium Observation Wrapper ----
 class PongV5_FeatureExtractor(gym.ObservationWrapper):
@@ -78,6 +86,7 @@ class PongV5_FeatureExtractor(gym.ObservationWrapper):
         super().__init__(env)
         self.include_hud = include_hud
         self.clip = clip
+        # TODO: if not normalized then return correct max values for each feature
         self.observation_space = spaces.Box(
             low=0.0, high=1.0, shape=(8,), dtype=np.float32
         )

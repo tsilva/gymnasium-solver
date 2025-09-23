@@ -198,6 +198,22 @@ pytest -q
 - `!TASK: audit_config_consistency` - Validate inconsistencies across configuration files and registries
 - `!TASK: audit_dependency_health` - Assess and document the state of runtime and development dependencies
 - `!TASK: tune_hyperparams` - Iteratively adjust hyperparameters for fastest convergence
+
+#### 🧪 Smoke tests
+- Train all configs briefly (prints PASS/FAIL with ✅/❌ and a summary):
+```
+python scripts/smoke_train_envs.py                 # default 100 steps/config
+python scripts/smoke_train_envs.py --timesteps 50  # adjust steps
+python scripts/smoke_train_envs.py --filter CartPole --limit 3
+```
+  - Uses small rollouts and disables video/W&B networking for speed.
+  - Results section shows one bullet per config, e.g. `- ✅ CartPole-v1:ppo` or `- ❌ VizDoom-... — ImportError: ...`.
+
+- Random-action step smoke (no training):
+```
+python scripts/smoke_test_envs.py                  # default 200 steps/config
+python scripts/smoke_test_envs.py --filter CartPole --limit 3
+```
 - `!TASK: update_docs_architecture` - Ensure Architecture Guide stays accurate and useful
 - `!TASK: update_docs_coding_from_diff` - Infer coding preferences from uncommitted changes
 - `!TASK: update_docs_readme` - Keep README concise, accurate, and aligned with current features

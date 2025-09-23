@@ -1,7 +1,14 @@
 # TODO
 
+## Pong-v5_objects
+
+- BUG: fix duplicate object error in feature extractor
+- FEAT: create action wrapper that maps action indexes into a smaller subset, wrapper must be configurable to receive the pairings, eg: if it receives [3, 2, 1] it must map 0 -> 3, 1 -> 2, 2 -> 1; apply it to this env
+- add env normalization support (use that instead of normalization from feature extractor)
+
 ## NEXT
 
+- FEAT: add ability to tell LLM to inspect last N runs by providing a run registry json that has timestamps and other metadata, always sort by timestamp descending, ensure lock on write
 - FEAT: track approx_kl early stops in wandb dashboard
 - FEAT: plot advantage mean/std
 - FEAT: add support for scheduler min and progress decoupled from timesteps, perhaps by specifying percentage -> value tuples and have the scheduler interpolate between those, allowing dynamic linear schedules that perform differently across the training (eg: higher early, lower late)
@@ -28,11 +35,6 @@
 - REFACTOR: dont let callbacks inject variables int o
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 - TODO: learn how to read gradient graphs
-
-## Pong-v5_objects
-
-- FEAT: create action wrapper that maps action indexes into a smaller subset, wrapper must be configurable to receive the pairings, eg: if it receives [3, 2, 1] it must map 0 -> 3, 1 -> 2, 2 -> 1; apply it to this env
-- add env normalization support (use that instead of normalization from feature extractor)
 
 ## WISHLIST
 

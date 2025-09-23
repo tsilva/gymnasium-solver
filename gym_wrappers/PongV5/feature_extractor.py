@@ -2,16 +2,14 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
-# TODO: CLEANUP this file
-
-# Deterministic normalization constants to keep features in [0,1]
-# Screen dimensions for Atari Pong (overshoot-safe denominators)
+# Screen dimensions for Atari Pong (for normalizing positions)
 SCREEN_W: float = 160.0
 SCREEN_H: float = 210.0
 
-# Symmetric velocity scales. Tanh-based mapping guarantees [0,1].
-# Choose conservative scales to avoid saturation for typical speeds.
+# Max Y pixels per frame that paddle can move (for normalizing velocity)
 PADDLE_DY_SCALE: float = 24.0
+
+# Max X/Y pixels per frame that ball can move (for normalizing velocity)
 BALL_D_SCALE: float = 12.0
 
 # ---- helpers from your snippet ----
@@ -22,13 +20,12 @@ def _index_objects_by_category(objects, include_hud: bool = False):
         if object.category not in objects_map: objects_map[object.category] = object
     return objects_map
 
-def _sym_to_unit(value: float, scale: float) -> float:
+def _normalize_velocity(value: float, scale: float) -> float:
     """Map symmetric value in R to [0,1] using tanh with scale.
 
     0 maps to 0.5, extremes saturate to 0/1.
     """
     return 0.5 * (np.tanh(float(value) / float(scale)) + 1.0)
-
 
 def pong_state_vector(objects, include_hud: bool = False):
     """
@@ -46,14 +43,14 @@ def pong_state_vector(objects, include_hud: bool = False):
     player_y = player_obj.y
     player_dy = player_obj.dy
     player_y_n = player_y / SCREEN_H
-    player_dy_n = _sym_to_unit(player_dy, PADDLE_DY_SCALE)
+    player_dy_n = _normalize_velocity(player_dy, PADDLE_DY_SCALE)
 
     # Retrieve enemy state and normalize
     enemy_obj = obj_map["Enemy"]
     enemy_y = enemy_obj.y
     enemy_dy = enemy_obj.dy
     enemy_y_n = enemy_y / SCREEN_H
-    enemy_dy_n = _sym_to_unit(enemy_dy, PADDLE_DY_SCALE)
+    enemy_dy_n = _normalize_velocity(enemy_dy, PADDLE_DY_SCALE)
 
     # Retrieve ball state and normalize
     ball_obj = obj_map["Ball"]
@@ -63,8 +60,8 @@ def pong_state_vector(objects, include_hud: bool = False):
     ball_dy = ball_obj.dy
     ball_x_n = ball_x / SCREEN_W
     ball_y_n = ball_y / SCREEN_H
-    ball_dx_n = _sym_to_unit(ball_dx, BALL_D_SCALE)
-    ball_dy_n = _sym_to_unit(ball_dy, BALL_D_SCALE)
+    ball_dx_n = _normalize_velocity(ball_dx, BALL_D_SCALE)
+    ball_dy_n = _normalize_velocity(ball_dy, BALL_D_SCALE)
 
     # Create state vector and return it
     state_vector = np.asarray([

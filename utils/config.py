@@ -158,6 +158,13 @@ class Config:
     # The schedule for the entropy coefficient
     ent_coef_schedule: Optional[str] = None
 
+    # The minimum entropy coefficient for the 
+    # policy (scheduler can only decay down to this value)
+    ent_coef_schedule_target_value: Optional[float] = None
+
+    # The progress at which the entropy coefficient will reach the target value
+    ent_coef_schedule_target_progress: Optional[float] = None
+
     # The value function coefficient for the policy (algo defaults in subclasses)
     vf_coef: Optional[float] = None
     

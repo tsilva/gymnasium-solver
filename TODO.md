@@ -2,6 +2,7 @@
 
 ## NEXT
 
+- FEAT: add support for scheduler min and progress decoupled from timesteps, perhaps by specifying percentage -> value tuples and have the scheduler interpolate between those, allowing dynamic linear schedules that perform differently across the training (eg: higher early, lower late)
 - BUG: even though action_mean starts correctly std is not 1
 - BUG: alerts are not making into table logger
 - BUG: env smoke tests not passing
@@ -31,9 +32,11 @@
 - add support for running step by step in run_play
 - consider passing velocity magnitudes as extra obs info
 - add env normalization support (use that instead of normalization from feature extractor)
+- try training longer
 
 ## WISHLIST
 
+- FEAT: auto-tune n_steps to average steps between rewards
 - FEAT: customize wandb dashboard to make action_mean min/max be computed from the action space defined in the spec, same for obs_mean
 - TASK: solve Pong-v5_objects, get max reward
 - TASK: solve Taxi-v3 with PPO, training stalls for unknown reasons

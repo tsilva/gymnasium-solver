@@ -11,6 +11,11 @@ gae_lambda: 0.95
 env_wrappers:
   - id: PongV5_FeatureExtractor
 
+# NEXT: 
+# - Use a constant ent_coef ≈ 0.004–0.005 (avoid fast decay to 0.001; it pushes early exploitation).
+# - Slightly increase update budget if clip_fraction remains very low: Either policy_lr=0.0012–0.0015 with target_kl=0.02, or keep lr=0.001 and raise n_epochs to 18 (watch approx_kl ~0.01–0.02, clip_fraction ~0.1–0.2).
+# optional: n_steps=2048 (with batch_size=1024, n_epochs 10–12)
+
 # Best so far, 15.3 at 2.5M steps (263fc0d6447057f482567dfd5661eb96ab9dff08)
 ppo:
   algo_id: ppo

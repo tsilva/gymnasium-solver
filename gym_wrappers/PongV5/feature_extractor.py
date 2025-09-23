@@ -46,18 +46,18 @@ def pong_state_vector(objects, include_hud: bool = False):
     player_dy_n = _normalize_velocity(player_dy, PADDLE_DY_SCALE)
 
     # Retrieve enemy state and normalize
-    enemy_obj = obj_map["Enemy"]
-    enemy_y = enemy_obj.y
-    enemy_dy = enemy_obj.dy
+    enemy_obj = obj_map.get("Enemy", None)
+    enemy_y = enemy_obj.y if enemy_obj else 0
+    enemy_dy = enemy_obj.dy if enemy_obj else 0
     enemy_y_n = enemy_y / SCREEN_H
     enemy_dy_n = _normalize_velocity(enemy_dy, PADDLE_DY_SCALE)
 
     # Retrieve ball state and normalize
-    ball_obj = obj_map["Ball"]
-    ball_x = ball_obj.x
-    ball_y = ball_obj.y
-    ball_dx = ball_obj.dx
-    ball_dy = ball_obj.dy
+    ball_obj = obj_map.get("Ball", None)
+    ball_x = ball_obj.x if ball_obj else 0
+    ball_y = ball_obj.y if ball_obj else 0
+    ball_dx = ball_obj.dx if ball_obj else 0
+    ball_dy = ball_obj.dy if ball_obj else 0
     ball_x_n = ball_x / SCREEN_W
     ball_y_n = ball_y / SCREEN_H
     ball_dx_n = _normalize_velocity(ball_dx, BALL_D_SCALE)

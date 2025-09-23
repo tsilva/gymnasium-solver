@@ -2,13 +2,17 @@
 
 ## NEXT
 
+
+- FEAT: track approx_kl early stops in wandb dashboard
+- FEAT: plot advantage mean/std
 - FEAT: add support for scheduler min and progress decoupled from timesteps, perhaps by specifying percentage -> value tuples and have the scheduler interpolate between those, allowing dynamic linear schedules that perform differently across the training (eg: higher early, lower late)
 - BUG: even though action_mean starts correctly std is not 1
 - BUG: alerts are not making into table logger
 - BUG: env smoke tests not passing
+- FEAT: define min-max entropy on wandb dashboard
 - FEAT: currently charts are indexed by n_envs * n_steps, index only by n_steps so we can compare performance of N_ENVS vs less envs; max_timesteps should also be indexed by that, as well as training progress
 - FEAT: add support for agents to handle their own save/load logic
-
+- FEAT: plot scaled losses together to understand their relative importance
 - FEAT: track dead relus
 - TEST: empirically verify that initial policy distribution is uniform (check if action mean starts at middle of action space and std is 0)
 - BUG: bandit env crashes because it tries to record
@@ -28,14 +32,12 @@
 
 ## Pong-v5_objects
 
-- reduce action space
-- add support for running step by step in run_play
-- consider passing velocity magnitudes as extra obs info
+- FEAT: create action wrapper that maps action indexes into a smaller subset, wrapper must be configurable to receive the pairings, eg: if it receives [3, 2, 1] it must map 0 -> 3, 1 -> 2, 2 -> 1; apply it to this env
 - add env normalization support (use that instead of normalization from feature extractor)
-- try training longer
 
 ## WISHLIST
 
+- FEAT: add support to only start eval when ep_rew_mean crosses eval threshold
 - FEAT: auto-tune n_steps to average steps between rewards
 - FEAT: customize wandb dashboard to make action_mean min/max be computed from the action space defined in the spec, same for obs_mean
 - TASK: solve Pong-v5_objects, get max reward

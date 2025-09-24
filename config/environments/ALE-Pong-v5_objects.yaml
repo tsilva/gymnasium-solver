@@ -8,30 +8,37 @@ eval_freq_epochs: 10
 eval_episodes: 10  
 gamma: 0.99
 gae_lambda: 0.95
+#frame_stack: 4
 # NOTE: agent learns easily when env is deterministic
-env_kwargs:
-  repeat_action_probability: 0.0  # Makes the environment deterministic
+#env_kwargs:
+#  repeat_action_probability: 0.0  # Makes the environment deterministic
+# TODO GIT UNSTASHHHHH!!! VIEW LAST RUN PERF!!!
+#NOTES: deterministic works, so feature extractor is right?
 env_wrappers:
   # Extract paddle/ball positions and velocities into compact normalized vector
   - id: PongV5_FeatureExtractor
   # Remap actions to only include NOOP, LEFT, RIGHT
   - id: DiscreteActionSpaceRemapperWrapper
     mapping: [0, 2, 3]
+  # Add a small bonus for NOOP (index 0 after remap)
+  - id: ActionRewardShaper
+    rewards: [0.001, 0.0, 0.0]
 
+# TODO: check if FPS is higher with subproc off
 ppo:
   algo_id: ppo
   max_timesteps: 5e6
-  n_envs: 16
+  n_envs: 32
   subproc: true
   vf_coef: 0.5
   n_epochs: 15
-  n_steps: 1024
-  batch_size: 1024 
+  n_steps: 256
+  batch_size: 0.25 
   ent_coef: 0.005
   #ent_coef_schedule: linear
   #ent_coef_schedule_target_value: 0.003
   #ent_coef_schedule_target_progress: 0.5
   clip_range: 0.2
   policy_lr: 2e-3 #4e-2 # TODO: approx_kl = inf if 1e-1
-  normalize_advantages: "rollout"
+  normalize_advantages: "batch" # TODO: try batch norm
   #target_kl: 0.02

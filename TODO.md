@@ -7,6 +7,10 @@ changes.
 
 ## Pong-v5_objects
 
+- Print when performing evaluation
+- TODO: add support for resuming with policy from previous run
+- TODO: add support for hardcoding lower reward threshold
+- TODO: remove action repeat bias by rewarding staying still
 - Try frame stacking, may mitigate stickiness issues
 - Check if env gets solved when its deterministic
 - try debug server
@@ -23,6 +27,7 @@ changes.
 - FEAT: alert if action_std doesnt start in expected bounds (initial policy not uniform)
 - FEAT: search for known hard min/max bounds for metrics that are not currently in metrics.yaml and add them
 - FEAT: infer min/max bounds based on configuration
+- FEAT: provide previous actions
 
 ## NEXT
 

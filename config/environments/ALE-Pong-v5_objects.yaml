@@ -21,6 +21,7 @@ env_wrappers:
 # optional: n_steps=2048 (with batch_size=1024, n_epochs 10–12)
 
 # Best so far, 15.3 at 2.5M steps (263fc0d6447057f482567dfd5661eb96ab9dff08)
+# NOTE: this works if deterministic so the issue is with entropy not collapsing fast enough
 ppo:
   algo_id: ppo
   max_timesteps: 5e6
@@ -38,3 +39,4 @@ ppo:
   policy_lr: 2e-3 #4e-2 # TODO: approx_kl = inf if 1e-1
   normalize_advantages: "rollout"
   #target_kl: 0.02
+  eval_deterministic: true

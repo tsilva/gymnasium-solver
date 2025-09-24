@@ -3,6 +3,7 @@ from utils.metrics_monitor import MetricAlert
 
 # TODO: CLEAN this up
 
+DEFAULT_SMOOTHING_WINDOW = 5
 class PPOAlerts(MetricMonitorBundle):
     """PPO-specific metric alert bundle.
 
@@ -10,12 +11,8 @@ class PPOAlerts(MetricMonitorBundle):
     and value-function diagnostics.
     """
 
-    DEFAULT_SMOOTHING_WINDOW = 5
-
-    def __init__(self, agent, *, smoothing_window: int | None = None) -> None:
+    def __init__(self, agent, *, smoothing_window: int = DEFAULT_SMOOTHING_WINDOW) -> None:
         self.agent = agent
-        if smoothing_window is None:
-            smoothing_window = self.DEFAULT_SMOOTHING_WINDOW
         self._smoothing_window = max(1, int(smoothing_window))
 
     def _smoothed_metric_value(self, history: dict, metric_key: str) -> float | None:

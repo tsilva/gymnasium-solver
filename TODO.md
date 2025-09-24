@@ -4,6 +4,10 @@
 
 ## Pong-v5_objects
 
+- Ensure we solve deterministic variant without action reward shaping
+- Establish baseline for sticky actions variant
+- Test if wcan improve by using online feature normalization inside extractor (rolling averages)
+- Update reward threshold for reward shaped runs
 - TODO: add support for resuming with policy from previous run
 - try debug server
 - BUG: fix duplicate object error in feature extractor (run step by step in human mode and compare conflicted object data, against frame, create script for this)

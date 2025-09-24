@@ -9,12 +9,23 @@ action_space:
   labels: {0: NOOP, 1: FIRE, 2: RIGHT, 3: LEFT, 4: RIGHTFIRE, 5: LEFTFIRE}
   full_space: {count: 18, enable_with: full_action_space=True}
 
+# TODO: make spec also overridable
 observation_space:
-  default: rgb
+  default: state
   variants:
-    rgb: {shape: [210,160,3], dtype: uint8, range: [0,255]}
-    grayscale: {shape: [210,160], dtype: uint8, range: [0,255]}
-    ram: {shape: [128], dtype: uint8, range: [0,255]}
+    state:
+      shape: [9]
+      dtype: float32
+      components:
+        - {name: Player.y,  range: [-1.0, 1.0]}
+        - {name: Player.dy, range: [-1.0, 1.0]}
+        - {name: Enemy.y,   range: [-1.0, 1.0]}
+        - {name: Enemy.dy,  range: [-1.0, 1.0]}
+        - {name: Ball.x,    range: [-1.0, 1.0]}
+        - {name: Ball.y,    range: [-1.0, 1.0]}
+        - {name: Ball.dx,   range: [-1.0, 1.0]}
+        - {name: Ball.dy,   range: [-1.0, 1.0]}
+        - {name: Ball.visible,   range: [-1.0, 1.0]}
 
 rewards:
   per_point: +1/-1

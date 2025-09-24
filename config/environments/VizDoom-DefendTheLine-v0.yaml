@@ -64,3 +64,4 @@ _ppo: &ppo
 
 ppo:
   <<: *ppo
+  description: "PPO on VizDoom DefendTheLine - standard configuration for line defense task"

@@ -71,3 +71,4 @@ _ppo: &ppo
 
 ppo:
   <<: *ppo
+  description: "PPO on VizDoom DefendTheCenter - standard configuration for center defense task"

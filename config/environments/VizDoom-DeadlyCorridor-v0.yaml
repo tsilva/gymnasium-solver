@@ -64,3 +64,4 @@ _ppo: &ppo
 
 ppo:
   <<: *ppo
+  description: "PPO on VizDoom DeadlyCorridor - standard configuration for corridor navigation task"

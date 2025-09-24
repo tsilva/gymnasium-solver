@@ -70,14 +70,22 @@ _reinforce: &reinforce
   policy_lr: 0.005
   hidden_dims: [64]
 
+# PPO on FrozenLake - standard configuration for grid navigation task
 ppo:
   <<: *ppo
+  description: "PPO on FrozenLake - standard configuration for grid navigation task"
 
+# PPO on FrozenLake deterministic - no slippery ice, easier navigation
 ppo_deterministic:
   <<: [*env_deterministic, *ppo]
+  description: "PPO on FrozenLake deterministic - no slippery ice, easier navigation"
 
+# REINFORCE on FrozenLake - basic policy gradient for grid navigation
 reinforce:
   <<: *reinforce
+  description: "REINFORCE on FrozenLake - basic policy gradient for grid navigation"
 
+# REINFORCE on FrozenLake deterministic - no slippery ice, easier navigation
 reinforce_deterministic:
   <<: [*env_deterministic, *reinforce]
+  description: "REINFORCE on FrozenLake deterministic - no slippery ice, easier navigation"

@@ -62,5 +62,7 @@ _ppo: &ppo
   clip_range: 0.1
   policy_lr: 2.5e-4
 
+# PPO on VizDoom HealthGathering - standard configuration for health gathering survival task
 ppo:
   <<: *ppo
+  description: "PPO on VizDoom HealthGathering - standard configuration for health gathering survival task"

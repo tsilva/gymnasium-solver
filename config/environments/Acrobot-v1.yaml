@@ -64,8 +64,12 @@ _reinforce: &reinforce
   hidden_dims: [128, 128]
   max_epochs: 2000
 
+# Standard PPO on Acrobot - baseline configuration for acrobot swing-up task
 ppo:
   <<: *ppo
+  description: "Standard PPO on Acrobot - baseline configuration for acrobot swing-up task"
 
+# Standard REINFORCE on Acrobot - basic policy gradient baseline
 reinforce:
   <<: *reinforce
+  description: "Standard REINFORCE on Acrobot - basic policy gradient baseline"

@@ -70,6 +70,7 @@ reinforce_baseline:
   returns_type: "mc:episode"
   advantages_type: "baseline"
   policy_targets: "advantages"
+  description: "REINFORCE with baseline - uses value function baseline for variance reduction"
 
 reinforce_baseline2:
   <<: *reinforce
@@ -79,6 +80,9 @@ reinforce_baseline2:
   normalize_advantages: "rollout"
   ent_coef: 0.01
   n_epochs: 2
+  description: "REINFORCE with baseline and return-to-go - combines both variance reduction techniques"
 
+# PPO on LunarLander - standard configuration for lunar landing task
 ppo:
   <<: *ppo
+  description: "PPO on LunarLander - standard configuration for lunar landing task"

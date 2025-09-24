@@ -71,5 +71,7 @@ _ppo: &ppo
   eval_freq_epochs: 20
   eval_episodes: 5
 
+# PPO on SuperMarioBros - standard configuration for Mario platformer game
 ppo:
   <<: *ppo
+  description: "PPO on SuperMarioBros - standard configuration for Mario platformer game"

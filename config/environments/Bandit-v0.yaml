@@ -56,5 +56,7 @@ _ppo: &ppo
   eval_warmup_epochs: 5
   eval_freq_epochs: 1
 
+# PPO on Multi-Armed Bandit - standard configuration for bandit problem
 ppo:
   <<: *ppo
+  description: "PPO on Multi-Armed Bandit - standard configuration for bandit problem"

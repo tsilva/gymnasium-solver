@@ -71,12 +71,17 @@ _reinforce: &reinforce
   batch_size: 0.25
   policy_lr: 1e-3
 
+# Standard PPO on MountainCar - baseline configuration for mountain car task
 ppo:
   <<: *ppo
+  description: "Standard PPO on MountainCar - baseline configuration for mountain car task"
 
+# Standard REINFORCE on MountainCar - basic policy gradient baseline
 reinforce:
   <<: *reinforce
+  description: "Standard REINFORCE on MountainCar - basic policy gradient baseline"
 
+# PPO with reward shaping - uses shaped rewards to guide learning up the mountain
 ppo_rewardshaped:
   <<: [*env_rewardshaped, *ppo]
   max_timesteps: 1e6
@@ -86,7 +91,9 @@ ppo_rewardshaped:
   policy_lr: 3e-4
   hidden_dims: [256, 256]
   max_epochs: 1000
+  description: "PPO with reward shaping - uses shaped rewards to guide learning up the mountain"
 
+# REINFORCE with reward shaping - uses shaped rewards with policy gradient
 reinforce_rewardshaped:
   <<: [*env_rewardshaped, *reinforce]
   max_timesteps: 1e6
@@ -95,3 +102,4 @@ reinforce_rewardshaped:
   gamma: 0.999
   hidden_dims: [128, 128]
   max_epochs: 2000
+  description: "REINFORCE with reward shaping - uses shaped rewards with policy gradient"

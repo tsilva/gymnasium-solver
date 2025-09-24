@@ -109,9 +109,12 @@ _rgb_ppo: &rgb_ppo
   policy_lr: lin_2.5e-4
   clip_range: lin_0.2
 
+# Standard PPO on state observations - baseline configuration
 ppo:
   <<: *ppo
+  description: "Standard PPO on state observations - baseline configuration for CartPole"
 
+# PPO with reward shaping - uses shaped rewards for faster learning
 ppo_rewardshaped:
   <<: [*env_rewardshaped, *ppo]
   max_timesteps: 1e5
@@ -120,31 +123,42 @@ ppo_rewardshaped:
   ent_coef: 0.0
   policy_lr: lin_0.001
   clip_range: lin_0.2
+  description: "PPO with reward shaping - uses shaped rewards for faster learning"
 
+# Vanilla REINFORCE - basic policy gradient with episode returns
 reinforce_vanilla:
   <<: *reinforce
   returns_type: "mc:episode"
   policy_targets: "returns"
+  description: "Vanilla REINFORCE - basic policy gradient with episode returns"
 
+# REINFORCE with return-to-go - uses return-to-go for variance reduction
 reinforce_rtg:
   <<: *reinforce
   returns_type: "mc:rtg"
   policy_targets: "returns"
   normalize_returns: "batch"
+  description: "REINFORCE with return-to-go - uses return-to-go for variance reduction"
 
+# REINFORCE with baseline - uses value function baseline for variance reduction
 reinforce_baseline:
   <<: *reinforce
   returns_type: "mc:episode"
   advantages_type: "baseline"
   policy_targets: "advantages"
   normalize_advantages: "batch"
+  description: "REINFORCE with baseline - uses value function baseline for variance reduction"
 
+# REINFORCE with baseline and return-to-go - combines both variance reduction techniques
 reinforce_baseline_rtg:
   <<: *reinforce
   returns_type: "mc:rtg"
   advantages_type: "baseline"
   policy_targets: "advantages"
   normalize_advantages: "batch"
+  description: "REINFORCE with baseline and return-to-go - combines both variance reduction techniques"
 
+# PPO on RGB pixel observations - uses CNN policy on rendered frames
 rgb_ppo:
   <<: *rgb_ppo
+  description: "PPO on RGB pixel observations - uses CNN policy on rendered frames"

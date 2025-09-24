@@ -191,16 +191,18 @@ def launch_training_from_args(args) -> None:
     # Ensure a W&B run exists (sweep-or-regular) before building the agent
     _ensure_wandb_run_initialized(config)
 
+    # Create/update the W&B workspace immediately so the dashboard is ready during training
+    url = create_or_update_workspace_for_current_run(overwrite=True, select_current_run_only=True)
+    if url:
+        print(f"W&B Workspace: {url}")
+
     # Create the agent and kick off learning
     from agents import build_agent
 
     agent = build_agent(config)
     agent.learn()
 
-    # Ensure a W&B workspace exists for this project and print its URL
-    url = create_or_update_workspace_for_current_run(overwrite=True, select_current_run_only=True)
-    if url:
-        print(f"W&B Workspace: {url}")
+    # (Workspace already ensured at training start)
 
     # Print final training completion message (duration and normalized reason)
     elapsed_seconds = _extract_elapsed_seconds(agent)

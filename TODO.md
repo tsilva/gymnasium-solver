@@ -25,6 +25,7 @@
 
 ## NEXT
 
+- PERF: dont fork subprocesses before confirming run
 - FEAT: generalize decay schedule further by specifying decay start
 - FEAT: add ability to tell LLM to inspect last N runs by providing a run registry json that has timestamps and other metadata, always sort by timestamp descending, ensure lock on write
 - FEAT: track approx_kl early stops in wandb dashboard

@@ -18,7 +18,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Tuple, List
 
 # TODO: REFACTOR this file
 
@@ -87,27 +87,28 @@ def _maybe_build_runset(wr, *, entity: str, project: str, run_id: Optional[str])
         return None
 
 
-def _make_panel(panel_cls, *, title: str, x: Optional[str] = None, y: Optional[Sequence[str]] = None, runset=None):
-    """Create a panel, attaching runset if supported; fall back gracefully otherwise."""
-    # First try with runsets parameter when a runset is provided
-    if runset is not None:
-        try:
-            # Some panel constructors accept runsets=[...]
-            kwargs = {"title": title}
-            if x is not None:
-                kwargs["x"] = x
-            if y is not None:
-                kwargs["y"] = list(y)
-            kwargs["runsets"] = [runset]
-            return panel_cls(**kwargs)
-        except Exception:
-            pass
-    # Fallback without runset
-    kwargs = {"title": title}
-    if x is not None:
+def _make_panel(panel_cls, *, title: str, x: Optional[str] = None, y: Optional[Sequence[str]] = None, runset=None, range_y: Optional[Tuple[Optional[float], Optional[float]]] = None):
+    """Create a panel with best-effort kwargs based on the panel signature.
+
+    - Adds `runsets=[runset]` when supported and provided.
+    - Adds `x`, `y` when supported and provided.
+    - Adds `range_y=(min, max)` when supported and provided.
+    Silently drops unsupported kwargs to keep compatibility across versions.
+    """
+    import inspect
+
+    params = set(getattr(inspect.signature(panel_cls), "parameters", {}).keys())
+    kwargs = {}
+    if "title" in params:
+        kwargs["title"] = title
+    if x is not None and "x" in params:
         kwargs["x"] = x
-    if y is not None:
+    if y is not None and "y" in params:
         kwargs["y"] = list(y)
+    if range_y is not None and "range_y" in params:
+        kwargs["range_y"] = range_y
+    if runset is not None and "runsets" in params:
+        kwargs["runsets"] = [runset]
     return panel_cls(**kwargs)
 
 
@@ -131,6 +132,37 @@ def _build_sections(key_metrics: Optional[Sequence[str]], *, key_panels_per_sect
     default_x = metrics_config.total_timesteps_key()
     sections = []
     runset = _maybe_build_runset(wr, entity=entity, project=project, run_id=select_run_id)
+
+    def _y_range_for_metrics(keys: Sequence[str]) -> Optional[Tuple[Optional[float], Optional[float]]]:
+        """Infer a combined y-range (min, max) from metrics.yaml for the given metric keys.
+
+        - Uses per-metric bounds (min/max) when available in metrics.yaml.
+        - For multiple series, combines mins as min(all mins) and maxes as max(all maxes).
+        - Returns (None, None) when no bounds are specified for any series so the caller can omit.
+        """
+        mins: List[float] = []
+        maxs: List[float] = []
+        for k in keys:
+            try:
+                bounds = metrics_config.bounds_for_metric(k) or {}
+            except Exception:
+                bounds = {}
+            if isinstance(bounds, dict):
+                if "min" in bounds and bounds.get("min") is not None:
+                    try:
+                        mins.append(float(bounds["min"]))
+                    except Exception:
+                        pass
+                if "max" in bounds and bounds.get("max") is not None:
+                    try:
+                        maxs.append(float(bounds["max"]))
+                    except Exception:
+                        pass
+        y_min: Optional[float] = min(mins) if mins else None
+        y_max: Optional[float] = max(maxs) if maxs else None
+        if y_min is None and y_max is None:
+            return None
+        return (y_min, y_max)
 
     if key_metrics:
         # Treat key_priority as unnamespaced subkeys and expand across
@@ -162,11 +194,17 @@ def _build_sections(key_metrics: Optional[Sequence[str]], *, key_panels_per_sect
         val_keys = _expand_for_namespace("val", key_metrics)
 
         if train_keys:
-            train_panels = [_make_panel(wr.LinePlot, title=k, x=default_x, y=[k], runset=runset) for k in train_keys]
+            train_panels = []
+            for k in train_keys:
+                ry = _y_range_for_metrics([k])
+                train_panels.append(_make_panel(wr.LinePlot, title=k, x=default_x, y=[k], runset=runset, range_y=ry))
             sections.append(ws.Section(name="train", is_open=True, panels=train_panels))
 
         if val_keys:
-            val_panels = [_make_panel(wr.LinePlot, title=k, x=default_x, y=[k], runset=runset) for k in val_keys]
+            val_panels = []
+            for k in val_keys:
+                ry = _y_range_for_metrics([k])
+                val_panels.append(_make_panel(wr.LinePlot, title=k, x=default_x, y=[k], runset=runset, range_y=ry))
             sections.append(ws.Section(name="val", is_open=True, panels=val_panels))
 
     # Diagnostics + Videos sections
@@ -176,8 +214,30 @@ def _build_sections(key_metrics: Optional[Sequence[str]], *, key_panels_per_sect
                 name="Diagnostics",
                 is_open=True,
                 panels=[
-                    _make_panel(wr.LinePlot, title="Policy LR (scheduled)", x=default_x, y=["train/policy_lr"], runset=runset),
-                    _make_panel(wr.LinePlot, title="Losses", x=default_x, y=["train/opt/loss/policy", "train/opt/loss/value", "train/opt/policy/entropy"], runset=runset),
+                    _make_panel(
+                        wr.LinePlot,
+                        title="Policy LR (scheduled)",
+                        x=default_x,
+                        y=["train/policy_lr"],
+                        runset=runset,
+                        range_y=_y_range_for_metrics(["train/policy_lr"]),
+                    ),
+                    _make_panel(
+                        wr.LinePlot,
+                        title="Losses",
+                        x=default_x,
+                        y=[
+                            "train/opt/loss/policy",
+                            "train/opt/loss/value",
+                            "train/opt/policy/entropy",
+                        ],
+                        runset=runset,
+                        range_y=_y_range_for_metrics([
+                            "train/opt/loss/policy",
+                            "train/opt/loss/value",
+                            "train/opt/policy/entropy",
+                        ]),
+                    ),
                     # ScalarChart doesn't require x/y but may also accept runsets; attempt to attach
                     _make_panel(wr.ScalarChart, title="Best Eval Reward", runset=runset),
                 ],

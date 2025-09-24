@@ -158,7 +158,7 @@ wandb agent <entity>/<project>/<sweep_id>
 ```
 
 ### 📊 W&B Workspace
-Training auto-creates/updates a project workspace at the end, default-selects the current run across panels, and prints the URL (uses the active run's entity/project; workspace name: "<project> View").
+Training auto-creates/updates a project workspace at the beginning of the run, default-selects the current run across panels, and prints the URL (uses the active run's entity/project; workspace name: "<project> View"). This makes the dashboard ready while training is in progress.
 
 Create or preview a default W&B dashboard manually (idempotent):
 ```bash

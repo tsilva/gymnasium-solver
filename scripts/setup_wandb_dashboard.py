@@ -13,7 +13,7 @@ Notes:
 - Use --dry-run to print the workspace spec without pushing to W&B.
 
 Implementation detail: Logic lives in `utils.wandb_workspace` and is reused
-by training to optionally create/update a workspace at the end of a run.
+by training to create/update a workspace at the beginning of a run.
 """
 
 from __future__ import annotations

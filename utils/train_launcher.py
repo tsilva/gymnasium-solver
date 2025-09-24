@@ -192,9 +192,7 @@ def launch_training_from_args(args) -> None:
     _ensure_wandb_run_initialized(config)
 
     # Create/update the W&B workspace immediately so the dashboard is ready during training
-    url = create_or_update_workspace_for_current_run(overwrite=True, select_current_run_only=True)
-    if url:
-        print(f"W&B Workspace: {url}")
+    create_or_update_workspace_for_current_run(overwrite=True, select_current_run_only=True)
 
     # Create the agent and kick off learning
     from agents import build_agent

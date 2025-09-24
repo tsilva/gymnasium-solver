@@ -20,16 +20,14 @@
 
 - add progress metric 0-1 that uses total_timesteps/max_timesteps when available
 - FEAT: define min-max entropy on wandb dashboard
-- BUG: alerts are not making into table logger
 - FEAT: infer min/max bounds based on configuration
 
 ## NEXT
 
-- PERF: dont fork subprocesses before confirming run
-- FEAT: generalize decay schedule further by specifying decay start
-- FEAT: add ability to tell LLM to inspect last N runs by providing a run registry json that has timestamps and other metadata, always sort by timestamp descending, ensure lock on write
-- FEAT: track approx_kl early stops in wandb dashboard
 - FEAT: add support for scheduler min and progress decoupled from timesteps, perhaps by specifying percentage -> value tuples and have the scheduler interpolate between those, allowing dynamic linear schedules that perform differently across the training (eg: higher early, lower late)
+- FEAT: generalize decay schedule further by specifying decay start
+- PERF: dont fork subprocesses before confirming run
+- FEAT: add ability to tell LLM to inspect last N runs by providing a run registry json that has timestamps and other metadata, always sort by timestamp descending, ensure lock on write
 - BUG: env smoke tests not passing
 - FEAT: currently charts are indexed by n_envs * n_steps, index only by n_steps so we can compare performance of N_ENVS vs less envs; max_timesteps should also be indexed by that, as well as training progress
 - FEAT: add support for agents to handle their own save/load logic
@@ -39,10 +37,8 @@
 - BUG: bandit env crashes because it tries to record
 - BUG: bandit training not running due to missing spec
 - BUG: can't inspect bandit training
-
 - BUG: training epoch is still running after validation early stop
 - BUG: wandb run is being logged even when training is not started, bold terminal
-- BUG: W&B workspace redundant print
 - TEST: are sweeps still working?
 - FEAT: track output distribution
 - REFACTOR: dont let callbacks inject variables int o

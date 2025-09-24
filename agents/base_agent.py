@@ -274,7 +274,7 @@ class BaseAgent(pl.LightningModule):
         
         # Log eval metrics
         epoch_fps_values = self.timings.throughput_since("on_validation_epoch_start", values_now=val_metrics)
-        epoch_fps = epoch_fps_values.get("cnt/total_timesteps", epoch_fps_values.get("roll/timesteps", 0.0))
+        epoch_fps = epoch_fps_values.get("cnt/total_vec_steps", epoch_fps_values.get("roll/vec_steps", 0.0))
         self.metrics_recorder.record("val", {
             **val_metrics,
             "cnt/epoch": int(self.current_epoch),
@@ -500,9 +500,9 @@ class BaseAgent(pl.LightningModule):
             namespace_depth=1,
         ))
 
-        # If defined in config, early stop after reaching a certain number of timesteps
+        # If defined in config, early stop after reaching a certain number of vectorized steps
         if self.config.max_timesteps: callbacks.append(
-            EarlyStoppingCallback("train/cnt/total_timesteps", self.config.max_timesteps)
+            EarlyStoppingCallback("train/cnt/total_vec_steps", self.config.max_timesteps)
         )
 
         # If defined in config, early stop when mean training reward reaches a threshold
@@ -556,8 +556,9 @@ class BaseAgent(pl.LightningModule):
         max_timesteps = self.config.max_timesteps
         if max_timesteps is None: return 0.0
         train_collector = self.get_rollout_collector("train")
-        total_steps = train_collector.total_steps
-        training_progress = max(0.0, min(total_steps / max_timesteps, 1.0))
+        # Use vectorized steps to match the configured step key and early stopping
+        total_vec_steps = train_collector.total_vec_steps
+        training_progress = max(0.0, min(total_vec_steps / max_timesteps, 1.0))
         return training_progress
 
     def _change_optimizers_lr(self, lr):

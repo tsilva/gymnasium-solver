@@ -11,9 +11,13 @@ from .scalars import only_scalar_values
 class MetricsRecorder:
     """In-memory metrics recorder with dynamic namespaces and shared step history."""
 
-    def __init__(self) -> None:
+    def __init__(self, step_key: str | None = None) -> None:
         self._buffers: MutableMapping[str, MetricsBuffer] = {}
         self._history = MetricsHistory()
+        # Optional logical step key retained for backward compatibility with
+        # callers that provide it; current implementation infers steps from
+        # the snapshot keys themselves.
+        self.step_key = step_key
 
     # ---- hot-path recorder ----
     def record(self, namespace: str, metrics: Mapping[str, Any]) -> None:

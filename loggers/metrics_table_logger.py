@@ -5,6 +5,7 @@ import sys
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+# Prefer the real Lightning logger base when available
 from pytorch_lightning.loggers.logger import (
     Logger as LightningLoggerBase,  # type: ignore
 )
@@ -316,6 +317,10 @@ class MetricsTableLogger(LightningLoggerBase):
 
             formatted[group_key] = formatted_sub
             charts[group_key] = charts_sub
+            # Ensure alerts collected for this group are preserved so they can
+            # be rendered later in _compose_lines. Without this, the alert
+            # column remains empty even when active alerts exist.
+            alerts[group_key] = alerts_sub
 
         return _PreparedSections(
             formatted=formatted,

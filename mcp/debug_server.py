@@ -122,7 +122,7 @@ class MCPDebugServer:
                     "type": "object",
                     "properties": {
                         "run_id": {"type": "string"},
-                        "metric": {"type": "string", "description": "Metric key e.g. 'train/ep_rew/mean'."},
+                        "metric": {"type": "string", "description": "Metric key e.g. 'train/roll/ep_rew/mean'."},
                         "limit": {"type": "integer", "minimum": 1, "default": 5},
                         "stage": {
                             "type": "string",
@@ -273,11 +273,14 @@ class MCPDebugServer:
             value = _safe_float(value_raw)
             if value is None:
                 continue
-            total_ts = _safe_float(row.get("train/total_timesteps"))
-            if total_ts is None:
-                total_ts = _safe_float(row.get("total_timesteps"))
+            total_ts = (
+                _safe_float(row.get("train/cnt/total_timesteps"))
+                or _safe_float(row.get("cnt/total_timesteps"))
+                or _safe_float(row.get("train/total_timesteps"))  # legacy fallback
+                or _safe_float(row.get("total_timesteps"))        # legacy fallback
+            )
             sample = {
-                "epoch": row.get("epoch"),
+                "epoch": row.get("cnt/epoch") or row.get("epoch"),
                 "total_timesteps": total_ts,
                 "value": value,
             }
@@ -402,8 +405,10 @@ class MCPDebugServer:
         config = self.config_slice(run_id=run_id)["config"]
         metrics_rows = self._read_metrics(run_id)
         totals = [
-            _safe_float(row.get("train/total_timesteps"))
-            or _safe_float(row.get("total_timesteps"))
+            _safe_float(row.get("train/cnt/total_timesteps"))
+            or _safe_float(row.get("cnt/total_timesteps"))
+            or _safe_float(row.get("train/total_timesteps"))  # legacy fallback
+            or _safe_float(row.get("total_timesteps"))        # legacy fallback
             for row in metrics_rows
         ]
         total_timesteps = max((value for value in totals if value is not None), default=None)
@@ -427,16 +432,16 @@ class MCPDebugServer:
             return best
 
         train_block = {
-            "ep_rew/mean": _latest_metric("train", "ep_rew/mean"),
-            "ep_rew/best": _best_metric("train", "ep_rew/mean"),
-            "ppo/clip_fraction": _latest_metric("train", "ppo/clip_fraction"),
-            "ppo/approx_kl": _latest_metric("train", "ppo/approx_kl"),
+            "roll/ep_rew/mean": _latest_metric("train", "roll/ep_rew/mean"),
+            "roll/ep_rew/best": _best_metric("train", "roll/ep_rew/mean"),
+            "opt/ppo/clip_fraction": _latest_metric("train", "opt/ppo/clip_fraction"),
+            "opt/ppo/approx_kl": _latest_metric("train", "opt/ppo/approx_kl"),
         }
         val_block = None
         if any("val/" in key for key in metrics_rows[-1].keys()):
             val_block = {
-                "ep_rew/mean": _latest_metric("val", "ep_rew/mean"),
-                "ep_rew/best": _best_metric("val", "ep_rew/mean"),
+                "roll/ep_rew/mean": _latest_metric("val", "roll/ep_rew/mean"),
+                "roll/ep_rew/best": _best_metric("val", "roll/ep_rew/mean"),
             }
 
         return {

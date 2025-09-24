@@ -168,8 +168,8 @@ def test_action_histogram_counts_and_metrics():
     expected_mean = float((idxs * counts).sum() / total)
     var = float(((idxs - expected_mean) ** 2 * counts).sum() / total)
     expected_std = float(np.sqrt(max(0.0, var)))
-    assert abs(m["policy/action_mean"] - expected_mean) < 1e-6
-    assert abs(m["policy/action_std"] - expected_std) < 1e-6
+    assert abs(m["roll/actions/mean"] - expected_mean) < 1e-6
+    assert abs(m["roll/actions/std"] - expected_std) < 1e-6
 
     # Reset zeros internal counters
     counts2 = collector.get_action_histogram_counts(reset=True)

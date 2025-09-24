@@ -32,8 +32,8 @@ class DispatchMetricsCallback(pl.Callback):
         time_elapsed = pl_module.timings.seconds_since("on_fit_start")
         fps_total_map = pl_module.timings.throughput_since("on_fit_start", values_now=rollout_metrics)
         fps_instant_map = pl_module.timings.throughput_since("on_train_epoch_start", values_now=rollout_metrics)
-        fps_total = fps_total_map.get("total_timesteps", fps_total_map.get("rollout/total", 0.0))
-        fps_instant = fps_instant_map.get("total_timesteps", fps_instant_map.get("rollout/total", 0.0))
+        fps_total = fps_total_map.get("cnt/total_timesteps", fps_total_map.get("roll/timesteps", 0.0))
+        fps_instant = fps_instant_map.get("cnt/total_timesteps", fps_instant_map.get("roll/timesteps", 0.0))
 
         # Aggregate metrics for the this epoch
         epoch_metrics = pl_module.metrics_recorder.compute_epoch_means(stage)
@@ -45,15 +45,15 @@ class DispatchMetricsCallback(pl.Callback):
         loggable_metrics = {
             **filtered_rollout_metrics,
             **epoch_metrics,
-            "timing/time_elapsed": time_elapsed,
-            "epoch": pl_module.current_epoch,
-            "timing/fps": fps_total,
-            "timing/fps_instant": fps_instant,
+            "sys/timing/time_elapsed": time_elapsed,
+            "cnt/epoch": pl_module.current_epoch,
+            "sys/timing/fps": fps_total,
+            "sys/timing/fps_instant": fps_instant,
         }
 
         # Derive ETA (seconds remaining) from FPS and max_timesteps if available
         if fps_total > 0.0 and pl_module.config.max_timesteps is not None:
-            loggable_metrics["timing/eta_s"] = float(pl_module.config.max_timesteps / float(fps_total))
+            loggable_metrics["sys/timing/eta_s"] = float(pl_module.config.max_timesteps / float(fps_total))
 
         # Prefix metrics with train/
         prefixed_metrics = {f"{stage}/{k}": v for k, v in loggable_metrics.items()}

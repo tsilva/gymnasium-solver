@@ -7,6 +7,7 @@ changes.
 
 ## Pong-v5_objects
 
+- Try frame stacking, may mitigate stickiness issues
 - Check if env gets solved when its deterministic
 - try debug server
 - BUG: fix duplicate object error in feature extractor
@@ -20,6 +21,8 @@ changes.
 - BUG: alerts are not making into table logger
 - FEAT: alert if action_mean doesnt start in expected bounds (initial policy not uniform)
 - FEAT: alert if action_std doesnt start in expected bounds (initial policy not uniform)
+- FEAT: search for known hard min/max bounds for metrics that are not currently in metrics.yaml and add them
+- FEAT: infer min/max bounds based on configuration
 
 ## NEXT
 

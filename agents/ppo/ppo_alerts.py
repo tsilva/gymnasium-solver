@@ -35,7 +35,7 @@ class PPOAlerts(MetricMonitorBundle):
         return f"{window_label} {avg_fmt} (latest {latest_fmt})"
 
     def _monitor_approx_kl_oob(self, history: dict):
-        metric_key = "train/ppo/approx_kl"
+        metric_key = "train/opt/ppo/approx_kl"
         value = self._smoothed_metric_value(history, metric_key)
         if value is None:
             return None
@@ -65,7 +65,7 @@ class PPOAlerts(MetricMonitorBundle):
             )
 
     def _monitor_clip_fraction_oob(self, history: dict):
-        metric_key = "train/ppo/clip_fraction"
+        metric_key = "train/opt/ppo/clip_fraction"
         value = self._smoothed_metric_value(history, metric_key)
         if value is None:
             return None
@@ -95,7 +95,7 @@ class PPOAlerts(MetricMonitorBundle):
             )
 
     def _monitor_explained_variance_instability(self, history: dict):
-        metric_key = "train/ppo/explained_variance"
+        metric_key = "train/opt/value/explained_variance"
         value = self._smoothed_metric_value(history, metric_key)
         if value is None:
             return None
@@ -133,7 +133,7 @@ class PPOAlerts(MetricMonitorBundle):
         the targets. We smooth over a short window to reduce noise and trigger a
         warning when the average is below 0.0.
         """
-        metric_key = "train/ppo/explained_variance"
+        metric_key = "train/opt/value/explained_variance"
         value = self._smoothed_metric_value(history, metric_key)
         if value is None:
             return None

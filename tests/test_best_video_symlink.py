@@ -70,7 +70,7 @@ class _Agent:
 
 class _Trainer:
     def __init__(self):
-        self.logged_metrics = {"val/ep_rew/mean": 1.0}
+        self.logged_metrics = {"val/roll/ep_rew/mean": 1.0}
         self.global_step = 10
         self.should_stop = False
 
@@ -83,7 +83,7 @@ def test_best_mp4_symlink_points_to_epoch_video(tmp_path: Path):
     epoch_video = ckpt_dir / "epoch=01.mp4"
     epoch_video.write_bytes(b"fake mp4 bytes")
 
-    cb = ModelCheckpointCallback(checkpoint_dir=str(ckpt_dir), metric="val/ep_rew/mean")
+    cb = ModelCheckpointCallback(checkpoint_dir=str(ckpt_dir), metric="val/roll/ep_rew/mean")
     trainer = _Trainer()
     agent = _Agent(tmp_path)
 
@@ -138,9 +138,9 @@ class _LoggingAgent:
 @pytest.mark.unit
 def test_checkpoint_logs_timing_metrics(tmp_path: Path):
     ckpt_dir = tmp_path / "with_timing" / "checkpoints"
-    cb = ModelCheckpointCallback(checkpoint_dir=str(ckpt_dir), metric="val/ep_rew/mean")
+    cb = ModelCheckpointCallback(checkpoint_dir=str(ckpt_dir), metric="val/roll/ep_rew/mean")
     trainer = _Trainer()
-    trainer.logged_metrics["val/ep_rew/mean"] = 2.5
+    trainer.logged_metrics["val/roll/ep_rew/mean"] = 2.5
 
     elapsed = 12.5
     agent = _LoggingAgent(ckpt_dir, elapsed=elapsed)

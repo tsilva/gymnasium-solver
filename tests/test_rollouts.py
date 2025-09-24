@@ -75,7 +75,7 @@ def test_rollout_collector_collects_and_computes_metrics():
     traj = collector.collect()
     m = collector.get_metrics()
     assert traj.observations.shape[0] == 12  # n_envs * n_steps
-    assert "ep_rew/mean" in m and "rollout/fps" in m
+    assert "roll/ep_rew/mean" in m and "roll/fps" in m
 
 
 @pytest.mark.unit

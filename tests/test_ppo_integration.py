@@ -84,7 +84,7 @@ def _install_trainer_factory_stub(monkeypatch):
                 try:
                     metrics = lightning_module.train_collector.get_metrics()
                     max_timesteps = getattr(lightning_module.config, "max_timesteps", None)
-                    if max_timesteps is not None and metrics.get("total_timesteps", 0) >= max_timesteps:
+                    if max_timesteps is not None and metrics.get("cnt/total_timesteps", 0) >= max_timesteps:
                         break
                 except Exception:
                     pass
@@ -186,6 +186,6 @@ def test_full_ppo_train_tiny_loop_progress(monkeypatch):
 
     # Verify progress was recorded and loop didn't crash
     m = agent.train_collector.get_metrics()
-    assert m["total_timesteps"] >= cfg.n_steps * cfg.n_envs
-    assert m["total_rollouts"] >= 1
-    assert m["rollout/fps"] > 0.0
+    assert m["cnt/total_timesteps"] >= cfg.n_steps * cfg.n_envs
+    assert m["cnt/total_rollouts"] >= 1
+    assert m["roll/fps"] > 0.0

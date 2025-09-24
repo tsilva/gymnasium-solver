@@ -107,14 +107,14 @@ def test_rollout_collector_gae_with_timeout_bootstrap_influences_advantages():
 
     # Metrics updated
     m = collector.get_metrics()
-    assert m['rollout/timesteps'] == 3 * env.num_envs
-    assert m['rollout/episodes'] == 1
+    assert m['roll/timesteps'] == 3 * env.num_envs
+    assert m['roll/episodes'] == 1
     assert len(collector.episode_reward_deque) == 1
     assert len(collector.env_episode_reward_deques[0]) == 1
     # Immediate episode metrics captured
-    assert 'ep_rew/last' in m and 'ep_len/last' in m
-    assert m['ep_rew/last'] == 0.0
-    assert m['ep_len/last'] == 2
+    assert 'roll/ep_rew/last' in m and 'roll/ep_len/last' in m
+    assert m['roll/ep_rew/last'] == 0.0
+    assert m['roll/ep_len/last'] == 2
 
 
 @pytest.mark.unit
@@ -154,8 +154,8 @@ def test_rollout_collector_deterministic_actions_and_shapes():
     # Metrics presence
     m = collector.get_metrics()
     for k in [
-        'total_timesteps', 'total_episodes', 'total_rollouts', 'rollout/timesteps', 'rollout/episodes',
-        'ep_rew/last', 'ep_len/last', 'ep_rew/mean', 'ep_len/mean', 'reward/mean', 'reward/std', 'obs/mean', 'obs/std'
+        'cnt/total_timesteps', 'cnt/total_episodes', 'cnt/total_rollouts', 'roll/timesteps', 'roll/episodes',
+        'roll/ep_rew/last', 'roll/ep_len/last', 'roll/ep_rew/mean', 'roll/ep_len/mean', 'roll/reward/mean', 'roll/reward/std', 'roll/obs/mean', 'roll/obs/std'
     ]:
         assert k in m
 

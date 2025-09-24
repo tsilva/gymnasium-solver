@@ -1,7 +1,7 @@
 # Metric-centric configuration
 # Each metric is defined as a top-level entry with all its properties
 # Metric names should be without namespace prefixes since the same metric
-# can appear across different namespaces (train/, eval/, rollout/, etc.)
+# can appear across different namespaces (train/, eval/, roll/, etc.)
 
 
 # Global configuration
@@ -11,74 +11,64 @@ _global:
   # train/val/test namespaces when ordering per-section.
   # Keys not listed here will follow alphabetically within their section.
   key_priority:
-      # === Performance: top-level reward, return, and episode stats (what you care about improving) ===
-      - "ep_rew/mean"
-      - "ep_rew/best"
-      - "ep_rew/last"
-      - "ep_len/mean"
-      - "ep_len/last"
-      - "reward/mean"
-      - "reward/std"
-      - "return/mean"
-      - "return/std"
+      # === Rollout (training samples from the environment) ===
+      - "roll/ep_rew/mean"
+      - "roll/ep_rew/best"
+      - "roll/ep_rew/last"
+      - "roll/ep_len/mean"
+      - "roll/ep_len/last"
+      - "roll/reward/mean"
+      - "roll/reward/std"
+      - "roll/return/mean"
+      - "roll/return/std"
+      - "roll/adv/mean"
+      - "roll/adv/std"
+      - "roll/baseline/mean"
+      - "roll/baseline/std"
+      - "roll/obs/mean"
+      - "roll/obs/std"
+      - "roll/actions/mean"
+      - "roll/actions/std"
+      - "roll/fps"
+      - "roll/episodes"
+      - "roll/timesteps"
 
-      # === PPO diagnostics: policy update behavior (how stable/efficient the optimization is) ===
-      - "ppo/clip_fraction"
-      - "ppo/approx_kl"
-      - "ppo/kl"
-      - "ppo/explained_variance"
-      - "adv/mean"
-      - "adv/std"
+      # === Optimization (per-update diagnostics) ===
+      - "opt/ppo/clip_fraction"
+      - "opt/ppo/kl"
+      - "opt/ppo/approx_kl"
+      - "opt/value/explained_variance"
+      - "opt/loss/total"
+      - "opt/loss/policy"
+      - "opt/loss/value"
+      - "opt/loss/value_scaled"
+      - "opt/loss/entropy"
+      - "opt/loss/entropy_scaled"
+      - "opt/policy/entropy"
+      - "opt/grads/norm/all"
+      - "opt/grads/norm/backbone"
+      - "opt/grads/norm/policy_head"
+      - "opt/grads/norm/value_head"
 
-      # === Losses: optimization targets for PPO (policy/value/entropy contributions) ===
-      - "loss/total"
-      - "loss/policy"
-      - "loss/value"
-      - "loss/value_scaled"
-      - "loss/entropy"
-      - "loss/entropy_scaled"
+      # === Counters (monotonic progress) ===
+      - "cnt/total_episodes"
+      - "cnt/total_rollouts"
+      - "cnt/total_timesteps"
+      - "cnt/epoch"
 
-      # === Policy stats: entropy and action distribution (exploration & action spread) ===
-      - "policy/entropy"
-      - "policy/action_mean"
-      - "policy/action_std"
+      # === System & timing ===
+      - "sys/timing/fps"
+      - "sys/timing/fps_instant"
+      - "sys/timing/time_elapsed"
+      - "sys/timing/eta_s"
 
-      # === Gradients: training stability (magnitude of updates across model parts) ===
-      - "grad_norm/all"
-      - "grad_norm/backbone"
-      - "grad_norm/policy_head"
-      - "grad_norm/value_head"
-
-      # === Observations: input scaling sanity check (mean/std of environment observations) ===
-      - "obs/mean"
-      - "obs/std"
-
-      # === Rollout & sampling: how many timesteps/episodes are being collected per epoch ===
-      - "rollout/timesteps"
-      - "rollout/episodes"
-      - "rollout/fps"
-      - "total_episodes"
-      - "total_rollouts"
-      - "total_timesteps"
-      - "epoch"
-
-      # === Timing & system: wallclock training throughput and ETA ===
-      - "timing/fps"
-      - "timing/fps_instant"
-      - "timing/time_elapsed"
-      - "timing/eta_s"
-
-      # === Baseline stats: advantage normalization baselines (if used) ===
-      - "baseline_mean"
-      - "baseline_std"
-
-      # === Hyperparameters: static knobs that don’t change during training ===
+      # === Hyperparameters ===
       - "hp/policy_lr"
       - "hp/clip_range"
       - "hp/ent_coef"
       - "hp/vf_coef"
-  
-  step_key: "train/total_timesteps"
+
+  step_key: "train/cnt/total_timesteps"
 
 clip_range:
   description: "PPO clip range for policy updates (ratio clamp around 1.0)"
@@ -87,87 +77,99 @@ clip_range:
   max: 1.0
       
 # Episode and timestep counts (integers)
-total_episodes:
+cnt/total_episodes:
   precision: 0
   description: "Cumulative number of episodes completed across all training"
   delta_rule: ">="  # Should always increase
 
+# For CSV base fields, keep bare precision settings for compatibility
 total_timesteps:
+  highlight: true
+  description: "Cumulative number of environment steps taken across all training"
+  precision: 0
+
+cnt/total_timesteps:
   highlight: true
   # Note: delta_rule removed because eval/total_timesteps can legitimately decrease
   # between evaluation runs when using different eval strategies or env resets
   description: "Cumulative number of environment steps taken across all training"
   precision: 0
 
-rollout/timesteps:
+roll/timesteps:
   description: "Number of timesteps collected in the current rollout buffer"
   precision: 0
   delta_rule: ">="  # Should always increase
 
 # Additional counters
-total_rollouts:
+cnt/total_rollouts:
   description: "Cumulative number of completed rollouts (batches) collected"
   precision: 0
   delta_rule: ">="
 
-rollout/episodes:
+roll/episodes:
   description: "Number of episodes finished within the current rollout"
   precision: 0
 
 # Episode statistics
-ep_rew/mean:
+roll/ep_rew/mean:
   bold: true
   highlight: true
   description: "Average episode reward over recent episodes window"
   precision: 2
 
-ep_len/mean:
+roll/ep_len/mean:
   description: "Average episode length over recent episodes window"
   precision: 0
 
 # Immediate episode stats
-ep_rew/last:
+roll/ep_rew/last:
   bold: true
   highlight: true
   description: "Reward of the most recent completed episode"
   precision: 2
 
-ep_len/last:
+roll/ep_len/last:
   description: "Length of the most recent completed episode"
   precision: 0
 
-ep_rew/best:
+roll/ep_rew/best:
   bold: true
   highlight: true
   description: "Running best of ep_rew/mean across epochs"
   precision: 2
 
-ep_rew/min:
+roll/ep_rew/min:
   description: "Minimum episode reward observed in recent episodes window"
   precision: 2
 
-ep_rew/max:
+roll/ep_rew/max:
   description: "Maximum episode reward observed in recent episodes window"
   precision: 2
 
-ep_len/min:
+roll/ep_len/min:
   precision: 0
   description: "Minimum episode length observed in recent episodes window"
 
-ep_len/max: 
+roll/ep_len/max: 
   description: "Maximum episode length observed in recent episodes window"
   precision: 0
 
-ep_rew/std:
+roll/ep_rew/std:
   description: "Standard deviation of episode rewards in recent episodes window"
   precision: 2
 
-ep_len/std:
+roll/ep_len/std:
   description: "Standard deviation of episode lengths in recent episodes window"
   precision: 2
 
 # Training metrics
+# For CSV base fields, keep bare precision settings for compatibility
 epoch:
+  description: "Current training epoch number"
+  precision: 0
+  delta_rule: ">="  # Should always increase
+
+cnt/epoch:
   description: "Current training epoch number"
   precision: 0
   delta_rule: ">="  # Should always increase
@@ -178,23 +180,23 @@ n_updates:
   delta_rule: ">="  # Should always increase
 
 # Time metrics
-time_elapsed:
+sys/timing/time_elapsed:
   description: "Total elapsed training time in seconds"
   precision: 2
   delta_rule: ">="  # Time should always increase
   min: 0.0
 
-timing/fps:
+sys/timing/fps:
   description: "Training throughput in frames (environment steps) per second"
   precision: 0
   min: 0.0
 
-timing/eta_s:
+sys/timing/eta_s:
   description: "Estimated seconds remaining to reach max_timesteps"
   precision: 0
   min: 0.0
 
-timing/fps_instant:
+sys/timing/fps_instant:
   description: "Instant training throughput in frames per second measured within the current epoch"
   precision: 0
   min: 0.0
@@ -205,51 +207,51 @@ epoch_fps:
   min: 0.0
 
 # Loss metrics
-loss/policy:
+opt/loss/policy:
   description: "Policy network loss from gradient ascent on expected returns"
   precision: 4
 
-loss/value:
+opt/loss/value:
   description: "Value function loss measuring prediction accuracy of state values"
   precision: 4
 
-loss/total:
+opt/loss/total:
   highlight: true
   description: "Total loss used for backprop (policy + value + entropy terms)"
   precision: 4
 
-loss/entropy:
+opt/loss/entropy:
   description: "Negative policy entropy used as regularization term"
   precision: 4
 
-loss/entropy_scaled:
+opt/loss/entropy_scaled:
   description: "Scaled negative entropy term used in total loss"
   precision: 4
 
 # Algorithm-specific metrics
-ppo/approx_kl:
+opt/ppo/approx_kl:
   description: "Approximate KL divergence between old and new policy distributions"
   precision: 4
   min: 0.0
   max: 0.1
 
-ppo/kl:
+opt/ppo/kl:
   description: "KL divergence between old and new policy log probabilities"
   precision: 4
 
-ppo/clip_fraction:
+opt/ppo/clip_fraction:
   description: "Fraction of probability ratios that were clipped in PPO objective"
   precision: 3
   min: 0.0
   max: 1.0
 
-ppo/explained_variance:
+opt/value/explained_variance:
   description: "How well the value function predicts returns (1.0 = perfect, 0.0 = no better than mean, <0.0 = worse than mean)"
   precision: 3
   min: -1.0
   max: 1.0
 
-policy/entropy:
+opt/policy/entropy:
   description: "Policy entropy measuring exploration vs exploitation trade-off"
   precision: 4
   min: 0.0
@@ -257,39 +259,28 @@ policy/entropy:
 
 
 # Learning rates
-policy_lr:
-  description: "Current learning rate for policy network optimizer"
-  precision: 6
-  min: 0.0
-
-value_lr:
-  description: "Current learning rate for value network optimizer"
-  precision: 6
-  min: 0.0
-
-# Gradient metrics
-grad_norm:
-  description: "L2 norm of policy network gradients before clipping"
-  precision: 4
-  min: 0.0
-
 max_grad_norm:
   description: "Maximum allowed gradient norm for gradient clipping"
   precision: 4
   min: 0.0
 
 # Granular gradient norms
-grad_norm/backbone:
+opt/grads/norm/all:
+  description: "L2 norm of all gradients before clipping"
+  precision: 4
+  min: 0.0
+
+opt/grads/norm/backbone:
   description: "Gradient L2 norm for shared backbone parameters"
   precision: 4
   min: 0.0
 
-grad_norm/policy_head:
+opt/grads/norm/policy_head:
   description: "Gradient L2 norm for policy head"
   precision: 4
   min: 0.0
 
-grad_norm/value_head:
+opt/grads/norm/value_head:
   description: "Gradient L2 norm for value head"
   precision: 4
   min: 0.0
@@ -314,43 +305,43 @@ value_std:
   min: 0.0
 
 # Observations and rewards statistics (from collectors)
-obs/mean:
+roll/obs/mean:
   description: "Running mean of observations after preprocessing/normalization"
   precision: 3
 
-obs/std:
+roll/obs/std:
   description: "Running standard deviation of observations after preprocessing/normalization"
   precision: 3
   min: 0.0
 
-reward/mean:
+roll/reward/mean:
   description: "Running mean of raw rewards (pre-normalization)"
   precision: 3
 
-reward/std:
+roll/reward/std:
   description: "Running standard deviation of raw rewards (pre-normalization)"
   precision: 3
   min: 0.0
 
-policy/action_mean:
+roll/actions/mean:
   description: "Mean of actions taken (discrete: mean index; continuous: mean magnitude)"
   precision: 3
 
-policy/action_std:
+roll/actions/std:
   description: "Standard deviation of actions (proxy for exploration for continuous control)"
   precision: 3
   min: 0.0
 
-rollout/fps:
+roll/fps:
   description: "Collector throughput in frames per second (rollout only)"
   precision: 0
   min: 0.0
 
-baseline_mean:
+roll/baseline/mean:
   description: "Running mean of the baseline used for returns normalization"
   precision: 3
 
-baseline_std:
+roll/baseline/std:
   description: "Running std of the baseline used for returns normalization"
   precision: 3
   min: 0.0
@@ -368,5 +359,10 @@ hp/clip_range:
 
 hp/ent_coef:
   description: "Entropy coefficient at start (static reference)"
+  precision: 6
+  min: 0.0
+
+hp/vf_coef:
+  description: "Value coefficient at start (static reference)"
   precision: 6
   min: 0.0

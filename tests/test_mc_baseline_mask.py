@@ -75,4 +75,4 @@ def test_mc_baseline_uses_masked_values_only():
     # Valid positions are up to and including the last terminal (t=1)
     # Returns with gamma=1: t=0 -> 1+2=3, t=1 -> 2
     expected_mean = (3.0 + 2.0) / 2.0
-    assert abs(metrics["baseline_mean"] - expected_mean) < 1e-6
+    assert abs(metrics["roll/baseline/mean"] - expected_mean) < 1e-6

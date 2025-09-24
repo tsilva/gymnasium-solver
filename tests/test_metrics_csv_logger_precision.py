@@ -12,10 +12,10 @@ def test_metrics_csv_respects_precision_zero(tmp_path: Path) -> None:
 
     # Mix of counters (precision 0) and float metrics
     metrics = {
-        "train/total_timesteps": 100.0,  # precision 0 -> int
-        "train/epoch": 5.0,               # precision 0 -> int
-        "train/ep_len/mean": 12.9,       # precision 0 -> int (rounded)
-        "train/policy/entropy": 0.123456, # precision 4 -> rounded float
+        "train/cnt/total_timesteps": 100.0,  # precision 0 -> int
+        "train/cnt/epoch": 5.0,               # precision 0 -> int
+        "train/roll/ep_len/mean": 12.9,       # precision 0 -> int (rounded)
+        "train/opt/policy/entropy": 0.123456, # precision 4 -> rounded float
     }
 
     logger.buffer_metrics(metrics)
@@ -34,5 +34,5 @@ def test_metrics_csv_respects_precision_zero(tmp_path: Path) -> None:
     assert row["epoch"] == "5"
 
     # Namespaced metric columns
-    assert row["train/ep_len/mean"] == "13"  # 12.9 -> 13 (precision 0)
-    assert row["train/policy/entropy"] == "0.1235"  # rounded to 4 decimals
+    assert row["train/roll/ep_len/mean"] == "13"  # 12.9 -> 13 (precision 0)
+    assert row["train/opt/policy/entropy"] == "0.1235"  # rounded to 4 decimals

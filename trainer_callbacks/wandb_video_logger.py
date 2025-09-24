@@ -302,11 +302,11 @@ class WandbVideoLoggerCallback(pl.Callback):
                 from utils.metrics_config import metrics_config
                 step_key = metrics_config.total_timesteps_key()
                 # Resolve unnamespaced variant of the step key
-                # e.g., 'train/total_timesteps' -> 'total_timesteps'
+                # e.g., 'train/cnt/total_timesteps' -> 'cnt/total_timesteps'
                 try:
                     _, bare = step_key.split("/", 1)
                 except Exception:
-                    bare = "total_timesteps"
+                    bare = "cnt/total_timesteps"
                 step_value = metrics.get(bare, trainer.global_step)
             
             # Use Lightning's log_metrics to ensure proper step handling

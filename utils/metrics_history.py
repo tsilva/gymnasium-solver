@@ -11,7 +11,7 @@ class MetricsHistory:
 
     Tracks numeric values over time keyed by metric name, storing
     (step, value) pairs. The canonical step is inferred from a
-    designated step key (default: "train/total_timesteps").
+    designated step key (default: "train/cnt/total_timesteps").
     """
 
     def __init__(self) -> None:

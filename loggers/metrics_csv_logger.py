@@ -76,10 +76,10 @@ class MetricsCSVLogger:
             train_step_key = step_key
             val_step_key = step_key.replace("train/", "val/") if step_key.startswith("train/") else step_key
         except Exception:
-            train_step_key = "train/total_timesteps"
-            val_step_key = "val/total_timesteps"
+            train_step_key = "train/cnt/total_timesteps"
+            val_step_key = "val/cnt/total_timesteps"
         step = self._first_number(metrics.get(train_step_key), metrics.get(val_step_key))
-        epoch = self._first_number(metrics.get("train/epoch"), metrics.get("val/epoch"))
+        epoch = self._first_number(metrics.get("train/cnt/epoch"), metrics.get("val/cnt/epoch"))
         t = time.time()
 
         row = {
@@ -219,7 +219,7 @@ class MetricsCSVLogger:
     def _coerce_by_precision(self, metric_key_or_bare: str, value: Any) -> Any:
         """Coerce a numeric metric to int when precision=0, else rounded float.
 
-        Accepts either namespaced keys (e.g., "train/total_timesteps") or bare
+        Accepts either namespaced keys (e.g., "train/cnt/total_timesteps") or bare
         names (e.g., "total_timesteps"). Non-numeric or None values are returned
         as-is so the CSV writer can handle blanks appropriately.
         """

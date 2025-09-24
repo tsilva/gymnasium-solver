@@ -898,10 +898,10 @@ class RolloutCollector():
 
         return {
             **base_metrics,
-            "total_episodes": total_episodes_collected,
-            "total_timesteps": int(total_timesteps),
-            "ep_rew/mean": ep_rew_mean,
-            "ep_len/mean": float(ep_len_mean),
+            "cnt/total_episodes": total_episodes_collected,
+            "cnt/total_timesteps": int(total_timesteps),
+            "roll/ep_rew/mean": ep_rew_mean,
+            "roll/ep_len/mean": float(ep_len_mean),
         }
 
     def slice_trajectories(self, trajectories, idxs):
@@ -969,30 +969,30 @@ class RolloutCollector():
         ret_std = self._ret_stats.std()
 
         return {
-            "total_timesteps": self.total_steps,  # canonical step counter for history
-            "total_episodes": self.total_episodes,
-            "total_rollouts": self.total_rollouts,
-            "rollout/timesteps": self.rollout_steps,
-            "rollout/episodes": self.rollout_episodes,
-            "rollout/fps": rollout_fps,  # average fps over recent rollouts
-            "ep_rew/best": float(self._best_episode_reward),
-            "ep_rew/last": float(self._last_episode_reward),
-            "ep_len/last": int(self._last_episode_length),
-            "ep_rew/mean": ep_rew_mean,
-            "ep_len/mean": ep_len_mean,
-            "obs/mean": obs_mean,
-            "obs/std": obs_std,
-            "reward/mean": reward_mean,
-            "reward/std": reward_std,
-            "return/mean": ret_mean,
-            "return/std": ret_std,
-            "adv/mean": adv_mean,
-            "adv/std": adv_std,
-            "policy/action_mean": action_mean,
-            "policy/action_std": action_std,
+            "cnt/total_timesteps": self.total_steps,  # canonical step counter for history
+            "cnt/total_episodes": self.total_episodes,
+            "cnt/total_rollouts": self.total_rollouts,
+            "roll/timesteps": self.rollout_steps,
+            "roll/episodes": self.rollout_episodes,
+            "roll/fps": rollout_fps,  # average fps over recent rollouts
+            "roll/ep_rew/best": float(self._best_episode_reward),
+            "roll/ep_rew/last": float(self._last_episode_reward),
+            "roll/ep_len/last": int(self._last_episode_length),
+            "roll/ep_rew/mean": ep_rew_mean,
+            "roll/ep_len/mean": ep_len_mean,
+            "roll/obs/mean": obs_mean,
+            "roll/obs/std": obs_std,
+            "roll/reward/mean": reward_mean,
+            "roll/reward/std": reward_std,
+            "roll/return/mean": ret_mean,
+            "roll/return/std": ret_std,
+            "roll/adv/mean": adv_mean,
+            "roll/adv/std": adv_std,
+            "roll/actions/mean": action_mean,
+            "roll/actions/std": action_std,
             "action_dist": action_dist,
-            "baseline_mean": baseline_mean,
-            "baseline_std": baseline_std
+            "roll/baseline/mean": baseline_mean,
+            "roll/baseline/std": baseline_std
         }
 
     def pop_recent_episodes(self) -> List[Tuple[int, float, int, bool]]:

@@ -68,7 +68,7 @@ class BaseModel(nn.Module):
     def compute_grad_norms(self) -> Dict[str, float]:
         """Compute gradient norms for named parameter groups (default: 'all')."""
         all_params = list(self.parameters())
-        return {"grad_norm/all": compute_param_group_grad_norm(all_params)}
+        return {"opt/grads/norm/all": compute_param_group_grad_norm(all_params)}
 
 
 class MLPPolicy(BaseModel):
@@ -120,8 +120,8 @@ class MLPPolicy(BaseModel):
         
         return {
             **grad_norms,
-            "grad_norm/backbone": compute_param_group_grad_norm(backbone_params),
-            "grad_norm/policy_head": compute_param_group_grad_norm(policy_head_params),
+            "opt/grads/norm/backbone": compute_param_group_grad_norm(backbone_params),
+            "opt/grads/norm/policy_head": compute_param_group_grad_norm(policy_head_params),
         }
 
 class MLPActorCritic(BaseModel):
@@ -190,7 +190,7 @@ class MLPActorCritic(BaseModel):
         
         return {
             **grad_norms,
-            "grad_norm/backbone": compute_param_group_grad_norm(backbone_params),
-            "grad_norm/policy_head": compute_param_group_grad_norm(policy_head_params),
-            "grad_norm/value_head": compute_param_group_grad_norm(value_head_params),
+            "opt/grads/norm/backbone": compute_param_group_grad_norm(backbone_params),
+            "opt/grads/norm/policy_head": compute_param_group_grad_norm(policy_head_params),
+            "opt/grads/norm/value_head": compute_param_group_grad_norm(value_head_params),
         }

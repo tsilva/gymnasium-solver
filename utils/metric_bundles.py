@@ -170,7 +170,7 @@ class CoreMetricAlerts(MetricMonitorBundle):
         Triggers when the recent average falls below a small fraction of the
         early average, signaling premature determinism and loss of exploration.
         """
-        metric_key = "train/entropy"
+        metric_key = "train/opt/policy/entropy"
         series = self._metric_series(history, metric_key)
 
         # Use the same smoothing window as other bounds checks

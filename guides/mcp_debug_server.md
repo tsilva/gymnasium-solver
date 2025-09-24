@@ -6,8 +6,8 @@ This helper server captures the shortcuts I kept wishing for while debugging the
 - **Run triage was manual** – I had to tab through dozens of `runs/<id>/` folders,
   inspect `config.json`, skim `metrics.csv`, and eyeball `run.log` just to learn
   whether a run ever left -20 reward or if KL/clip values were drifting.
-- **Metric inspection was noisy** – grabbing the tail of `train/ep_rew/mean` or
-  `train/ppo/approx_kl` meant opening large CSVs and manually scanning for the last
+- **Metric inspection was noisy** – grabbing the tail of `train/roll/ep_rew/mean` or
+  `train/opt/ppo/approx_kl` meant opening large CSVs and manually scanning for the last
   non-empty entry.
 - **Env instrumentation required ad-hoc scripts** – validating that OCAtari was
   surfacing `Ball`, `Player`, and `Enemy` objects (and that the feature vector
@@ -49,8 +49,8 @@ stdout, making it easy to integrate with an MCP-compatible agent or script.
 
 | Tool | Purpose | Key fields |
 | --- | --- | --- |
-| `list_runs` | Recent runs with coarse stats (filterable by `project_id`). | `runs[*].train`, `runs[*].val`, `total_timesteps` |
-| `summarize_run` | Single-run snapshot of reward, KL, and clip stats plus config highlights. | `train`, `val`, `total_timesteps` |
+| `list_runs` | Recent runs with coarse stats (filterable by `project_id`). | `runs[*].train`, `runs[*].val`, `cnt/total_timesteps` |
+| `summarize_run` | Single-run snapshot of reward, KL, and clip stats plus config highlights. | `train`, `val`, `cnt/total_timesteps` |
 | `metrics_tail` | Last _N_ samples of any metric column (default `train/`). | `samples`, `stats` |
 | `config_slice` | `config.json` with optional key filtering for lightweight inspection. | `config` |
 | `probe_objects` | Steps an OCAtari env for quick object/feature sanity checks. | `snapshots`, `unique_categories` |
@@ -80,7 +80,7 @@ schemas.
     "id": 4,
     "params": {
       "name": "metrics_tail",
-      "args": {"run_id": "sdpskiii", "metric": "ppo/approx_kl", "stage": "train", "limit": 5}
+      "args": {"run_id": "sdpskiii", "metric": "opt/ppo/approx_kl", "stage": "train", "limit": 5}
     }
   }
   ```

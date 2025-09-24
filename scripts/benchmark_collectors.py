@@ -170,7 +170,7 @@ def run_custom_collector(cfg, *, subproc_override: Optional[bool], deterministic
     sustained_fps = total_steps / max(1e-9, elapsed)
 
     metrics = collector.get_metrics()
-    window_fps = float(metrics.get("rollout/fps", 0.0))
+    window_fps = float(metrics.get("roll/fps", 0.0))
 
     print("Results: elapsed={:.2f}s total_steps={:,} sustained_fps={:,.0f} (window_fps≈{:,.0f})".format(
         elapsed, total_steps, sustained_fps, window_fps

@@ -50,9 +50,9 @@ Algo-specific config subclasses:
 
 ### Agents
 - `BaseAgent` (LightningModule):
-  - Creates `train`, `val`, and `test` envs with offset seeds and stage-specific video settings, then builds matching `RolloutCollector`s. Instantiates a `MetricsRecorder` (step key `train/total_timesteps`), a `MetricsMonitor` used for alert hooks, and a `Run` object for run directory bookkeeping.
+  - Creates `train`, `val`, and `test` envs with offset seeds and stage-specific video settings, then builds matching `RolloutCollector`s. Instantiates a `MetricsRecorder` (step key `train/cnt/total_timesteps`), a `MetricsMonitor` used for alert hooks, and a `Run` object for run directory bookkeeping.
 - Manual optimization in `training_step`; per-batch metrics are buffered in the recorder and flushed once per epoch by `trainer_callbacks.DispatchMetricsCallback`, which also updates history and forwards `train/*` / `val/*` snapshots to Lightning loggers. `MetricsMonitor.check()` surfaces alert messages (printed once per epoch), and `loggers.metrics_table_logger.PrintMetricsLogger` renders the console table using `config/metrics.yaml` precision/highlight rules.
-  - Tracks best episode rewards via the collector: `train/ep_rew/best` and `val/ep_rew/best` are derived from the running best of `*/ep_rew/mean` and appear in `metrics.csv`, W&B, and the terminal view.
+  - Tracks best episode rewards via the collector: `train/roll/ep_rew/best` and `val/roll/ep_rew/best` are derived from the running best of `*/roll/ep_rew/mean` and appear in `metrics.csv`, W&B, and the terminal view.
   - Evaluation cadence honors `Config.eval_freq_epochs` and `eval_warmup_epochs`. `WarmupEvalCallback` disables validation until warmup completes, after which `validation_step` drives the collector-based evaluation + optional video capture described earlier.
   - Schedules: BaseAgent auto-wires any `*_schedule` fields in `Config` to `HyperparameterSchedulerCallback`s. Special setters are used when needed (e.g., `policy_lr` updates both the attribute and optimizer param groups; logged as `train/policy_lr`).
   - Logging: `WandbLogger` derives the project from `env_id`, `CsvLightningLogger` writes `runs/<id>/metrics.csv`, and `PrintMetricsLogger` keeps the terminal table in sync with Lightning's metric stream. Gradients are captured in W&B via `WandbLogger.watch(model, log='gradients', log_freq=100)`.
@@ -60,7 +60,7 @@ Algo-specific config subclasses:
   - Builds an actor-critic via `utils.policy_factory.build_policy_from_env_and_config`, computes PPO losses, and defaults to AdamW (configurable through `Config.optimizer`).
   - PPO losses consume mutable attrs like `clip_range`, `vf_coef`, and `ent_coef`, so schedules on these fields apply automatically.
   - Registers metric monitors for KL, clip fraction, and explained variance; alerts show up in the console when values leave recommended ranges.
-  - Logs gradient norms for `actor_head`, `critic_head`, and `trunk` before clipping/optimizer step (exposed as `train/grad_norm/*`).
+  - Logs gradient norms for `actor_head`, `critic_head`, and `trunk` before clipping/optimizer step (exposed as `train/opt/grads/norm/*`).
 - `agents/reinforce.REINFORCE`:
   - Builds a policy-only network via `utils.policy_factory.build_policy`, supports returns- or advantages-weighted policy targets (`config.policy_targets`), and disables GAE in the collector for classic REINFORCE behavior.
   - Logs diagnostics including entropy and PPO-style KL approximations comparing rollout vs current log-probs; Monte Carlo return mode is controlled by `Config.returns_type` (`mc:rtg` default, `mc:episode` to scale all timesteps equally).
@@ -111,7 +111,7 @@ Algo-specific config subclasses:
 - **Metrics/logging**: adjust `config/metrics.yaml` / `utils.metrics_config` for precision/highlight rules, register additional `MetricsMonitor` callbacks when alerts are needed, and continue logging through `MetricsRecorder` buffers to keep the Lightning stream consistent.
 
 ### Conventions and gotchas
-- Observations are flattened only for vectors/scalars; image observations are preserved as CHW tensors through the rollout/DataLoader path. CNN models consume CHW directly (a small trunk handles shape consistency).
+- Observations are flattened only for vectors/scalars; image observations are preserved as CHW tensors through the roll/DataLoader path. CNN models consume CHW directly (a small trunk handles shape consistency).
 - Q-Learning assumes discrete obs/action spaces; do not auto-wrap discrete obs into vectors in `build_env` to avoid breaking tabular methods.
 - When `eval_freq_epochs` is None or 0, validation is disabled. With warmup (`eval_warmup_epochs > 0`), all epochs up to and including the warmup boundary are skipped; evaluation resumes on the cadence grid (multiples of `eval_freq_epochs`) strictly after warmup. Example: warmup=50, freq=15 -> first eval at E=60 (epoch_idx=59).
 - Use `config.max_timesteps` for progress-based schedules; ensure it’s set for linear decays to have effect.

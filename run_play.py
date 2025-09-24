@@ -146,10 +146,10 @@ def main():
 
             reported_episodes += 1
             metrics = collector.get_metrics()
-            mean_rew = metrics.get('ep_rew/mean', 0)
+            mean_rew = metrics.get('roll/ep_rew/mean', 0)
             last_len = int(_ep_len)
-            mean_len = metrics.get('ep_len/mean', 0)
-            fps = metrics.get('rollout/fps', 0)
+            mean_len = metrics.get('roll/ep_len/mean', 0)
+            fps = metrics.get('roll/fps', 0)
             print(
                 f"[episodes {reported_episodes}/{target_eps}] last_rew={ep_rew:.2f} last_len={last_len} "
                 f"mean_rew={mean_rew:.2f} mean_len={int(mean_len)} fps={fps:.1f}"

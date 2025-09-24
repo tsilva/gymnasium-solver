@@ -9,28 +9,32 @@ _base: &base
   eval_episodes: 10  
   gamma: 0.99
   gae_lambda: 0.95
-  #frame_stack: 4
-  # NOTE: agent learns easily when env is deterministic
-  #env_kwargs:
-  #  repeat_action_probability: 0.0  # Makes the environment deterministic
-  # TODO GIT UNSTASHHHHH!!! VIEW LAST RUN PERF!!!
-  #NOTES: deterministic works, so feature extractor is right?
   env_wrappers:
     # Extract paddle/ball positions and velocities into compact normalized vector
     - id: PongV5_FeatureExtractor
-    # Remap actions to only include NOOP, LEFT, RIGHT
+
+_env_deterministic: &env_deterministic
+  <<: *base
+  env_kwargs:
+    repeat_action_probability: 0.0  # Makes the environment deterministic
+
+_env_remap_actions: &env_remap_actions
+  <<: *base
+  env_wrappers:
     - id: DiscreteActionSpaceRemapperWrapper
       mapping: [0, 2, 3]
-    # Add a small bonus for NOOP (index 0 after remap)
-    # this will help balance issues caused by sticky actions 
-    # by prioritizing staying still, even if episode is 10k steps
-    # it will only add one point to the final reward
-    # (staying still is predictable)
+
+_env_reward_noop: &env_reward_noop
+  <<: *base
+  env_wrappers:
     - id: ActionRewardShaper
       rewards: [0.0001, 0.0, 0.0]
-  # TODO: check if FPS is higher with subproc off
+
+_current_config: &_current_config
+  <<: [*base, *env_remap_actions, *env_reward_noop, *env_deterministic]
+
 ppo:
-  <<: *base
+  <<: *_current_config
   algo_id: ppo
   max_timesteps: 2e5
   n_envs: 32

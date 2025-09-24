@@ -28,7 +28,7 @@ _env_reward_noop: &env_reward_noop
   <<: *base
   env_wrappers:
     - id: ActionRewardShaper
-      rewards: [0.0001, 0.0, 0.0]
+      rewards: [0.001, 0.0, 0.0]
 
 _current_config: &_current_config
   <<: [*base, *env_remap_actions, *env_reward_noop, *env_deterministic]

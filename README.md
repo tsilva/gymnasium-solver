@@ -183,6 +183,7 @@ Requires a logged-in W&B session (`wandb login`) or `WANDB_API_KEY` set.
   - The script won’t overwrite an existing workspace by default; it prints that it already exists. Use `--overwrite` to update the existing layout.
   - Use `--key-panels-per-section N` to control how many “Key Metrics” panels appear per section.
   - Default workspace name is "<project> View". Override with `--name`.
+  - The “roll/actions/mean” chart auto-sets its y‑axis from the environment spec’s action space: for discrete spaces, `[0, N-1]`; for continuous, the provided `[min, max]`/`bounds` when available. Falls back to auto‑scaling if the spec isn’t found.
 
 ### 🔇 Silencing logs
 To suppress creation of session log files and banner/config dumps to `logs/` (useful for ad‑hoc play sessions), set:

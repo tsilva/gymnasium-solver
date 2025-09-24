@@ -18,7 +18,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Sequence, Tuple, List
+from typing import Optional, Sequence, Tuple, List, Any, Dict
 
 # TODO: REFACTOR this file
 
@@ -133,6 +133,118 @@ def _build_sections(key_metrics: Optional[Sequence[str]], *, key_panels_per_sect
     sections = []
     runset = _maybe_build_runset(wr, entity=entity, project=project, run_id=select_run_id)
 
+    # Best-effort cache to avoid repeated API/spec lookups
+    _cached_action_mean_bounds: Optional[Tuple[float, float]] = None
+
+    def _infer_action_mean_bounds_from_spec() -> Optional[Tuple[float, float]]:
+        """Infer [min, max] bounds for roll/actions/mean from the env spec.
+
+        Strategy:
+        - Query W&B for the selected run (or latest in project) to obtain
+          config fields (env_id, project_id).
+        - Resolve spec file path using project_id when present, otherwise
+          env_id normalized (ALE/Pong-v5 -> ALE-Pong-v5).
+        - Read action_space from spec and derive discrete/continuous bounds.
+
+        Falls back to None on any error so callers can omit range_y.
+        """
+        try:
+            import wandb  # local import; optional dep
+        except Exception:
+            return None
+
+        try:
+            api = wandb.Api()
+            run = None
+            if select_run_id:
+                try:
+                    run = api.run(f"{entity}/{project}/{select_run_id}")
+                except Exception:
+                    run = None
+            if run is None:
+                runs = list(api.runs(f"{entity}/{project}"))
+                if not runs:
+                    return None
+                # Most recent by created_at when available
+                try:
+                    runs.sort(key=lambda r: getattr(r, "created_at", None) or 0, reverse=True)
+                except Exception:
+                    pass
+                run = runs[0]
+
+            cfg: Dict[str, Any] = {}
+            try:
+                cfg = dict(getattr(run, "config", {}) or {})
+            except Exception:
+                cfg = {}
+
+            project_id = str(cfg.get("project_id") or "")
+            env_id = str(cfg.get("env_id") or "")
+            if not project_id and not env_id:
+                return None
+
+            # Resolve spec path (mirror EnvInfoWrapper resolution)
+            from utils.io import read_yaml  # type: ignore
+            from pathlib import Path as _Path
+
+            repo_root = _Path(__file__).resolve().parents[1]
+            spec_path = None
+            if project_id:
+                candidate = repo_root / "config" / "environments" / f"{project_id}.spec.yaml"
+                if candidate.exists():
+                    spec_path = candidate
+            if spec_path is None and env_id:
+                normalized = env_id.replace("/", "-")
+                candidate = repo_root / "config" / "environments" / f"{normalized}.spec.yaml"
+                if candidate.exists():
+                    spec_path = candidate
+            if spec_path is None:
+                return None
+
+            spec = read_yaml(spec_path) or {}
+            action_space = spec.get("action_space") if isinstance(spec, dict) else None
+            if not isinstance(action_space, dict):
+                return None
+
+            # Prefer explicit discrete count
+            if "discrete" in action_space:
+                try:
+                    n = int(action_space.get("discrete"))
+                    if n > 0:
+                        return (0.0, float(max(0, n - 1)))
+                except Exception:
+                    pass
+
+            # Fallback: labels mapping 0..N-1
+            labels = action_space.get("labels") if isinstance(action_space, dict) else None
+            if isinstance(labels, dict) and labels:
+                try:
+                    keys = [int(k) for k in labels.keys()]
+                    lo, hi = min(keys), max(keys)
+                    return (float(lo), float(hi))
+                except Exception:
+                    pass
+
+            # Continuous-style: try range/bounds
+            rng = action_space.get("range") if isinstance(action_space, dict) else None
+            if isinstance(rng, (list, tuple)) and len(rng) == 2:
+                try:
+                    lo, hi = float(rng[0]), float(rng[1])
+                    return (lo, hi)
+                except Exception:
+                    pass
+            bounds = action_space.get("bounds") if isinstance(action_space, dict) else None
+            if isinstance(bounds, (list, tuple)) and len(bounds) == 2:
+                try:
+                    lo, hi = float(bounds[0]), float(bounds[1])
+                    return (lo, hi)
+                except Exception:
+                    pass
+
+            return None
+        except Exception:
+            return None
+
     def _y_range_for_metrics(keys: Sequence[str]) -> Optional[Tuple[Optional[float], Optional[float]]]:
         """Infer a combined y-range (min, max) from metrics.yaml for the given metric keys.
 
@@ -140,6 +252,15 @@ def _build_sections(key_metrics: Optional[Sequence[str]], *, key_panels_per_sect
         - For multiple series, combines mins as min(all mins) and maxes as max(all maxes).
         - Returns (None, None) when no bounds are specified for any series so the caller can omit.
         """
+        # Special-case: action mean should reflect the env action space bounds
+        contains_action_mean = any(str(k).endswith("roll/actions/mean") for k in keys)
+        if contains_action_mean:
+            nonlocal _cached_action_mean_bounds
+            if _cached_action_mean_bounds is None:
+                _cached_action_mean_bounds = _infer_action_mean_bounds_from_spec()
+            if _cached_action_mean_bounds is not None:
+                return _cached_action_mean_bounds
+
         mins: List[float] = []
         maxs: List[float] = []
         for k in keys:
@@ -236,6 +357,20 @@ def _build_sections(key_metrics: Optional[Sequence[str]], *, key_panels_per_sect
                             "train/opt/loss/policy",
                             "train/opt/loss/value",
                             "train/opt/policy/entropy",
+                        ]),
+                    ),
+                    _make_panel(
+                        wr.LinePlot,
+                        title="Scaled Losses",
+                        x=default_x,
+                        y=[
+                            "train/opt/loss/value_scaled",
+                            "train/opt/loss/entropy_scaled",
+                        ],
+                        runset=runset,
+                        range_y=_y_range_for_metrics([
+                            "train/opt/loss/value_scaled",
+                            "train/opt/loss/entropy_scaled",
                         ]),
                     ),
                     # ScalarChart doesn't require x/y but may also accept runsets; attempt to attach

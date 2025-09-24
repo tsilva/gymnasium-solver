@@ -8,6 +8,16 @@ _base: &base
   hidden_dims: [128, 128]
   gamma: 0.999
 
+# Optional: reward shaping wrapper configuration
+_env_rewardshaped: &env_rewardshaped
+  <<: *base
+  frame_stack: 3
+  env_wrappers:
+    - id: MountainCarV0_RewardShaper
+      position_reward_scale: 100.0
+      velocity_reward_scale: 10.0
+      height_reward_scale: 50.0
+
 ppo:
   <<: *base
   algo_id: ppo
@@ -24,3 +34,30 @@ reinforce:
   n_steps: 1024
   batch_size: 0.25
   policy_lr: 1e-3
+
+# Reward-shaped variants
+ppo_rewardshaped:
+  <<: *env_rewardshaped
+  algo_id: ppo
+  n_envs: 16
+  max_timesteps: 1e6
+  n_epochs: 10
+  batch_size: 128
+  n_steps: 128
+  gamma: 0.999
+  policy_lr: 3e-4
+  hidden_dims: [256, 256]
+  max_epochs: 1000
+
+reinforce_rewardshaped:
+  <<: *env_rewardshaped
+  algo_id: reinforce
+  max_timesteps: 1e6
+  normalize_obs: true
+  n_envs: 8
+  n_steps: 1024
+  batch_size: 128
+  gamma: 0.999
+  policy_lr: 1e-3
+  hidden_dims: [128, 128]
+  max_epochs: 2000

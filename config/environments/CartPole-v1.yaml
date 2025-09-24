@@ -15,6 +15,15 @@ _base: &base
   eval_freq_epochs: 5
   eval_episodes: 100
 
+# Optional: reward shaping wrapper configuration
+_env_rewardshaped: &env_rewardshaped
+  <<: *base
+  env_wrappers:
+    - id: CartPoleV1_RewardShaper
+      angle_reward_scale: 1.0
+      position_reward_scale: 0.25
+      clip_potential: true
+
 # Unsolved: 300k timesteps
 reinforce_vanilla:
   <<: *base
@@ -68,3 +77,18 @@ ppo:
   #early_stop_on_eval_threshold: True
   #eval_recording_freq_epochs: 15
   #frame_stack: 2 # TODO: not converging faster with frame stacking here, why?
+
+# Reward-shaped PPO variant
+ppo_rewardshaped:
+  <<: *env_rewardshaped
+  algo_id: ppo
+  n_envs: 8
+  max_timesteps: 1e5
+  n_steps: 32
+  batch_size: 256
+  gae_lambda: 0.8
+  gamma: 0.98
+  ent_coef: 0.0
+  n_epochs: 20
+  policy_lr: lin_0.001
+  clip_range: lin_0.2

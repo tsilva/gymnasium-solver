@@ -247,6 +247,7 @@ class BaseAgent(pl.LightningModule):
         return build_dummy_loader()
 
     def on_validation_epoch_start(self):
+        print("Running validation...")
         val_collector = self.get_rollout_collector("val")
         val_metrics = val_collector.get_metrics()
         self.timings.start("on_validation_epoch_start", values=val_metrics)

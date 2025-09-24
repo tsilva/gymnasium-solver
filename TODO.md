@@ -4,12 +4,9 @@
 
 ## Pong-v5_objects
 
-- Merge config
-- Print when performing evaluation
 - TODO: add support for resuming with policy from previous run
-- Check if env gets solved when its deterministic
 - try debug server
-- BUG: fix duplicate object error in feature extractor
+- BUG: fix duplicate object error in feature extractor (run step by step in human mode and compare conflicted object data, against frame, create script for this)
 - online feature normalization inside extractor (rolling averages)
 - add env normalization support (use that instead of normalization from feature extractor)
 - previous actions
@@ -17,9 +14,7 @@
 
 ## NEXT
 
-- FEAT: in the wandb dashboard we create, create a composite panel that shows all scaled losses together to understand their relative importance
-
-
+- Merge spec into config yaml files2
 - FEAT: add support for scheduler min and progress decoupled from timesteps, perhaps by specifying percentage -> value tuples and have the scheduler interpolate between those, allowing dynamic linear schedules that perform differently across the training (eg: higher early, lower late)
 - FEAT: generalize decay schedule further by specifying decay start
 - PERF: dont fork subprocesses before confirming run
@@ -44,7 +39,6 @@
 
 - FEAT: add support to only start eval when ep_rew_mean crosses eval threshold
 - FEAT: auto-tune n_steps to average steps between rewards
-- FEAT: customize wandb dashboard to make action_mean min/max be computed from the action space defined in the spec, same for obs_mean
 - TASK: solve Pong-v5_objects, get max reward
 - TASK: solve Taxi-v3 with PPO, training stalls for unknown reasons
 - FEAT: add support for run_play to run with random actions and/or user actions

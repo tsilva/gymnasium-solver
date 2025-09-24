@@ -5,7 +5,14 @@ _base: &base
   obs_type: "ram"
   normalize_obs: "static"
 
-ppo:
+# Optional environment variants (composable via YAML merges)
+_env_deterministic: &env_deterministic
+  <<: *base
+  env_kwargs:
+    repeat_action_probability: 0.0  # Makes the environment deterministic
+
+# Algo presets to avoid duplication across variants
+_ppo_base: &ppo_base
   <<: *base
   algo_id: ppo
   max_timesteps: 5e6
@@ -13,11 +20,11 @@ ppo:
   n_steps: 512             # Reduced for more frequent updates
   batch_size: 512          # Larger batches for stable gradients
   n_epochs: 10             # More epochs to better utilize data
-  policy_lr: 0.0003    # Higher learning rate for faster learning
+  policy_lr: 0.0003        # Higher learning rate for faster learning
   eval_freq_epochs: 50     # Less frequent eval to focus on training
   eval_episodes: 10        # More episodes for reliable evaluation
 
-reinforce:
+_reinforce_base: &reinforce_base
   <<: *base
   algo_id: reinforce
   max_timesteps: 1e7
@@ -27,3 +34,16 @@ reinforce:
   policy_lr: 1e-3
   hidden_dims: [128, 128]
   max_epochs: 2000
+
+# Public variants
+ppo:
+  <<: *ppo_base
+
+ppo_deterministic:
+  <<: [*env_deterministic, *ppo_base]
+
+reinforce:
+  <<: *reinforce_base
+
+reinforce_deterministic:
+  <<: [*env_deterministic, *reinforce_base]

@@ -21,9 +21,12 @@ env_wrappers:
   - id: DiscreteActionSpaceRemapperWrapper
     mapping: [0, 2, 3]
   # Add a small bonus for NOOP (index 0 after remap)
+  # this will help balance issues caused by sticky actions 
+  # by prioritizing staying still, even if episode is 10k steps
+  # it will only add one point to the final reward
+  # (staying still is predictable)
   - id: ActionRewardShaper
-    rewards: [0.001, 0.0, 0.0]
-
+    rewards: [0.0001, 0.0, 0.0]
 # TODO: check if FPS is higher with subproc off
 ppo:
   algo_id: ppo
@@ -40,5 +43,5 @@ ppo:
   #ent_coef_schedule_target_progress: 0.5
   clip_range: 0.2
   policy_lr: 2e-3 #4e-2 # TODO: approx_kl = inf if 1e-1
-  normalize_advantages: "batch" # TODO: try batch norm
+  normalize_advantages: "rollout"
   #target_kl: 0.02

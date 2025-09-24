@@ -85,3 +85,4 @@ changes.
 - FEAT: add support for publishing run to Hugging Face Hub
 - FEAT: add support for async eval (to avoid blocking training)
 - FEAT: SEEDRL+PPO
+- FEAT: P3O

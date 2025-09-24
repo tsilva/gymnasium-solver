@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 from stable_baselines3.common.vec_env.base_vec_env import VecEnvWrapper
+from gymnasium import spaces
 
 # TODO: CLEANUP this file
 
@@ -89,6 +90,10 @@ class VecObsBarPrinter(VecEnvWrapper):
         self._ranges: Optional[List[Tuple[Optional[float], Optional[float]]]] = None
         # Reward range from spec (lo, hi) when available
         self._reward_range: Tuple[Optional[float], Optional[float]] = (None, None)
+        # Action metadata (from spec or action_space)
+        self._action_discrete_n: Optional[int] = None
+        self._action_labels: Optional[Dict[int, str]] = None
+        self._last_actions: Optional[np.ndarray] = None
         # Cached time limit (max episode steps), if available via env info
         self._time_limit: Optional[int] = None
 
@@ -128,6 +133,11 @@ class VecObsBarPrinter(VecEnvWrapper):
         return obs
 
     def step_async(self, actions):
+        # Cache last actions for rendering (best-effort; shapes vary by env)
+        try:
+            self._last_actions = np.asarray(actions)
+        except Exception:
+            self._last_actions = None
         return self.venv.step_async(actions)
 
     def step_wait(self):
@@ -222,6 +232,25 @@ class VecObsBarPrinter(VecEnvWrapper):
                     lo = _parse_inf(rr[0])
                     hi = _parse_inf(rr[1])
                     self._reward_range = (lo, hi)
+        except Exception:
+            pass
+
+        # Parse action space metadata (discrete count, optional labels)
+        try:
+            act = spec.get("action_space") if isinstance(spec, dict) else None
+            if isinstance(act, dict):
+                if "discrete" in act and isinstance(act.get("discrete"), (int, float)):
+                    self._action_discrete_n = int(act.get("discrete"))
+                labels_map = act.get("labels")
+                if isinstance(labels_map, dict):
+                    parsed: Dict[int, str] = {}
+                    for k, v in labels_map.items():
+                        try:
+                            parsed[int(k)] = str(v)
+                        except Exception:
+                            continue
+                    if parsed:
+                        self._action_labels = parsed
         except Exception:
             pass
 
@@ -417,6 +446,34 @@ class VecObsBarPrinter(VecEnvWrapper):
             val_fmt = f"{reward_val:+.4f}".rjust(value_w)
             r_rng_fmt = f"[{r_lo_eff:+.2f}, {r_hi_eff:+.2f}]"
             print(f"{label_fmt}  {val_fmt}  {r_bar}  {r_rng_fmt}")
+
+        # Action bar (discrete only): scale 0..N-1 with last action value
+        action_idx: Optional[int] = None
+        try:
+            if self._last_actions is not None:
+                arr = np.asarray(self._last_actions)
+                if arr.ndim == 0:
+                    action_idx = int(arr.item())
+                elif arr.ndim == 1 and arr.size > self._env_index:
+                    action_idx = int(arr[self._env_index])
+                elif arr.ndim >= 2 and arr.shape[0] > self._env_index:
+                    # Handle shapes like (n_envs, 1)
+                    action_idx = int(np.asarray(arr[self._env_index]).flatten()[0])
+        except Exception:
+            action_idx = None
+        # Determine discrete action count
+        act_n: Optional[int] = None
+        if isinstance(self.action_space, spaces.Discrete):
+            act_n = int(self.action_space.n)
+        elif isinstance(self._action_discrete_n, int) and self._action_discrete_n > 0:
+            act_n = int(self._action_discrete_n)
+        if (action_idx is not None) and (act_n is not None) and act_n > 0:
+            a_lo, a_hi = 0, act_n - 1
+            a_bar, _a_ratio, (_a_lo, _a_hi) = self._format_bar_scalar(float(action_idx), float(a_lo), float(a_hi), width=self._bar_width)
+            label_fmt = "action"[:label_w].ljust(label_w)
+            val_fmt = f"{action_idx}".rjust(value_w)
+            a_rng_fmt = f"[{a_lo}, {a_hi}]"
+            print(f"{label_fmt}  {val_fmt}  {a_bar}  {a_rng_fmt}")
 
         for i in range(dim):
             name = labels[i] if i < len(labels) else f"obs[{i}]"

@@ -7,8 +7,8 @@ from utils.reports import print_terminal_ascii_alerts
 
 def test_print_terminal_ascii_alerts_includes_epoch_summary():
     alert = MetricAlert(
-        _id="train/ep_rew_mean/too_low",
-        metric="train/ep_rew_mean",
+        _id="train/ep_rew/mean/too_low",
+        metric="train/ep_rew/mean",
         message="training reward below threshold",
         tip="increase policy entropy",
     )

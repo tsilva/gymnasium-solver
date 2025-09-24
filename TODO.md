@@ -2,21 +2,33 @@
 
 ## Pong-v5_objects
 
+- FEAT: prefix metrics (eg: time/epoch, time/step, etc., env/obs_mean, env/obs_std, env/) - use chatg
+
+
 - Check if env gets solved when its deterministic
 - try debug server
 - BUG: fix duplicate object error in feature extractor
 - add env normalization support (use that instead of normalization from feature extractor)
 
+## METRICS
+
+- Track advantage mean/std
+- Track returns mean/std
+
+## ALERTS
+
+- FEAT: define min-max entropy on wandb dashboard
+- BUG: alerts are not making into table logger
+- FEAT: alert if action_mean doesnt start in expected bounds (initial policy not uniform)
+- FEAT: alert if action_std doesnt start in expected bounds (initial policy not uniform)
+
 ## NEXT
 
+- FEAT: generalize decay schedule further by specifying decay start
 - FEAT: add ability to tell LLM to inspect last N runs by providing a run registry json that has timestamps and other metadata, always sort by timestamp descending, ensure lock on write
 - FEAT: track approx_kl early stops in wandb dashboard
-- FEAT: plot advantage mean/std
 - FEAT: add support for scheduler min and progress decoupled from timesteps, perhaps by specifying percentage -> value tuples and have the scheduler interpolate between those, allowing dynamic linear schedules that perform differently across the training (eg: higher early, lower late)
-- BUG: even though action_mean starts correctly std is not 1
-- BUG: alerts are not making into table logger
 - BUG: env smoke tests not passing
-- FEAT: define min-max entropy on wandb dashboard
 - FEAT: currently charts are indexed by n_envs * n_steps, index only by n_steps so we can compare performance of N_ENVS vs less envs; max_timesteps should also be indexed by that, as well as training progress
 - FEAT: add support for agents to handle their own save/load logic
 - FEAT: plot scaled losses together to understand their relative importance
@@ -24,12 +36,10 @@
 - TEST: empirically verify that initial policy distribution is uniform (check if action mean starts at middle of action space and std is 0)
 - BUG: bandit env crashes because it tries to record
 - BUG: bandit training not running due to missing spec
-- FEAT: add support for scheduler min
+- BUG: can't inspect bandit training
 
 - BUG: training epoch is still running after validation early stop
 - BUG: wandb run is being logged even when training is not started, bold terminal
-- FEAT: prefix metrics (eg: time/epoch, time/step, etc., env/obs_mean, env/obs_std, env/)
-- BUG: can't inspect bandit training
 - BUG: W&B workspace redundant print
 - TEST: are sweeps still working?
 - FEAT: track output distribution

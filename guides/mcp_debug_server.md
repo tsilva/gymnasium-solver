@@ -6,8 +6,8 @@ This helper server captures the shortcuts I kept wishing for while debugging the
 - **Run triage was manual** – I had to tab through dozens of `runs/<id>/` folders,
   inspect `config.json`, skim `metrics.csv`, and eyeball `run.log` just to learn
   whether a run ever left -20 reward or if KL/clip values were drifting.
-- **Metric inspection was noisy** – grabbing the tail of `train/ep_rew_mean` or
-  `train/approx_kl` meant opening large CSVs and manually scanning for the last
+- **Metric inspection was noisy** – grabbing the tail of `train/ep_rew/mean` or
+  `train/ppo/approx_kl` meant opening large CSVs and manually scanning for the last
   non-empty entry.
 - **Env instrumentation required ad-hoc scripts** – validating that OCAtari was
   surfacing `Ball`, `Player`, and `Enemy` objects (and that the feature vector
@@ -80,7 +80,7 @@ schemas.
     "id": 4,
     "params": {
       "name": "metrics_tail",
-      "args": {"run_id": "sdpskiii", "metric": "approx_kl", "stage": "train", "limit": 5}
+      "args": {"run_id": "sdpskiii", "metric": "ppo/approx_kl", "stage": "train", "limit": 5}
     }
   }
   ```

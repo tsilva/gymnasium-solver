@@ -10,7 +10,7 @@ class MetricAlert:
 
     Fields
     - _id: unique identifier for the alert
-    - metric: fully-qualified key (e.g., 'train/approx_kl')
+    - metric: fully-qualified key (e.g., 'train/ppo/approx_kl')
     - message: short human-readable description
     - tip: optional hint to address the alert
     """

@@ -122,7 +122,7 @@ class MCPDebugServer:
                     "type": "object",
                     "properties": {
                         "run_id": {"type": "string"},
-                        "metric": {"type": "string", "description": "Metric key e.g. 'train/ep_rew_mean'."},
+                        "metric": {"type": "string", "description": "Metric key e.g. 'train/ep_rew/mean'."},
                         "limit": {"type": "integer", "minimum": 1, "default": 5},
                         "stage": {
                             "type": "string",
@@ -427,16 +427,16 @@ class MCPDebugServer:
             return best
 
         train_block = {
-            "ep_rew_mean": _latest_metric("train", "ep_rew_mean"),
-            "ep_rew_best": _best_metric("train", "ep_rew_mean"),
-            "clip_fraction": _latest_metric("train", "clip_fraction"),
-            "approx_kl": _latest_metric("train", "approx_kl"),
+            "ep_rew/mean": _latest_metric("train", "ep_rew/mean"),
+            "ep_rew/best": _best_metric("train", "ep_rew/mean"),
+            "ppo/clip_fraction": _latest_metric("train", "ppo/clip_fraction"),
+            "ppo/approx_kl": _latest_metric("train", "ppo/approx_kl"),
         }
         val_block = None
         if any("val/" in key for key in metrics_rows[-1].keys()):
             val_block = {
-                "ep_rew_mean": _latest_metric("val", "ep_rew_mean"),
-                "ep_rew_best": _best_metric("val", "ep_rew_mean"),
+                "ep_rew/mean": _latest_metric("val", "ep_rew/mean"),
+                "ep_rew/best": _best_metric("val", "ep_rew/mean"),
             }
 
         return {

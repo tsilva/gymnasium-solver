@@ -188,4 +188,4 @@ def test_full_ppo_train_tiny_loop_progress(monkeypatch):
     m = agent.train_collector.get_metrics()
     assert m["total_timesteps"] >= cfg.n_steps * cfg.n_envs
     assert m["total_rollouts"] >= 1
-    assert m["rollout_fps"] > 0.0
+    assert m["rollout/fps"] > 0.0

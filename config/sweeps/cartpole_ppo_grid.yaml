@@ -2,7 +2,7 @@ name: cartpole-ppo-grid
 project: CartPole-v1
 method: grid
 metric:
-  name: train/ep_rew_mean
+  name: train/ep_rew/mean
   goal: maximize
 
 # You can override or extend these parameters in W&B UI as needed.
@@ -31,4 +31,3 @@ command:
   - "CartPole-v1:ppo"
   - -q
   - --wandb_sweep
-

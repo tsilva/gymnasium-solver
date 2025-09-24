@@ -274,7 +274,7 @@ class BaseAgent(pl.LightningModule):
         
         # Log eval metrics
         epoch_fps_values = self.timings.throughput_since("on_validation_epoch_start", values_now=val_metrics)
-        epoch_fps = epoch_fps_values["total_timesteps"]
+        epoch_fps = epoch_fps_values.get("total_timesteps", epoch_fps_values.get("rollout/total", 0.0))
         self.metrics_recorder.record("val", {
             **val_metrics,
             "epoch": int(self.current_epoch),
@@ -489,7 +489,7 @@ class BaseAgent(pl.LightningModule):
         # Checkpointing: save best/last models and metrics
         callbacks.append(ModelCheckpointCallback( # TODO: pass run
             run=self.run,
-            metric="val/ep_rew_mean",
+            metric="val/ep_rew/mean",
             mode="max"
         ))
 
@@ -508,12 +508,12 @@ class BaseAgent(pl.LightningModule):
         # If defined in config, early stop when mean training reward reaches a threshold
         train_env = self.get_env("train")
         reward_threshold = train_env.get_return_threshold()
-        if self.config.early_stop_on_train_threshold: callbacks.append(EarlyStoppingCallback("train/ep_rew_mean", reward_threshold))
+        if self.config.early_stop_on_train_threshold: callbacks.append(EarlyStoppingCallback("train/ep_rew/mean", reward_threshold))
 
         # If defined in config, early stop when mean validation reward reaches a threshold
         val_env = self.get_env("val")
         reward_threshold = val_env.get_return_threshold()
-        if self.config.early_stop_on_eval_threshold: callbacks.append(EarlyStoppingCallback("val/ep_rew_mean", reward_threshold))
+        if self.config.early_stop_on_eval_threshold: callbacks.append(EarlyStoppingCallback("val/ep_rew/mean", reward_threshold))
 
         # Also print a terminal summary and alerts recap at the end of training
         callbacks.append(ConsoleSummaryCallback())

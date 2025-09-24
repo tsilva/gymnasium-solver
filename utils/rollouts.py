@@ -879,8 +879,8 @@ class RolloutCollector():
             **base_metrics,
             "total_episodes": total_episodes_collected,
             "total_timesteps": int(total_timesteps),
-            "ep_rew_mean": ep_rew_mean,
-            "ep_len_mean": float(ep_len_mean),
+            "ep_rew/mean": ep_rew_mean,
+            "ep_len/mean": float(ep_len_mean),
         }
 
     def slice_trajectories(self, trajectories, idxs):
@@ -942,23 +942,23 @@ class RolloutCollector():
         baseline_std = self._base_stats.std()
 
         return {
-            "total_timesteps": self.total_steps,  # TODO: steps vs timesteps
+            "total_timesteps": self.total_steps,  # canonical step counter for history
             "total_episodes": self.total_episodes,
             "total_rollouts": self.total_rollouts,
-            "rollout_timesteps": self.rollout_steps,
-            "rollout_episodes": self.rollout_episodes,
-            "rollout_fps": rollout_fps,  # TODO: this is a mean, it shouln't be
-            "ep_rew_best": float(self._best_episode_reward),
-            "ep_rew_last": float(self._last_episode_reward),
-            "ep_len_last": int(self._last_episode_length),
-            "ep_rew_mean": ep_rew_mean,
-            "ep_len_mean": ep_len_mean,
-            "obs_mean": obs_mean,
-            "obs_std": obs_std,
-            "reward_mean": reward_mean,
-            "reward_std": reward_std,
-            "action_mean": action_mean,
-            "action_std": action_std,
+            "rollout/timesteps": self.rollout_steps,
+            "rollout/episodes": self.rollout_episodes,
+            "rollout/fps": rollout_fps,  # average fps over recent rollouts
+            "ep_rew/best": float(self._best_episode_reward),
+            "ep_rew/last": float(self._last_episode_reward),
+            "ep_len/last": int(self._last_episode_length),
+            "ep_rew/mean": ep_rew_mean,
+            "ep_len/mean": ep_len_mean,
+            "obs/mean": obs_mean,
+            "obs/std": obs_std,
+            "reward/mean": reward_mean,
+            "reward/std": reward_std,
+            "policy/action_mean": action_mean,
+            "policy/action_std": action_std,
             "action_dist": action_dist,
             "baseline_mean": baseline_mean,
             "baseline_std": baseline_std

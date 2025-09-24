@@ -299,7 +299,15 @@ class WandbVideoLoggerCallback(pl.Callback):
             step_value = trainer.global_step
             if hasattr(trainer, 'lightning_module') and hasattr(trainer.lightning_module, 'train_collector'):
                 metrics = trainer.lightning_module.train_collector.get_metrics()
-                step_value = metrics.get("total_timesteps", trainer.global_step)
+                from utils.metrics_config import metrics_config
+                step_key = metrics_config.total_timesteps_key()
+                # Resolve unnamespaced variant of the step key
+                # e.g., 'train/total_timesteps' -> 'total_timesteps'
+                try:
+                    _, bare = step_key.split("/", 1)
+                except Exception:
+                    bare = "total_timesteps"
+                step_value = metrics.get(bare, trainer.global_step)
             
             # Use Lightning's log_metrics to ensure proper step handling
             trainer.logger.log_metrics({f"{prefix}/{key}": media}, step=step_value)

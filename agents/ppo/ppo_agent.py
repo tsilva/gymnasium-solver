@@ -108,17 +108,17 @@ class PPOAgent(BaseAgent):
             explained_var = 1 - torch.var(returns - values_pred) / torch.var(returns)
         
         metrics = {
-            'loss': loss.detach(),
-            'policy_loss': policy_loss.detach(),
-            'entropy_loss': entropy_loss.detach(),
-            'entropy_loss_scaled': scaled_entropy_loss.detach(),
-            'value_loss': value_loss.detach(),
-            'value_loss_scaled': scaled_value_loss.detach(),
-            'entropy': entropy.detach(),
-            'clip_fraction': clip_fraction.detach(),
-            'kl_div': kl_div.detach(),
-            'approx_kl': approx_kl.detach(),
-            'explained_var': explained_var.detach()
+            'loss/total': loss.detach(),
+            'loss/policy': policy_loss.detach(),
+            'loss/entropy': entropy_loss.detach(),
+            'loss/entropy_scaled': scaled_entropy_loss.detach(),
+            'loss/value': value_loss.detach(),
+            'loss/value_scaled': scaled_value_loss.detach(),
+            'policy/entropy': entropy.detach(),
+            'ppo/clip_fraction': clip_fraction.detach(),
+            'ppo/kl': kl_div.detach(),
+            'ppo/approx_kl': approx_kl.detach(),
+            'ppo/explained_variance': explained_var.detach(),
         }
 
         # In case the KL divergence exceeded the target, stop training on this epoch
@@ -126,7 +126,7 @@ class PPOAgent(BaseAgent):
         if target_kl is not None:
             approx_kl_value = float(approx_kl.detach())
             early_stop_epoch = approx_kl_value > target_kl
-            metrics['kl_stop_triggered'] = 1 if early_stop_epoch else 0
+            metrics['ppo/kl_stop_triggered'] = 1 if early_stop_epoch else 0
 
         # Log all metrics (will be avarages and flushed by end of epoch)
         self.metrics_recorder.record("train", metrics)

@@ -177,7 +177,7 @@ def _build_sections(key_metrics: Optional[Sequence[str]], *, key_panels_per_sect
                 is_open=True,
                 panels=[
                     _make_panel(wr.LinePlot, title="Policy LR (scheduled)", x=default_x, y=["train/policy_lr"], runset=runset),
-                    _make_panel(wr.LinePlot, title="Losses", x=default_x, y=["train/policy_loss", "train/value_loss", "train/entropy"], runset=runset),
+                    _make_panel(wr.LinePlot, title="Losses", x=default_x, y=["train/loss/policy", "train/loss/value", "train/policy/entropy"], runset=runset),
                     # ScalarChart doesn't require x/y but may also accept runsets; attempt to attach
                     _make_panel(wr.ScalarChart, title="Best Eval Reward", runset=runset),
                 ],

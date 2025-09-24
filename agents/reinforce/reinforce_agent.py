@@ -90,14 +90,13 @@ class REINFORCEAgent(BaseAgent):
         
         # Log the metrics for monitoring training progress
         self.metrics_recorder.record_train({
-            'loss' : loss.detach(),
-            'policy_loss': policy_loss.detach(),
-            'entropy_loss': entropy_loss.detach(),
-            'entropy': entropy.detach(),
-            'kl_div': kl_div.detach(),
-            'approx_kl': approx_kl.detach(),
+            'loss/total' : loss.detach(),
+            'loss/policy': policy_loss.detach(),
+            'loss/entropy': entropy_loss.detach(),
+            'policy/entropy': entropy.detach(),
+            'ppo/kl': kl_div.detach(),
+            'ppo/approx_kl': approx_kl.detach(),
             'policy_targets_mean': policy_targets.mean().detach(),
             'policy_targets_std': policy_targets.std().detach()
         })
         return loss
-

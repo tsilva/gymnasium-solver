@@ -69,7 +69,16 @@ class MetricsCSVLogger:
             return
 
         # Extract canonical step and epoch if available
-        step = self._first_number(metrics.get("train/total_timesteps"), metrics.get("val/total_timesteps"))
+        try:
+            from utils.metrics_config import metrics_config  # lazy import
+            step_key = metrics_config.total_timesteps_key()
+            # Build both train/ and val/ variants for flexibility
+            train_step_key = step_key
+            val_step_key = step_key.replace("train/", "val/") if step_key.startswith("train/") else step_key
+        except Exception:
+            train_step_key = "train/total_timesteps"
+            val_step_key = "val/total_timesteps"
+        step = self._first_number(metrics.get(train_step_key), metrics.get(val_step_key))
         epoch = self._first_number(metrics.get("train/epoch"), metrics.get("val/epoch"))
         t = time.time()
 

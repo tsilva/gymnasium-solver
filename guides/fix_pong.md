@@ -1,6 +1,6 @@
 Quick diagnosis
-- Policy saturation: entropy fell from ~0.35 early to ~0.26–0.28; clip_fraction ~0.05; approx_kl ~0.002–0.004. PPO updates are very conservative; advantages partly washed out.
-- Value head underfits near plateau: explained_variance drops to ~0.68 around the stall; value_loss rising slightly.
+- Policy saturation: entropy fell from ~0.35 early to ~0.26–0.28; ppo/clip_fraction ~0.05; ppo/approx_kl ~0.002–0.004. PPO updates are very conservative; advantages partly washed out.
+- Value head underfits near plateau: ppo/explained_variance drops to ~0.68 around the stall; loss/value rising slightly.
 - Rollout horizon might be short for sparse scoring: n_steps 256 across 16 envs (4096) works, but episodes last ~4k–4.4k steps on objects features; bootstrapping dominates, making advantage signal small.
 - Objects feature vector normalization may clip informative extremes: wrapper clips to [0,1]; MIN/MAX are from random play; after competence increases, ball/paddle dynamics can exceed calibration.
 
@@ -36,8 +36,8 @@ Minimal edit to config (ALE-Pong-v5_objects_ppo)
 
 Next steps I recommend
 - Spawn a new run with the above changes; monitor:
-  - train/clip_fraction target 0.1–0.2
-  - train/approx_kl ~0.01–0.02 max
-  - train/explained_variance trending back >0.8
-  - train/ep_rew_mean slope over next 1–2M steps
+  - train/ppo/clip_fraction target 0.1–0.2
+  - train/ppo/approx_kl ~0.01–0.02 max
+  - train/ppo/explained_variance trending back >0.8
+  - train/ep_rew/mean slope over next 1–2M steps
 - If still flat, try n_envs 32 with n_steps 256 (same batch size 8192) to diversify episodes.

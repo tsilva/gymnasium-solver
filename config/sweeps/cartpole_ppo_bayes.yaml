@@ -2,7 +2,7 @@ name: cartpole-ppo-bayes
 project: CartPole-v1
 method: bayes
 metric:
-  name: train/ep_rew_mean
+  name: train/ep_rew/mean
   goal: maximize
 early_terminate:
   type: hyperband
@@ -33,4 +33,3 @@ command:
   - "CartPole-v1:ppo"
   - -q
   - --wandb_sweep
-

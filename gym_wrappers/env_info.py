@@ -1,5 +1,7 @@
-import os
+from collections.abc import Mapping
 from dataclasses import asdict
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 import gymnasium as gym
 from gymnasium.wrappers import TimeLimit
@@ -16,6 +18,15 @@ class EnvInfoWrapper(gym.ObservationWrapper):
         self._obs_type = kwargs.get('obs_type', None)
         # Optional: project/challenge id (YAML filename stem) to prefer when resolving specs
         self._project_id = kwargs.get('project_id', None)
+        spec_override = kwargs.get('spec', None)
+        if isinstance(spec_override, Mapping):
+            # Store a shallow copy to avoid mutating caller data
+            self._spec_override: Optional[Dict[str, Any]] = dict(spec_override)
+        elif isinstance(spec_override, dict):
+            self._spec_override = dict(spec_override)
+        else:
+            self._spec_override = None
+        self._spec_cache: Optional[Dict[str, Any]] = None
 
     def _get_root_env(self):
         current = self
@@ -28,33 +39,77 @@ class EnvInfoWrapper(gym.ObservationWrapper):
         root_env = self._get_root_env()
         return root_env.spec.id
 
-    def _get_spec__file(self):
-        """Load spec YAML, preferring challenge-specific file when available.
+    def _repo_root(self) -> Path:
+        return Path(__file__).resolve().parents[1]
 
-        Resolution order:
-        1) config/environments/<project_id>.spec.yaml (when provided)
-        2) config/environments/<env_id>.spec.yaml (env_id '/' → '-')
-        """
-        # 1) Try challenge-specific spec based on project_id (YAML filename stem)
+    def _config_candidates(self) -> Dict[Path, None]:
+        candidates: Dict[Path, None] = {}
+        config_dir = self._repo_root() / "config" / "environments"
         if isinstance(self._project_id, str) and self._project_id:
-            spec_path = f"config/environments/{self._project_id}.spec.yaml"
-            if os.path.exists(spec_path):
-                return read_yaml(spec_path)
+            candidates[config_dir / f"{self._project_id}.yaml"] = None
+        try:
+            env_id = self.get_id().replace("/", "-")
+            candidates[config_dir / f"{env_id}.yaml"] = None
+        except Exception:
+            pass
+        return candidates
 
-        # 2) Fallback to environment id-based spec (current strategy)
-        env_id = self.get_id().replace("/", "-")  # normalize ALE/Pong-v5 → ALE-Pong-v5
-        spec_path = f"config/environments/{env_id}.spec.yaml"
-        assert os.path.exists(spec_path), f"spec file not found: {spec_path}"
-        return read_yaml(spec_path)
+    def _match_variant_spec(self, doc: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        obs_type = self.get_obs_type()
+        if not isinstance(obs_type, str):
+            return None
+        for key, value in doc.items():
+            if isinstance(key, str) and key.startswith('_'):
+                continue
+            if not isinstance(value, Mapping):
+                continue
+            candidate = value.get('spec')
+            if not isinstance(candidate, Mapping):
+                continue
+            variant_obs_type = value.get('obs_type')
+            if variant_obs_type == obs_type:
+                return dict(candidate)
+        return None
+
+    def _load_spec_from_config(self) -> Dict[str, Any]:
+        for path in self._config_candidates().keys():
+            if not path.exists():
+                continue
+            try:
+                doc = read_yaml(path) or {}
+            except Exception:
+                continue
+            if not isinstance(doc, dict):
+                continue
+            variant_spec = self._match_variant_spec(doc)
+            if isinstance(variant_spec, dict):
+                return variant_spec
+            spec_section = doc.get('spec')
+            if isinstance(spec_section, Mapping):
+                return dict(spec_section)
+        return {}
+
+    def _resolve_spec(self) -> Dict[str, Any]:
+        if self._spec_cache is not None:
+            return self._spec_cache
+        if isinstance(self._spec_override, dict):
+            self._spec_cache = dict(self._spec_override)
+            return self._spec_cache
+        self._spec_cache = self._load_spec_from_config()
+        return self._spec_cache
 
     def _get_spec__env(self):
         root_env = self._get_root_env()
         return asdict(root_env.spec)
 
     def get_spec(self):
-        _file_spec = self._get_spec__file()
+        _file_spec = self._resolve_spec()
         _env_spec = self._get_spec__env()
-        spec = {**_env_spec, **_file_spec}
+        spec: Dict[str, Any] = {}
+        if isinstance(_env_spec, dict):
+            spec.update(_env_spec)
+        if isinstance(_file_spec, dict):
+            spec.update(_file_spec)
         return spec
 
     def get_obs_type(self):

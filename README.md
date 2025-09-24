@@ -80,6 +80,8 @@ ppo:
     - { id: CartPoleV1_RewardShaper, angle_reward_scale: 1.0 }
 ```
 
+- Each config also embeds an environment `spec` block describing action/observation spaces, rewards, and metadata. Variants can override `spec` when wrappers change the effective interface (e.g., Pong objects remaps the action set).
+
 Selection:
 - Programmatic (Python): `load_config("CartPole-v1", "ppo")`; pass the environment id and variant explicitly because the compact `"CartPole-v1_ppo"` form is no longer supported.
 - CLI (train.py): pass config as positional `CartPole-v1:ppo` or flag `--config_id "CartPole-v1:ppo"` (colon, not underscore). The CLI enforces providing a variant.

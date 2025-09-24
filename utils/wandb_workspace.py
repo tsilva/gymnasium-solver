@@ -183,25 +183,10 @@ def _build_sections(key_metrics: Optional[Sequence[str]], *, key_panels_per_sect
             if not project_id and not env_id:
                 return None
 
-            # Resolve spec path (mirror EnvInfoWrapper resolution)
-            from utils.io import read_yaml  # type: ignore
-            from pathlib import Path as _Path
+            spec = cfg.get("spec") if isinstance(cfg.get("spec"), dict) else None
+            if not isinstance(spec, dict):
+                spec = _load_config_spec(project_id, env_id, cfg.get("obs_type")) or {}
 
-            repo_root = _Path(__file__).resolve().parents[1]
-            spec_path = None
-            if project_id:
-                candidate = repo_root / "config" / "environments" / f"{project_id}.spec.yaml"
-                if candidate.exists():
-                    spec_path = candidate
-            if spec_path is None and env_id:
-                normalized = env_id.replace("/", "-")
-                candidate = repo_root / "config" / "environments" / f"{normalized}.spec.yaml"
-                if candidate.exists():
-                    spec_path = candidate
-            if spec_path is None:
-                return None
-
-            spec = read_yaml(spec_path) or {}
             action_space = spec.get("action_space") if isinstance(spec, dict) else None
             if not isinstance(action_space, dict):
                 return None
@@ -571,3 +556,43 @@ def create_or_update_workspace_for_current_run(*, name: Optional[str] = None, ov
         )
     )
     return url or None
+def _load_config_spec(project_id: str, env_id: str, obs_type: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Best-effort load of spec data from config/environments YAML files."""
+    from utils.io import read_yaml  # local import to avoid circulars during tests
+
+    repo_root = Path(__file__).resolve().parents[1]
+    config_dir = repo_root / "config" / "environments"
+
+    candidates: List[Path] = []
+    if isinstance(project_id, str) and project_id:
+        candidates.append(config_dir / f"{project_id}.yaml")
+    if isinstance(env_id, str) and env_id:
+        normalized = env_id.replace("/", "-")
+        candidates.append(config_dir / f"{normalized}.yaml")
+
+    seen = set()
+    for path in candidates:
+        if path in seen:
+            continue
+        seen.add(path)
+        if not path.exists():
+            continue
+        try:
+            doc = read_yaml(path) or {}
+        except Exception:
+            continue
+        if not isinstance(doc, dict):
+            continue
+        if isinstance(obs_type, str):
+            for key, value in doc.items():
+                if isinstance(key, str) and key.startswith("_"):
+                    continue
+                if not isinstance(value, dict):
+                    continue
+                candidate = value.get("spec")
+                if isinstance(candidate, dict) and value.get("obs_type") == obs_type:
+                    return dict(candidate)
+        spec_section = doc.get("spec")
+        if isinstance(spec_section, dict):
+            return dict(spec_section)
+    return None

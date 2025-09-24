@@ -1,31 +1,47 @@
 from pathlib import Path
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import yaml
 
 from utils.env_info_schema import validate_env_info
 
 
-def _find_yaml_files(root: Path) -> List[Path]:
+def _find_config_files(root: Path) -> List[Path]:
     files: List[Path] = []
-    # Only consider spec files
-    for pattern in ("*.spec.yaml", "*.spec.yml"):
+    for pattern in ("*.yaml", "*.yml"):
         files.extend(root.rglob(pattern))
-    # Deduplicate while preserving order
     seen = set()
-    unique: List[Path] = []
+    ordered: List[Path] = []
     for f in files:
-        if f not in seen:
-            unique.append(f)
-            seen.add(f)
-    return unique
+        if f in seen:
+            continue
+        if f.name.endswith(".spec.yaml") or f.name.endswith(".spec.yml"):
+            continue
+        if f.name.endswith(".new.yaml") or f.name.endswith(".new.yml"):
+            continue
+        ordered.append(f)
+        seen.add(f)
+    return ordered
 
 
-def _validate_file(path: Path) -> List[Tuple[str, str]]:
+def _extract_spec_blocks(path: Path) -> List[Tuple[str, Dict]]:
     with path.open("r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
-    assert isinstance(data, dict), f"env_info YAML must be a mapping: {path}"
-    return validate_env_info(data)
+    if not isinstance(data, dict):
+        return []
+    specs: List[Tuple[str, Dict]] = []
+    base_spec = data.get("spec")
+    if isinstance(base_spec, dict):
+        specs.append(("spec", dict(base_spec)))
+    for key, value in data.items():
+        if isinstance(key, str) and key.startswith("_"):
+            continue
+        if not isinstance(value, dict):
+            continue
+        variant_spec = value.get("spec")
+        if isinstance(variant_spec, dict):
+            specs.append((f"{key}.spec", dict(variant_spec)))
+    return specs
 
 
 def test_env_info_files_are_valid():
@@ -33,8 +49,11 @@ def test_env_info_files_are_valid():
     assert root.exists(), "config/environments directory not found"
 
     failures: List[str] = []
-    for yf in sorted(_find_yaml_files(root)):
-        errors = _validate_file(yf)
-        if errors:
-            failures.append("\n".join([f"  - {path}: {msg}" for path, msg in errors]))
+    for cfg_path in sorted(_find_config_files(root)):
+        for label, spec in _extract_spec_blocks(cfg_path):
+            errors = validate_env_info(spec)
+            if errors:
+                prefix = f"{cfg_path}::{label}"
+                formatted = "\n".join([f"  - {path}: {msg}" for path, msg in errors])
+                failures.append(f"{prefix}\n{formatted}")
     assert not failures, "Some env_info files are invalid:\n" + "\n".join(failures)

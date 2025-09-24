@@ -59,6 +59,9 @@ class Config:
     # The id of the environment to train on
     env_id: str = ""
 
+    # Descriptive spec metadata for the environment (merges into EnvInfoWrapper)
+    spec: Dict[str, Any] = field(default_factory=dict)
+
     # The number of steps to collect per rollout environment
     # (algorithm-specific defaults live in algo config classes)
     n_steps: Optional[int] = None
@@ -258,11 +261,16 @@ class Config:
 
             # Load the base config from the YAML file
             config_field_names = set(cls.__dataclass_fields__.keys())
-            base_config: Dict[str, Any] = {k: v for k, v in doc.items() if k in config_field_names}
+            base_config: Dict[str, Any] = {}
+            base_section = doc.get("_base") if isinstance(doc.get("_base"), dict) else {}
+            if isinstance(base_section, dict):
+                base_config.update({k: v for k, v in base_section.items() if k in config_field_names})
+            base_config.update({k: v for k, v in doc.items() if k in config_field_names})
+
             # Allow project_id to be provided under a `_base` section as well
             project_id = (
                 base_config.get("project_id")
-                or (doc.get("_base") or {}).get("project_id")
+                or (base_section or {}).get("project_id")
                 or path.stem
             )
 
@@ -346,6 +354,7 @@ class Config:
         return dict(
             env_id=self.env_id,
             project_id=self.project_id,
+            spec=self.spec,
             n_envs=self.n_envs,
             seed=self.seed,
             max_episode_steps=self.max_episode_steps,

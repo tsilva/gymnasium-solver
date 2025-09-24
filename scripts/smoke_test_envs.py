@@ -45,6 +45,7 @@ def _collect_env_config_map(config_dir: Path) -> Dict[str, Dict[str, Any]]:
                 "obs_type", "frame_stack", "grayscale_obs", "resize_obs", "env_kwargs",
                 "project_id", "accelerator", "devices", "eval_freq_epochs", "eval_episodes",
                 "eval_recording_freq_epochs", "eval_deterministic", "env_wrappers", "seed", "subproc",
+                "spec",
             }
             base_root = {k: v for k, v in doc.items() if k in field_names}
             # allow _base to supply fields when using anchor-based style
@@ -136,6 +137,8 @@ def run_random_steps_for_config(config_id: str, max_timesteps: int, n_envs: int)
             cfg.get("env_id"),
             n_envs=n_envs,
             seed=int(cfg.get("seed", 42)),
+            project_id=cfg.get("project_id"),
+            spec=cfg.get("spec"),
             env_wrappers=list(cfg.get("env_wrappers", []) or []),
             normalize_obs=cfg.get("normalize_obs", cfg.get("normalize", False) or False),
             frame_stack=int(cfg.get("frame_stack", 1) or 1),

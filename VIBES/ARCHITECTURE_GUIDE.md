@@ -21,6 +21,7 @@ High-signal reference for maintainers and agents. Read this alongside `VIBES/COD
 
 ### Configuration model (`utils/config.py`)
 - `Config` dataclass aggregates env, algo, rollout, model, optimization, eval, logging, and runtime settings. The loader instantiates an algo-specific subclass based on `algo_id`.
+- Environment YAMLs embed a `spec` mapping (action/observation metadata, rewards, versions); the loader attaches it to `Config.spec` so `EnvInfoWrapper` can expose accurate ranges even when variants override the spec (e.g., Pong objects remaps actions).
 - `load_config(env_id, variant_id)` delegates to `Config.build_from_yaml(...)`, loading from `config/environments/*.yaml` (base fields at the top or under `_base` with YAML anchors; per-variant blocks like `ppo:` nested below and may `<<: *base`). Schedule strings like `lin_0.001` are parsed into `*_schedule='linear'` plus the numeric base. When `project_id` is omitted in YAML it defaults to the filename stem.
 - Variant selection: callers must provide a variant id; the loader builds `<project>_<variant>` keys and raises if the requested pair is missing. The CLI enforces the `env:variant` form and falls back to `Bandit-v0:ppo` only when no config is supplied on the command line.
 - Fractional batch size: when `batch_size` is a float in (0, 1], it is interpreted as a fraction of the rollout size (`n_envs * n_steps`). The loader computes `floor(rollout_size * fraction)` with a minimum of 1 and asserts that the resolved `batch_size` evenly divides the rollout size so all minibatches have equal size.

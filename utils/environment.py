@@ -110,6 +110,7 @@ def build_env(
     seed=None, 
     max_episode_steps=None,
     project_id=None,
+    spec=None,
     env_wrappers=[], 
     grayscale_obs=False,
     resize_obs=False,
@@ -166,7 +167,7 @@ def build_env(
         #    env = TimeLimit(env, max_episode_steps=max_episode_steps)
 
         # Attach metadata wrapper with context (obs_type and project_id)
-        env = EnvInfoWrapper(env, obs_type=obs_type, project_id=project_id)
+        env = EnvInfoWrapper(env, obs_type=obs_type, project_id=project_id, spec=spec)
 
         # Enable video recording if requested
         if record_video: env = EnvVideoRecorder(env, **record_video_kwargs)

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List
+from typing import Dict, List, Tuple
 
 import pytest
 import yaml
@@ -24,28 +24,48 @@ def test_env_info_files_conform_to_jsonschema():
     root = Path("config/environments")
     assert root.exists(), "config/environments directory not found"
 
-    def find_yaml_files(dir_path: Path) -> List[Path]:
+    def find_config_files(dir_path: Path) -> List[Path]:
         files: List[Path] = []
-        # Only consider spec files
-        for pattern in ("*.spec.yaml", "*.spec.yml"):
+        for pattern in ("*.yaml", "*.yml"):
             files.extend(dir_path.rglob(pattern))
-        # Deduplicate
         seen = set()
-        unique: List[Path] = []
+        ordered: List[Path] = []
         for f in files:
-            if f not in seen:
-                unique.append(f)
-                seen.add(f)
-        return unique
+            if f in seen:
+                continue
+            if f.name.endswith(".spec.yaml") or f.name.endswith(".spec.yml"):
+                continue
+            if f.name.endswith(".new.yaml") or f.name.endswith(".new.yml"):
+                continue
+            ordered.append(f)
+            seen.add(f)
+        return ordered
+
+    def extract_spec_blocks(path: Path) -> List[Tuple[str, Dict]]:
+        with path.open("r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        if not isinstance(data, dict):
+            return []
+        specs: List[Tuple[str, Dict]] = []
+        base_spec = data.get("spec")
+        if isinstance(base_spec, dict):
+            specs.append(("spec", dict(base_spec)))
+        for key, value in data.items():
+            if isinstance(key, str) and key.startswith("_"):
+                continue
+            if not isinstance(value, dict):
+                continue
+            variant_spec = value.get("spec")
+            if isinstance(variant_spec, dict):
+                specs.append((f"{key}.spec", dict(variant_spec)))
+        return specs
 
     failures: List[str] = []
-    for yf in sorted(find_yaml_files(root)):
-        with yf.open("r", encoding="utf-8") as f:
-            data = yaml.safe_load(f)
-        assert isinstance(data, dict), f"env_info YAML must be a mapping: {yf}"
-        errs = list(validator.iter_errors(data))
-        if errs:
-            formatted = "\n".join([f"  - {'.'.join([str(x) for x in e.absolute_path]) or 'root'}: {e.message}" for e in errs])
-            failures.append(f"{yf}:\n{formatted}")
+    for cfg_path in sorted(find_config_files(root)):
+        for label, spec in extract_spec_blocks(cfg_path):
+            errs = list(validator.iter_errors(spec))
+            if errs:
+                formatted = "\n".join([f"  - {'.'.join([str(x) for x in e.absolute_path]) or 'root'}: {e.message}" for e in errs])
+                failures.append(f"{cfg_path}::{label}:\n{formatted}")
 
     assert not failures, "Some env_info files fail JSON Schema validation:\n" + "\n".join(failures)

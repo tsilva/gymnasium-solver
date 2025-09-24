@@ -24,14 +24,12 @@
 ## NEXT
 
 - Add alert for when ep_rew_mean starts stalling / downward trend
-- Merge spec files into config yaml files, allow those to have inheritance as well (since objects variant has different action labels); use gpt-5-codex-high for this
 - Make sure metrics.yaml is up to date with all metrics with correct names
 - FEAT: add support for scheduler min and progress decoupled from timesteps, perhaps by specifying percentage -> value tuples and have the scheduler interpolate between those, allowing dynamic linear schedules that perform differently across the training (eg: higher early, lower late)
 - FEAT: generalize decay schedule further by specifying decay start
 - PERF: dont fork subprocesses before confirming run
 - FEAT: add ability to tell LLM to inspect last N runs by providing a run registry json that has timestamps and other metadata, always sort by timestamp descending, ensure lock on write
 - BUG: env smoke tests not passing
-- FEAT: currently charts are indexed by n_envs * n_steps, index only by n_steps so we can compare performance of N_ENVS vs less envs; max_timesteps should also be indexed by that, as well as training progress
 - FEAT: add support for agents to handle their own save/load logic
 - FEAT: track dead relus
 - TEST: empirically verify that initial policy distribution is uniform (check if action mean starts at middle of action space and std is 0)

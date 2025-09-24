@@ -27,3 +27,32 @@ _ppo: &ppo
 ppo:
   <<: *ppo
 
+spec:
+  source: https://github.com/mwydmuch/ViZDoom/blob/master/scenarios/basic.cfg
+  description: Simple scenario. Agent must pick up a can of health.
+
+  render_fps: 35
+
+  action_space:
+    discrete: 9
+    labels: {0: noop, 1: forward, 2: backward, 3: strafe_left, 4: strafe_right, 5: turn_left, 6: turn_right, 7: attack, 8: forward_attack}
+
+  observation_space:
+    default: rgb
+    variants:
+      rgb:
+        shape: [height, width, 3]
+        dtype: uint8
+        range: [0, 255]
+        note: Height/width depend on the ViZDoom cfg; wrapper enforces RGB24 and HWC.
+
+  rewards:
+    description: Sparse reward for obtaining the object; small step penalties possible.
+    components:
+      - {name: pickup_reward, sign: positive}
+      - {name: step_penalty, sign: negative}
+    threshold_solved: 10
+    range: [-10, 100]
+
+  versions:
+    v0: ViZDoom basic.cfg scenario

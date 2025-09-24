@@ -27,3 +27,33 @@ _ppo: &ppo
 ppo:
   <<: *ppo
 
+spec:
+  source: https://github.com/mwydmuch/ViZDoom/tree/master/scenarios#health-gathering
+  description: Survive in a toxic environment by gathering health vials to avoid death.
+
+  render_fps: 35
+
+  action_space:
+    discrete: 9
+    labels: {0: noop, 1: forward, 2: backward, 3: strafe_left, 4: strafe_right, 5: turn_left, 6: turn_right, 7: attack, 8: forward_attack}
+
+  observation_space:
+    default: rgb
+    variants:
+      rgb:
+        shape: [height, width, 3]
+        dtype: uint8
+        range: [0, 255]
+        note: Height/width depend on the ViZDoom cfg; wrapper enforces RGB24 and HWC.
+
+  rewards:
+    description: Positive for survival time and picking health; negative on death.
+    components:
+      - {name: health_pickup, sign: positive}
+      - {name: survival_time, sign: positive}
+      - {name: death_penalty, value: -100.0}
+    threshold_solved: 1000
+    range: [-100, 2000]
+
+  versions:
+    v0: ViZDoom health_gathering.cfg scenario

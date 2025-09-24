@@ -1,6 +1,11 @@
 from statistics import fmean
 from typing import Callable, Iterable, List
 
+import math
+
+# Prefer Gymnasium spaces; fall back gracefully if not present in test stubs
+from gymnasium import spaces as gym_spaces  # type: ignore
+
 import pytorch_lightning as pl
 
 from utils.metrics_config import metrics_config
@@ -80,7 +85,7 @@ class CoreMetricAlerts(MetricMonitorBundle):
 
     _BOUNDS_SMOOTHING_WINDOW = 5
 
-    def __init__(self, pl_module: pl.LightningModule) -> None:
+    def __init__(self, pl_module: pl.LightningModule | None = None) -> None:
         self.pl_module = pl_module
         self._step_key = metrics_config.total_timesteps_key()
 
@@ -225,3 +230,152 @@ class CoreMetricAlerts(MetricMonitorBundle):
             )
 
         return None
+
+    # ---- initial policy sanity checks ----
+    def _monitor_initial_action_mean_uniform(self, history: dict):
+        """Warn if early action mean deviates from uniform-policy expectation.
+
+        Applies only to discrete action spaces. Uses the first few logged points
+        to estimate the initial behavior before learning drifts the policy.
+        """
+        # Guard missing module/env
+        if self.pl_module is None:
+            return None
+        try:
+            env = self.pl_module.get_env("train")
+        except Exception:
+            return None
+
+        # Only for discrete action spaces
+        try:
+            action_space = getattr(env, "action_space", None)
+            is_discrete = (
+                action_space is not None
+                and gym_spaces is not None
+                and isinstance(action_space, gym_spaces.Discrete)
+            )
+        except Exception:
+            is_discrete = False
+        if not is_discrete:
+            return None
+
+        n = int(action_space.n)
+        if n <= 1:
+            return None
+
+        # Expected mean for uniform over {0, 1, ..., n-1}
+        expected_mean = (n - 1) / 2.0
+
+        metric_key = "train/roll/actions/mean"
+        series = self._metric_series(history, metric_key)
+        if not series:
+            return None
+
+        # Use early window to represent initial policy behavior
+        window = self._BOUNDS_SMOOTHING_WINDOW
+        early_vals = []
+        for _, raw in series[:window]:
+            try:
+                early_vals.append(float(raw))
+            except (TypeError, ValueError):
+                continue
+        if not early_vals:
+            return None
+        early_avg = fmean(early_vals)
+
+        # Tolerance: allow +/-15% of action index range
+        tol = 0.15 * float(max(1, n - 1))
+        if math.fabs(early_avg - expected_mean) <= tol:
+            return None
+
+        # Format message with smoothed early average and latest for context
+        try:
+            latest_val = self._latest_metric_value(history, metric_key)
+            latest_fmt = self._format_metric_value(metric_key, float(latest_val)) if latest_val is not None else None
+        except (TypeError, ValueError):
+            latest_fmt = None
+
+        early_fmt = self._format_metric_value(metric_key, early_avg)
+        exp_fmt = self._format_metric_value(metric_key, expected_mean)
+        latest_suffix = f" (latest {latest_fmt})" if latest_fmt else ""
+
+        return MetricAlert(
+            _id=f"{metric_key}/initial_uniform_mean_oob",
+            metric=metric_key,
+            message=f"{window}-step early avg {early_fmt}{latest_suffix} vs expected {exp_fmt} (n={n})",
+            tip="Initial policy may be biased; verify weight init and zero biases for policy head.",
+        )
+
+    def _monitor_initial_action_std_uniform(self, history: dict):
+        """Warn if early action std deviates from uniform-policy expectation.
+
+        Applies only to discrete action spaces. Uses the first few logged points
+        to estimate the initial behavior before learning drifts the policy.
+        """
+        # Guard missing module/env
+        if self.pl_module is None:
+            return None
+        try:
+            env = self.pl_module.get_env("train")
+        except Exception:
+            return None
+
+        # Only for discrete action spaces
+        try:
+            action_space = getattr(env, "action_space", None)
+            is_discrete = (
+                action_space is not None
+                and gym_spaces is not None
+                and isinstance(action_space, gym_spaces.Discrete)
+            )
+        except Exception:
+            is_discrete = False
+        if not is_discrete:
+            return None
+
+        n = int(action_space.n)
+        if n <= 1:
+            return None
+
+        # Expected std for uniform over integers {0, ..., n-1}
+        expected_std = math.sqrt((n * n - 1) / 12.0)
+
+        metric_key = "train/roll/actions/std"
+        series = self._metric_series(history, metric_key)
+        if not series:
+            return None
+
+        # Use early window to represent initial policy behavior
+        window = self._BOUNDS_SMOOTHING_WINDOW
+        early_vals = []
+        for _, raw in series[:window]:
+            try:
+                early_vals.append(float(raw))
+            except (TypeError, ValueError):
+                continue
+        if not early_vals:
+            return None
+        early_avg = fmean(early_vals)
+
+        # Tolerance: allow +/-20% relative deviation
+        rel_err = abs(early_avg - expected_std) / max(expected_std, 1e-9)
+        if rel_err <= 0.20:
+            return None
+
+        # Format message with smoothed early average and latest for context
+        try:
+            latest_val = self._latest_metric_value(history, metric_key)
+            latest_fmt = self._format_metric_value(metric_key, float(latest_val)) if latest_val is not None else None
+        except (TypeError, ValueError):
+            latest_fmt = None
+
+        early_fmt = self._format_metric_value(metric_key, early_avg)
+        exp_fmt = self._format_metric_value(metric_key, expected_std)
+        latest_suffix = f" (latest {latest_fmt})" if latest_fmt else ""
+
+        return MetricAlert(
+            _id=f"{metric_key}/initial_uniform_std_oob",
+            metric=metric_key,
+            message=f"{window}-step early avg {early_fmt}{latest_suffix} vs expected {exp_fmt} (n={n})",
+            tip="Initial action variability differs from uniform; check logits init and sampling path.",
+        )

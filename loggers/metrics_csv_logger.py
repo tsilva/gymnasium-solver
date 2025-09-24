@@ -79,6 +79,12 @@ class MetricsCSVLogger:
             train_step_key = "train/cnt/total_timesteps"
             val_step_key = "val/cnt/total_timesteps"
         step = self._first_number(metrics.get(train_step_key), metrics.get(val_step_key))
+        # Backward-compat fallback: if configured step key isn't present, try legacy total_timesteps counters
+        if step is None:
+            step = self._first_number(
+                metrics.get("train/cnt/total_timesteps"),
+                metrics.get("val/cnt/total_timesteps"),
+            )
         epoch = self._first_number(metrics.get("train/cnt/epoch"), metrics.get("val/cnt/epoch"))
         t = time.time()
 

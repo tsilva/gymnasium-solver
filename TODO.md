@@ -6,7 +6,6 @@
 because I cant compare runs that have different n_envs. Since these envs are collected under same policy it doesnt seem fair when comparing to less envs. So I think
 there should be another timestep metric that tracks the number of vectorized env.step() instead and that is the metric that everyone keys from. Think hard, make clean
 changes.
-- FEAT: 
 - REFACTOR: use anchors/aliases to streamline configs
 
 ## Pong-v5_objects
@@ -20,17 +19,15 @@ changes.
 - BUG: fix duplicate object error in feature extractor
 - online feature normalization inside extractor (rolling averages)
 - add env normalization support (use that instead of normalization from feature extractor)
+- previous actions
+- force lower reward threshold
 
 ## ALERTS
 
 - add progress metric 0-1 that uses total_timesteps/max_timesteps when available
 - FEAT: define min-max entropy on wandb dashboard
 - BUG: alerts are not making into table logger
-- FEAT: alert if action_mean doesnt start in expected bounds (initial policy not uniform)
-- FEAT: alert if action_std doesnt start in expected bounds (initial policy not uniform)
-- FEAT: search for known hard min/max bounds for metrics that are not currently in metrics.yaml and add them
 - FEAT: infer min/max bounds based on configuration
-- FEAT: provide previous actions
 
 ## NEXT
 

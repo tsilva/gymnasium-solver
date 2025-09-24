@@ -468,8 +468,11 @@ class RolloutCollector():
 
         self.total_rollouts = 0
         self.total_steps = 0
+        # Vectorized step counters: one increment per env.step() call across the vector
+        self.total_vec_steps = 0
         self.total_episodes = 0
         self.rollout_steps = 0
+        self.rollout_vec_steps = 0
         self.rollout_episodes = 0
 
         # Current observations - initialize on first collect
@@ -750,6 +753,7 @@ class RolloutCollector():
         end = start + self.n_steps
 
         self.rollout_steps = 0
+        self.rollout_vec_steps = 0
         self.rollout_episodes = 0
 
         # Collect one rollout
@@ -797,10 +801,13 @@ class RolloutCollector():
 
             # Advance rollout stats
             self.rollout_steps += self.n_envs
+            # One vectorized step per env.step() call
+            self.rollout_vec_steps += 1
             self.rollout_episodes += int(dones.sum())
 
         last_obs = next_obs
         self.total_steps += self.rollout_steps
+        self.total_vec_steps += self.rollout_vec_steps
         self.total_episodes += self.rollout_episodes
 
         # Update stats based on the collected slice
@@ -856,6 +863,7 @@ class RolloutCollector():
         total_reward_sum = 0.0
         total_length_sum = 0
         total_timesteps = 0
+        total_vec_steps = 0
 
         # Start fresh episodes: force a reset/alloc on next collection
         self.obs = None
@@ -871,6 +879,8 @@ class RolloutCollector():
             # Collect one rollout worth of steps using the current policy
             traj = self.collect(deterministic=deterministic)
             total_timesteps += int(traj.observations.shape[0])
+            # Each collect call advanced this many vector steps
+            total_vec_steps += int(self.rollout_vec_steps)
 
             # Consume finished episodes recorded during this rollout
             recent_eps = getattr(self, "_recent_episodes", None) or []
@@ -900,6 +910,7 @@ class RolloutCollector():
             **base_metrics,
             "cnt/total_episodes": total_episodes_collected,
             "cnt/total_timesteps": int(total_timesteps),
+            "cnt/total_vec_steps": int(total_vec_steps),
             "roll/ep_rew/mean": ep_rew_mean,
             "roll/ep_len/mean": float(ep_len_mean),
         }
@@ -969,10 +980,12 @@ class RolloutCollector():
         ret_std = self._ret_stats.std()
 
         return {
-            "cnt/total_timesteps": self.total_steps,  # canonical step counter for history
+            "cnt/total_timesteps": self.total_steps,
+            "cnt/total_vec_steps": self.total_vec_steps,  # canonical step counter for history
             "cnt/total_episodes": self.total_episodes,
             "cnt/total_rollouts": self.total_rollouts,
             "roll/timesteps": self.rollout_steps,
+            "roll/vec_steps": self.rollout_vec_steps,
             "roll/episodes": self.rollout_episodes,
             "roll/fps": rollout_fps,  # average fps over recent rollouts
             "roll/ep_rew/best": float(self._best_episode_reward),

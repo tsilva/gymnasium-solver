@@ -50,7 +50,7 @@ Algo-specific config subclasses:
 
 ### Agents
 - `BaseAgent` (LightningModule):
-  - Creates `train`, `val`, and `test` envs with offset seeds and stage-specific video settings, then builds matching `RolloutCollector`s. Instantiates a `MetricsRecorder` (step key `train/cnt/total_timesteps`), a `MetricsMonitor` used for alert hooks, and a `Run` object for run directory bookkeeping.
+  - Creates `train`, `val`, and `test` envs with offset seeds and stage-specific video settings, then builds matching `RolloutCollector`s. Instantiates a `MetricsRecorder` (step key `train/cnt/total_vec_steps`), a `MetricsMonitor` used for alert hooks, and a `Run` object for run directory bookkeeping.
 - Manual optimization in `training_step`; per-batch metrics are buffered in the recorder and flushed once per epoch by `trainer_callbacks.DispatchMetricsCallback`, which also updates history and forwards `train/*` / `val/*` snapshots to Lightning loggers. `MetricsMonitor.check()` surfaces alert messages (printed once per epoch), and `loggers.metrics_table_logger.PrintMetricsLogger` renders the console table using `config/metrics.yaml` precision/highlight rules.
   - Tracks best episode rewards via the collector: `train/roll/ep_rew/best` and `val/roll/ep_rew/best` are derived from the running best of `*/roll/ep_rew/mean` and appear in `metrics.csv`, W&B, and the terminal view.
   - Evaluation cadence honors `Config.eval_freq_epochs` and `eval_warmup_epochs`. `WarmupEvalCallback` disables validation until warmup completes, after which `validation_step` drives the collector-based evaluation + optional video capture described earlier.
@@ -72,7 +72,7 @@ Algo-specific config subclasses:
   - Vectors/scalars: `(N*T, D)` or `(N*T, 1)`; Images (CHW): `(N*T, C, H, W)`.
 - Terminal observations for time-limit truncations are coerced to the buffer's CHW shape before value bootstrapping.
 - `build_index_collate_loader_from_collector` creates a `DataLoader` over indices with `MultiPassRandomSampler` to perform `n_epochs` passes over the same rollout without epoch resets.
-- `evaluate_episodes(n_episodes, deterministic, timeout_seconds)` reuses the collector to gather finished episodes only, balances per-env episode targets, and updates running aggregates such as `ep_rew_best`, `ep_len_mean`, and `total_timesteps` consumed during evaluation.
+- `evaluate_episodes(n_episodes, deterministic, timeout_seconds)` reuses the collector to gather finished episodes only, balances per-env episode targets, and updates running aggregates such as `ep_rew_best`, `ep_len_mean`, and both total environment frames (`total_timesteps`) and vector steps (`total_vec_steps`) consumed during evaluation.
 
 ### Models and policies (`utils/models.py`, `utils/policy_factory.py`)
 - MLP actor-critic (`MLPActorCritic`) and policy-only (`MLPPolicy`) for discrete actions; distributions are `Categorical` from logits. `MLPPolicy` accepts either `input_dim`/`output_dim` or `input_shape`/`output_shape` for factory compatibility.

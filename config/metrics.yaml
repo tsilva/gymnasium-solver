@@ -32,6 +32,7 @@ _global:
       - "roll/fps"
       - "roll/episodes"
       - "roll/timesteps"
+      - "roll/vec_steps"
 
       # === Optimization (per-update diagnostics) ===
       - "opt/ppo/clip_fraction"
@@ -54,6 +55,7 @@ _global:
       - "cnt/total_episodes"
       - "cnt/total_rollouts"
       - "cnt/total_timesteps"
+      - "cnt/total_vec_steps"
       - "cnt/epoch"
 
       # === System & timing ===
@@ -68,7 +70,7 @@ _global:
       - "hp/ent_coef"
       - "hp/vf_coef"
 
-  step_key: "train/cnt/total_timesteps"
+  step_key: "train/cnt/total_vec_steps"
 
 clip_range:
   description: "PPO clip range for policy updates (ratio clamp around 1.0)"
@@ -81,12 +83,14 @@ cnt/total_episodes:
   precision: 0
   description: "Cumulative number of episodes completed across all training"
   delta_rule: ">="  # Should always increase
+  min: 0
 
 # For CSV base fields, keep bare precision settings for compatibility
 total_timesteps:
   highlight: true
   description: "Cumulative number of environment steps taken across all training"
   precision: 0
+  min: 0
 
 cnt/total_timesteps:
   highlight: true
@@ -94,21 +98,38 @@ cnt/total_timesteps:
   # between evaluation runs when using different eval strategies or env resets
   description: "Cumulative number of environment steps taken across all training"
   precision: 0
+  min: 0
 
 roll/timesteps:
   description: "Number of timesteps collected in the current rollout buffer"
   precision: 0
   delta_rule: ">="  # Should always increase
+  min: 0
+
+# Vectorized-step counters (one per env.step() call across the vector)
+cnt/total_vec_steps:
+  highlight: true
+  description: "Cumulative number of vectorized env.step() calls across training"
+  precision: 0
+  min: 0
+
+roll/vec_steps:
+  description: "Number of vectorized env.step() calls in the current rollout"
+  precision: 0
+  delta_rule: ">="
+  min: 0
 
 # Additional counters
 cnt/total_rollouts:
   description: "Cumulative number of completed rollouts (batches) collected"
   precision: 0
   delta_rule: ">="
+  min: 0
 
 roll/episodes:
   description: "Number of episodes finished within the current rollout"
   precision: 0
+  min: 0
 
 # Episode statistics
 roll/ep_rew/mean:
@@ -120,6 +141,7 @@ roll/ep_rew/mean:
 roll/ep_len/mean:
   description: "Average episode length over recent episodes window"
   precision: 0
+  min: 0
 
 # Immediate episode stats
 roll/ep_rew/last:
@@ -131,6 +153,7 @@ roll/ep_rew/last:
 roll/ep_len/last:
   description: "Length of the most recent completed episode"
   precision: 0
+  min: 0
 
 roll/ep_rew/best:
   bold: true
@@ -146,13 +169,15 @@ roll/ep_rew/max:
   description: "Maximum episode reward observed in recent episodes window"
   precision: 2
 
-roll/ep_len/min:
+roll/ep_len/min: 
   precision: 0
   description: "Minimum episode length observed in recent episodes window"
+  min: 0
 
 roll/ep_len/max: 
   description: "Maximum episode length observed in recent episodes window"
   precision: 0
+  min: 0
 
 roll/ep_rew/std:
   description: "Standard deviation of episode rewards in recent episodes window"
@@ -161,6 +186,7 @@ roll/ep_rew/std:
 roll/ep_len/std:
   description: "Standard deviation of episode lengths in recent episodes window"
   precision: 2
+  min: 0.0
 
 # Training metrics
 # For CSV base fields, keep bare precision settings for compatibility
@@ -168,16 +194,19 @@ epoch:
   description: "Current training epoch number"
   precision: 0
   delta_rule: ">="  # Should always increase
+  min: 0
 
 cnt/epoch:
   description: "Current training epoch number"
   precision: 0
   delta_rule: ">="  # Should always increase
+  min: 0
 
 n_updates:
   description: "Total number of parameter updates (gradient steps) performed"
   precision: 0
   delta_rule: ">="  # Should always increase
+  min: 0
 
 # Time metrics
 sys/timing/time_elapsed:
@@ -238,6 +267,7 @@ opt/ppo/approx_kl:
 opt/ppo/kl:
   description: "KL divergence between old and new policy log probabilities"
   precision: 4
+  min: 0.0
 
 opt/ppo/clip_fraction:
   description: "Fraction of probability ratios that were clipped in PPO objective"
@@ -345,6 +375,32 @@ roll/baseline/std:
   description: "Running std of the baseline used for returns normalization"
   precision: 3
   min: 0.0
+
+# Additional rollout statistics with hard bounds
+roll/return/mean:
+  description: "Running mean of returns (post-normalization if enabled)"
+  precision: 3
+
+roll/return/std:
+  description: "Running standard deviation of returns (post-normalization if enabled)"
+  precision: 3
+  min: 0.0
+
+roll/adv/mean:
+  description: "Running mean of advantage estimates (post-normalization if enabled)"
+  precision: 4
+
+roll/adv/std:
+  description: "Running standard deviation of advantage estimates (post-normalization if enabled)"
+  precision: 4
+  min: 0.0
+
+# Binary/flag metrics
+opt/ppo/kl_stop_triggered:
+  description: "Whether KL early stopping triggered for this epoch (0 or 1)"
+  precision: 0
+  min: 0
+  max: 1
 
 # Hyperparameter mirrors logged under hp/*
 hp/policy_lr:

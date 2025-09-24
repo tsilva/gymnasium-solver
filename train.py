@@ -41,7 +41,7 @@ def find_closest_match(search_term, candidates):
     return best_match if best_score > 0 else None
 
 
-def list_available_environments(search_term=None):
+def list_available_environments(search_term=None, exact_match=None):
     """List all available environment targets with their descriptions."""
     from utils.config import Config
     from utils.io import read_yaml
@@ -60,8 +60,15 @@ def list_available_environments(search_term=None):
     yaml_files = sorted(config_dir.glob("*.yaml"))
     env_names = [f.stem for f in yaml_files]
     
+    # If exact_match provided, use it directly
+    if exact_match:
+        yaml_files = [f for f in yaml_files if f.stem == exact_match]
+        if not yaml_files:
+            print(f"Environment '{exact_match}' not found.")
+            return
+        print(f"{BOLD}Environment targets for '{exact_match}':{RESET}")
     # If search term provided, find closest match
-    if search_term:
+    elif search_term:
         matched_env = find_closest_match(search_term, env_names)
         if not matched_env:
             print(f"No environment found matching '{search_term}'")
@@ -108,13 +115,35 @@ def list_available_environments(search_term=None):
             print()
 
 
+def find_matching_environment(env_name):
+    """Find the best matching environment for a given name."""
+    from utils.config import Config
+    from utils.io import read_yaml
+    
+    config_dir = Path("config/environments")
+    if not config_dir.exists():
+        return None
+    
+    # Check for exact match first
+    env_file = config_dir / f"{env_name}.yaml"
+    if env_file.exists():
+        return env_name
+    
+    # Check for fuzzy match
+    yaml_files = list(config_dir.glob("*.yaml"))
+    env_names = [f.stem for f in yaml_files]
+    matched_env = find_closest_match(env_name, env_names)
+    
+    return matched_env
+
+
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Train RL agent.")
     parser.add_argument(
         "config", 
         nargs="?",
-        help="Config spec '<env>:<variant>' (e.g., CartPole-v1:ppo)"
+        help="Config spec '<env>:<variant>' (e.g., CartPole-v1:ppo) or environment name for fuzzy search"
     )
     parser.add_argument(
         "--config_id", 
@@ -154,6 +183,26 @@ def main():
         search_term = args.list_envs if args.list_envs else None
         list_available_environments(search_term)
         return
+
+    # Handle config argument - check if it's a valid environment or needs fuzzy search
+    config_spec = args.config or args.config_id or "Bandit-v0:ppo"
+    
+    # If it doesn't contain ':', treat it as an environment name for fuzzy search
+    if ":" not in config_spec:
+        # Find the best matching environment
+        matched_env = find_matching_environment(config_spec)
+        if not matched_env:
+            print(f"No environment found matching '{config_spec}'")
+            print("Available environments:")
+            print()
+            list_available_environments()
+            return
+        else:
+            # Environment exists, show its targets
+            print(f"Environment '{config_spec}' found. Available targets:")
+            print()
+            list_available_environments(exact_match=matched_env)
+            return
 
     # Parse args and start training
     launch_training_from_args(args)

@@ -7,9 +7,12 @@ from __future__ import annotations
 
 import os
 import sys
-from math import gcd
 from dataclasses import asdict
+from math import gcd
 from typing import Optional
+
+from utils.logging import display_config_summary
+from utils.user import prompt_confirm
 
 
 def _parse_positive_int(value: str, flag: str) -> int:
@@ -146,6 +149,60 @@ def _extract_elapsed_seconds(agent) -> Optional[float]:
         return None
 
 
+def _format_summary_value(value):
+    if isinstance(value, (dict, list, tuple, set)):
+        return str(value)
+    return value
+
+
+def _present_prefit_summary(config) -> None:
+    spec = config.spec if isinstance(getattr(config, "spec", None), dict) else {}
+    returns = spec.get("returns") if isinstance(spec, dict) else {}
+    rewards = spec.get("rewards") if isinstance(spec, dict) else {}
+
+    reward_threshold = None
+    if isinstance(returns, dict) and returns.get("threshold_solved") is not None:
+        reward_threshold = returns.get("threshold_solved")
+    elif isinstance(rewards, dict) and rewards.get("threshold_solved") is not None:
+        reward_threshold = rewards.get("threshold_solved")
+
+    env_block = {
+        "env_id": _format_summary_value(getattr(config, "env_id", None)),
+        "obs_type": _format_summary_value(getattr(config, "obs_type", None)),
+        "wrappers": _format_summary_value(getattr(config, "env_wrappers", None)),
+        "subproc": _format_summary_value(getattr(config, "subproc", None)),
+        "spec/action_space": _format_summary_value(spec.get("action_space")),
+        "spec/observation_space": _format_summary_value(spec.get("observation_space")),
+        "reward_threshold": _format_summary_value(reward_threshold),
+        "time_limit": _format_summary_value(spec.get("max_episode_steps")),
+    }
+
+    training_block = {
+        "algo_id": _format_summary_value(getattr(config, "algo_id", None)),
+        "policy": _format_summary_value(getattr(config, "policy", None)),
+        "hidden_dims": _format_summary_value(getattr(config, "hidden_dims", None)),
+        "activation": _format_summary_value(getattr(config, "activation", None)),
+        "seed": _format_summary_value(getattr(config, "seed", None)),
+        "n_envs": _format_summary_value(getattr(config, "n_envs", None)),
+        "n_steps": _format_summary_value(getattr(config, "n_steps", None)),
+        "batch_size": _format_summary_value(getattr(config, "batch_size", None)),
+        "max_timesteps": _format_summary_value(getattr(config, "max_timesteps", None)),
+    }
+
+    project_id = getattr(config, "project_id", None) or getattr(config, "env_id", None)
+    run_block = {
+        "project_id": _format_summary_value(project_id),
+        "run_id": "<pending>",
+        "quiet": _format_summary_value(getattr(config, "quiet", False)),
+    }
+
+    display_config_summary({
+        "Run": run_block,
+        "Environment": env_block,
+        "Training": training_block,
+    })
+
+
 def launch_training_from_args(args) -> None:
     """End-to-end training launcher extracted from train.py.
 
@@ -177,10 +234,27 @@ def launch_training_from_args(args) -> None:
     if cli_max_timesteps is not None:
         config.max_timesteps = cli_max_timesteps
 
-    # Merge W&B sweep overrides when requested/auto-detected
+    _present_prefit_summary(config)
+
+    quiet = bool(getattr(config, "quiet", False))
+    start_training = prompt_confirm("Start training?", default=True, quiet=quiet)
+    if not start_training:
+        print("Training aborted before initialization.")
+        return
+
+    # Merge W&B sweep overrides when requested/auto-detected (after confirmation)
+    prev_config = config
     config = _maybe_merge_wandb_config(
         config, wandb_sweep_flag=bool(getattr(args, "wandb_sweep", False)), cli_max_timesteps=cli_max_timesteps
     )
+    if config is not prev_config:
+        print("Applied W&B sweep overrides after confirmation.")
+
+    # Reapply CLI/noise overrides that must persist after sweep merge
+    if getattr(args, "quiet", False) is True:
+        config.quiet = True
+    if cli_max_timesteps is not None:
+        config.max_timesteps = cli_max_timesteps
 
     # If running under a debugger (e.g., vscode/pycharm/debugpy), clamp vec envs
     config = _apply_debugger_env_overrides(config)
@@ -198,6 +272,13 @@ def launch_training_from_args(args) -> None:
     from agents import build_agent
 
     agent = build_agent(config)
+    setattr(agent, "_prefit_prompt_completed", True)
+    maybe_warn = getattr(agent, "_maybe_warn_observation_policy_mismatch", None)
+    if callable(maybe_warn):
+        try:
+            maybe_warn()
+        except Exception:
+            pass
     agent.learn()
 
     # (Workspace already ensured at training start)

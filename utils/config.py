@@ -59,6 +59,9 @@ class Config:
     # The id of the environment to train on
     env_id: str = ""
 
+    # Description of this configuration variant
+    description: str = ""
+
     # Descriptive spec metadata for the environment (merges into EnvInfoWrapper)
     spec: Dict[str, Any] = field(default_factory=dict)
 

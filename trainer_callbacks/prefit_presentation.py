@@ -25,6 +25,9 @@ class PrefitPresentationCallback(pl.Callback):
         get_env = pl_module.get_env
         assert all([config, run, policy_model, callable(get_env)])
 
+        if getattr(pl_module, "_prefit_prompt_completed", False):
+            return
+
         # Compute model parameter counts
         num_params_total = int(sum(p.numel() for p in policy_model.parameters()))
         num_params_trainable = int(sum(p.numel() for p in policy_model.parameters() if p.requires_grad))

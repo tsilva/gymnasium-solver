@@ -7,19 +7,25 @@
 - Ensure we solve deterministic variant without action reward shaping
 - Establish baseline for sticky actions variant
 - Test if wcan improve by using online feature normalization inside extractor (rolling averages)
-
-
 - Update reward threshold for reward shaped runs
 - TODO: add support for resuming with policy from previous run
 - try debug server
 - BUG: fix duplicate object error in feature extractor (run step by step in human mode and compare conflicted object data, against frame, create script for this)
 - add env normalization support (use that instead of normalization from feature extractor)
 - previous actions
+- Search for where to check for SOTA scores on each env (ask gpt to research)
 
+## LunarLander-v3
+
+- Solve baseline
+- Increase difficulty using domain randomization
+- Ensure eval uses domain randomization as well
+ 
 ## NEXT
 
+- Add alert for when ep_rew_mean starts stalling / downward trend
+- Merge spec files into config yaml files, allow those to have inheritance as well (since objects variant has different action labels); use gpt-5-codex-high for this
 - Make sure metrics.yaml is up to date with all metrics with correct names
-- Merge spec into config yaml files2
 - FEAT: add support for scheduler min and progress decoupled from timesteps, perhaps by specifying percentage -> value tuples and have the scheduler interpolate between those, allowing dynamic linear schedules that perform differently across the training (eg: higher early, lower late)
 - FEAT: generalize decay schedule further by specifying decay start
 - PERF: dont fork subprocesses before confirming run

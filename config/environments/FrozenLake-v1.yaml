@@ -1,8 +1,6 @@
 # FrozenLake-v1 deterministic challenge configurations
-# TODO: reward shape to receive -1 on movement
-# TODO: override reward threshold for deterministic
 
-_base: &base
+_env: &env
   env_id: FrozenLake-v1
   env_kwargs:
     is_slippery: true
@@ -14,15 +12,13 @@ _base: &base
   eval_freq_epochs: 10
   eval_recording_freq_epochs: 10
 
-# Optional environment variants (composable via YAML merges)
 _env_deterministic: &env_deterministic
-  <<: *base
+  <<: *env
   env_kwargs:
     is_slippery: false
 
-# Algo presets
-_ppo_base: &ppo_base
-  <<: *base
+_ppo: &ppo
+  <<: *env
   algo_id: ppo
   n_envs: 8
   n_steps: 512
@@ -31,8 +27,8 @@ _ppo_base: &ppo_base
   policy_lr: 9e-3
   hidden_dims: [64]
 
-_reinforce_base: &reinforce_base
-  <<: *base
+_reinforce: &reinforce
+  <<: *env
   algo_id: reinforce
   max_timesteps: 2e5
   n_steps: 512
@@ -40,16 +36,15 @@ _reinforce_base: &reinforce_base
   policy_lr: 0.005
   hidden_dims: [64]
 
-# Public variants
-# SOLVED: 122k timesteps
 ppo:
-  <<: *ppo_base
+  <<: *ppo
 
 ppo_deterministic:
-  <<: [*env_deterministic, *ppo_base]
+  <<: [*env_deterministic, *ppo]
 
 reinforce:
-  <<: *reinforce_base
+  <<: *reinforce
 
 reinforce_deterministic:
-  <<: [*env_deterministic, *reinforce_base]
+  <<: [*env_deterministic, *reinforce]
+

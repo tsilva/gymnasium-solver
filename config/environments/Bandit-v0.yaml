@@ -1,4 +1,4 @@
-_base: &base
+_env: &env
   env_id: Bandit-v0
   env_kwargs:
     n_arms: 10
@@ -6,8 +6,8 @@ _base: &base
     stds: 1
     episode_length: 1
 
-ppo:
-  <<: *base
+_ppo: &ppo
+  <<: *env
   algo_id: ppo
   max_timesteps: 20_000
   n_envs: 16
@@ -16,8 +16,12 @@ ppo:
   n_epochs: 4
   policy_lr: lin_4e-2
   clip_range: 0.2
-  gamma: 1.0           # single-step episodes
+  gamma: 1.0
   gae_lambda: 1.0
   normalize_advantages: "rollout"
   eval_warmup_epochs: 5
   eval_freq_epochs: 1
+
+ppo:
+  <<: *ppo
+

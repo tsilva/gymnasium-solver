@@ -1,12 +1,13 @@
 # Acrobot standard challenge configurations
-_base: &base
+
+_env: &env
   env_id: Acrobot-v1
   max_timesteps: 1e6
   eval_freq_epochs: 10
   eval_episodes: 10
 
-ppo:
-  <<: *base
+_ppo: &ppo
+  <<: *env
   algo_id: ppo
   n_envs: 8
   n_epochs: 4
@@ -15,8 +16,8 @@ ppo:
   gae_lambda: 0.94
   ent_coef: 0.0
 
-reinforce:
-  <<: *base
+_reinforce: &reinforce
+  <<: *env
   algo_id: reinforce
   n_envs: 16
   n_steps: 512
@@ -24,3 +25,10 @@ reinforce:
   policy_lr: 5e-4
   hidden_dims: [128, 128]
   max_epochs: 2000
+
+ppo:
+  <<: *ppo
+
+reinforce:
+  <<: *reinforce
+

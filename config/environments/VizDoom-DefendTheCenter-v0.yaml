@@ -1,39 +1,36 @@
-_base: &base
+_env: &env
   env_id: VizDoom-DefendTheCenter-v0
   policy: 'cnn'
+  policy_kwargs:
+    channels: [32, 64, 64]
+    kernel_sizes: [8, 4, 3]
+    strides: [4, 2, 1]
   grayscale_obs: true
   resize_obs: true
   frame_stack: 4
   accelerator: 'gpu'
   devices: 'auto'
+  env_kwargs:
+    frame_skip: 4
+  env_wrappers:
+    - { id: VizDoom_RewardShaper, noop_penalty: 0.01, move_reward: 0.004, turn_reward: 0.004 }
   eval_freq_epochs: 10
   eval_episodes: 1
 
-ppo:
-  <<: *base
+_ppo: &ppo
+  <<: *env
   algo_id: ppo
-  # Vectorization / rollout
   max_timesteps: 5e6
   n_envs: 16
   n_steps: 256
   batch_size: 512
   n_epochs: 4
-  # Exploration and stability
   ent_coef: 0.01
   clip_range: lin_0.2
   policy_lr: lin_0.0003
   gamma: 0.99
   gae_lambda: 0.95
-  # Visual preprocessing
-  policy_kwargs:
-    channels: [32, 64, 64]
-    kernel_sizes: [8, 4, 3]
-    strides: [4, 2, 1]
-  # Environment preprocessing
-  grayscale_obs: true
-  resize_obs: true
-  frame_stack: 4
-  env_kwargs:
-    frame_skip: 4
-  env_wrappers:
-    - { id: VizDoom_RewardShaper, noop_penalty: 0.01, move_reward: 0.004, turn_reward: 0.004 }
+
+ppo:
+  <<: *ppo
+

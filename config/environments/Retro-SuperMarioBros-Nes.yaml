@@ -1,7 +1,9 @@
 # SuperMarioBros-Nes with RGB observations (preprocessed to grayscale+84x84+frame-stack)
 
-_base: &base
+_env: &env
   env_id: Retro/SuperMarioBros-Nes
+  env_kwargs:
+    state: "Level1-1"
   policy: 'cnn'
   policy_kwargs:
     channels: [32, 64, 64]
@@ -10,15 +12,13 @@ _base: &base
   grayscale_obs: true
   resize_obs: true
   frame_stack: 4
-  env_kwargs:
-    state: "Level1-1"       # Default starting level/state in stable-retro
   accelerator: 'gpu'
   devices: 'auto'
   eval_freq_epochs: 5
   eval_episodes: 3
 
-ppo:
-  <<: *base
+_ppo: &ppo
+  <<: *env
   algo_id: ppo
   max_timesteps: 3e6
   n_envs: 8
@@ -27,6 +27,9 @@ ppo:
   n_epochs: 3
   clip_range: 0.1
   policy_lr: 1e-4
-  frame_stack: 4
   eval_freq_epochs: 20
   eval_episodes: 5
+
+ppo:
+  <<: *ppo
+

@@ -1,65 +1,30 @@
-_base: &base
-  seed: 42 # TODO: try different seed
+# CartPole-v1 configurations covering classic state-based, reward-shaped, and pixel observations
+
+_env: &env
   env_id: CartPole-v1
+  seed: 42
   max_timesteps: 3e5
-  normalize_obs: False # Normalization doesn't seem to help
+  normalize_obs: false
   n_envs: 8
   n_steps: 1024
   policy_lr: 6e-3
-  hidden_dims: [64, 64] # TODO: try changing this
-  gamma: 0.99 # TODO: try increasing
-  ent_coef: 0.0 # TODO: try increasing
-  frame_stack: 1 # TODO: try changing this
-  # TODO: try deterministic eval
-  # TODO: monitor gradients
+  hidden_dims: [64, 64]
+  gamma: 0.99
+  ent_coef: 0.0
+  frame_stack: 1
   eval_freq_epochs: 5
   eval_episodes: 100
 
-# Optional: reward shaping wrapper configuration
 _env_rewardshaped: &env_rewardshaped
-  <<: *base
+  <<: *env
   env_wrappers:
     - id: CartPoleV1_RewardShaper
       angle_reward_scale: 1.0
       position_reward_scale: 0.25
       clip_potential: true
 
-# Unsolved: 300k timesteps
-reinforce_vanilla:
-  <<: *base
-  algo_id: reinforce
-  returns_type: "mc:episode"
-  policy_targets: "returns"
-
-# Solved: 82k timesteps
-reinforce_rtg:
-  <<: *base
-  algo_id: reinforce
-  returns_type: "mc:rtg"
-  policy_targets: "returns"
-  normalize_returns: "batch"
-
-reinforce_baseline:
-  <<: *base
-  algo_id: reinforce
-  returns_type: "mc:episode"
-  advantages_type: "baseline"
-  policy_targets: "advantages"
-  normalize_advantages: "batch"
-
-# TODO: same as using returns... investigate
-# Solved: 82k timesteps
-reinforce_baseline_rtg:
-  <<: *base
-  algo_id: reinforce
-  returns_type: "mc:rtg"
-  advantages_type: "baseline"
-  policy_targets: "advantages"
-  normalize_advantages: "batch"
-
-# Tuned: n_envs=8, n_steps=32 => total_timesteps=15k
-ppo:
-  <<: *base
+_ppo: &ppo
+  <<: *env
   algo_id: ppo
   max_timesteps: 50000
   n_envs: 8
@@ -67,28 +32,81 @@ ppo:
   batch_size: 0.25
   n_epochs: 20
   gae_lambda: 0.8
-  clip_range: 0.2 # TODO: clip_range = 0.25 + policy_lr = 1e-3 leads to explained_var > 1, why?
-  #target_kl: 0.03 # TODO: enabling this is compromising training
-  policy_lr: 1e-3 # NOTE: policy_lr = 1e-4 + clip_range 0.2  leads to explained_var < -1, investigating this will help learn more about PPO
+  clip_range: 0.2
+  policy_lr: 1e-3
   normalize_advantages: "rollout"
   eval_warmup_epochs: 50
   eval_freq_epochs: 10
-  #early_stop_on_train_threshold: True
-  #early_stop_on_eval_threshold: True
-  #eval_recording_freq_epochs: 15
-  #frame_stack: 2 # TODO: not converging faster with frame stacking here, why?
 
-# Reward-shaped PPO variant
-ppo_rewardshaped:
-  <<: *env_rewardshaped
+_reinforce: &reinforce
+  <<: *env
+  algo_id: reinforce
+
+_rgb_env: &rgb_env
+  env_id: CartPole-v1
+  env_wrappers:
+    - id: PixelObservationWrapper
+      pixels_only: true
+  frame_stack: 4
+  policy: 'cnn'
+  policy_kwargs:
+    channels: [32, 64, 64]
+    kernel_sizes: [8, 4, 3]
+    strides: [4, 2, 1]
+  eval_freq_epochs: 10
+  eval_episodes: 5
+
+_rgb_ppo: &rgb_ppo
+  <<: *rgb_env
   algo_id: ppo
   n_envs: 8
+  max_timesteps: 5e5
+  n_steps: 64
+  batch_size: 512
+  gae_lambda: 0.95
+  gamma: 0.99
+  ent_coef: 0.001
+  n_epochs: 4
+  policy_lr: lin_2.5e-4
+  clip_range: lin_0.2
+
+ppo:
+  <<: *ppo
+
+ppo_rewardshaped:
+  <<: [*env_rewardshaped, *ppo]
   max_timesteps: 1e5
-  n_steps: 32
   batch_size: 256
-  gae_lambda: 0.8
   gamma: 0.98
   ent_coef: 0.0
-  n_epochs: 20
   policy_lr: lin_0.001
   clip_range: lin_0.2
+
+reinforce_vanilla:
+  <<: *reinforce
+  returns_type: "mc:episode"
+  policy_targets: "returns"
+
+reinforce_rtg:
+  <<: *reinforce
+  returns_type: "mc:rtg"
+  policy_targets: "returns"
+  normalize_returns: "batch"
+
+reinforce_baseline:
+  <<: *reinforce
+  returns_type: "mc:episode"
+  advantages_type: "baseline"
+  policy_targets: "advantages"
+  normalize_advantages: "batch"
+
+reinforce_baseline_rtg:
+  <<: *reinforce
+  returns_type: "mc:rtg"
+  advantages_type: "baseline"
+  policy_targets: "advantages"
+  normalize_advantages: "batch"
+
+rgb_ppo:
+  <<: *rgb_ppo
+

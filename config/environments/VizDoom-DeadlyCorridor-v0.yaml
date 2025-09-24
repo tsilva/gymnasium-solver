@@ -1,6 +1,10 @@
-_base: &base
+_env: &env
   env_id: VizDoom-DeadlyCorridor-v0
   policy: 'cnn'
+  policy_kwargs:
+    channels: [32, 64, 64]
+    kernel_sizes: [8, 4, 3]
+    strides: [4, 2, 1]
   grayscale_obs: true
   resize_obs: true
   frame_stack: 4
@@ -9,8 +13,8 @@ _base: &base
   eval_freq_epochs: 1
   eval_episodes: 1
 
-ppo:
-  <<: *base
+_ppo: &ppo
+  <<: *env
   algo_id: ppo
   max_timesteps: 1e7
   n_envs: 8
@@ -19,8 +23,7 @@ ppo:
   n_epochs: 4
   clip_range: 0.1
   policy_lr: 2.5e-4
-  # CNN defaults suitable for 84x84 inputs
-  policy_kwargs:
-    channels: [32, 64, 64]
-    kernel_sizes: [8, 4, 3]
-    strides: [4, 2, 1]
+
+ppo:
+  <<: *ppo
+

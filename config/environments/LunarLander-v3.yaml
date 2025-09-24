@@ -1,36 +1,17 @@
-_base: &base
+_env: &env
   env_id: LunarLander-v3
   eval_episodes: 10
   hidden_dims: [128, 128]
   n_envs: 16
   n_steps: 1024
   ent_coef: 0.25
-  #max_timesteps: 1e6
-  #max_episode_steps: 500
 
-reinforce_baseline:
-  <<: *base
+_reinforce: &reinforce
+  <<: *env
   algo_id: reinforce
-  returns_type: "mc:episode"
-  advantages_type: "baseline"
-  policy_targets: "advantages"
-  #normalize_advantages: "batch"
 
-reinforce_baseline2:
-  <<: *base
-  algo_id: reinforce
-  returns_type: "mc:rtg"          # was "mc:episode"
-  advantages_type: "baseline"
-  policy_targets: "advantages"
-  normalize_advantages: "rollout" # or "batch"
-  ent_coef: 0.01                  # was 0.25
-  n_epochs: 2                     # reuse data once (optional)
-  # Optionally shrink the batch per update:
-  # n_steps: 512   # was 1024
-
-# Previous solve: 983040 timesteps (~33m)
-ppo:
-  <<: *base
+_ppo: &ppo
+  <<: *env
   algo_id: ppo
   n_envs: 12
   max_timesteps: 5e6
@@ -41,11 +22,26 @@ ppo:
   n_epochs: 4
   policy_lr: 5e-4
   ent_coef: 0.01
-  # Evaluate every epoch but keep it lightweight
   eval_warmup_epochs: 50
   eval_freq_epochs: 10
-  eval_episodes: 10
-  # Record only the first eval video to reduce overhead
-  #eval_recording_freq_epochs: null
   policy_targets: "advantages"
   normalize_advantages: "batch"
+
+reinforce_baseline:
+  <<: *reinforce
+  returns_type: "mc:episode"
+  advantages_type: "baseline"
+  policy_targets: "advantages"
+
+reinforce_baseline2:
+  <<: *reinforce
+  returns_type: "mc:rtg"
+  advantages_type: "baseline"
+  policy_targets: "advantages"
+  normalize_advantages: "rollout"
+  ent_coef: 0.01
+  n_epochs: 2
+
+ppo:
+  <<: *ppo
+

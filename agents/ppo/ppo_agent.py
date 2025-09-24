@@ -42,6 +42,10 @@ class PPOAgent(BaseAgent):
 
         # Infer policy_distribution and value_predictions from the actor critic model
         policy_dist, values_pred = self.policy_model(states)
+        if values_pred is None:
+            raise ValueError(
+                "PPO requires a policy with a value head; set config.policy to 'mlp_actorcritic'."
+            )
 
         # Retrieve the log probabilities of the batch actions under the current policy
         # (since we are training multiple epochs using same rollout, the policy will

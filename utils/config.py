@@ -5,6 +5,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
 
+from utils.formatting import sanitize_name
 from utils.io import read_yaml, write_json
 
 
@@ -298,6 +299,19 @@ class Config:
                 variant_cfg["project_id"] = project_id
                 variant_config_id = f"{project_id}_{variant_id}"
                 all_configs[variant_config_id] = variant_cfg
+
+                # Allow lookups by raw env id and sanitized aliases so callers
+                # can pass either "ALE/Pong-v5" or "ALE-Pong-v5" without
+                # needing to duplicate configs per naming style.
+                alias_keys = {variant_config_id}
+                env_id = variant_cfg.get("env_id")
+                if env_id:
+                    alias_keys.add(f"{env_id}_{variant_id}")
+                    alias_keys.add(f"{sanitize_name(env_id)}_{variant_id}")
+                alias_keys.add(f"{sanitize_name(project_id)}_{variant_id}")
+
+                for alias in alias_keys:
+                    all_configs.setdefault(alias, variant_cfg)
 
         # Load all config files
         yaml_files = sorted(env_config_path.glob("*.yaml"))

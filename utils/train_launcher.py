@@ -124,7 +124,8 @@ def _ensure_wandb_run_initialized(config) -> None:
 
     # Otherwise create a fresh run using project and full config
     from utils.formatting import sanitize_name
-    project_name = config.project_id if getattr(config, "project_id", None) else sanitize_name(config.env_id)
+    raw_project = getattr(config, "project_id", None) or getattr(config, "env_id", None) or "gymnasium-solver"
+    project_name = sanitize_name(raw_project)
     wandb.init(project=project_name, config=asdict(config))
 
 def _extract_elapsed_seconds(agent) -> Optional[float]:

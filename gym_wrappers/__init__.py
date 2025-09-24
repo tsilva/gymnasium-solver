@@ -7,6 +7,7 @@ from .discrete_action_space_remapper import (
     DiscreteActionSpaceRemapperWrapper,
 )
 from .action_reward_shaper import ActionRewardShaper
+from .BreakoutV5.feature_extractor import BreakoutV5_FeatureExtractor
 from .PongV5.feature_extractor import PongV5_FeatureExtractor
 from .PongV5.reward_shaper import PongV5_RewardShaper
 from .VizDoom.reward_shaper import VizDoom_RewardShaper
@@ -24,6 +25,7 @@ _wrappers_to_register = [
     DiscreteEncoder,
     DiscreteActionSpaceRemapperWrapper,
     ActionRewardShaper,
+    BreakoutV5_FeatureExtractor,
     PongV5_FeatureExtractor,
     PongV5_RewardShaper,
     MountainCarV0_RewardShaper,

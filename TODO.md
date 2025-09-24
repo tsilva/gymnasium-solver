@@ -23,6 +23,7 @@
  
 ## NEXT
 
+- NEXT: only show certain metrics in table logger
 - Add alert for when ep_rew_mean starts stalling / downward trend
 - Make sure metrics.yaml is up to date with all metrics with correct names
 - FEAT: add support for scheduler min and progress decoupled from timesteps, perhaps by specifying percentage -> value tuples and have the scheduler interpolate between those, allowing dynamic linear schedules that perform differently across the training (eg: higher early, lower late); generalize decay schedule further by specifying decay start

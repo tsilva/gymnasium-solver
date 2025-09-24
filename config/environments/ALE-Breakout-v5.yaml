@@ -1,0 +1,182 @@
+# ALE/Breakout-v5 configuration with OCAtari-derived object features
+
+# =====================
+# Environment Specification
+# =====================
+spec:
+  source: https://ale.farama.org/environments/breakout/
+  description: Deflect the ball with the paddle to clear bricks without losing lives.
+
+  render_fps: 60
+
+  action_space:
+    discrete: 4
+    labels: {0: NOOP, 1: FIRE, 2: RIGHT, 3: LEFT}
+    full_space: {count: 18, enable_with: full_action_space=True}
+
+  observation_space:
+    default: rgb
+    variants:
+      rgb:
+        shape: [210, 160, 3]
+        dtype: uint8
+      ram:
+        shape: [128]
+        dtype: uint8
+      objects:
+        shape: [10]
+        dtype: float32
+        components:
+          - {name: Paddle.x, range: [-1.0, 1.0]}
+          - {name: Paddle.dx, range: [-1.0, 1.0]}
+          - {name: Ball.x, range: [-1.0, 1.0]}
+          - {name: Ball.y, range: [-1.0, 1.0]}
+          - {name: Ball.dx, range: [-1.0, 1.0]}
+          - {name: Ball.dy, range: [-1.0, 1.0]}
+          - {name: Ball.visible, range: [-1.0, 1.0]}
+          - {name: Ball.minusPaddle.x, range: [-1.0, 1.0]}
+          - {name: Ball.minusPaddle.y, range: [-1.0, 1.0]}
+          - {name: Blocks.remaining, range: [-1.0, 1.0]}
+
+  rewards:
+    per_block: +1
+    life_lost: -1
+    range: [-1, 1]
+
+  returns:
+    episodic: cumulative score (includes brick hits and life losses)
+    range: [0, 432]
+    threshold_solved: 400
+
+  modes:
+    values: [0, 1, 2, 3]
+    default: 0
+
+  difficulties:
+    values: [0, 1, 2, 3]
+    default: 0
+
+  versions:
+    v5: Gymnasium ALE/Breakout deterministic release
+
+# =====================
+# Spec Anchors
+# =====================
+_spec_base: &spec_base
+  source: https://ale.farama.org/environments/breakout/
+  description: Deflect the ball with the paddle to clear bricks without losing lives.
+
+  render_fps: 60
+
+  action_space:
+    discrete: 4
+    labels: {0: NOOP, 1: FIRE, 2: RIGHT, 3: LEFT}
+    full_space: {count: 18, enable_with: full_action_space=True}
+
+  observation_space:
+    default: rgb
+    variants:
+      rgb:
+        shape: [210, 160, 3]
+        dtype: uint8
+      ram:
+        shape: [128]
+        dtype: uint8
+      objects:
+        shape: [10]
+        dtype: float32
+        components:
+          - {name: Paddle.x, range: [-1.0, 1.0]}
+          - {name: Paddle.dx, range: [-1.0, 1.0]}
+          - {name: Ball.x, range: [-1.0, 1.0]}
+          - {name: Ball.y, range: [-1.0, 1.0]}
+          - {name: Ball.dx, range: [-1.0, 1.0]}
+          - {name: Ball.dy, range: [-1.0, 1.0]}
+          - {name: Ball.visible, range: [-1.0, 1.0]}
+          - {name: Ball.minusPaddle.x, range: [-1.0, 1.0]}
+          - {name: Ball.minusPaddle.y, range: [-1.0, 1.0]}
+          - {name: Blocks.remaining, range: [-1.0, 1.0]}
+
+  rewards:
+    per_block: +1
+    life_lost: -1
+    range: [-1, 1]
+
+  returns:
+    episodic: cumulative score (includes brick hits and life losses)
+    range: [0, 432]
+    threshold_solved: 400
+
+  modes:
+    values: [0, 1, 2, 3]
+    default: 0
+
+  difficulties:
+    values: [0, 1, 2, 3]
+    default: 0
+
+  versions:
+    v5: Gymnasium ALE/Breakout deterministic release
+
+_spec_objects: &spec_objects
+  <<: *spec_base
+
+# =====================
+# Configuration Anchors
+# =====================
+
+_env: &env
+  env_id: ALE/Breakout-v5
+
+_env_deterministic: &env_deterministic
+  env_kwargs:
+    repeat_action_probability: 0.0
+
+_ppo: &ppo
+  algo_id: ppo
+
+_obj_env: &obj_env
+  <<: *env
+  obs_type: "objects"
+  policy: "mlp_actorcritic"
+  hidden_dims: [512, 512]
+  gamma: 0.99
+  gae_lambda: 0.95
+  eval_warmup_epochs: 125
+  eval_freq_epochs: 10
+  eval_episodes: 15
+  accelerator: "gpu"
+  devices: "auto"
+
+_obj_wrappers: &obj_wrappers
+  env_wrappers:
+    - { id: BreakoutV5_FeatureExtractor }
+
+_obj_ppo: &obj_ppo
+  <<: [*obj_env, *obj_wrappers, *ppo]
+  max_timesteps: 1.2e6
+  n_envs: 32
+  subproc: true
+  n_steps: 256
+  batch_size: 0.25
+  n_epochs: 20
+  policy_lr: 1e-2
+  clip_range: 0.15
+  ent_coef: 0.005
+  vf_coef: 0.5
+  normalize_advantages: "rollout"
+
+# =====================
+# Public variants
+# =====================
+objects_ppo:
+  <<: *obj_ppo
+  spec:
+    <<: *spec_objects
+  description: "PPO using OCAtari object features for Breakout"
+
+objects_deterministic_ppo:
+  <<: [*obj_ppo, *env_deterministic]
+  spec:
+    <<: *spec_objects
+  description: "PPO object features without sticky actions"

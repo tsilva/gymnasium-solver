@@ -460,6 +460,8 @@ class RolloutCollector():
         self._obs_stats = RunningStats()
         self._rew_stats = RunningStats()
         self._base_stats = RunningStats()
+        self._adv_stats = RunningStats()
+        self._ret_stats = RunningStats()
 
         # Action histogram (discrete); grows dynamically as needed
         self._action_counts = None
@@ -654,6 +656,9 @@ class RolloutCollector():
         dones_slice = self._buffer.dones_buf[start:end]
         timeouts_slice = self._buffer.timeouts_buf[start:end]
 
+        # Track valid mask for MC-style targets so advantage stats ignore trailing partials
+        valid_mask_flat_for_stats: Optional[np.ndarray] = None
+
         if self.returns_type == "gae:rtg" and self.advantages_type == "gae":
             last_values_vec = self._predict_values_np(last_obs)
             bootstrapped_slice = self._buffer.bootstrapped_values_buf[start:end]
@@ -701,6 +706,8 @@ class RolloutCollector():
             if valid_mask_flat is not None:
                 returns_flat_env_major = returns_buf.transpose(1, 0).reshape(-1)
                 self._base_stats.update(returns_flat_env_major[valid_mask_flat])
+                # Record mask to compute advantage stats later on valid positions only
+                valid_mask_flat_for_stats = valid_mask_flat
 
             advantages_buf = returns_buf
             if self.advantages_type == "baseline":
@@ -716,6 +723,20 @@ class RolloutCollector():
         # Normalize advantages if requested
         if self.normalize_advantages:
             advantages_buf = _normalize_advantages(advantages_buf)
+
+        # Update running return/advantage stats (post-normalization so it reflects training distribution)
+        ret_flat_env_major = returns_buf.transpose(1, 0).reshape(-1)
+        if valid_mask_flat_for_stats is not None:
+            self._ret_stats.update(ret_flat_env_major[valid_mask_flat_for_stats])
+        else:
+            self._ret_stats.update(ret_flat_env_major)
+
+        # Advantages
+        adv_flat_env_major = advantages_buf.transpose(1, 0).reshape(-1)
+        if valid_mask_flat_for_stats is not None:
+            self._adv_stats.update(adv_flat_env_major[valid_mask_flat_for_stats])
+        else:
+            self._adv_stats.update(adv_flat_env_major)
 
         return advantages_buf, returns_buf
 
@@ -940,6 +961,12 @@ class RolloutCollector():
         # Baseline statistics from global aggregates
         baseline_mean = self._base_stats.mean()
         baseline_std = self._base_stats.std()
+        # Advantage statistics (post-normalization if enabled)
+        adv_mean = self._adv_stats.mean()
+        adv_std = self._adv_stats.std()
+        # Return statistics (post-normalization if enabled)
+        ret_mean = self._ret_stats.mean()
+        ret_std = self._ret_stats.std()
 
         return {
             "total_timesteps": self.total_steps,  # canonical step counter for history
@@ -957,6 +984,10 @@ class RolloutCollector():
             "obs/std": obs_std,
             "reward/mean": reward_mean,
             "reward/std": reward_std,
+            "return/mean": ret_mean,
+            "return/std": ret_std,
+            "adv/mean": adv_mean,
+            "adv/std": adv_std,
             "policy/action_mean": action_mean,
             "policy/action_std": action_std,
             "action_dist": action_dist,

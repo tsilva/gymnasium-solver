@@ -2,9 +2,6 @@
 
 ## Pong-v5_objects
 
-- FEAT: prefix metrics (eg: time/epoch, time/step, etc., env/obs_mean, env/obs_std, env/) - use chatg
-
-
 - Check if env gets solved when its deterministic
 - try debug server
 - BUG: fix duplicate object error in feature extractor
@@ -14,6 +11,7 @@
 
 - Track advantage mean/std
 - Track returns mean/std
+- Track current episod return/length
 
 ## ALERTS
 

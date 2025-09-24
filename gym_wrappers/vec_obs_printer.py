@@ -105,6 +105,8 @@ class VecObsBarPrinter(VecEnvWrapper):
         self._current_ep_len: int = 0
         self._last_ep_return: Optional[float] = None
         self._last_ep_len: Optional[int] = None
+        # Running mean over completed episodes in this session
+        self._sum_ep_returns: float = 0.0
 
         # Try reading spec to pre-populate labels/ranges
         self._init_from_spec()
@@ -119,6 +121,7 @@ class VecObsBarPrinter(VecEnvWrapper):
         self._current_ep_len = 0
         self._last_ep_return = None
         self._last_ep_len = None
+        self._sum_ep_returns = 0.0
         # Print initial observation if enabled
         if self._enable:
             self._print_obs(obs, rewards=None, dones=None)
@@ -141,6 +144,11 @@ class VecObsBarPrinter(VecEnvWrapper):
                 self._last_ep_return = float(self._current_ep_return)
                 self._last_ep_len = int(self._current_ep_len)
                 self._ep_count += 1
+                # Update running sum for mean across played episodes
+                try:
+                    self._sum_ep_returns += float(self._last_ep_return)
+                except Exception:
+                    pass
                 self._current_ep_return = 0.0
                 self._current_ep_len = 0
         except Exception:
@@ -350,7 +358,7 @@ class VecObsBarPrinter(VecEnvWrapper):
         except Exception:
             env_id = None
 
-        # Build header with episode info and last episode reward
+        # Build header with episode info, last reward, and running mean reward
         curr_ep_idx = self._ep_count + 1  # 1-based index for current episode
         if self._target_episodes is not None and self._target_episodes > 0:
             ep_prog = f"Ep {curr_ep_idx}/{self._target_episodes}"
@@ -361,7 +369,12 @@ class VecObsBarPrinter(VecEnvWrapper):
             if isinstance(self._last_ep_return, (int, float))
             else "last_ep_r=--"
         )
-        header_main = "  ".join(x for x in [env_id or "", ep_prog, last_ep] if x)
+        mean_ep = (
+            f"ep_rew_mean={(self._sum_ep_returns / self._ep_count):+.3f}"
+            if isinstance(self._ep_count, int) and self._ep_count > 0
+            else "ep_rew_mean=--"
+        )
+        header_main = "  ".join(x for x in [env_id or "", ep_prog, last_ep, mean_ep] if x)
         print(header_main)
         if status:
             print(status)

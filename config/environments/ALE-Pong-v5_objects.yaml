@@ -8,6 +8,9 @@ eval_freq_epochs: 10
 eval_episodes: 10  
 gamma: 0.99
 gae_lambda: 0.95
+# NOTE: agent learns easily when env is deterministic
+env_kwargs:
+  repeat_action_probability: 0.0  # Makes the environment deterministic
 env_wrappers:
   - id: PongV5_FeatureExtractor
   - id: DiscreteActionSpaceRemapperWrapper
@@ -39,4 +42,3 @@ ppo:
   policy_lr: 2e-3 #4e-2 # TODO: approx_kl = inf if 1e-1
   normalize_advantages: "rollout"
   #target_kl: 0.02
-  eval_deterministic: true

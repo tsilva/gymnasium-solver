@@ -11,48 +11,68 @@ _global:
   # train/val/test namespaces when ordering per-section.
   # Keys not listed here will follow alphabetically within their section.
   key_priority:
-    - "ep_rew/last"
-    - "ep_rew/mean"
-    - "ep_rew/best"
-    - "ep_len/last"
-    - "ep_len/mean"
-    - "ppo/approx_kl"
+    # === Performance: top-level reward and episode stats (what you care about improving) ===
+    - "train/ep_rew/mean"
+    - "train/ep_rew/best"
+    - "train/ep_rew/last"
+    - "train/ep_len/mean"
+    - "train/ep_len/last"
+    - "reward/mean" # TODO; consider grouping env metrics together, eg: env/reward/* env/obs/*, or rollout/reward/* rollout/obs/*, whichever makes more sense
+    - "reward/std"
+
+    # === PPO diagnostics: policy update behavior (how stable/efficient the optimization is) ===
     - "ppo/clip_fraction"
-    - "policy/entropy"
-    - "policy/action_std"
+    - "ppo/approx_kl"
+    - "ppo/kl"
+    - "ppo/explained_variance"
+
+    # === Losses: optimization targets for PPO (policy/value/entropy contributions) ===
+    - "loss/total"
     - "loss/policy"
     - "loss/value"
-    - "ppo/explained_variance"
-    - "ppo/kl"
-    - "loss/entropy"
     - "loss/value_scaled"
-    - "loss/total"
+    - "loss/entropy"
+    - "loss/entropy_scaled"
+
+    # === Policy stats: entropy and action distribution (exploration & action spread) ===
+    - "policy/entropy"
+    - "policy/action_mean"
+    - "policy/action_std"
+
+    # === Gradients: training stability (magnitude of updates across model parts) ===
     - "grad_norm/all"
     - "grad_norm/backbone"
     - "grad_norm/policy_head"
     - "grad_norm/value_head"
+
+    # === Observations: input scaling sanity check (mean/std of environment observations) ===
     - "obs/mean"
     - "obs/std"
-    - "reward/mean"
-    - "reward/std"
-    - "total_timesteps"
-    - "epoch"
-    - "timing/fps"
-    - "timing/fps_instant"
-    - "timing/time_elapsed"
-    - "total_episodes"
-    - "total_rollouts"
+
+    # === Rollout & sampling: how many timesteps/episodes are being collected per epoch ===
     - "rollout/timesteps"
     - "rollout/episodes"
     - "rollout/fps"
+    - "total_episodes"
+    - "total_rollouts"
+    - "total_timesteps"
+    - "epoch"
+
+    # === Timing & system: wallclock training throughput and ETA ===
+    - "timing/fps"
+    - "timing/fps_instant"
+    - "timing/time_elapsed"
     - "timing/eta_s"
+
+    # === Baseline stats: advantage normalization baselines (if used) ===
     - "baseline_mean"
     - "baseline_std"
-    - "loss/entropy_scaled"
+
+    # === Hyperparameters: static knobs that don’t change during training ===
     - "hp/policy_lr"
     - "hp/clip_range"
     - "hp/ent_coef"
-    - "hp/vf_coef" 
+    - "hp/vf_coef"
   
   step_key: "train/total_timesteps"
 

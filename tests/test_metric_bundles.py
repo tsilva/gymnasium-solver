@@ -124,3 +124,20 @@ def test_ppo_alerts_clip_fraction_high_average_triggers():
     alerts = _collect_alerts(bundle, history)
     alert_ids = {alert._id for alert in alerts}
     assert "train/clip_fraction/oob_max" in alert_ids
+
+
+def test_ppo_alerts_explained_var_worse_than_mean():
+    bundle = PPOAlerts(agent=None)
+    history = {
+        "train/explained_var": [
+            (10, -0.05),
+            (11, -0.02),
+            (12, -0.03),
+            (13, -0.04),
+            (14, -0.01),
+        ]
+    }
+
+    alerts = _collect_alerts(bundle, history)
+    alert_ids = {alert._id for alert in alerts}
+    assert "train/explained_var/worse_than_mean" in alert_ids

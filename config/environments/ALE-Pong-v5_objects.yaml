@@ -10,6 +10,10 @@ gamma: 0.99
 gae_lambda: 0.95
 env_wrappers:
   - id: PongV5_FeatureExtractor
+  - id: DiscreteActionSpaceRemapperWrapper
+    mapping: [0, 2, 3]
+
+# TODO: test performance when NOOP is allowed
 
 # NEXT: 
 # - Use a constant ent_coef ≈ 0.004–0.005 (avoid fast decay to 0.001; it pushes early exploitation).
@@ -31,6 +35,6 @@ ppo:
   #ent_coef_schedule_target_value: 0.003
   #ent_coef_schedule_target_progress: 0.5
   clip_range: 0.2
-  policy_lr: 1e-3 #4e-2 # TODO: approx_kl = inf if 1e-1
+  policy_lr: 2e-3 #4e-2 # TODO: approx_kl = inf if 1e-1
   normalize_advantages: "rollout"
   #target_kl: 0.02

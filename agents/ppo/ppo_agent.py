@@ -104,6 +104,7 @@ class PPOAgent(BaseAgent):
 
             kl_div = (old_logprobs - new_logprobs).mean()
             approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
+            # TODO: should I make metric explain that explained_var is for value head?
             explained_var = 1 - torch.var(returns - values_pred) / torch.var(returns)
         
         metrics = {
@@ -117,7 +118,7 @@ class PPOAgent(BaseAgent):
             'clip_fraction': clip_fraction.detach(),
             'kl_div': kl_div.detach(),
             'approx_kl': approx_kl.detach(),
-            'explained_variance': explained_var.detach()
+            'explained_var': explained_var.detach()
         }
 
         # In case the KL divergence exceeded the target, stop training on this epoch

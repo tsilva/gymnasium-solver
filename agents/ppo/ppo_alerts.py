@@ -1,6 +1,7 @@
 from utils.metric_bundles import MetricMonitorBundle
 from utils.metrics_monitor import MetricAlert
 
+# TODO: CLEAN this up
 
 class PPOAlerts(MetricMonitorBundle):
     """PPO-specific metric alert bundle.
@@ -125,6 +126,34 @@ class PPOAlerts(MetricMonitorBundle):
                 metric=metric_key,
                 message=f"{smoothed_fmt} exceeds the stable range (> {high_fmt})",
                 tip="Check for value leakage or normalize returns/advantages more aggressively.",
+            )
+
+    def _monitor_explained_var_worse_than_mean(self, history: dict):
+        """Warn when value head explains less than the mean baseline.
+
+        The `explained_var` metric is computed as 1 - Var(target - pred) / Var(target).
+        Values < 0 mean the predictor performs worse than predicting the mean of
+        the targets. We smooth over a short window to reduce noise and trigger a
+        warning when the average is below 0.0.
+        """
+        metric_key = "train/explained_var"
+        value = self._smoothed_metric_value(history, metric_key)
+        if value is None:
+            return None
+        try:
+            current = float(value)
+        except (TypeError, ValueError):
+            return None
+
+        threshold = 0.0
+        if current < threshold:
+            smoothed_fmt = self._format_smoothed_value(history, metric_key, current)
+            threshold_fmt = self._format_metric_value(metric_key, threshold)
+            return MetricAlert(
+                _id=f"{metric_key}/worse_than_mean",
+                metric=metric_key,
+                message=f"{smoothed_fmt} < {threshold_fmt}; predicting worse than mean",
+                tip="Strengthen value learning (increase vf_coef or value lr) and verify returns normalization.",
             )
 
         

@@ -3,6 +3,9 @@ from .discrete_encoder import DiscreteEncoder
 from .env_wrapper_registry import EnvWrapperRegistry
 from .MountainCarV0.reward_shaper import MountainCarV0_RewardShaper
 from .pixel_observation import PixelObservationWrapper as _PixelObservationWrapper
+from .discrete_action_space_remapper import (
+    DiscreteActionSpaceRemapperWrapper,
+)
 from .PongV5.feature_extractor import PongV5_FeatureExtractor
 from .PongV5.reward_shaper import PongV5_RewardShaper
 from .VizDoom.reward_shaper import VizDoom_RewardShaper
@@ -18,6 +21,7 @@ class PixelObservationWrapper(_PixelObservationWrapper):
 
 _wrappers_to_register = [
     DiscreteEncoder,
+    DiscreteActionSpaceRemapperWrapper,
     PongV5_FeatureExtractor,
     PongV5_RewardShaper,
     MountainCarV0_RewardShaper,

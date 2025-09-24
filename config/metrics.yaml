@@ -22,7 +22,7 @@ _global:
     - "action_std"
     - "policy_loss"
     - "value_loss"
-    - "explained_variance"
+    - "explained_var"
     - "kl_div"
     - "entropy_loss"
     - "value_loss_scaled"
@@ -219,8 +219,8 @@ clip_fraction:
   min: 0.0
   max: 1.0
 
-explained_variance:
-  description: "How well the value function predicts returns (1.0 = perfect, 0.0 = no better than mean)"
+explained_var:
+  description: "How well the value function predicts returns (1.0 = perfect, 0.0 = no better than mean, <0.0 = worse than mean)"
   precision: 3
   min: -1.0
   max: 1.0

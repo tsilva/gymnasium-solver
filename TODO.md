@@ -25,8 +25,7 @@
 
 - Add alert for when ep_rew_mean starts stalling / downward trend
 - Make sure metrics.yaml is up to date with all metrics with correct names
-- FEAT: add support for scheduler min and progress decoupled from timesteps, perhaps by specifying percentage -> value tuples and have the scheduler interpolate between those, allowing dynamic linear schedules that perform differently across the training (eg: higher early, lower late)
-- FEAT: generalize decay schedule further by specifying decay start
+- FEAT: add support for scheduler min and progress decoupled from timesteps, perhaps by specifying percentage -> value tuples and have the scheduler interpolate between those, allowing dynamic linear schedules that perform differently across the training (eg: higher early, lower late); generalize decay schedule further by specifying decay start
 - PERF: dont fork subprocesses before confirming run
 - FEAT: add ability to tell LLM to inspect last N runs by providing a run registry json that has timestamps and other metadata, always sort by timestamp descending, ensure lock on write
 - BUG: env smoke tests not passing

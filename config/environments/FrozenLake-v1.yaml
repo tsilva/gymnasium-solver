@@ -2,19 +2,21 @@
 # TODO: reward shape to receive -1 on movement
 # TODO: override reward threshold for deterministic
 
-env_id: FrozenLake-v1
-env_kwargs:
-  is_slippery: true
-  map_name: "4x4"
-env_wrappers:
-  - id: DiscreteEncoder
-    encoding: array
-eval_episodes: 10
-eval_freq_epochs: 10
-eval_recording_freq_epochs: 10
+_base: &base
+  env_id: FrozenLake-v1
+  env_kwargs:
+    is_slippery: true
+    map_name: "4x4"
+  env_wrappers:
+    - id: DiscreteEncoder
+      encoding: array
+  eval_episodes: 10
+  eval_freq_epochs: 10
+  eval_recording_freq_epochs: 10
 
 # SOLVED: 122k timesteps
 ppo:
+  <<: *base
   n_envs: 8
   algo_id: ppo
   n_steps: 512
@@ -24,6 +26,7 @@ ppo:
   hidden_dims: [64]
 
 reinforce:
+  <<: *base
   algo_id: reinforce
   max_timesteps: 2e5
   n_steps: 512

@@ -231,17 +231,31 @@ def _guess_config_id_from_environments(env_id: str, algo_id: str) -> Optional[st
             doc = read_yaml(yf) or {}
             if not isinstance(doc, dict):
                 continue
-            # Detect new style
-            if "env_id" in doc and isinstance(doc.get("env_id"), str):
-                # base at root, variants under keys that are dicts
-                project = doc.get("project_id") or yf.stem.replace(".new", "")
+            # Detect new style (support `_base` anchor mapping as well)
+            project = (
+                doc.get("project_id")
+                or (doc.get("_base") or {}).get("project_id")
+                or yf.stem.replace(".new", "")
+            )
+            has_env_root = isinstance(doc.get("env_id"), str)
+            has_base = isinstance(doc.get("_base"), dict)
+            base_env = None
+            if has_env_root:
                 base_env = doc.get("env_id")
+            elif has_base and isinstance(doc["_base"].get("env_id"), str):
+                base_env = doc["_base"].get("env_id")
+            if base_env is not None:
+                # base at root or under _base, variants under keys that are dicts
                 for k, v in doc.items():
-                    if isinstance(v, dict):
-                        # algo_id may be inside the variant, else assume section name
-                        cand_algo = v.get("algo_id") or str(k)
-                        if base_env == env_id and cand_algo == algo_id:
-                            candidates.append(f"{project}_{k}")
+                    if not isinstance(v, dict):
+                        continue
+                    # Skip meta/utility sections (e.g., _base)
+                    if isinstance(k, str) and k.startswith("_"):
+                        continue
+                    # algo_id may be inside the variant, else assume section name
+                    cand_algo = v.get("algo_id") or str(k)
+                    if base_env == env_id and cand_algo == algo_id:
+                        candidates.append(f"{project}_{k}")
             else:
                 # Legacy style: id -> mapping
                 for k, v in doc.items():

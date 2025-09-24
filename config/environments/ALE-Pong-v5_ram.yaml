@@ -1,10 +1,12 @@
 # Pong with RAM observations challenge configurations
 
-env_id: ALE/Pong-v5
-obs_type: "ram"
-normalize_obs: "static"
+_base: &base
+  env_id: ALE/Pong-v5
+  obs_type: "ram"
+  normalize_obs: "static"
 
 ppo:
+  <<: *base
   algo_id: ppo
   max_timesteps: 5e6
   n_envs: 8               # Reduced for better sample efficiency
@@ -16,6 +18,7 @@ ppo:
   eval_episodes: 10        # More episodes for reliable evaluation
 
 reinforce:
+  <<: *base
   algo_id: reinforce
   max_timesteps: 1e7
   n_envs: 8

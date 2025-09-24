@@ -1,17 +1,19 @@
 # MountainCar standard challenge configurations
 
-project_id: "MountainCar-v0"
-env_id: MountainCar-v0
-eval_freq_epochs: 10
-eval_episodes: 10
-frame_stack: 3
-env_wrappers:
-  - id: MountainCarV0_RewardShaper
-    position_reward_scale: 100.0
-    velocity_reward_scale: 10.0
-    height_reward_scale: 50.0
+_base: &base
+  project_id: "MountainCar-v0"
+  env_id: MountainCar-v0
+  eval_freq_epochs: 10
+  eval_episodes: 10
+  frame_stack: 3
+  env_wrappers:
+    - id: MountainCarV0_RewardShaper
+      position_reward_scale: 100.0
+      velocity_reward_scale: 10.0
+      height_reward_scale: 50.0
 
 ppo:
+  <<: *base
   algo_id: ppo
   n_envs: 16
   max_timesteps: 1e6
@@ -24,6 +26,7 @@ ppo:
   max_epochs: 1000
 
 reinforce:
+  <<: *base
   algo_id: reinforce
   max_timesteps: 1e6
   normalize_obs: true

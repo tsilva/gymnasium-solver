@@ -259,7 +259,12 @@ class Config:
             # Load the base config from the YAML file
             config_field_names = set(cls.__dataclass_fields__.keys())
             base_config: Dict[str, Any] = {k: v for k, v in doc.items() if k in config_field_names}
-            project_id = base_config.get("project_id", path.stem)
+            # Allow project_id to be provided under a `_base` section as well
+            project_id = (
+                base_config.get("project_id")
+                or (doc.get("_base") or {}).get("project_id")
+                or path.stem
+            )
 
             # Search for variant configs in the YAML file
             # and add them to the all_configs dictionary 
@@ -270,6 +275,10 @@ class Config:
 
                 # Skip non-dict fields
                 if not isinstance(v, dict): continue
+
+                # Skip meta/utility sections (e.g., anchors) prefixed with underscore
+                if isinstance(k, str) and k.startswith("_"):
+                    continue
 
                 # Create the variant config
                 variant_id = str(k)

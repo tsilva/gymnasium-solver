@@ -78,25 +78,26 @@ class MetricsMonitor:
                 if epoch is not None:
                     epochs.add(epoch)
             
-        # For each metric, add to active alerts if alerts
-        # are present, if no alerts, remove previous alerts
-        add_alerts = {}
-        remove_alerts = []
-        for metric, alerts in metric_alerts_map.items():
-            if alerts: add_alerts[metric] = alerts
-            else: remove_alerts.append(metric)
+        # Compute the new set of active alerts strictly from this check().
+        # Any metric not re-emitting an alert in the current epoch is cleared.
+        new_active: Dict[str, List[MetricAlert]] = {
+            metric: alerts for metric, alerts in metric_alerts_map.items() if alerts
+        }
 
-        # Remove alerts that are no longer present
-        for metric in remove_alerts: del self.active_alerts[metric]
+        # Derive added/removed by diffing against the previous snapshot
+        prev_keys = set(self.active_alerts.keys())
+        new_keys = set(new_active.keys())
+        added_keys = list(new_keys - prev_keys)
+        removed_keys = list(prev_keys - new_keys)
 
-        # Add new alerts
-        self.active_alerts.update(add_alerts)   
+        # Swap in the fresh snapshot
+        self.active_alerts = new_active
 
-        # Return active/added/removed alerts
+        # Return active/added/removed alerts (by metric key)
         return dict(
-            active=list(self.active_alerts.keys()),
-            added=list(add_alerts.keys()),
-            removed=list(remove_alerts)
+            active=list(new_keys),
+            added=added_keys,
+            removed=removed_keys,
         )
 
     def get_active_alerts(self) -> Dict[str, List["MetricAlert"]]:

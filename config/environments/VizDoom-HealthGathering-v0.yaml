@@ -1,14 +1,16 @@
-env_id: VizDoom-HealthGathering-v0
-policy: 'cnn'
-grayscale_obs: true
-resize_obs: true
-frame_stack: 4
-accelerator: 'gpu'
-devices: 'auto'
-eval_freq_epochs: 1
-eval_episodes: 1
+_base: &base
+  env_id: VizDoom-HealthGathering-v0
+  policy: 'cnn'
+  grayscale_obs: true
+  resize_obs: true
+  frame_stack: 4
+  accelerator: 'gpu'
+  devices: 'auto'
+  eval_freq_epochs: 1
+  eval_episodes: 1
 
 ppo:
+  <<: *base
   algo_id: ppo
   max_timesteps: 2e6
   n_envs: 8

@@ -61,12 +61,14 @@ python inspector.py --run-id @latest-run --port 7860 --host 127.0.0.1
 Configs live in `config/environments/*.yaml`. New style puts base fields at the top and per-algorithm variants under their own key. Linear schedules like `lin_0.001` are parsed automatically. The loader selects an algo-specific config subclass based on `algo_id` (e.g., `PPOConfig`, `REINFORCEConfig`).
 
 ```yaml
-# New per-file style
+# New per-file style (with YAML anchors)
 # Tip: omit project_id to default to the filename (e.g., CartPole-v1)
-env_id: CartPole-v1
-eval_episodes: 10
+_base: &base
+  env_id: CartPole-v1
+  eval_episodes: 10
 
 ppo:
+  <<: *base
   algo_id: ppo
   n_envs: 8
   max_timesteps: 1e5
@@ -82,7 +84,7 @@ Selection:
 - Programmatic (Python): `load_config("CartPole-v1", "ppo")`; pass the environment id and variant explicitly because the compact `"CartPole-v1_ppo"` form is no longer supported.
 - CLI (train.py): pass config as positional `CartPole-v1:ppo` or flag `--config_id "CartPole-v1:ppo"` (colon, not underscore). The CLI enforces providing a variant.
 Callers must always supply a variant; the loader no longer falls back to the first block in the YAML file.
-The loader remains compatible with the legacy multi-block format for a transitional period. When `project_id` is omitted in environment YAMLs, it is inferred from the file name.
+The loader supports base fields either at the document root or under `_base` with `<<: *base` merges in each variant. It remains compatible with the legacy multi-block format for a transitional period. When `project_id` is omitted in environment YAMLs, it is inferred from the file name.
 
 Key fields: `env_id`, `algo_id`, `n_envs`, `n_steps`, `batch_size`, `max_timesteps`, `policy` (`mlp|cnn`), `hidden_dims`, `obs_type` (`rgb|ram|objects` for ALE), `optimizer` (`adamw` default; supports `adam|adamw|sgd`).
 

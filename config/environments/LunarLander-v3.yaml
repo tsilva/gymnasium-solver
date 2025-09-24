@@ -1,13 +1,15 @@
-env_id: LunarLander-v3
-eval_episodes: 10
-hidden_dims: [128, 128]
-n_envs: 16
-n_steps: 1024
-ent_coef: 0.25
-#max_timesteps: 1e6
-#max_episode_steps: 500
+_base: &base
+  env_id: LunarLander-v3
+  eval_episodes: 10
+  hidden_dims: [128, 128]
+  n_envs: 16
+  n_steps: 1024
+  ent_coef: 0.25
+  #max_timesteps: 1e6
+  #max_episode_steps: 500
 
 reinforce_baseline:
+  <<: *base
   algo_id: reinforce
   returns_type: "mc:episode"
   advantages_type: "baseline"
@@ -15,6 +17,7 @@ reinforce_baseline:
   #normalize_advantages: "batch"
 
 reinforce_baseline2:
+  <<: *base
   algo_id: reinforce
   returns_type: "mc:rtg"          # was "mc:episode"
   advantages_type: "baseline"
@@ -27,6 +30,7 @@ reinforce_baseline2:
 
 # Previous solve: 983040 timesteps (~33m)
 ppo:
+  <<: *base
   algo_id: ppo
   n_envs: 12
   max_timesteps: 5e6

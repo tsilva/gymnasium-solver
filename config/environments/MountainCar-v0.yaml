@@ -1,13 +1,15 @@
 # MountainCar standard challenge configurations
 
-env_id: MountainCar-v0
-eval_warmup_epochs: 50
-eval_freq_epochs: 10
-eval_episodes: 10
-hidden_dims: [128, 128]
-gamma: 0.999
+_base: &base
+  env_id: MountainCar-v0
+  eval_warmup_epochs: 50
+  eval_freq_epochs: 10
+  eval_episodes: 10
+  hidden_dims: [128, 128]
+  gamma: 0.999
 
 ppo:
+  <<: *base
   algo_id: ppo
   n_envs: 16
   n_steps: 1024
@@ -16,6 +18,7 @@ ppo:
   policy_lr: 1e-4
 
 reinforce:
+  <<: *base
   algo_id: reinforce
   n_envs: 8
   n_steps: 1024

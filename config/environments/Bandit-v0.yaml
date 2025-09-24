@@ -1,11 +1,13 @@
-env_id: Bandit-v0
-env_kwargs:
-  n_arms: 10
-  means: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-  stds: 1
-  episode_length: 1
+_base: &base
+  env_id: Bandit-v0
+  env_kwargs:
+    n_arms: 10
+    means: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    stds: 1
+    episode_length: 1
 
 ppo:
+  <<: *base
   algo_id: ppo
   max_timesteps: 20_000
   n_envs: 16

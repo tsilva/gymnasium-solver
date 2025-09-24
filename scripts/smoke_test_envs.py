@@ -28,21 +28,35 @@ def _collect_env_config_map(config_dir: Path) -> Dict[str, Dict[str, Any]]:
                 continue
         except Exception:
             continue
-        # New style detection: env_id at root and dict fields present
-        if isinstance(doc.get("env_id"), str):
-            project = doc.get("project_id") or path.stem.replace(".new", "")
+        # New style detection: env_id at root OR under _base; dict fields present
+        has_env_root = isinstance(doc.get("env_id"), str)
+        has_base = isinstance(doc.get("_base"), dict)
+        base_section = doc.get("_base") if has_base else {}
+        if has_env_root or (has_base and isinstance(base_section.get("env_id"), str)):
+            project = (
+                doc.get("project_id")
+                or (base_section.get("project_id") if isinstance(base_section, dict) else None)
+                or path.stem.replace(".new", "")
+            )
             field_names = {
                 # Minimal set sufficient to disambiguate variant sections
                 "env_id", "algo_id", "n_envs", "n_steps", "batch_size", "n_epochs",
                 "gamma", "gae_lambda", "ent_coef", "vf_coef", "policy", "policy_kwargs",
                 "obs_type", "frame_stack", "grayscale_obs", "resize_obs", "env_kwargs",
                 "project_id", "accelerator", "devices", "eval_freq_epochs", "eval_episodes",
+                "eval_recording_freq_epochs", "eval_deterministic", "env_wrappers", "seed", "subproc",
             }
-            base = {k: v for k, v in doc.items() if k in field_names}
+            base_root = {k: v for k, v in doc.items() if k in field_names}
+            # allow _base to supply fields when using anchor-based style
+            if isinstance(base_section, dict):
+                base_root.update({k: v for k, v in base_section.items() if k in field_names})
             for k, v in doc.items():
                 if k in field_names or not isinstance(v, dict):
                     continue
-                cfg = dict(base)
+                # Skip meta/utility sections (e.g., _base)
+                if isinstance(k, str) and k.startswith("_"):
+                    continue
+                cfg = dict(base_root)
                 cfg.update(v)
                 cfg.setdefault("algo_id", str(k))
                 cid = f"{project}_{k}"

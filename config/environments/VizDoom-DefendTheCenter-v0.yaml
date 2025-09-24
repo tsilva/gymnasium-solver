@@ -1,14 +1,16 @@
-env_id: VizDoom-DefendTheCenter-v0
-policy: 'cnn'
-grayscale_obs: true
-resize_obs: true
-frame_stack: 4
-accelerator: 'gpu'
-devices: 'auto'
-eval_freq_epochs: 10
-eval_episodes: 1
+_base: &base
+  env_id: VizDoom-DefendTheCenter-v0
+  policy: 'cnn'
+  grayscale_obs: true
+  resize_obs: true
+  frame_stack: 4
+  accelerator: 'gpu'
+  devices: 'auto'
+  eval_freq_epochs: 10
+  eval_episodes: 1
 
 ppo:
+  <<: *base
   algo_id: ppo
   # Vectorization / rollout
   max_timesteps: 5e6

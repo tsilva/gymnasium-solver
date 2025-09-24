@@ -2,10 +2,9 @@
 
 # NEXT
 
-- REFACTOR: use anchors/aliases to streamline configs, initially by just adding a _base: that groups all orfan attributes and then making everyone inherit from it
-
 ## Pong-v5_objects
 
+- Merge config
 - Print when performing evaluation
 - TODO: add support for resuming with policy from previous run
 - Check if env gets solved when its deterministic
@@ -16,13 +15,10 @@
 - previous actions
 - force lower reward threshold
 
-## ALERTS
-
-- add progress metric 0-1 that uses total_timesteps/max_timesteps when available
-- FEAT: define min-max entropy on wandb dashboard
-- FEAT: infer min/max bounds based on configuration
-
 ## NEXT
+
+- FEAT: in the wandb dashboard we create, create a composite panel that shows all scaled losses together to understand their relative importance
+
 
 - FEAT: add support for scheduler min and progress decoupled from timesteps, perhaps by specifying percentage -> value tuples and have the scheduler interpolate between those, allowing dynamic linear schedules that perform differently across the training (eg: higher early, lower late)
 - FEAT: generalize decay schedule further by specifying decay start
@@ -31,7 +27,6 @@
 - BUG: env smoke tests not passing
 - FEAT: currently charts are indexed by n_envs * n_steps, index only by n_steps so we can compare performance of N_ENVS vs less envs; max_timesteps should also be indexed by that, as well as training progress
 - FEAT: add support for agents to handle their own save/load logic
-- FEAT: plot scaled losses together to understand their relative importance
 - FEAT: track dead relus
 - TEST: empirically verify that initial policy distribution is uniform (check if action mean starts at middle of action space and std is 0)
 - BUG: bandit env crashes because it tries to record

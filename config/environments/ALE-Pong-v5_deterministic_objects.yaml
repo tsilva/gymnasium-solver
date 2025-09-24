@@ -1,16 +1,18 @@
 # Pong with object-based observations and deterministic environment challenge configurations
 
-env_id: ALE/Pong-v5
-obs_type: "objects"
-env_wrappers:
-  - id: PongV5_FeatureExtractor
-env_kwargs:
-  repeat_action_probability: 0.0  # Makes the environment deterministic
-gamma: 0.99
-hidden_dims: [128, 128]
-eval_episodes: 10
+_base: &base
+  env_id: ALE/Pong-v5
+  obs_type: "objects"
+  env_wrappers:
+    - id: PongV5_FeatureExtractor
+  env_kwargs:
+    repeat_action_probability: 0.0  # Makes the environment deterministic
+  gamma: 0.99
+  hidden_dims: [128, 128]
+  eval_episodes: 10
 
 reinforce:
+  <<: *base
   algo_id: reinforce
   n_envs: 16
   n_steps: 1024
@@ -22,6 +24,7 @@ reinforce:
 
 # SOLVED: 3M timesteps (~17m)
 ppo:
+  <<: *base
   algo_id: ppo
   max_timesteps: 3.3e6
   n_envs: 16

@@ -1,16 +1,18 @@
 # Taxi standard challenge configurations
 
-env_id: Taxi-v3
-# Lower entropy; high (0.5) stalls learning on Taxi
-ent_coef: 0.01
-n_envs: 16
-eval_freq_epochs: 10
-eval_episodes: 10
-env_wrappers:
-  - id: DiscreteEncoder
-    encoding: array
+_base: &base
+  env_id: Taxi-v3
+  # Lower entropy; high (0.5) stalls learning on Taxi
+  ent_coef: 0.01
+  n_envs: 16
+  eval_freq_epochs: 10
+  eval_episodes: 10
+  env_wrappers:
+    - id: DiscreteEncoder
+      encoding: array
 
 ppo:
+  <<: *base
   algo_id: ppo
   max_timesteps: 10e6 #3e5
   # Slightly longer rollouts help stabilize updates on Taxi
@@ -30,6 +32,7 @@ ppo:
   eval_episodes: 10
 
 reinforce:
+  <<: *base
   algo_id: reinforce
   max_timesteps: 5e5
   n_steps: 256

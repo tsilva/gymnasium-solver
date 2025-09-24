@@ -11,6 +11,8 @@ _global:
   # train/val/test namespaces when ordering per-section.
   # Keys not listed here will follow alphabetically within their section.
   key_priority:
+      # === Overall training progress (0.0 → 1.0) ===
+      - "progress"
       # === Rollout (training samples from the environment) ===
       - "roll/ep_rew/mean"
       - "roll/ep_rew/best"
@@ -99,6 +101,12 @@ cnt/total_timesteps:
   description: "Cumulative number of environment steps taken across all training"
   precision: 0
   min: 0
+
+# Training progress (only logged when max_timesteps is defined)
+progress:
+  highlight: true
+  description: "Normalized training progress based on total vectorized steps (0.0 start → 1.0 at max_timesteps)"
+  precision: 2
 
 roll/timesteps:
   description: "Number of timesteps collected in the current rollout buffer"

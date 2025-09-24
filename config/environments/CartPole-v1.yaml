@@ -1,35 +1,37 @@
-
-seed: 42 # TODO: try different seed
-env_id: CartPole-v1
-algo_id: reinforce
-max_timesteps: 3e5
-normalize_obs: False # Normalization doesn't seem to help
-n_envs: 8
-n_steps: 1024
-policy_lr: 6e-3
-hidden_dims: [64, 64] # TODO: try changing this
-gamma: 0.99 # TODO: try increasing
-ent_coef: 0.0 # TODO: try increasing
-frame_stack: 1 # TODO: try changing this
-# TODO: try deterministic eval
-# TODO: monitor gradients
-eval_freq_epochs: 5
-eval_episodes: 100
+_base: &base
+  seed: 42 # TODO: try different seed
+  env_id: CartPole-v1
+  max_timesteps: 3e5
+  normalize_obs: False # Normalization doesn't seem to help
+  n_envs: 8
+  n_steps: 1024
+  policy_lr: 6e-3
+  hidden_dims: [64, 64] # TODO: try changing this
+  gamma: 0.99 # TODO: try increasing
+  ent_coef: 0.0 # TODO: try increasing
+  frame_stack: 1 # TODO: try changing this
+  # TODO: try deterministic eval
+  # TODO: monitor gradients
+  eval_freq_epochs: 5
+  eval_episodes: 100
 
 # Unsolved: 300k timesteps
 reinforce_vanilla:
+  <<: *base
   algo_id: reinforce
   returns_type: "mc:episode"
   policy_targets: "returns"
 
 # Solved: 82k timesteps
 reinforce_rtg:
+  <<: *base
   algo_id: reinforce
   returns_type: "mc:rtg"
   policy_targets: "returns"
   normalize_returns: "batch"
 
 reinforce_baseline:
+  <<: *base
   algo_id: reinforce
   returns_type: "mc:episode"
   advantages_type: "baseline"
@@ -39,6 +41,7 @@ reinforce_baseline:
 # TODO: same as using returns... investigate
 # Solved: 82k timesteps
 reinforce_baseline_rtg:
+  <<: *base
   algo_id: reinforce
   returns_type: "mc:rtg"
   advantages_type: "baseline"
@@ -47,6 +50,7 @@ reinforce_baseline_rtg:
 
 # Tuned: n_envs=8, n_steps=32 => total_timesteps=15k
 ppo:
+  <<: *base
   algo_id: ppo
   max_timesteps: 50000
   n_envs: 8

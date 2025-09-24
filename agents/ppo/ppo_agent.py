@@ -118,7 +118,7 @@ class PPOAgent(BaseAgent):
             'opt/ppo/clip_fraction': clip_fraction.detach(),
             'opt/ppo/kl': kl_div.detach(),
             'opt/ppo/approx_kl': approx_kl.detach(),
-            'opt/value/explained_variance': explained_var.detach(),
+            'opt/value/explained_var': explained_var.detach(),
         }
 
         # In case the KL divergence exceeded the target, stop training on this epoch

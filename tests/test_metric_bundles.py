@@ -72,26 +72,26 @@ def test_common_alerts_guard_config_bounds():
     assert "train/opt/ppo/clip_fraction/above_max" in alert_ids
 
 
-def test_ppo_alerts_explained_variance_low():
+def test_ppo_alerts_explained_var_low():
     bundle = PPOAlerts(agent=None)
     history = {
-        "train/opt/value/explained_variance": [(1000, -0.4)],
+        "train/opt/value/explained_var": [(1000, -0.4)],
     }
 
     alerts = _collect_alerts(bundle, history)
     alert_ids = {alert._id for alert in alerts}
-    assert "train/opt/value/explained_variance/too_low" in alert_ids
+    assert "train/opt/value/explained_var/too_low" in alert_ids
 
 
-def test_ppo_alerts_explained_variance_high():
+def test_ppo_alerts_explained_var_high():
     bundle = PPOAlerts(agent=None)
     history = {
-        "train/opt/value/explained_variance": [(2000, 1.2)],
+        "train/opt/value/explained_var": [(2000, 1.2)],
     }
 
     alerts = _collect_alerts(bundle, history)
     alert_ids = {alert._id for alert in alerts}
-    assert "train/opt/value/explained_variance/too_high" in alert_ids
+    assert "train/opt/value/explained_var/too_high" in alert_ids
 
 
 def test_ppo_alerts_clip_fraction_spike_not_flagged_by_average():
@@ -129,7 +129,7 @@ def test_ppo_alerts_clip_fraction_high_average_triggers():
 def test_ppo_alerts_explained_var_worse_than_mean():
     bundle = PPOAlerts(agent=None)
     history = {
-        "train/opt/value/explained_variance": [
+        "train/opt/value/explained_var": [
             (10, -0.05),
             (11, -0.02),
             (12, -0.03),
@@ -140,4 +140,4 @@ def test_ppo_alerts_explained_var_worse_than_mean():
 
     alerts = _collect_alerts(bundle, history)
     alert_ids = {alert._id for alert in alerts}
-    assert "train/opt/value/explained_variance/worse_than_mean" in alert_ids
+    assert "train/opt/value/explained_var/worse_than_mean" in alert_ids

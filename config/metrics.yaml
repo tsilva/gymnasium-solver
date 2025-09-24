@@ -38,7 +38,7 @@ _global:
       - "opt/ppo/clip_fraction"
       - "opt/ppo/kl"
       - "opt/ppo/approx_kl"
-      - "opt/value/explained_variance"
+      - "opt/value/explained_var"
       - "opt/loss/total"
       - "opt/loss/policy"
       - "opt/loss/value"
@@ -275,7 +275,7 @@ opt/ppo/clip_fraction:
   min: 0.0
   max: 1.0
 
-opt/value/explained_variance:
+opt/value/explained_var:
   description: "How well the value function predicts returns (1.0 = perfect, 0.0 = no better than mean, <0.0 = worse than mean)"
   precision: 3
   min: -1.0

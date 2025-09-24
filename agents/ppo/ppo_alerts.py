@@ -94,8 +94,8 @@ class PPOAlerts(MetricMonitorBundle):
                 tip="Decrease the learning rate or increase the clip range.",
             )
 
-    def _monitor_explained_variance_instability(self, history: dict):
-        metric_key = "train/opt/value/explained_variance"
+    def _monitor_explained_var_instability(self, history: dict):
+        metric_key = "train/opt/value/explained_var"
         value = self._smoothed_metric_value(history, metric_key)
         if value is None:
             return None
@@ -133,7 +133,7 @@ class PPOAlerts(MetricMonitorBundle):
         the targets. We smooth over a short window to reduce noise and trigger a
         warning when the average is below 0.0.
         """
-        metric_key = "train/opt/value/explained_variance"
+        metric_key = "train/opt/value/explained_var"
         value = self._smoothed_metric_value(history, metric_key)
         if value is None:
             return None

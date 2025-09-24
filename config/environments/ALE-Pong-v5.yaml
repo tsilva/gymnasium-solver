@@ -1,32 +1,37 @@
-# ALE/Pong-v5 unified configurations (rgb, ram, objects)
+# ALE/Pong-v5 configurations with explicit base envs and PPO overlays
 
-# Common env id anchor
+# Shared environment id
 _env: &env
   env_id: ALE/Pong-v5
+
+# Makes ALE deterministic by disabling sticky actions
+_env_deterministic: &env_deterministic
+  env_kwargs:
+    repeat_action_probability: 0.0
+
+# Shared algo anchors
+_ppo: &ppo
+  algo_id: ppo
 
 # =====================
 # RGB observation setup
 # =====================
-_rgb_base: &rgb_base
+_rgb_env: &rgb_env
   <<: *env
   obs_type: "rgb"
   policy: 'cnn'
-  # CNN defaults suitable for 84x84 inputs
+  grayscale_obs: true
+  resize_obs: true
   policy_kwargs:
     channels: [32, 64, 64]
     kernel_sizes: [8, 4, 3]
     strides: [4, 2, 1]
-  grayscale_obs: true
-  resize_obs: true
-  frame_stack: 4
   accelerator: 'gpu'
   devices: 'auto'
-  eval_freq_epochs: 1
-  eval_episodes: 1
 
-_rgb_ppo_base: &rgb_ppo_base
-  <<: *rgb_base
-  algo_id: ppo
+_rgb_ppo: &rgb_ppo
+  <<: [*rgb_env, *ppo]
+  frame_stack: 2
   max_timesteps: 5e6
   n_envs: 8
   n_steps: 256             # 8*256 = 2048 samples/update
@@ -34,26 +39,19 @@ _rgb_ppo_base: &rgb_ppo_base
   n_epochs: 3
   clip_range: 0.1
   policy_lr: 1e-4          # Slightly lower LR for stability on pixels
-  frame_stack: 2           # Improve temporal information (typical Atari default)
   eval_freq_epochs: 10     # Less frequent eval due to computational cost
   eval_episodes: 5
 
 # =====================
 # RAM observation setup
 # =====================
-_ram_base: &ram_base
+_ram_env: &ram_env
   <<: *env
   obs_type: "ram"
   normalize_obs: "static"
 
-_ram_env_deterministic: &ram_env_deterministic
-  <<: *ram_base
-  env_kwargs:
-    repeat_action_probability: 0.0  # Makes the environment deterministic
-
-_ram_ppo_base: &ram_ppo_base
-  <<: *ram_base
-  algo_id: ppo
+_ram_ppo: &ram_ppo
+  <<: [*ram_env, *ppo]
   max_timesteps: 5e6
   n_envs: 8               # Reduced for better sample efficiency
   n_steps: 512            # Reduced for more frequent updates
@@ -66,43 +64,31 @@ _ram_ppo_base: &ram_ppo_base
 # ==========================
 # Object observation setup
 # ==========================
-_obj_base: &obj_base
+_obj_env: &obj_env
   <<: *env
   obs_type: "objects"
   hidden_dims: [256, 256]
   eval_warmup_epochs: 100
-  eval_freq_epochs: 10 
-  eval_episodes: 10  
+  eval_freq_epochs: 10
+  eval_episodes: 10
   gamma: 0.99
   gae_lambda: 0.95
+
+_obj_wrappers_shaped: &obj_wrappers_shaped
   env_wrappers:
-    # Extract paddle/ball positions and velocities into compact normalized vector
-    - id: PongV5_FeatureExtractor
+    - { id: PongV5_FeatureExtractor }
+    - { id: DiscreteActionSpaceRemapperWrapper, mapping: [0, 2, 3] }
+    - { id: ActionRewardShaper, rewards: [0.001, 0.0, 0.0] }
 
-_obj_env_deterministic: &obj_env_deterministic
-  <<: *obj_base
-  env_kwargs:
-    repeat_action_probability: 0.0  # Makes the environment deterministic
-
-# Compose the full wrapper stack for objects (feature extractor + remap + shaped reward)
-_obj_wrappers_full: &obj_wrappers_full
-  - { id: PongV5_FeatureExtractor }
-  - { id: DiscreteActionSpaceRemapperWrapper, mapping: [0, 2, 3] }
-  - { id: ActionRewardShaper, rewards: [0.001, 0.0, 0.0] }
-
-_obj_current: &obj_current
-  <<: *obj_env_deterministic
-  env_wrappers: *obj_wrappers_full
-
-_obj_ppo_base: &obj_ppo_base
-  algo_id: ppo
+_obj_ppo: &obj_ppo
+  <<: [*obj_env, *obj_wrappers_shaped, *ppo]
   max_timesteps: 2e5
   n_envs: 32
   subproc: true
   vf_coef: 0.5
   n_epochs: 15
   n_steps: 256
-  batch_size: 0.25 
+  batch_size: 0.25
   ent_coef: 0.005
   clip_range: 0.2
   policy_lr: 2e-3
@@ -111,19 +97,21 @@ _obj_ppo_base: &obj_ppo_base
 # =====================
 # Public variants
 # =====================
+rgb_ppo:
+  <<: *rgb_ppo
 
-# RGB variants
-ppo_rgb:
-  <<: *rgb_ppo_base
+rgb_deterministic_ppo:
+  <<: [*rgb_ppo, *env_deterministic]
 
-# RAM variants
-ppo_ram:
-  <<: *ram_ppo_base
+ram_ppo:
+  <<: *ram_ppo
 
-ppo_deterministic_ram:
-  <<: [*ram_env_deterministic, *ram_ppo_base]
+ram_deterministic_ppo:
+  <<: [*ram_ppo, *env_deterministic]
 
-# Objects variants
-ppo_objects:
-  <<: [*obj_current, *obj_ppo_base]
+objects_ppo:
+  <<: *obj_ppo
+
+objects_deterministic_ppo:
+  <<: [*obj_ppo, *env_deterministic]
 

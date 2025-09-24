@@ -7,17 +7,18 @@
 - Ensure we solve deterministic variant without action reward shaping
 - Establish baseline for sticky actions variant
 - Test if wcan improve by using online feature normalization inside extractor (rolling averages)
+
+
 - Update reward threshold for reward shaped runs
 - TODO: add support for resuming with policy from previous run
 - try debug server
 - BUG: fix duplicate object error in feature extractor (run step by step in human mode and compare conflicted object data, against frame, create script for this)
-- online feature normalization inside extractor (rolling averages)
 - add env normalization support (use that instead of normalization from feature extractor)
 - previous actions
-- force lower reward threshold
 
 ## NEXT
 
+- Make sure metrics.yaml is up to date with all metrics with correct names
 - Merge spec into config yaml files2
 - FEAT: add support for scheduler min and progress decoupled from timesteps, perhaps by specifying percentage -> value tuples and have the scheduler interpolate between those, allowing dynamic linear schedules that perform differently across the training (eg: higher early, lower late)
 - FEAT: generalize decay schedule further by specifying decay start

@@ -1,20 +1,21 @@
 # TODO
 
+We currently use total_timesteps to tell us how many timesteps happened so far. And all our reporterd metrics are keyed under that metric. However, its not optimal
+because I cant compare runs that have different n_envs. Since these envs are collected under same policy it doesnt seem fair when comparing to less envs. So I think
+there should be another timestep metric that tracks the number of vectorized env.step() instead and that is the metric that everyone keys from. Think hard, make clean
+changes.
+
 ## Pong-v5_objects
 
 - Check if env gets solved when its deterministic
 - try debug server
 - BUG: fix duplicate object error in feature extractor
+- online feature normalization inside extractor (rolling averages)
 - add env normalization support (use that instead of normalization from feature extractor)
-
-## METRICS
-
-- Track advantage mean/std
-- Track returns mean/std
-- Track current episod return/length
 
 ## ALERTS
 
+- add progress metric 0-1 that uses total_timesteps/max_timesteps when available
 - FEAT: define min-max entropy on wandb dashboard
 - BUG: alerts are not making into table logger
 - FEAT: alert if action_mean doesnt start in expected bounds (initial policy not uniform)

@@ -364,6 +364,10 @@ class VecObsBarPrinter(VecEnvWrapper):
             ep_prog = f"Ep {curr_ep_idx}/{self._target_episodes}"
         else:
             ep_prog = f"Ep {curr_ep_idx}"
+        # Current episode progress (return and length)
+        cur_ep = f"cur_ep_r={self._current_ep_return:+.3f}"
+        cur_len = f"cur_len={int(self._current_ep_len)}"
+
         last_ep = (
             f"last_ep_r={self._last_ep_return:+.3f}"
             if isinstance(self._last_ep_return, (int, float))
@@ -374,7 +378,9 @@ class VecObsBarPrinter(VecEnvWrapper):
             if isinstance(self._ep_count, int) and self._ep_count > 0
             else "ep_rew_mean=--"
         )
-        header_main = "  ".join(x for x in [env_id or "", ep_prog, last_ep, mean_ep] if x)
+        header_main = "  ".join(
+            x for x in [env_id or "", ep_prog, cur_len, cur_ep, last_ep, mean_ep] if x
+        )
         print(header_main)
         if status:
             print(status)

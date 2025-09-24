@@ -84,26 +84,37 @@ def main():
             next_obs, rewards, dones, infos = env.step(actions_np)
             step += 1
 
+
             # Episode accounting based on VecEnv infos
             if hasattr(dones, "__len__") and len(dones) > 0 and bool(dones[0]):
                 # Try to read episode summary from info when available
                 ep_rew = None
+                ep_len = None
                 try:
                     info0 = infos[0]
                     ep = info0.get("episode") if isinstance(info0, dict) else None
                     if isinstance(ep, dict) and "r" in ep:
                         ep_rew = float(ep["r"])
+                    if isinstance(ep, dict) and "l" in ep:
+                        ep_len = int(ep["l"])
                 except Exception:
-                    ep_rew = None
+                    ep_rew = ep_rew
+                    ep_len = ep_len
 
                 reported_episodes += 1
                 if ep_rew is not None:
-                    print(f"[episodes {reported_episodes}/{target_eps}] last_rew={ep_rew:+.3f}")
+                    # Prefer episode summary from info when available
+                    last_len = ep_len if ep_len is not None else "--"
+                    print(
+                        f"[episodes {reported_episodes}/{target_eps}] last_rew={ep_rew:+.3f} last_len={last_len}"
+                    )
                 else:
                     print(f"[episodes {reported_episodes}/{target_eps}] finished")
 
-            # Advance observation
-            obs = next_obs
+                # Advance observation
+                obs = next_obs
+
+                # Nothing else to reset here; VecObsBarPrinter tracks ep counters for header
 
         print("Done.")
         return
@@ -136,10 +147,12 @@ def main():
             reported_episodes += 1
             metrics = collector.get_metrics()
             mean_rew = metrics.get('ep_rew/mean', 0)
+            last_len = int(_ep_len)
+            mean_len = metrics.get('ep_len/mean', 0)
             fps = metrics.get('rollout/fps', 0)
             print(
-                f"[episodes {reported_episodes}/{target_eps}] last_rew={ep_rew:.2f} "
-                f"mean_rew={mean_rew:.2f} fps={fps:.1f}"
+                f"[episodes {reported_episodes}/{target_eps}] last_rew={ep_rew:.2f} last_len={last_len} "
+                f"mean_rew={mean_rew:.2f} mean_len={int(mean_len)} fps={fps:.1f}"
             )
 
     print("Done.")

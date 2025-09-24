@@ -95,6 +95,12 @@ REINFORCE options: set `returns_type` to control Monte Carlo returns used for sc
 
 VizDoom support: set `env_id` to `VizDoom-DeadlyCorridor-v0`. Requires `pip install vizdoom` and access to `deadly_corridor.cfg`/`deadly_corridor.wad` (auto-discovered from the installed package, or set `VIZDOOM_SCENARIOS_DIR` or `env_kwargs.config_path`).
 
+PPO+Replay (experimental): enable light off-policy mixing à la ACER/P3O.
+- `replay_ratio`: extra off-policy minibatches per on-policy minibatch (e.g., 2–8). Default `0.0` (off).
+- `replay_buffer_size`: capacity in transitions (flattened). Default `0` (disabled).
+- `replay_is_clip`: cap for importance weights when sampling from replay (default `10.0`).
+Keeps the usual PPO GAE/entropy settings; off-policy updates use clipped IS weights and the standard clipped PPO objective.
+
 ### 🧰 Environment wrappers
 Register-by-name wrappers via `EnvWrapperRegistry` (see `gym_wrappers/__init__.py`). Available IDs:
 - `PixelObservationWrapper`

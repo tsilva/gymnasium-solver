@@ -234,9 +234,10 @@ class Config:
     def build_from_dict(cls, config_dict: Dict[str, Any]) -> 'Config':
         _config_dict = config_dict.copy()
         algo_id = _config_dict.pop("algo_id")
-        config_cls = { # TODO: build directly from objects
-            "ppo": PPOConfig,
+        config_cls = {
             "reinforce": REINFORCEConfig,
+            "ppo": PPOConfig,
+            "p3o": P3OConfig, 
         }[algo_id]
         config = config_cls(**_config_dict)
         return config
@@ -422,7 +423,18 @@ class Config:
                 )
         if self.policy_targets is not None and self.policy_targets not in {Config.PolicyTargetsType.returns, Config.PolicyTargetsType.advantages}:  # type: ignore[operator]
             raise ValueError("policy_targets must be 'returns' or 'advantages'.")
+        # PPO replay-specific checks (only if fields exist)
+        rr = getattr(self, "replay_ratio", 0.0)
+        if rr is not None and rr < 0:
+            raise ValueError("replay_ratio must be >= 0.")
+        rbs = getattr(self, "replay_buffer_size", 0)
+        if rbs is not None and rbs < 0:
+            raise ValueError("replay_buffer_size must be >= 0.")
+        ric = getattr(self, "replay_is_clip", 10.0)
+        if ric is not None and ric <= 0:
+            raise ValueError("replay_is_clip must be > 0.")
 
+# TODO: these config extensions should somehow be provided by the agent itself
 @dataclass
 class REINFORCEConfig(Config):
     policy: "Config.PolicyType" = Config.PolicyType.mlp  # type: ignore[assignment]
@@ -461,6 +473,18 @@ class PPOConfig(Config):
     @property
     def algo_id(self) -> str:
         return "ppo"
+
+@dataclass
+class P3OConfig(PPOConfig):
+    # PPO+Replay (off-policy mixing) — tuned for Atari object observations
+    # Defaults aim for better sample efficiency while keeping variance controlled.
+    replay_ratio: float = 4.0           # ~4x off-policy minibatches per on-policy minibatch
+    replay_buffer_size: int = 500_000   # transitions; suitable for small object-vector obs
+    replay_is_clip: float = 10.0        # cap IS weights to stabilize updates
+
+    @property
+    def algo_id(self) -> str:
+        return "p3o"
 
 def load_config(config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> Config:
     """Convenience function to load configuration."""

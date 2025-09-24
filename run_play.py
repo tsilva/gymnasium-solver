@@ -20,6 +20,7 @@ def main():
     p.add_argument("--run-id", default="@last", help="Run ID under runs/ (default: last run with best checkpoint)")
     p.add_argument("--episodes", type=int, default=10, help="Number of episodes to play")
     p.add_argument("--deterministic", action="store_true", default=False, help="Use deterministic actions (mode/argmax)")
+    p.add_argument("--no-render", action="store_true", default=False, help="Do not render the environment")
     p.add_argument(
         "--step-by-step",
         dest="step_by_step",
@@ -42,7 +43,7 @@ def main():
         config,
         n_envs=1,
         subproc=False,
-        render_mode="human" # TODO: force n_envs when render_mode is human
+        render_mode="human" if not args.no_render else None
     )
 
     # Attach a live observation bar printer for interactive play (vector-level wrapper)

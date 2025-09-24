@@ -1,16 +1,19 @@
 # TODO
 
-We currently use total_timesteps to tell us how many timesteps happened so far. And all our reporterd metrics are keyed under that metric. However, its not optimal
+# NEXT
+
+- FEAT: We currently use total_timesteps to tell us how many timesteps happened so far. And all our reporterd metrics are keyed under that metric. However, its not optimal
 because I cant compare runs that have different n_envs. Since these envs are collected under same policy it doesnt seem fair when comparing to less envs. So I think
 there should be another timestep metric that tracks the number of vectorized env.step() instead and that is the metric that everyone keys from. Think hard, make clean
 changes.
+- FEAT: 
+- REFACTOR: use anchors/aliases to streamline configs
 
 ## Pong-v5_objects
 
 - Print when performing evaluation
 - TODO: add support for resuming with policy from previous run
 - TODO: add support for hardcoding lower reward threshold
-- TODO: remove action repeat bias by rewarding staying still
 - Try frame stacking, may mitigate stickiness issues
 - Check if env gets solved when its deterministic
 - try debug server
@@ -85,4 +88,4 @@ changes.
 - FEAT: add support for publishing run to Hugging Face Hub
 - FEAT: add support for async eval (to avoid blocking training)
 - FEAT: SEEDRL+PPO
-- FEAT: P3O
+- FEAT: P3

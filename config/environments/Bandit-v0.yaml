@@ -1,30 +1,6 @@
-_env: &env
-  env_id: Bandit-v0
-  env_kwargs:
-    n_arms: 10
-    means: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-    stds: 1
-    episode_length: 1
-
-_ppo: &ppo
-  <<: *env
-  algo_id: ppo
-  max_timesteps: 20_000
-  n_envs: 16
-  n_steps: 64
-  batch_size: 0.25
-  n_epochs: 4
-  policy_lr: lin_4e-2
-  clip_range: 0.2
-  gamma: 1.0
-  gae_lambda: 1.0
-  normalize_advantages: "rollout"
-  eval_warmup_epochs: 5
-  eval_freq_epochs: 1
-
-ppo:
-  <<: *ppo
-
+# =====================
+# Environment Specification
+# =====================
 spec:
   source: local gym_envs.mab_env.MultiArmedBanditEnv
   description: Stateless multi-armed bandit; pull an arm to receive a stochastic reward.
@@ -51,3 +27,34 @@ spec:
 
   versions:
     v0: MultiArmedBanditEnv baseline configuration
+
+# =====================
+# Configuration Anchors
+# =====================
+
+_env: &env
+  env_id: Bandit-v0
+  env_kwargs:
+    n_arms: 10
+    means: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    stds: 1
+    episode_length: 1
+
+_ppo: &ppo
+  <<: *env
+  algo_id: ppo
+  max_timesteps: 20_000
+  n_envs: 16
+  n_steps: 64
+  batch_size: 0.25
+  n_epochs: 4
+  policy_lr: lin_4e-2
+  clip_range: 0.2
+  gamma: 1.0
+  gae_lambda: 1.0
+  normalize_advantages: "rollout"
+  eval_warmup_epochs: 5
+  eval_freq_epochs: 1
+
+ppo:
+  <<: *ppo

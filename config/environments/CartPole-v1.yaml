@@ -1,5 +1,44 @@
 # CartPole-v1 configurations covering classic state-based, reward-shaped, and pixel observations
 
+# =====================
+# Environment Specification
+# =====================
+spec:
+  source: https://gymnasium.farama.org/environments/classic_control/cart_pole/
+  description: Balance a pole on a moving cart by applying forces to the cart.
+
+  action_space:
+    discrete: 2
+    labels: {0: push_left, 1: push_right}
+
+  observation_space:
+    default: state
+    variants:
+      state:
+        shape: [4]
+        dtype: float32
+        components:
+          - {name: cart_position, range: [-4.8, 4.8]}
+          - {name: cart_velocity, range: [-inf, inf]}
+          - {name: pole_angle_rad, range: [-0.418, 0.418]}
+          - {name: pole_angular_velocity, range: [-inf, inf]}
+
+  rewards:
+    per_step: +1
+    range: [0, 1]
+
+  returns:
+    episodic: number of steps balanced (max 500)
+    range: [0, 500]
+    threshold_solved: 475
+
+  versions:
+    v1: Default Gymnasium release
+
+# =====================
+# Configuration Anchors
+# =====================
+
 _env: &env
   env_id: CartPole-v1
   seed: 42
@@ -109,35 +148,3 @@ reinforce_baseline_rtg:
 
 rgb_ppo:
   <<: *rgb_ppo
-
-spec:
-  source: https://gymnasium.farama.org/environments/classic_control/cart_pole/
-  description: Balance a pole on a moving cart by applying forces to the cart.
-
-  action_space:
-    discrete: 2
-    labels: {0: push_left, 1: push_right}
-
-  observation_space:
-    default: state
-    variants:
-      state:
-        shape: [4]
-        dtype: float32
-        components:
-          - {name: cart_position, range: [-4.8, 4.8]}
-          - {name: cart_velocity, range: [-inf, inf]}
-          - {name: pole_angle_rad, range: [-0.418, 0.418]}
-          - {name: pole_angular_velocity, range: [-inf, inf]}
-
-  rewards:
-    per_step: +1
-    range: [0, 1]
-
-  returns:
-    episodic: number of steps balanced (max 500)
-    range: [0, 500]
-    threshold_solved: 475
-
-  versions:
-    v1: Default Gymnasium release

@@ -299,7 +299,7 @@ class MetricsTableLogger(LightningLoggerBase):
                     try:
                         from utils.metrics_monitor import MetricAlert as _MetricAlert
                         if isinstance(a, _MetricAlert):
-                            return a.message
+                            return a._id
                     except Exception:
                         pass
                     if isinstance(a, str):

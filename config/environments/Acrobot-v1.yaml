@@ -1,5 +1,43 @@
 # Acrobot standard challenge configurations
 
+# =====================
+# Environment Specification
+# =====================
+spec:
+  source: https://gymnasium.farama.org/environments/classic_control/acrobot/
+  description: Swing the double pendulum to raise the end effector above a threshold.
+
+  action_space:
+    discrete: 3
+    labels: {0: torque_negative, 1: torque_zero, 2: torque_positive}
+
+  observation_space:
+    default: state
+    variants:
+      state:
+        shape: [6]
+        dtype: float32
+        components:
+          - {name: cos(theta1), range: [-1.0, 1.0]}
+          - {name: sin(theta1), range: [-1.0, 1.0]}
+          - {name: cos(theta2), range: [-1.0, 1.0]}
+          - {name: sin(theta2), range: [-1.0, 1.0]}
+          - {name: thetaDot1, range: [-inf, inf]}
+          - {name: thetaDot2, range: [-inf, inf]}
+
+  rewards:
+    per_step: -1
+    termination_goal: end effector above threshold height
+    range: [-500, 0]
+    threshold_solved: -100
+
+  versions:
+    v1: Default Gymnasium release
+
+# =====================
+# Configuration Anchors
+# =====================
+
 _env: &env
   env_id: Acrobot-v1
   max_timesteps: 1e6
@@ -31,34 +69,3 @@ ppo:
 
 reinforce:
   <<: *reinforce
-
-spec:
-  source: https://gymnasium.farama.org/environments/classic_control/acrobot/
-  description: Swing the double pendulum to raise the end effector above a threshold.
-
-  action_space:
-    discrete: 3
-    labels: {0: torque_negative, 1: torque_zero, 2: torque_positive}
-
-  observation_space:
-    default: state
-    variants:
-      state:
-        shape: [6]
-        dtype: float32
-        components:
-          - {name: cos(theta1), range: [-1.0, 1.0]}
-          - {name: sin(theta1), range: [-1.0, 1.0]}
-          - {name: cos(theta2), range: [-1.0, 1.0]}
-          - {name: sin(theta2), range: [-1.0, 1.0]}
-          - {name: thetaDot1, range: [-inf, inf]}
-          - {name: thetaDot2, range: [-inf, inf]}
-
-  rewards:
-    per_step: -1
-    termination_goal: end effector above threshold height
-    range: [-500, 0]
-    threshold_solved: -100
-
-  versions:
-    v1: Default Gymnasium release

@@ -172,7 +172,6 @@ _obj_wrappers_shaped: &obj_wrappers_shaped
   env_wrappers:
     - { id: PongV5_FeatureExtractor, action_ids: [0, 2, 3] }
     - { id: DiscreteActionSpaceRemapperWrapper, mapping: [0, 2, 3] }
-    - { id: ActionRewardShaper, rewards: [0.001, 0.0, 0.0] }
 
 _obj_ppo: &obj_ppo
   <<: [*obj_env, *obj_wrappers_shaped, *ppo]

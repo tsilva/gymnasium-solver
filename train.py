@@ -18,12 +18,6 @@ def main():
         help="Config ID '<env>:<variant>' (e.g., CartPole-v1:ppo)"
     )
     parser.add_argument(
-        "--quiet", "-q", 
-        action="store_true", 
-        default=False, 
-        help="Run non-interactively: auto-accept prompts and defaults"
-    )
-    parser.add_argument(
         "--wandb_sweep", 
         action="store_true", 
         default=False, 

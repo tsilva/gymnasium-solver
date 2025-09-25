@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import sys
+import wandb
 from pathlib import Path
 from dataclasses import asdict
 from math import gcd
@@ -14,60 +15,28 @@ from typing import Optional
 
 from utils.logging import display_config_summary
 from utils.user import prompt_confirm
+from utils.config import Config
 
-
-def _parse_positive_int(value: str, flag: str) -> int:
-    """Parse a positive integer from CLI strings (supports 1e5 and 1_000 forms).
-
-    Raises SystemExit with a friendly message on invalid input to match
-    typical CLI behavior in train.py.
-    """
-    sanitized = str(value).replace("_", "")
-    try:
-        numeric = float(sanitized)
-    except ValueError as exc:
-        raise SystemExit(f"{flag} must be a positive integer (got '{value}').") from exc
-    if numeric <= 0:
-        raise SystemExit(f"{flag} must be greater than zero (got {value}).")
-    if not numeric.is_integer():
-        raise SystemExit(f"{flag} must be a whole number (got {value}).")
-    return int(numeric)
-
-
-def _init_wandb_sweep(config):
-    """Initialize W&B early for sweeps and merge wandb.config into config.
-
-    Returns a Config instance with overrides applied.
-    """
-    # Import locally to keep module import light for tests and non-W&B flows
-    import wandb
-    from utils.config import Config
-
-    base = asdict(config)
-    wandb.init(config=base)
-    merged = dict(wandb.config)
-    return Config.build_from_dict(merged)
-
-
-def _maybe_merge_wandb_config(config, *, wandb_sweep_flag: bool, cli_max_timesteps: Optional[int]):
+def _maybe_merge_wandb_config(config, *, wandb_sweep_flag: bool):
     """Optionally merge W&B sweep overrides into Config.
 
     Honors explicit --wandb_sweep or auto-detects via WANDB_SWEEP_ID/SWEEP_ID.
     Re-applies CLI --max-steps after merge to ensure CLI takes precedence.
     """
-    use_wandb_sweep = bool(wandb_sweep_flag) or bool(
-        os.environ.get("WANDB_SWEEP_ID") or os.environ.get("SWEEP_ID")
-    )
-    if not use_wandb_sweep:
-        return config
 
-    config = _init_wandb_sweep(config)
-    if cli_max_timesteps is not None:
-        config.max_timesteps = cli_max_timesteps
-    return config
+    # In case this is not a wandb sweep, do nothing (return original config)
+    wandb_sweep_id = os.environ.get("WANDB_SWEEP_ID") or os.environ.get("SWEEP_ID")
+    is_wandb_sweep = bool(wandb_sweep_flag) or bool(wandb_sweep_id)
+    if not is_wandb_sweep: return config
 
+    # TODO: confirm this is working as expected
+    # Otherwise, merge the configs and return
+    wandb.init(config=asdict(config))
+    merged = dict(wandb.config)
+    merged_config = Config.build_from_dict(merged)
+    return merged_config
 
-def _apply_debugger_env_overrides(config):
+def _maybe_merge_debugger_config(config):
     """When a debugger is attached, force single-env, in-process execution.
 
     Rationale: debuggers and subprocess-based vec envs don't play nicely. To
@@ -169,10 +138,10 @@ def _present_prefit_summary(config) -> None:
         reward_threshold = rewards.get("threshold_solved")
 
     env_block = {
-        "env_id": _format_summary_value(getattr(config, "env_id", None)),
-        "obs_type": _format_summary_value(getattr(config, "obs_type", None)),
-        "wrappers": _format_summary_value(getattr(config, "env_wrappers", None)),
-        "subproc": _format_summary_value(getattr(config, "subproc", None)),
+        "env_id": _format_summary_value(config.env_id),
+        "obs_type": _format_summary_value(config.obs_type),
+        "wrappers": _format_summary_value(config.env_wrappers),
+        "subproc": _format_summary_value(config.subproc),
         "spec/action_space": _format_summary_value(spec.get("action_space")),
         "spec/observation_space": _format_summary_value(spec.get("observation_space")),
         "reward_threshold": _format_summary_value(reward_threshold),
@@ -220,46 +189,32 @@ def launch_training_from_args(args) -> None:
 
     # Resolve configuration spec from positional, then flag, then default
     config_spec = args.config or args.config_id or "Bandit-v0:ppo"
-    if ":" not in config_spec:
-        raise SystemExit("Config spec must be '<env>:<variant>' (e.g., CartPole-v1:ppo)")
+    if ":" not in config_spec: raise SystemExit("Config spec must be '<env>:<variant>' (e.g., CartPole-v1:ppo)")
     env_id, variant_id = config_spec.split(":", 1)
 
-    # Parse CLI max-steps override early (after arg parsing) so we can apply it
-    cli_max_timesteps = None
-    if getattr(args, "max_timesteps", None) is not None:
-        cli_max_timesteps = _parse_positive_int(str(args.max_timesteps), "--max-steps")
 
-    # Load configuration and apply simple CLI overrides
+    # Load the requested configuration
     config = load_config(env_id, variant_id)
-    if getattr(args, "quiet", False) is True:
-        config.quiet = True
-    if cli_max_timesteps is not None:
-        config.max_timesteps = cli_max_timesteps
+
 
     _present_prefit_summary(config)
 
-    quiet = bool(getattr(config, "quiet", False))
-    start_training = prompt_confirm("Start training?", default=True, quiet=quiet)
+    # Prompt if user wants to start training
+    start_training = prompt_confirm("Start training?", default=True)
     if not start_training:
         print("Training aborted before initialization.")
         return
 
-    # Merge W&B sweep overrides when requested/auto-detected (after confirmation)
-    prev_config = config
-    config = _maybe_merge_wandb_config(
-        config, wandb_sweep_flag=bool(getattr(args, "wandb_sweep", False)), cli_max_timesteps=cli_max_timesteps
-    )
-    if config is not prev_config:
-        print("Applied W&B sweep overrides after confirmation.")
+    # In case this is a wandb sweep, merge the sweep config
+    config = _maybe_merge_wandb_config(config, wandb_sweep_flag=args.wandb_sweep)
 
-    # Reapply CLI/noise overrides that must persist after sweep merge
-    if getattr(args, "quiet", False) is True:
-        config.quiet = True
-    if cli_max_timesteps is not None:
-        config.max_timesteps = cli_max_timesteps
+    # When running with a debugger, force single-env, 
+    # in-process execution (easier to debug)
+    config = _maybe_merge_debugger_config(config)
 
-    # If running under a debugger (e.g., vscode/pycharm/debugpy), clamp vec envs
-    config = _apply_debugger_env_overrides(config)
+    # Override max timesteps if provided through CLI
+    cli_max_timesteps = int(args.max_timesteps) if args.max_timesteps else None
+    if cli_max_timesteps is not None: config.max_timesteps = cli_max_timesteps
 
     # Set global RNG seed for reproducibility
     set_random_seed(config.seed)
@@ -296,8 +251,6 @@ def launch_training_from_args(args) -> None:
     if isinstance(reason, str) and reason and not str(reason).endswith(".") and reason != "completed.":
         reason = f"{reason}."
     print(f"Training completed in {human}. Reason: {reason}")
-
-
 
 
 def find_closest_match(search_term, candidates):
@@ -408,25 +361,3 @@ def list_available_environments(search_term=None, exact_match=None):
             for target, description in sorted(public_targets):
                 print(f"  {BULLET} {env_name}:{target} - {description}")
             print()
-
-
-def find_matching_environment(env_name):
-    """Find the best matching environment for a given name."""
-    from utils.config import Config
-    from utils.io import read_yaml
-    
-    config_dir = Path("config/environments")
-    if not config_dir.exists():
-        return None
-    
-    # Check for exact match first
-    env_file = config_dir / f"{env_name}.yaml"
-    if env_file.exists():
-        return env_name
-    
-    # Check for fuzzy match
-    yaml_files = list(config_dir.glob("*.yaml"))
-    env_names = [f.stem for f in yaml_files]
-    matched_env = find_closest_match(env_name, env_names)
-    
-    return matched_env

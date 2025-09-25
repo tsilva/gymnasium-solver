@@ -335,8 +335,10 @@ class PongV5_FeatureExtractor(gym.ObservationWrapper):
             return fallback
 
         dy = float(getattr(player_obj, "dy", 0.0))
+        # When the paddle isn't moving we can't infer the executed action.
+        # Fall back to the command we issued so the one-hot stays aligned.
         if abs(dy) <= PADDLE_STILL_EPS:
-            return 0 if 0 in self._action_index_map else fallback
+            return fallback
 
         moving_down = dy > 0.0
         preferred_action = 3 if moving_down else 2

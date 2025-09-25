@@ -49,15 +49,15 @@ _env: &env
   devices: 'auto'
   eval_freq_epochs: 1
   eval_episodes: 1
-
-_ppo: &ppo
-  <<: *env
-  algo_id: ppo
   max_timesteps: 1e6
   n_envs: 8
   n_steps: 128
   batch_size: 256
   n_epochs: 4
+
+_ppo: &ppo
+  <<: *env
+  algo_id: ppo
   clip_range: 0.1
   policy_lr: 2.5e-4
 

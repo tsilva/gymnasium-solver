@@ -39,14 +39,14 @@ _env: &env
     means: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     stds: 1
     episode_length: 1
-
-_ppo: &ppo
-  <<: *env
-  algo_id: ppo
   max_timesteps: 20_000
   n_envs: 16
   n_steps: 64
   batch_size: 0.25
+
+_ppo: &ppo
+  <<: *env
+  algo_id: ppo
   n_epochs: 4
   policy_lr: lin_4e-2
   clip_range: 0.2

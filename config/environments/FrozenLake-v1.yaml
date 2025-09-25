@@ -45,6 +45,9 @@ _env: &env
   eval_episodes: 10
   eval_freq_epochs: 10
   eval_recording_freq_epochs: 10
+  n_envs: 8
+  n_steps: 512
+  hidden_dims: [64]
 
 _env_deterministic: &env_deterministic
   <<: *env
@@ -54,21 +57,16 @@ _env_deterministic: &env_deterministic
 _ppo: &ppo
   <<: *env
   algo_id: ppo
-  n_envs: 8
-  n_steps: 512
   batch_size: 0.25
   n_epochs: 10
   policy_lr: 9e-3
-  hidden_dims: [64]
 
 _reinforce: &reinforce
   <<: *env
   algo_id: reinforce
   max_timesteps: 2e5
-  n_steps: 512
   batch_size: 64
   policy_lr: 0.005
-  hidden_dims: [64]
 
 # PPO on FrozenLake - standard configuration for grid navigation task
 ppo:

@@ -3,7 +3,7 @@
 # =====================
 # Environment Specification
 # =====================
-spec:
+spec: &spec_base
   source: https://ale.farama.org/environments/pong/
   description: Control right paddle; score when ball passes opponent, lose when it passes you.
 
@@ -54,54 +54,6 @@ spec:
 # =====================
 # Spec Anchors
 # =====================
-_spec_base: &spec_base
-  source: https://ale.farama.org/environments/pong/
-  description: Control right paddle; score when ball passes opponent, lose when it passes you.
-
-  render_fps: 60
-
-  action_space:
-    discrete: 6
-    labels: {0: NOOP, 1: FIRE, 2: RIGHT, 3: LEFT, 4: RIGHTFIRE, 5: LEFTFIRE}
-    full_space: {count: 18, enable_with: full_action_space=True}
-
-  observation_space:
-    default: state
-    variants:
-      state:
-        shape: [9]
-        dtype: float32
-        components:
-          - {name: Player.y, range: [-1.0, 1.0]}
-          - {name: Player.dy, range: [-1.0, 1.0]}
-          - {name: Enemy.y, range: [-1.0, 1.0]}
-          - {name: Enemy.dy, range: [-1.0, 1.0]}
-          - {name: Ball.x, range: [-1.0, 1.0]}
-          - {name: Ball.y, range: [-1.0, 1.0]}
-          - {name: Ball.dx, range: [-1.0, 1.0]}
-          - {name: Ball.dy, range: [-1.0, 1.0]}
-          - {name: Ball.visible, range: [-1.0, 1.0]}
-
-  rewards:
-    per_point: +1/-1
-    range: [-1, 1]
-
-  returns:
-    episodic: score difference (player score - opponent score)
-    range: [-21, 21]
-    threshold_solved: 19
-
-  modes:
-    values: [0, 1]
-    default: 0
-
-  difficulties:
-    values: [0, 1, 2, 3]
-    default: 0
-
-  versions:
-    v5: Gymnasium ALE/Pong deterministic release
-
 _spec_objects: &spec_objects
   <<: *spec_base
   action_space:
@@ -141,14 +93,14 @@ _rgb_env: &rgb_env
     strides: [4, 2, 1]
   accelerator: 'gpu'
   devices: 'auto'
-
-_rgb_ppo: &rgb_ppo
-  <<: [*rgb_env, *ppo]
   frame_stack: 2
-  max_timesteps: 5e6
   n_envs: 8
   n_steps: 256             # 8*256 = 2048 samples/update
   batch_size: 1024         # 2k rollout → 2 minibatches of 1024
+
+_rgb_ppo: &rgb_ppo
+  <<: [*rgb_env, *ppo]
+  max_timesteps: 5e6
   n_epochs: 3
   clip_range: 0.1
   policy_lr: 1e-4          # Slightly lower LR for stability on pixels
@@ -162,13 +114,13 @@ _ram_env: &ram_env
   <<: *env
   obs_type: "ram"
   normalize_obs: "static"
+  n_envs: 8               # Reduced for better sample efficiency
+  n_steps: 512            # Reduced for more frequent updates
+  batch_size: 512         # Larger batches for stable gradients
 
 _ram_ppo: &ram_ppo
   <<: [*ram_env, *ppo]
   max_timesteps: 5e6
-  n_envs: 8               # Reduced for better sample efficiency
-  n_steps: 512            # Reduced for more frequent updates
-  batch_size: 512         # Larger batches for stable gradients
   n_epochs: 10            # More epochs to better utilize data
   policy_lr: 0.0003       # Higher learning rate for faster learning
   eval_freq_epochs: 50    # Less frequent eval to focus on training
@@ -186,6 +138,10 @@ _obj_env: &obj_env
   eval_episodes: 10
   gamma: 0.99
   gae_lambda: 0.95
+  n_envs: 32
+  subproc: true
+  n_steps: 256
+  batch_size: 0.25
 
 _obj_wrappers_shaped: &obj_wrappers_shaped
   env_wrappers:
@@ -196,12 +152,8 @@ _obj_wrappers_shaped: &obj_wrappers_shaped
 _obj_ppo: &obj_ppo
   <<: [*obj_env, *obj_wrappers_shaped, *ppo]
   max_timesteps: 2e5
-  n_envs: 32
-  subproc: true
   vf_coef: 0.5
   n_epochs: 15
-  n_steps: 256
-  batch_size: 0.25
   ent_coef: 0.005
   clip_range: 0.2
   policy_lr: 2e-3

@@ -23,6 +23,7 @@
  
 ## NEXT
 
+- BUG: fps seems slow
 - NEXT: only show certain metrics in table logger
 - Add alert for when ep_rew_mean starts stalling / downward trend
 - Make sure metrics.yaml is up to date with all metrics with correct names

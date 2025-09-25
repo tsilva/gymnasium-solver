@@ -13,12 +13,25 @@ _global:
   key_priority:
       # === Overall training progress (0.0 → 1.0) ===
       - "progress"
+      - "sys/timing/fps"
+      - "sys/timing/fps_instant"
+      - "sys/timing/time_elapsed"
+      - "sys/timing/eta_s"
       # === Rollout (training samples from the environment) ===
       - "roll/ep_rew/mean"
       - "roll/ep_rew/best"
       - "roll/ep_rew/last"
       - "roll/ep_len/mean"
       - "roll/ep_len/last"
+
+      - "cnt/epoch"
+      - "cnt/total_episodes"
+      - "cnt/total_vec_steps"
+      - "cnt/total_timesteps"
+
+
+
+
       - "roll/reward/mean"
       - "roll/reward/std"
       - "roll/return/mean"
@@ -54,17 +67,9 @@ _global:
       - "opt/grads/norm/value_head"
 
       # === Counters (monotonic progress) ===
-      - "cnt/total_episodes"
       - "cnt/total_rollouts"
-      - "cnt/total_timesteps"
-      - "cnt/total_vec_steps"
-      - "cnt/epoch"
 
       # === System & timing ===
-      - "sys/timing/fps"
-      - "sys/timing/fps_instant"
-      - "sys/timing/time_elapsed"
-      - "sys/timing/eta_s"
 
       # === Hyperparameters ===
       - "hp/policy_lr"
@@ -294,13 +299,6 @@ opt/policy/entropy:
   precision: 4
   min: 0.0
 
-
-
-# Learning rates
-max_grad_norm:
-  description: "Maximum allowed gradient norm for gradient clipping"
-  precision: 4
-  min: 0.0
 
 # Granular gradient norms
 opt/grads/norm/all:

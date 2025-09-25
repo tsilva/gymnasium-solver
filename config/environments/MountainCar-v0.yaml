@@ -44,6 +44,8 @@ _env: &env
   eval_episodes: 10
   hidden_dims: [128, 128]
   gamma: 0.999
+  n_steps: 1024
+  batch_size: 0.25
 
 _env_rewardshaped: &env_rewardshaped
   <<: *env
@@ -58,8 +60,6 @@ _ppo: &ppo
   <<: *env
   algo_id: ppo
   n_envs: 16
-  n_steps: 1024
-  batch_size: 0.25
   n_epochs: 10
   policy_lr: 1e-4
 
@@ -67,8 +67,6 @@ _reinforce: &reinforce
   <<: *env
   algo_id: reinforce
   n_envs: 8
-  n_steps: 1024
-  batch_size: 0.25
   policy_lr: 1e-3
 
 # Standard PPO on MountainCar - baseline configuration for mountain car task

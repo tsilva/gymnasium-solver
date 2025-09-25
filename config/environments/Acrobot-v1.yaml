@@ -43,13 +43,13 @@ _env: &env
   max_timesteps: 1e6
   eval_freq_epochs: 10
   eval_episodes: 10
+  batch_size: 64
 
 _ppo: &ppo
   <<: *env
   algo_id: ppo
   n_envs: 8
   n_epochs: 4
-  batch_size: 64
   n_steps: 256
   gae_lambda: 0.94
   ent_coef: 0.0
@@ -59,7 +59,6 @@ _reinforce: &reinforce
   algo_id: reinforce
   n_envs: 16
   n_steps: 512
-  batch_size: 64
   policy_lr: 5e-4
   hidden_dims: [128, 128]
   max_epochs: 2000

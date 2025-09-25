@@ -54,15 +54,15 @@ _env: &env
     - { id: VizDoom_RewardShaper, noop_penalty: 0.01, move_reward: 0.004, turn_reward: 0.004 }
   eval_freq_epochs: 10
   eval_episodes: 1
-
-_ppo: &ppo
-  <<: *env
-  algo_id: ppo
   max_timesteps: 5e6
   n_envs: 16
   n_steps: 256
   batch_size: 512
   n_epochs: 4
+
+_ppo: &ppo
+  <<: *env
+  algo_id: ppo
   ent_coef: 0.01
   clip_range: lin_0.2
   policy_lr: lin_0.0003

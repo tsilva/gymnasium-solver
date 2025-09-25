@@ -122,7 +122,7 @@ _obj_ppo: &obj_ppo
   clip_range: 0.18
   n_envs: 32
   subproc: true
-  n_steps: 512
+  n_steps: 1024
   batch_size: 0.25
   hidden_dims: [256, 256]
   target_kl: 0.01

@@ -67,14 +67,6 @@ class PrefitPresentationCallback(pl.Callback):
             "Config": config_dict,
         })
 
-        # Optional guidance before prompting
-        maybe_warn = pl_module._maybe_warn_observation_policy_mismatch
-        if callable(maybe_warn):
-            try:
-                maybe_warn()
-            except Exception:
-                pass
-
         # Confirm start
         quiet = bool(config.quiet)
         start_training = prompt_confirm("Start training?", default=True, quiet=quiet)

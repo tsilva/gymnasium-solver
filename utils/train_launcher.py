@@ -13,6 +13,8 @@ from dataclasses import asdict
 from math import gcd
 from typing import Optional
 
+from agents import build_agent
+
 from utils.logging import display_config_summary
 from utils.user import prompt_confirm
 from utils.config import Config
@@ -79,7 +81,7 @@ def _maybe_merge_debugger_config(config):
     )
     return config
 
-
+# TODO: remove if exception not raised
 def _ensure_wandb_run_initialized(config) -> None:
     """Ensure a W&B run exists before agent construction.
 
@@ -87,15 +89,13 @@ def _ensure_wandb_run_initialized(config) -> None:
       `wandb.init`, so this becomes a no-op.
     - Otherwise, initialize a run with the project's name and full config.
     """
-    import wandb  # lazy import to keep non-W&B paths light
 
     # If a run is already active (e.g., sweep agent), do nothing
     if wandb.run is not None: return
 
     # Otherwise create a fresh run using project and full config
     from utils.formatting import sanitize_name
-    raw_project = getattr(config, "project_id", None) or getattr(config, "env_id", None) or "gymnasium-solver"
-    project_name = sanitize_name(raw_project)
+    project_name = sanitize_name(config.env_id)
     wandb.init(project=project_name, config=asdict(config))
 
 def _extract_elapsed_seconds(agent) -> Optional[float]:
@@ -192,10 +192,8 @@ def launch_training_from_args(args) -> None:
     if ":" not in config_spec: raise SystemExit("Config spec must be '<env>:<variant>' (e.g., CartPole-v1:ppo)")
     env_id, variant_id = config_spec.split(":", 1)
 
-
     # Load the requested configuration
     config = load_config(env_id, variant_id)
-
 
     _present_prefit_summary(config)
 
@@ -216,29 +214,18 @@ def launch_training_from_args(args) -> None:
     cli_max_timesteps = int(args.max_timesteps) if args.max_timesteps else None
     if cli_max_timesteps is not None: config.max_timesteps = cli_max_timesteps
 
-    # Set global RNG seed for reproducibility
-    set_random_seed(config.seed)
-
     # Ensure a W&B run exists (sweep-or-regular) before building the agent
     _ensure_wandb_run_initialized(config)
 
     # Create/update the W&B workspace immediately so the dashboard is ready during training
-    create_or_update_workspace_for_current_run(overwrite=True, select_current_run_only=True)
+    create_or_update_workspace_for_current_run(overwrite=True, select_current_run_only=True) # TODO: review this function
+
+    # Set global RNG seed for reproducibility
+    set_random_seed(config.seed)
 
     # Create the agent and kick off learning
-    from agents import build_agent
-
     agent = build_agent(config)
-    setattr(agent, "_prefit_prompt_completed", True)
-    maybe_warn = getattr(agent, "_maybe_warn_observation_policy_mismatch", None)
-    if callable(maybe_warn):
-        try:
-            maybe_warn()
-        except Exception:
-            pass
     agent.learn()
-
-    # (Workspace already ensured at training start)
 
     # Print final training completion message (duration and normalized reason)
     elapsed_seconds = _extract_elapsed_seconds(agent)
@@ -251,7 +238,6 @@ def launch_training_from_args(args) -> None:
     if isinstance(reason, str) and reason and not str(reason).endswith(".") and reason != "completed.":
         reason = f"{reason}."
     print(f"Training completed in {human}. Reason: {reason}")
-
 
 def find_closest_match(search_term, candidates):
     """Find the closest match for a search term among candidates using fuzzy matching."""

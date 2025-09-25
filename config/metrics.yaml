@@ -26,12 +26,13 @@ _global:
       - "roll/ep_len/mean"
       - "roll/ep_len/last"
 
-
+      - "opt/ppo/clip_fraction"
+      - "opt/ppo/kl"
+      - "opt/ppo/approx_kl"
+      - "opt/value/explained_var"
+      
+      - "roll/fps"
       - "sys/timing/fps"
-      - "sys/timing/fps_instant"
-      - "sys/timing/time_elapsed"
-      - "sys/timing/eta_s"
-
 
       - "roll/reward/mean"
       - "roll/reward/std"
@@ -45,16 +46,11 @@ _global:
       - "roll/obs/std"
       - "roll/actions/mean"
       - "roll/actions/std"
-      - "roll/fps"
       - "roll/episodes"
       - "roll/timesteps"
       - "roll/vec_steps"
 
       # === Optimization (per-update diagnostics) ===
-      - "opt/ppo/clip_fraction"
-      - "opt/ppo/kl"
-      - "opt/ppo/approx_kl"
-      - "opt/value/explained_var"
       - "opt/loss/total"
       - "opt/loss/policy"
       - "opt/loss/value"
@@ -71,6 +67,10 @@ _global:
       - "cnt/total_rollouts"
 
       # === System & timing ===
+
+      - "sys/timing/fps_instant"
+      - "sys/timing/time_elapsed"
+      - "sys/timing/eta_s"
 
       # === Hyperparameters ===
       - "hp/policy_lr"
@@ -159,8 +159,6 @@ roll/ep_len/mean:
 
 # Immediate episode stats
 roll/ep_rew/last:
-  bold: true
-  highlight: true
   description: "Reward of the most recent completed episode"
   precision: 2
 
@@ -170,8 +168,6 @@ roll/ep_len/last:
   min: 0
 
 roll/ep_rew/best:
-  bold: true
-  highlight: true
   description: "Running best of ep_rew/mean across epochs"
   precision: 2
 
@@ -273,6 +269,7 @@ opt/loss/entropy_scaled:
 
 # Algorithm-specific metrics
 opt/ppo/approx_kl:
+  highlight: true
   description: "Approximate KL divergence between old and new policy distributions"
   precision: 4
   min: 0.0
@@ -284,6 +281,7 @@ opt/ppo/kl:
   min: 0.0
 
 opt/ppo/clip_fraction:
+  highlight: true
   description: "Fraction of probability ratios that were clipped in PPO objective"
   precision: 3
   min: 0.0

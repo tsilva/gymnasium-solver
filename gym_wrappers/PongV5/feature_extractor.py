@@ -21,6 +21,8 @@ assert 0.0 <= PLAYFIELD_Y_MIN < PLAYFIELD_Y_MAX <= SCREEN_H, (
 
 # Max Y pixels per frame that paddle can move (for normalizing velocity)
 PADDLE_DY_SCALE: float = 24.0
+# Treat very small paddle velocity as stationary to avoid spurious action flips.
+PADDLE_STILL_EPS: float = 1e-3
 
 # Max X/Y pixels per frame that ball can move (for normalizing velocity)
 BALL_D_SCALE: float = 12.0
@@ -151,6 +153,7 @@ def _obs_from_objects(
     ball_dx = ball_obj.dx if ball_obj else 0
     ball_dy = ball_obj.dy if ball_obj else 0
     ball_visible = (ball_obj is not None) and bool(getattr(ball_obj, "visible", True))
+
     # Normalize ball positions: use center-X and center-Y with width/height-aware bounds
     if ball_visible:
         # X normalization across the full screen width, adjusted for ball width
@@ -210,6 +213,7 @@ def _obs_from_objects(
         # Use last-seen normalized velocities if provided; fallback to 0.0
         ball_dx_n = float(last_ball_dx_n) if last_ball_dx_n is not None else 0.0
         ball_dy_n = float(last_ball_dy_n) if last_ball_dy_n is not None else 0.0
+        
     ball_visible_n = 1.0 if ball_visible else -1.0
 
     # Invariant: if we have a previous position and current ball is visible,
@@ -244,23 +248,28 @@ class PongV5_FeatureExtractor(gym.ObservationWrapper):
                  margin_y: float = 2.0,
                  action_ids: Optional[Sequence[int]] = None):
         super().__init__(env)
+
         self.clip = bool(clip)
         self.min_y = float(playfield_y_min)
         self.max_y = float(playfield_y_max)
         self.margin_y = float(margin_y)
+
         # Determine which discrete actions to encode in the one-hot tail of the observation.
         if not isinstance(env.action_space, spaces.Discrete):
             raise TypeError(
                 f"PongV5_FeatureExtractor requires a Discrete action space, got {type(env.action_space)}"
             )
+
         if action_ids is None:
             self._action_ids: tuple[int, ...] = tuple(range(int(env.action_space.n)))
         else:
             if len(action_ids) == 0:
                 raise ValueError("action_ids must contain at least one action index")
             self._action_ids = tuple(int(a) for a in action_ids)
+
         if len(set(self._action_ids)) != len(self._action_ids):
             raise ValueError(f"action_ids must be unique, got {self._action_ids}")
+
         # Map base-environment action indices to positions in the one-hot vector.
         self._action_index_map: dict[int, int] = {
             action: idx for idx, action in enumerate(self._action_ids)
@@ -295,20 +304,47 @@ class PongV5_FeatureExtractor(gym.ObservationWrapper):
 
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
-        self._record_last_action(action)
+        executed_action = self._infer_executed_action(
+            fallback=int(np.asarray(action).item())
+        )
+        self._record_last_action(executed_action)
         obs = self.observation(obs)
         return obs, reward, terminated, truncated, info
 
     def _record_last_action(self, action) -> None:
-        action_idx = int(np.asarray(action).item())
         try:
-            vector_index = self._action_index_map[action_idx]
-        except KeyError as exc:
-            raise ValueError(
-                f"Received action {action_idx} that is not tracked by action_ids={self._action_ids}"
-            ) from exc
+            vector_index = self._action_index_map[int(action)]
+        except KeyError:
+            return
         self._last_action_one_hot.fill(0.0)
         self._last_action_one_hot[vector_index] = 1.0
+
+    def _infer_executed_action(self, fallback: int) -> int:
+        """Best-effort inference of the action ALE executed after stickiness."""
+        objects = getattr(self.env, "objects", None)
+        if objects is None:
+            return fallback
+
+        try:
+            obj_map = _index_objects_by_category(objects)
+        except Exception:
+            return fallback
+
+        player_obj = obj_map.get("Player")
+        if player_obj is None:
+            return fallback
+
+        dy = float(getattr(player_obj, "dy", 0.0))
+        if abs(dy) <= PADDLE_STILL_EPS:
+            return 0 if 0 in self._action_index_map else fallback
+
+        moving_down = dy > 0.0
+        preferred_action = 3 if moving_down else 2
+        if preferred_action in self._action_index_map:
+            return preferred_action
+
+        # If the preferred action is not tracked (custom mapping), fall back.
+        return fallback
 
     def observation(self, observation):
         # Convert objects to observation vector using configured bounds.
@@ -323,16 +359,20 @@ class PongV5_FeatureExtractor(gym.ObservationWrapper):
             last_ball_dx_n=self._last_ball_dx_n,
             last_ball_dy_n=self._last_ball_dy_n,
         )
+
         # Update last-seen ball state only when currently visible
         if base_obs[8] > 0.0:  # ball_visible_n == +1
             self._last_ball_x_n = float(base_obs[4])
             self._last_ball_y_n = float(base_obs[5])
             self._last_ball_dx_n = float(base_obs[6])
             self._last_ball_dy_n = float(base_obs[7])
+
         # Optionally clip to the target range to avoid rare excursions at borders
         if self.clip:
             base_obs = np.clip(base_obs, -1.0, 1.0, out=base_obs)
+
         obs = np.concatenate((base_obs, self._last_action_one_hot), dtype=np.float32)
+
         # Always ensure finiteness
         assert np.all(np.isfinite(obs)), f"Non-finite values found: {obs}"
         return obs

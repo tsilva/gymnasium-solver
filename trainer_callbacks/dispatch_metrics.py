@@ -33,8 +33,8 @@ class DispatchMetricsCallback(pl.Callback):
         fps_total_map = pl_module.timings.throughput_since("on_fit_start", values_now=rollout_metrics)
         fps_instant_map = pl_module.timings.throughput_since("on_train_epoch_start", values_now=rollout_metrics)
         # Prefer vectorized-step FPS to align with step_key and early stopping
-        fps_total = fps_total_map.get("cnt/total_vec_steps", fps_total_map.get("roll/vec_steps", 0.0))
-        fps_instant = fps_instant_map.get("cnt/total_vec_steps", fps_instant_map.get("roll/vec_steps", 0.0))
+        fps_total = fps_total_map.get("cnt/total_timesteps", fps_total_map.get("roll/timesteps", 0.0))
+        fps_instant = fps_instant_map.get("cnt/total_timesteps", fps_instant_map.get("roll/timesteps", 0.0)) # TODO: remove default
 
         # Aggregate metrics for the this epoch
         epoch_metrics = pl_module.metrics_recorder.compute_epoch_means(stage)

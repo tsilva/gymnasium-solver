@@ -1,5 +1,6 @@
 from typing import Any, Dict, List
 
+from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 import torch.nn as nn
 
@@ -28,6 +29,7 @@ class BaseAgent(pl.LightningModule):
     _early_stop_epoch: bool
     _fit_elapsed_seconds: float
     _final_stop_reason: str
+    _train_dataloader: DataLoader
 
     def __init__(self, config):
         super().__init__()
@@ -56,6 +58,7 @@ class BaseAgent(pl.LightningModule):
         self.clip_range = config.clip_range
         self.vf_coef = config.vf_coef
         self.ent_coef = config.ent_coef
+        self.n_epochs = config.n_epochs
         
         # Initialize timing tracker for training 
         # loop performance measurements
@@ -181,23 +184,27 @@ class BaseAgent(pl.LightningModule):
         from utils.dataloaders import build_index_collate_loader_from_collector
         from utils.random import get_global_torch_generator
         generator = get_global_torch_generator(self.config.seed)
-        return build_index_collate_loader_from_collector(
+        self._train_dataloader = build_index_collate_loader_from_collector(
             collector=train_collector,
             trajectories_getter=lambda: self._trajectories,
             batch_size=self.config.batch_size,
-            num_passes=self.config.n_epochs,
+            num_passes=self.config.n_epochs, # TODO: must allow
             generator=generator,
             # TODO: add support for n_workers and memory options in config if needed
             num_workers=0,
             pin_memory=False,
             persistent_workers=False,
         )
-
+        return self._train_dataloader
     def on_train_epoch_start(self):
         # Start epoch timer
         train_collector = self.get_rollout_collector("train")
         train_metrics = train_collector.get_metrics()
         self.timings.start("on_train_epoch_start", values=train_metrics)
+
+        # Read latest hyperparameters from run 
+        # (may have been changed by user during training)
+        self._read_hyperparameters_from_run()
 
         # Log hyperparameters that are tunable in real-time
         self._log_hyperparameters()
@@ -345,28 +352,6 @@ class BaseAgent(pl.LightningModule):
         # Train the agent
         trainer.fit(self)
     
-    # TODO: get this out of here
-    def _maybe_warn_observation_policy_mismatch(self):
-        from utils.config import Config
-
-        # In case the observation space is RGB, warn if MLP policy is used
-        train_env = self.get_env("train")
-        is_rgb = train_env.is_rgb_env()
-        is_mlp = self.config.policy == Config.PolicyType.mlp
-        is_cnn = self.config.policy == Config.PolicyType.cnn
-        if is_rgb and is_mlp:
-            print(
-                "Warning: Detected RGB image observations with MLP policy. "
-                "For pixel inputs, consider using CNN for better performance."
-            )
-
-        # In case the observation space is not RGB, warn if CNN policy is used
-        if not is_rgb and is_cnn:
-            print(
-                "Warning: Detected non-RGB observations with CNN policy. "
-                "For non-image inputs, consider using MLP for better performance."
-            )
-
     # -------------------------
     # Pre-prompt guidance helpers
     # -------------------------
@@ -443,7 +428,7 @@ class BaseAgent(pl.LightningModule):
             HyperparameterSchedulerCallback,
             ModelCheckpointCallback,
             MonitorMetricsCallback,
-            PrefitPresentationCallback,
+            #PrefitPresentationCallback,
             WandbVideoLoggerCallback,
             WarmupEvalCallback,
         )
@@ -452,7 +437,7 @@ class BaseAgent(pl.LightningModule):
         callbacks = []
 
         # Present config and confirm start at fit start
-        callbacks.append(PrefitPresentationCallback())
+        #callbacks.append(PrefitPresentationCallback())
 
         # In case eval warmup is active, add a callback to enable validation only after warmup
         if self.config.eval_warmup_epochs > 0: 
@@ -469,9 +454,10 @@ class BaseAgent(pl.LightningModule):
         callbacks.append(DispatchMetricsCallback())
 
         # Auto-wire hyperparameter schedulers: scan config for any *_schedule fields
+        schedule_suffix = "_schedule"
         for key, value in vars(self.config).items():
-            if not key.endswith("_schedule") or not value: continue # TODO: extract concern to config
-            param = key[: -len("_schedule")]
+            if not key.endswith(schedule_suffix) or not value: continue # TODO: extract concern to config
+            param = key[:-len(schedule_suffix)]
             assert hasattr(self, param), f"Module {self} has no attribute {param}"
             target_value = getattr(self.config, f"{param}_schedule_target_value", 0.0)
             target_progress = getattr(self.config, f"{param}_schedule_target_progress", 1.0)
@@ -562,10 +548,12 @@ class BaseAgent(pl.LightningModule):
         training_progress = max(0.0, min(total_vec_steps / max_timesteps, 1.0))
         return training_progress
 
+    # TODO: is there an util for this?
     def _change_optimizers_lr(self, lr):
         # Keep attribute in sync for logging/inspection
         self.policy_lr = lr
         optimizers = self.optimizers()
+        if not isinstance(optimizers, (list, tuple)): optimizers = [optimizers]
         for opt in optimizers:
             for pg in opt.param_groups:
                 pg["lr"] = lr
@@ -578,9 +566,38 @@ class BaseAgent(pl.LightningModule):
             optimizer=self.config.optimizer,
             lr=self.policy_lr, # TODO: is this taking annealing into account?
         )
+    
+    def _read_hyperparameters_from_run(self):
+        from dataclasses import asdict
+        loaded_config = asdict(self.run.load_config())
+        current_config = asdict(self.config)
+
+        changes_map = {}
+        for key, value in loaded_config.items():
+            if type(value) in [list, tuple, dict, None]: continue
+            current_value = current_config.get(key, None)
+            if value != current_value: changes_map[key] = value
+
+        if changes_map: self.on_hyperparams_change(changes_map)
+        
+    def on_hyperparams_change(self, changes_map):
+        for key, value in changes_map.items():
+            if not hasattr(self.config, key): continue
+            setattr(self.config, key, value)
+            if key == "policy_lr": self._change_optimizers_lr(value)
+            elif key == "clip_range": self.clip_range = value
+            elif key == "vf_coef": self.vf_coef = value
+            elif key == "ent_coef": self.ent_coef = value
+            elif key == "n_epochs": self._change_n_epochs(value)
+        print(f"Hyperparameters changed from run: {changes_map}")
+
+    def _change_n_epochs(self, n_epochs):
+        self.n_epochs = n_epochs
+        self._train_dataloader.sampler.num_passes = n_epochs
 
     def _log_hyperparameters(self):
         metrics = {
+            "n_epochs": self.n_epochs,
             "ent_coef": self.ent_coef,
             "vf_coef": self.vf_coef,
             "clip_range": self.clip_range,

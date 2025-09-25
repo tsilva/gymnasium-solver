@@ -99,113 +99,37 @@ _env_deterministic: &env_deterministic
   env_kwargs:
     repeat_action_probability: 0.0
 
-# Shared algo anchors
-_ppo: &ppo
-  algo_id: ppo
-
-# =====================
-# RGB observation setup
-# =====================
-_rgb_env: &rgb_env
-  <<: *env
-  obs_type: "rgb"
-  policy: 'cnn'
-  grayscale_obs: true
-  resize_obs: true
-  policy_kwargs:
-    channels: [32, 64, 64]
-    kernel_sizes: [8, 4, 3]
-    strides: [4, 2, 1]
-  accelerator: 'gpu'
-  devices: 'auto'
-  frame_stack: 2
-  n_envs: 8
-  n_steps: 256             # 8*256 = 2048 samples/update
-  batch_size: 1024         # 2k rollout → 2 minibatches of 1024
-
-_rgb_ppo: &rgb_ppo
-  <<: [*rgb_env, *ppo]
-  max_timesteps: 5e6
-  n_epochs: 3
-  clip_range: 0.1
-  policy_lr: 1e-4          # Slightly lower LR for stability on pixels
-  eval_freq_epochs: 10     # Less frequent eval due to computational cost
-  eval_episodes: 5
-
-# =====================
-# RAM observation setup
-# =====================
-_ram_env: &ram_env
-  <<: *env
-  obs_type: "ram"
-  normalize_obs: "static"
-  n_envs: 8               # Reduced for better sample efficiency
-  n_steps: 512            # Reduced for more frequent updates
-  batch_size: 512         # Larger batches for stable gradients
-
-_ram_ppo: &ram_ppo
-  <<: [*ram_env, *ppo]
-  max_timesteps: 5e6
-  n_epochs: 10            # More epochs to better utilize data
-  policy_lr: 0.0003       # Higher learning rate for faster learning
-  eval_freq_epochs: 50    # Less frequent eval to focus on training
-  eval_episodes: 10       # More episodes for reliable evaluation
-
 # ==========================
 # Object observation setup
 # ==========================
 _obj_env: &obj_env
   <<: *env
   obs_type: "objects"
-  hidden_dims: [256, 256]
-  eval_warmup_epochs: 100
-  eval_freq_epochs: 10
-  eval_episodes: 10
-  gamma: 0.99
-  gae_lambda: 0.95
-  n_envs: 32
-  subproc: true
-  n_steps: 256
-  batch_size: 0.25
-
-_obj_wrappers_shaped: &obj_wrappers_shaped
   env_wrappers:
     - { id: PongV5_FeatureExtractor, action_ids: [0, 2, 3] }
     - { id: DiscreteActionSpaceRemapperWrapper, mapping: [0, 2, 3] }
 
 _obj_ppo: &obj_ppo
-  <<: [*obj_env, *obj_wrappers_shaped, *ppo]
-  max_timesteps: 2e5
-  vf_coef: 0.5
-  n_epochs: 15
-  ent_coef: 0.005
-  clip_range: 0.2
-  policy_lr: 2e-3
+  <<: [*obj_env]
+  n_epochs: 6
+  ent_coef: 0.01
+  policy_lr: 0.006
   normalize_advantages: "rollout"
+  algo_id: ppo
+  gamma: 0.99
+  gae_lambda: 0.95
+  vf_coef: 0.5
+  clip_range: 0.18
+  n_envs: 32
+  subproc: true
+  n_steps: 512
+  batch_size: 0.25
+  hidden_dims: [256, 256]
+  target_kl: 0.01
 
 # =====================
 # Public variants
 # =====================
-
-# RGB pixel observations with PPO - uses CNN policy on grayscale 84x84 frames
-rgb_ppo:
-  <<: *rgb_ppo
-  description: "PPO with RGB pixel observations using CNN policy on grayscale 84x84 frames"
-
-# RGB pixel observations with PPO - deterministic version (no sticky actions)
-rgb_deterministic_ppo:
-  <<: [*rgb_ppo, *env_deterministic]
-  description: "PPO with RGB pixel observations - deterministic version (no sticky actions)"
-
-# RAM state observations with PPO - uses MLP policy on 128-byte RAM state
-ram_ppo:
-  <<: *ram_ppo
-  description: "PPO with RAM state observations using MLP policy on 128-byte RAM state"
-
-# RAM state observations with PPO - deterministic version (no sticky actions)
-ram_deterministic_ppo:
-  <<: [*ram_ppo, *env_deterministic]
-  description: "PPO with RAM state observations - deterministic version (no sticky actions)"
 
 # Object-based observations with PPO - uses extracted game objects as features
 objects_ppo:

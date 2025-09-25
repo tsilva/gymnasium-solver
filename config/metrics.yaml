@@ -13,10 +13,12 @@ _global:
   key_priority:
       # === Overall training progress (0.0 → 1.0) ===
       - "progress"
-      - "sys/timing/fps"
-      - "sys/timing/fps_instant"
-      - "sys/timing/time_elapsed"
-      - "sys/timing/eta_s"
+
+      - "cnt/epoch"
+      - "cnt/total_episodes"
+      - "cnt/total_vec_steps"
+      - "cnt/total_timesteps"
+      
       # === Rollout (training samples from the environment) ===
       - "roll/ep_rew/mean"
       - "roll/ep_rew/best"
@@ -24,12 +26,11 @@ _global:
       - "roll/ep_len/mean"
       - "roll/ep_len/last"
 
-      - "cnt/epoch"
-      - "cnt/total_episodes"
-      - "cnt/total_vec_steps"
-      - "cnt/total_timesteps"
 
-
+      - "sys/timing/fps"
+      - "sys/timing/fps_instant"
+      - "sys/timing/time_elapsed"
+      - "sys/timing/eta_s"
 
 
       - "roll/reward/mean"

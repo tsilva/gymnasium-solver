@@ -1,7 +1,7 @@
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
-from typing import Optional
+from typing import Optional, Sequence
 
 # Screen dimensions for Atari Pong (for normalizing positions)
 SCREEN_W: float = 160.0
@@ -235,18 +235,37 @@ def _obs_from_objects(
 # ---- Gymnasium Observation Wrapper ----
 class PongV5_FeatureExtractor(gym.ObservationWrapper):
     """
-    Replaces obs with a 9-dim normalized vector built from OCAtari objects.
+    Replaces obs with a normalized vector built from OCAtari objects plus last-action one-hot.
     """
     def __init__(self, env,
                  clip: bool = True,
                  playfield_y_min: float = PLAYFIELD_Y_MIN,
                  playfield_y_max: float = PLAYFIELD_Y_MAX,
-                 margin_y: float = 2.0):
+                 margin_y: float = 2.0,
+                 action_ids: Optional[Sequence[int]] = None):
         super().__init__(env)
         self.clip = bool(clip)
         self.min_y = float(playfield_y_min)
         self.max_y = float(playfield_y_max)
         self.margin_y = float(margin_y)
+        # Determine which discrete actions to encode in the one-hot tail of the observation.
+        if not isinstance(env.action_space, spaces.Discrete):
+            raise TypeError(
+                f"PongV5_FeatureExtractor requires a Discrete action space, got {type(env.action_space)}"
+            )
+        if action_ids is None:
+            self._action_ids: tuple[int, ...] = tuple(range(int(env.action_space.n)))
+        else:
+            if len(action_ids) == 0:
+                raise ValueError("action_ids must contain at least one action index")
+            self._action_ids = tuple(int(a) for a in action_ids)
+        if len(set(self._action_ids)) != len(self._action_ids):
+            raise ValueError(f"action_ids must be unique, got {self._action_ids}")
+        # Map base-environment action indices to positions in the one-hot vector.
+        self._action_index_map: dict[int, int] = {
+            action: idx for idx, action in enumerate(self._action_ids)
+        }
+        self._last_action_one_hot = np.zeros(len(self._action_ids), dtype=np.float32)
         # Last-seen normalized ball kinematics (persist across steps; reset on env.reset)
         self._last_ball_x_n: Optional[float] = None
         self._last_ball_y_n: Optional[float] = None
@@ -255,8 +274,14 @@ class PongV5_FeatureExtractor(gym.ObservationWrapper):
         # Observation space remains [-1,1] as features are designed to be scaled there.
         # When clip=False, features may briefly exceed this range, but most algorithms
         # are tolerant as long as the Box advertises the intended scale.
+        base_low = np.full(9, -1.0, dtype=np.float32)
+        base_high = np.full(9, 1.0, dtype=np.float32)
+        action_low = np.zeros(len(self._action_ids), dtype=np.float32)
+        action_high = np.ones(len(self._action_ids), dtype=np.float32)
         self.observation_space = spaces.Box(
-            low=-1.0, high=1.0, shape=(9,), dtype=np.float32
+            low=np.concatenate([base_low, action_low]),
+            high=np.concatenate([base_high, action_high]),
+            dtype=np.float32,
         )
 
     def reset(self, **kwargs):
@@ -265,12 +290,30 @@ class PongV5_FeatureExtractor(gym.ObservationWrapper):
         self._last_ball_y_n = None
         self._last_ball_dx_n = None
         self._last_ball_dy_n = None
+        self._last_action_one_hot.fill(0.0)
         return super().reset(**kwargs)
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        self._record_last_action(action)
+        obs = self.observation(obs)
+        return obs, reward, terminated, truncated, info
+
+    def _record_last_action(self, action) -> None:
+        action_idx = int(np.asarray(action).item())
+        try:
+            vector_index = self._action_index_map[action_idx]
+        except KeyError as exc:
+            raise ValueError(
+                f"Received action {action_idx} that is not tracked by action_ids={self._action_ids}"
+            ) from exc
+        self._last_action_one_hot.fill(0.0)
+        self._last_action_one_hot[vector_index] = 1.0
 
     def observation(self, observation):
         # Convert objects to observation vector using configured bounds.
         # When the ball is invisible, use last-seen kinematics to avoid collisions with valid zeros.
-        obs = _obs_from_objects(
+        base_obs = _obs_from_objects(
             self.env.objects,
             self.min_y,
             self.max_y,
@@ -281,14 +324,15 @@ class PongV5_FeatureExtractor(gym.ObservationWrapper):
             last_ball_dy_n=self._last_ball_dy_n,
         )
         # Update last-seen ball state only when currently visible
-        if obs[8] > 0.0:  # ball_visible_n == +1
-            self._last_ball_x_n = float(obs[4])
-            self._last_ball_y_n = float(obs[5])
-            self._last_ball_dx_n = float(obs[6])
-            self._last_ball_dy_n = float(obs[7])
+        if base_obs[8] > 0.0:  # ball_visible_n == +1
+            self._last_ball_x_n = float(base_obs[4])
+            self._last_ball_y_n = float(base_obs[5])
+            self._last_ball_dx_n = float(base_obs[6])
+            self._last_ball_dy_n = float(base_obs[7])
         # Optionally clip to the target range to avoid rare excursions at borders
         if self.clip:
-            obs = np.clip(obs, -1.0, 1.0, out=obs)
+            base_obs = np.clip(base_obs, -1.0, 1.0, out=base_obs)
+        obs = np.concatenate((base_obs, self._last_action_one_hot), dtype=np.float32)
         # Always ensure finiteness
         assert np.all(np.isfinite(obs)), f"Non-finite values found: {obs}"
         return obs

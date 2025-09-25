@@ -4,6 +4,7 @@
 
 ## Pong-v5_objects
 
+- Test adding last action to feature extractor
 - Ensure we solve deterministic variant without action reward shaping
 - Establish baseline for sticky actions variant
 - Test if wcan improve by using online feature normalization inside extractor (rolling averages)

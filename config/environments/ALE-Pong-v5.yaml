@@ -18,7 +18,7 @@ spec: &spec_base
     default: state
     variants:
       state:
-        shape: [9]
+        shape: [15]
         dtype: float32
         components:
           - {name: Player.y, range: [-1.0, 1.0]}
@@ -30,6 +30,12 @@ spec: &spec_base
           - {name: Ball.dx, range: [-1.0, 1.0]}
           - {name: Ball.dy, range: [-1.0, 1.0]}
           - {name: Ball.visible, range: [-1.0, 1.0]}
+          - {name: LastAction.NOOP, range: [0.0, 1.0]}
+          - {name: LastAction.FIRE, range: [0.0, 1.0]}
+          - {name: LastAction.RIGHT, range: [0.0, 1.0]}
+          - {name: LastAction.LEFT, range: [0.0, 1.0]}
+          - {name: LastAction.RIGHTFIRE, range: [0.0, 1.0]}
+          - {name: LastAction.LEFTFIRE, range: [0.0, 1.0]}
 
   rewards:
     per_point: +1/-1
@@ -60,6 +66,25 @@ _spec_objects: &spec_objects
     discrete: 3
     labels: {0: NOOP, 1: RIGHT, 2: LEFT}
     note: Subset via DiscreteActionSpaceRemapperWrapper mapping [0, 2, 3]
+  observation_space:
+    default: state
+    variants:
+      state:
+        shape: [12]
+        dtype: float32
+        components:
+          - {name: Player.y, range: [-1.0, 1.0]}
+          - {name: Player.dy, range: [-1.0, 1.0]}
+          - {name: Enemy.y, range: [-1.0, 1.0]}
+          - {name: Enemy.dy, range: [-1.0, 1.0]}
+          - {name: Ball.x, range: [-1.0, 1.0]}
+          - {name: Ball.y, range: [-1.0, 1.0]}
+          - {name: Ball.dx, range: [-1.0, 1.0]}
+          - {name: Ball.dy, range: [-1.0, 1.0]}
+          - {name: Ball.visible, range: [-1.0, 1.0]}
+          - {name: LastAction.NOOP, range: [0.0, 1.0]}
+          - {name: LastAction.RIGHT, range: [0.0, 1.0]}
+          - {name: LastAction.LEFT, range: [0.0, 1.0]}
 
 # =====================
 # Configuration Anchors
@@ -145,7 +170,7 @@ _obj_env: &obj_env
 
 _obj_wrappers_shaped: &obj_wrappers_shaped
   env_wrappers:
-    - { id: PongV5_FeatureExtractor }
+    - { id: PongV5_FeatureExtractor, action_ids: [0, 2, 3] }
     - { id: DiscreteActionSpaceRemapperWrapper, mapping: [0, 2, 3] }
     - { id: ActionRewardShaper, rewards: [0.001, 0.0, 0.0] }
 

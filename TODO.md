@@ -2,6 +2,7 @@
 
 # NEXT
 
+- get rid of sb3 vecenv, use native gym.syncenv
 - benchmark https://ale.farama.org/vector-environment/ vs sb3 vecenvs
 - PERF: drop SB3 env vectorization and use ale-py native vector env instead
  

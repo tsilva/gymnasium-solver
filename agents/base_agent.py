@@ -75,6 +75,10 @@ class BaseAgent(pl.LightningModule):
         core_metric_alerts = CoreMetricAlerts(self)
         self.metrics_monitor.register_bundle(core_metric_alerts)
 
+        # Track evaluation cadence for optional video recording
+        self._eval_count = 0
+        self._record_eval_video = False
+
         # Build the environments
         for stage in STAGES: self.build_env(stage)
 
@@ -255,6 +259,12 @@ class BaseAgent(pl.LightningModule):
 
     def on_validation_epoch_start(self):
         print("Running validation...")
+        self._eval_count += 1
+        freq = self.config.eval_recording_freq
+        if freq is None:
+            self._record_eval_video = False
+        else:
+            self._record_eval_video = self._eval_count % freq == 0
         val_collector = self.get_rollout_collector("val")
         val_metrics = val_collector.get_metrics()
         self.timings.start("on_validation_epoch_start", values=val_metrics)
@@ -264,10 +274,7 @@ class BaseAgent(pl.LightningModule):
     # TODO: there are train/fps drops caused by running the collector N times (its not only the video recording); cause currently unknown
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
         # Decide if we record a video this eval epoch
-        record_video = (
-            self.current_epoch == 0
-            or self.config.eval_recording_freq_epochs is not None and (self.current_epoch + 1) % self.config.eval_recording_freq_epochs == 0
-        )
+        record_video = self._record_eval_video
 
         # Run evaluation with optional recording
         val_env = self.get_env("val")

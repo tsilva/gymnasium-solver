@@ -24,7 +24,7 @@ class EnvVideoRecorder(gym.Wrapper):
 
         render_mode = self.env.get_render_mode()
         assert render_mode == "rgb_array", (
-            "EnvVideoRecorder requires the base env to be created with render_mode='rgb_array'"
+            f"EnvVideoRecorder requires the base env to be created with render_mode='rgb_array': {render_mode}"
         )
 
         self.frames_per_sec = self.env.get_render_fps()

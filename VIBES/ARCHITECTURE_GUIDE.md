@@ -46,7 +46,7 @@ Algo-specific config subclasses:
   - `'static'`: bounds-based `VecNormalizeStatic` (observations only)
   Reward normalization: enable with `normalize_reward: true` (SB3 `VecNormalize`). When `'static'` is selected for observations, reward normalization is ignored.
   - Optional `VecFrameStack` and `VecVideoRecorder`.
-  - Each base env is wrapped with `EnvInfoWrapper`; the returned vec env is wrapped by `VecEnvInfoWrapper`, which exposes helpers like `.recorder(...)`, `get_return_threshold()`, `get_time_limit()`, and `.is_rgb_env()` used throughout training/eval flows.
+  - Each base env is wrapped with `EnvInfoWrapper`; the returned vec env is wrapped by `VecEnvInfoWrapper`, which exposes helpers like `.recorder(...)`, `get_return_threshold()`, `get_max_episode_steps()`, and `.is_rgb_env()` used throughout training/eval flows.
 - Wrapper registry: `gym_wrappers.__init__` registers `PixelObservationWrapper` and domain wrappers like `PongV5_FeatureExtractor`, reward shapers, etc.
 
 ### Agents

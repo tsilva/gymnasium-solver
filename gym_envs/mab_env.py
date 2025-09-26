@@ -35,8 +35,11 @@ from typing import List, Optional
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
+from PIL import Image
+import torch
 
 from utils.env_spec import EnvSpec
+
 
 
 @dataclass
@@ -126,15 +129,14 @@ class MultiArmedBanditEnv(gym.Env):
         # Return environment reset data
         return obs, info
     
-    # TODO: add support for not returning images
     def render(self):
         # Create dummy images just to avoid errors (codebase currently 
         # doesn't support environments that don't support rendering)
-        import torch
-        from PIL import Image
+        if hasattr(self, "_fake_frame"): return self._fake_frame
         tensor = torch.zeros((3, 84, 84), dtype=torch.uint8)
         array = tensor.permute(1, 2, 0).numpy()
         img = Image.fromarray(array)
+        self._fake_frame = img
         return img
 
     def step(self, action: int):

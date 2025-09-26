@@ -3,7 +3,6 @@ import json
 from typing import Any, Dict
 
 import gymnasium as gym
-from gymnasium.wrappers import TimeLimit
 
 from utils.decorators import cache
 from utils.env_spec import EnvSpec
@@ -49,51 +48,111 @@ def _env_spec_to_mapping(spec: Any) -> Dict[str, Any]:
         spec_dict[attr] = _sanitize_spec_value(value)
     return spec_dict
 
+# TODO: extract to reusable location
 def deep_merge(a: dict, b: dict) -> dict:
-    """
-    Merge dict b into dict a (recursively) and return a new dict.
-    Values in b override those in a.
-    """
+    """Return a recursive merge of ``b`` into ``a`` without mutating inputs."""
+
     result = a.copy()
-    for k, v in b.items():
+    for key, value in b.items():
         if (
-            k in result
-            and isinstance(result[k], dict)
-            and isinstance(v, dict)
+            key in result
+            and isinstance(result[key], dict)
+            and isinstance(value, dict)
         ):
-            result[k] = deep_merge(result[k], v)
+            result[key] = deep_merge(result[key], value)
         else:
-            result[k] = v
+            result[key] = value
     return result
 
 
-# TODO: a better strategy is to create the env spec with everything at build time and then only access it without any further lookups
+class GymEnvInfoCollector:
+    """Single-pass grab of environment-driven metadata for EnvInfoWrapper."""
+
+    def __init__(self, env: gym.Env):
+        self._env = env
+
+    @cache
+    def _get_wrappers(self) -> tuple[gym.Env, ...]:
+        wrappers: list[gym.Env] = []
+        current = self._env
+        while isinstance(current, gym.Env):
+            wrappers.append(current)
+            if not hasattr(current, "env"): break
+            current = getattr(current, "env")
+        return tuple(wrappers)
+
+    @cache
+    def _get_root_env(self) -> gym.Env:
+        wrappers = self._get_wrappers()
+        assert wrappers, "Expected at least one env wrapper"
+        return wrappers[-1]
+
+    def _get_from_wrappers(self, attr: str) -> Any:
+        for wrapper in self._get_wrappers():
+            if not hasattr(wrapper, attr): continue
+            return getattr(wrapper, attr)
+
+    @cache
+    def spec_mapping(self) -> Dict[str, Any]:
+        root_env = self._get_root_env()
+        spec_obj = getattr(root_env, "spec", None)
+        return _env_spec_to_mapping(spec_obj)
+
+    @cache
+    def get_render_mode(self) -> Any:
+        return self._get_from_wrappers("render_mode")
+
+    @cache
+    def get_return_threshold(self) -> Any:
+        return self._get_from_wrappers("return_threshold")
+
+    @cache
+    def get_max_episode_steps(self) -> Any:
+        return self._get_from_wrappers("max_episode_steps")
+
+    @cache
+    def metadata(self) -> Dict[str, Any]:
+        meta: Dict[str, Any] = {}
+        wrappers = self._get_wrappers()
+        for wrapper in reversed(wrappers):
+            wrapper_metadata = getattr(wrapper, "metadata", None)
+            if isinstance(wrapper_metadata, dict): meta.update(wrapper_metadata)
+        return meta
+
+    @cache
+    def get_render_fps(self) -> Any:
+        default_fps = 30
+        metadata = self.metadata()
+        if not "render_fps" in metadata: return default_fps
+        render_fps = metadata["render_fps"]
+        assert isinstance(render_fps, int), "render_fps must be an int"
+        return render_fps
+
+    def collect(self) -> Dict[str, Any]:
+        return {
+            **self.spec_mapping(),
+            "render_mode": self.get_render_mode(),
+            "return_threshold": self.get_return_threshold(),
+            "max_episode_steps": self.get_max_episode_steps(),
+            "render_fps": self.get_render_fps(),
+        }
+
+
 class EnvInfoWrapper(gym.ObservationWrapper):
 
     def __init__(self, env, **kwargs):
         super().__init__(env)
 
+        collected = GymEnvInfoCollector(self).collect()
+
+        # TODO: pass this to spec instead of storing property
         self._obs_type = kwargs.get('obs_type', None)
 
-        _env_spec = self._get_spec__env()
-        spec = kwargs.get('spec', {})
-        spec = deep_merge(_env_spec, spec)
-        self._spec = EnvSpec.from_mapping(spec)
+        override_spec = kwargs.get('spec', {})
+        merged_spec = deep_merge(collected, override_spec)
 
-    def get_id(self):
-        root_env = self._get_root_env()
-        return root_env.spec.id
-
-    @cache
-    def get_render_mode(self):
-        wrappers = self._collect_wrappers()
-        for wrapper in wrappers:
-            if hasattr(wrapper, "render_mode"): return wrapper.render_mode
-        return None 
-
-    def get_obs_type(self):
-        return self._obs_type
-
+        self._spec = EnvSpec.from_mapping(merged_spec)
+    
     def is_rgb_env(self):
         obs_type = self.get_obs_type()
         return obs_type == 'rgb'
@@ -101,142 +160,34 @@ class EnvInfoWrapper(gym.ObservationWrapper):
     def is_ram_env(self):
         obs_type = self.get_obs_type()
         return obs_type == 'ram'
+    
+    # TODO: proxy unknown methods to spec
+    def get_id(self):
+        return self._spec.get_id()
 
-    @cache
-    def _get_return_threshold__env(self):
-        wrappers = self._collect_wrappers()
-        for wrapper in wrappers:
-            value = getattr(wrapper, "return_threshold", None)
-            if not value is None: return value
-        return None
+    def get_obs_type(self):
+        return self._obs_type
 
-    @cache
-    def _get_return_threshold__spec(self):
-        spec = self.get_spec()
-        return_threshold = spec.get_return_threshold()
-        return return_threshold
-
-    @cache
+    def get_render_mode(self):
+        return self._spec.get_render_mode()
+        
     def get_return_threshold(self):
-        return_threshold = self._get_return_threshold__env()
-        if return_threshold is not None: 
-            return return_threshold
+        return self._spec.get_return_threshold()
 
-        return_threshold = self._get_return_threshold__spec()
-        if return_threshold is not None: 
-            return return_threshold
-        return None
-
-    @cache
     def get_reward_range(self):
-        spec = self.get_spec()
-        reward_range = spec.get_reward_range()
-        return reward_range
+        return self._spec.get_reward_range()
     
-    @cache
     def get_return_range(self):
-        spec = self.get_spec()
-        return_range = spec.get_return_range()
-        return return_range
+        return self._spec.get_return_range()
 
-    @cache
-    def _get_time_limit__env(self):
-        wrapper = self._find_wrapper(TimeLimit)
-        if not wrapper: return None 
-        value = getattr(wrapper, "max_episode_steps", None)
-        if not value: value = getattr(wrapper, "_max_episode_steps", None)
-        if not value: return None
-        return value
+    def get_max_episode_steps(self):
+        return self._spec.get_max_episode_steps()
 
-    def _get_time_limit_spec(self):
-        spec = self.get_spec()
-        max_episode_steps = spec.get_max_episode_steps()
-        return max_episode_steps
-    
-    @cache
-    def get_time_limit(self):
-        time_limit = self._get_time_limit__env()
-        if time_limit: return time_limit
-
-        time_limit = self._get_time_limit_spec()
-        if time_limit: return time_limit
-
-        return None
-
-    def _get_render_fps__env(self):
-        render_fps = self._get_env_metadata().get("render_fps")
-        if not isinstance(render_fps, (int, float)): return None
-        if render_fps <= 0: return None
-        return int(render_fps)
-    
-    def _get_render_fps__spec(self):
-        spec = self.get_spec()
-        render_fps = spec.get_render_fps()
-        return render_fps
-    
     def get_render_fps(self):
-        """Best-effort render FPS from env metadata or spec file."""
-
-        # Return FPS from env metadata if available
-        fps = self._get_render_fps__env()
-        if fps is not None: return fps
-
-        # Return FPS from spec file if available
-        fps = self._get_render_fps__spec()
-        if fps is not None: return fps
-
-        # Return default FPS if no FPS is available
-        return 30   
+        return self._spec.get_render_fps()
 
     def get_action_labels(self):
-        spec = self.get_spec()
-        action_labels = spec.get_action_labels()
-        return action_labels
-
-
-    def _get_spec__env(self):
-        root_env = self._get_root_env()
-        spec_obj = getattr(root_env, "spec", None)
-        return _env_spec_to_mapping(spec_obj)
-
-    @cache
-    def _get_root_env(self):
-        current = self
-        while isinstance(current, gym.Env):
-            if not hasattr(current, "env"): break
-            current = current.env
-        return current
-
-    @cache
-    def _find_wrapper(self, wrapper_class):
-        wrappers = self._collect_wrappers()
-        for wrapper in wrappers:
-            if isinstance(wrapper, wrapper_class): return wrapper
-        return None
-
-    @cache
-    def _collect_wrappers(self):
-        wrappers = []
-        current = self
-        while isinstance(current, gym.Env):
-            wrappers.append(current)
-            if not hasattr(current, "env"): break
-            current = getattr(current, "env")
-        return wrappers
-
-    @cache
-    def get_spec(self):
-        return self._spec
-
-    @cache
-    def _get_env_metadata(self):
-        wrappers = self._collect_wrappers()
-        metadata = {}
-        for wrapper in reversed(wrappers):
-            wrapper_metadata = getattr(wrapper, "metadata", None)
-            if isinstance(wrapper_metadata, dict):
-                metadata.update(wrapper_metadata)
-        return metadata
+        return self._spec.get_action_labels()
 
     # NOTE: required by ObservationWrapper
     def observation(self, observation): 
@@ -245,5 +196,4 @@ class EnvInfoWrapper(gym.ObservationWrapper):
 if __name__ == "__main__":
     env = gym.make("CartPole-v1")
     env_info = EnvInfoWrapper(env)
-    print(env_info.get_spec())
-    print(env_info.get_reward_treshold())
+    print(env_info.get_return_threshold())

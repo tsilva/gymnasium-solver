@@ -421,7 +421,7 @@ class VecObsBarPrinter(VecEnvWrapper):
 
         # Episode timestep progress bar, if time limit is known
         if self._time_limit is None:
-            tl = self.venv.get_time_limit()
+            tl = self.venv.get_max_episode_steps()
             self._time_limit = None if tl is None else int(tl)
         if self._time_limit:
             steps = int(self._current_ep_len)

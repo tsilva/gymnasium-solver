@@ -2,9 +2,8 @@
 
 # NEXT
 
-- REFACTOR: currently we are keying some metrics off epochs (eg: eval_freq_epochs), change all freq metrics to use vec steps instead and rename metrics (eg: eval_freq only)... adjust environment yaml files to have sensible values for this change
 - TEST: do highlighted rows also show alerts correctly?
-
+- CHECK: ensure model runs validation in eval mode (rollout collector)
 - REFACTOR: get rid of prefit presentation callback, check how things are done right now
 - BUG: inspect not working because it cant retrieve action labels
 
@@ -27,11 +26,11 @@
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 - TODO: learn how to read gradient graphs
 - REFACTOR: search for occurrences where states naming is used instead of observations
+- TODO: assert that ALE-py is not running with rosetta on M1
 
 ## Pong-v5_objects
 
 - https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/
-- TODO: rerun with these hyperparams https://wandb.ai/tsilva/ALE-Pong-v5_objects/runs/jfr90820/overview
 - Frame stacking should work to turn POMDP into MDP
 - TODO: add support for resuming with policy from previous run
 - try debug server
@@ -39,6 +38,10 @@
 - add env normalization support (use that instead of normalization from feature extractor)
 - previous actions
 - Search for where to check for SOTA scores on each env (ask gpt to research)
+
+## MountainCar-v0
+
+- FEAT: MountainCar-v0: rewardshaping; statecount bonus
 
 ## LunarLander-v3
 
@@ -75,3 +78,7 @@
 - FEAT: add support for publishing run to Hugging Face Hub
 - FEAT: add support for async eval (to avoid blocking training)
 - FEAT: SEEDRL+PPO
+- FEAT: multidiscrete support
+- FEAT: implement RND (Random Network Distillation)
+- FEAT: MountainCar-v0: rewardshaping; statecount bonus
+- FEAT: Recurrent PPO (eg: PPO-LSTM)

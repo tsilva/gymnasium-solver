@@ -41,7 +41,7 @@ _env: &env
       encoding: array
   eval_episodes: 10
   eval_freq_epochs: 10
-  eval_recording_freq_epochs: 10
+  eval_recording_freq: 10
   n_envs: 8
   n_steps: 512
   hidden_dims: [64]

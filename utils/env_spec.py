@@ -7,6 +7,11 @@ from typing import Any, Dict, Mapping, Optional, Sequence, Tuple, Union
 
 Scalar = Union[int, float, str]
 
+from enum import Enum
+
+class RenderMode(Enum):
+    HUMAN = "human"
+    RGB_ARRAY = "rgb_array"
 
 def _is_sequence(value: Any) -> bool:
     return isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray))
@@ -504,6 +509,8 @@ class EnvSpec:
     name: Optional[str] = None
     version: Optional[int] = None
     render_fps: Optional[int] = None
+
+    render_mode: Optional[RenderMode] = None
     action_space: Optional[ActionSpaceSpec] = None
     observation_space: Optional[ObservationSpaceSpec] = None
     rewards: Optional[RewardsSpec] = None
@@ -582,6 +589,7 @@ class EnvSpec:
             name=str(data["name"]) if "name" in data and data["name"] is not None else None,
             version=_coerce_optional_int(data.get("version")),
             render_fps=_coerce_optional_int(data.get("render_fps")),
+            render_mode=str(data["render_mode"]) if "render_mode" in data and data["render_mode"] is not None else None,
             action_space=action_space,
             observation_space=observation_space,
             rewards=rewards,
@@ -630,6 +638,8 @@ class EnvSpec:
             data["version"] = self.version
         if self.render_fps is not None:
             data["render_fps"] = self.render_fps
+        if self.render_mode is not None:
+            data["render_mode"] = self.render_mode.value
         if self.action_space is not None:
             action_dict = self.action_space.as_dict()
             if action_dict:
@@ -657,6 +667,9 @@ class EnvSpec:
 
     def get_render_fps(self) -> Optional[int]:
         return self.render_fps if self.render_fps and self.render_fps > 0 else None
+
+    def get_render_mode(self) -> Optional[RenderMode]:
+        return self.render_mode
 
     def get_action_labels(self) -> Dict[Union[int, str], str]:
         if self.action_space is None:

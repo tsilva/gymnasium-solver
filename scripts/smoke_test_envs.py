@@ -44,7 +44,7 @@ def _collect_env_config_map(config_dir: Path) -> Dict[str, Dict[str, Any]]:
                 "gamma", "gae_lambda", "ent_coef", "vf_coef", "policy", "policy_kwargs",
                 "obs_type", "frame_stack", "grayscale_obs", "resize_obs", "env_kwargs",
                 "project_id", "accelerator", "devices", "eval_freq_epochs", "eval_episodes",
-                "eval_recording_freq_epochs", "eval_deterministic", "env_wrappers", "seed", "subproc",
+                "eval_recording_freq", "eval_deterministic", "env_wrappers", "seed", "subproc",
                 "spec",
             }
             base_root = {k: v for k, v in doc.items() if k in field_names}

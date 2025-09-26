@@ -42,7 +42,7 @@ class PrefitPresentationCallback(pl.Callback):
             "obs_space": train_env.observation_space,
             "action_space": train_env.action_space,
             "reward_threshold": train_env.get_return_threshold(),
-            "time_limit": train_env.get_time_limit(),
+            "max_episode_steps": train_env.get_max_episode_steps(),
             "env_wrappers": config_dict.get("env_wrappers", None),
             "env_kwargs": config_dict.get("env_kwargs", None),
         }

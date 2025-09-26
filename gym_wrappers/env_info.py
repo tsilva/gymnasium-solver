@@ -23,11 +23,9 @@ class EnvInfoWrapper(gym.ObservationWrapper):
 
     def __init__(self, env, **kwargs):
         super().__init__(env)
-        # TODO: review these (is obs_type available inside the env?)
+        
         self._obs_type = kwargs.get('obs_type', None)
-        # Optional: project/challenge id (YAML filename stem) to prefer when resolving specs
-        self._project_id = kwargs.get('project_id', None)
-        self._spec = kwargs.get('spec', None)
+        self._spec = kwargs.get('spec', {})
 
     def get_id(self):
         root_env = self._get_root_env()

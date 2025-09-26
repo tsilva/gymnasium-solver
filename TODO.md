@@ -2,7 +2,7 @@
 
 # NEXT
 
-- get rid of sb3 vecenv, use native gym.syncenv
+- get rid of sb3 vecenv, use native gym.syncenv/ confirm if gym.make_vec("ALE/*-v5") already uses the correct fast backend when rgb, if so, we can use the same logic for everything
 - benchmark https://ale.farama.org/vector-environment/ vs sb3 vecenvs
 - PERF: drop SB3 env vectorization and use ale-py native vector env instead
  

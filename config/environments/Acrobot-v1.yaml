@@ -6,6 +6,7 @@
 spec:
   source: https://gymnasium.farama.org/environments/classic_control/acrobot/
   description: Swing the double pendulum to raise the end effector above a threshold.
+  goal: end effector above threshold height
 
   action_space:
     discrete: 3
@@ -27,12 +28,11 @@ spec:
 
   rewards:
     per_step: -1
-    termination_goal: end effector above threshold height
     range: [-500, 0]
+
+  returns:
     threshold_solved: -100
 
-  versions:
-    v1: Default Gymnasium release
 
 # =====================
 # Configuration Anchors

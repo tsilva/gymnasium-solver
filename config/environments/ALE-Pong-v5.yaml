@@ -54,9 +54,6 @@ spec: &spec_base
     values: [0, 1, 2, 3]
     default: 0
 
-  versions:
-    v5: Gymnasium ALE/Pong deterministic release
-
 # =====================
 # Spec Anchors
 # =====================

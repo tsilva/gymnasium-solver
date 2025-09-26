@@ -34,8 +34,6 @@ spec:
       - {name: progress, sign: positive}
       - {name: death_penalty, sign: negative}
 
-  versions:
-    NES-Level1-1: Restricted actions with Level1-1 state
 
 # =====================
 # Configuration Anchors

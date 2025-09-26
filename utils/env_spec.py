@@ -4,7 +4,7 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Sequence
 
-
+# TODO: this should be a proper dataclass with fixed fields defining a concrete schema, inspect 
 @dataclass(frozen=True)
 class EnvSpec(Mapping[str, Any]):
     """Immutable view over merged environment spec data."""

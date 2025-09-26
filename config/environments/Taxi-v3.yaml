@@ -27,8 +27,6 @@ spec:
     range: [-800, 20]
     threshold_solved: 8
 
-  versions:
-    v3: Gymnasium Taxi deterministic variant
 
 # =====================
 # Configuration Anchors

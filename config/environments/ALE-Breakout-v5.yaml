@@ -6,6 +6,7 @@
 spec: &spec_base
   source: https://ale.farama.org/environments/breakout/
   description: Deflect the ball with the paddle to clear bricks without losing lives.
+  goal: clear all bricks without losing lives
 
   render_fps: 60
 
@@ -44,7 +45,6 @@ spec: &spec_base
     range: [-1, 1]
 
   returns:
-    episodic: cumulative score (includes brick hits and life losses)
     range: [0, 432]
     threshold_solved: 400
 
@@ -56,8 +56,6 @@ spec: &spec_base
     values: [0, 1, 2, 3]
     default: 0
 
-  versions:
-    v5: Gymnasium ALE/Breakout deterministic release
 
 # =====================
 # Spec Anchors

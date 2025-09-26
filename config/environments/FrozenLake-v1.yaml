@@ -27,9 +27,6 @@ spec:
     range: [0, 1]
     threshold_solved: 0.78
 
-  versions:
-    v1: Gymnasium FrozenLake deterministic variant
-
 # =====================
 # Configuration Anchors
 # =====================

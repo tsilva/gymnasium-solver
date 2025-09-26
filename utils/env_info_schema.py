@@ -42,8 +42,7 @@ class EnvInfo:
     observation_space: Optional[Mapping[str, Any]] = None
     rewards: Optional[Mapping[str, Any]] = None
     returns: Optional[Mapping[str, Any]] = None
-    defaults: Optional[Mapping[str, Any]] = None
-    versions: Optional[Mapping[str, Any]] = None
+    defaults: Optional[Mapping[str, Any]] = None∂
     modes: Optional[ChoiceBlock] = None
     difficulties: Optional[ChoiceBlock] = None
     extras: Dict[str, Any] = field(default_factory=dict)

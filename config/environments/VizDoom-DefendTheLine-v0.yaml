@@ -29,8 +29,6 @@ spec:
     threshold_solved: 1000
     range: [-100, 2000]
 
-  versions:
-    v0: ViZDoom defend_the_line.cfg scenario
 
 # =====================
 # Configuration Anchors

@@ -29,9 +29,6 @@ spec:
     shaping: dense; +100..140 for landing, -100 for crash; small per-step shaping
     threshold_solved: 200
 
-  versions:
-    v3: Gymnasium LunarLander discrete variant
-
 # =====================
 # Configuration Anchors
 # =====================

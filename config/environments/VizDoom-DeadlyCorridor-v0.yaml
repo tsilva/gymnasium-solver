@@ -29,8 +29,6 @@ spec:
     threshold_solved: 1000
     range: [-100, 1000]
 
-  versions:
-    v0: ViZDoom deadly_corridor.cfg scenario
 
 # =====================
 # Configuration Anchors

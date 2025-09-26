@@ -24,8 +24,6 @@ spec:
     episodic: reward per step (episode_length typically 1)
     range: [-inf, inf]
 
-  versions:
-    v0: MultiArmedBanditEnv baseline configuration
 
 # =====================
 # Configuration Anchors

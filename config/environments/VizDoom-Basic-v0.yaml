@@ -28,8 +28,6 @@ spec:
     threshold_solved: 10
     range: [-10, 100]
 
-  versions:
-    v0: ViZDoom basic.cfg scenario
 
 # =====================
 # Configuration Anchors

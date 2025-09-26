@@ -30,8 +30,6 @@ spec:
     range: [-200, 0]
     threshold_solved: -110
 
-  versions:
-    v0: Default Gymnasium release
 
 # =====================
 # Configuration Anchors

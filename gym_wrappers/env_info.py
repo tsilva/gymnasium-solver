@@ -1,6 +1,5 @@
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Dict, Optional, Sequence
 
 import gymnasium as gym
 from gymnasium.wrappers import TimeLimit
@@ -8,7 +7,25 @@ from gymnasium.wrappers import TimeLimit
 from utils.decorators import cache
 from utils.env_spec import EnvSpec
 
+def deep_merge(a: dict, b: dict) -> dict:
+    """
+    Merge dict b into dict a (recursively) and return a new dict.
+    Values in b override those in a.
+    """
+    result = a.copy()
+    for k, v in b.items():
+        if (
+            k in result
+            and isinstance(result[k], dict)
+            and isinstance(v, dict)
+        ):
+            result[k] = deep_merge(result[k], v)
+        else:
+            result[k] = v
+    return result
 
+
+# TODO: a better strategy is to create the env spec with everything at build time and then only access it without any further lookups
 class EnvInfoWrapper(gym.ObservationWrapper):
 
     def __init__(self, env, **kwargs):
@@ -18,15 +35,12 @@ class EnvInfoWrapper(gym.ObservationWrapper):
 
         _env_spec = self._get_spec__env()
         spec = kwargs.get('spec', {})
-        spec = {**_env_spec, **spec}
+        spec = deep_merge(_env_spec, spec)
         self._spec = EnvSpec(spec)
 
     def get_id(self):
         root_env = self._get_root_env()
         return root_env.spec.id
-
-    def _repo_root(self) -> Path:
-        return Path(__file__).resolve().parents[1]
 
     @cache
     def get_render_mode(self):
@@ -46,18 +60,44 @@ class EnvInfoWrapper(gym.ObservationWrapper):
         obs_type = self.get_obs_type()
         return obs_type == 'ram'
 
-    def get_return_threshold(self):
-        spec = self.get_spec()
-        return spec.return_threshold()
+    @cache
+    def _get_return_threshold__env(self):
+        wrappers = self._collect_wrappers()
+        for wrapper in wrappers:
+            value = getattr(wrapper, "return_threshold", None)
+            if not value is None: return value
+        return None
 
+    @cache
+    def _get_return_threshold__spec(self):
+        spec = self.get_spec()
+        return_threshold = spec.get_return_threshold()
+        return return_threshold
+
+    @cache
+    def get_return_threshold(self):
+        return_threshold = self._get_return_threshold__env()
+        if return_threshold is not None: 
+            return return_threshold
+
+        return_threshold = self._get_return_threshold__spec()
+        if return_threshold is not None: 
+            return return_threshold
+        return None
+
+    @cache
     def get_reward_range(self):
         spec = self.get_spec()
-        return spec.reward_range()
-
+        reward_range = spec.get_reward_range()
+        return reward_range
+    
+    @cache
     def get_return_range(self):
         spec = self.get_spec()
-        return spec.return_range()
+        return_range = spec.get_return_range()
+        return return_range
 
+    @cache
     def _get_time_limit__env(self):
         wrapper = self._find_wrapper(TimeLimit)
         if not wrapper: return None 
@@ -68,7 +108,8 @@ class EnvInfoWrapper(gym.ObservationWrapper):
 
     def _get_time_limit_spec(self):
         spec = self.get_spec()
-        return spec.max_episode_steps()
+        max_episode_steps = spec.get_max_episode_steps()
+        return max_episode_steps
     
     @cache
     def get_time_limit(self):
@@ -88,7 +129,8 @@ class EnvInfoWrapper(gym.ObservationWrapper):
     
     def _get_render_fps__spec(self):
         spec = self.get_spec()
-        return spec.render_fps()
+        render_fps = spec.get_render_fps()
+        return render_fps
     
     def get_render_fps(self):
         """Best-effort render FPS from env metadata or spec file."""
@@ -106,15 +148,13 @@ class EnvInfoWrapper(gym.ObservationWrapper):
 
     def get_action_labels(self):
         spec = self.get_spec()
-        return spec.action_labels()
+        action_labels = spec.get_action_labels()
+        return action_labels
 
-    # NOTE: required by ObservationWrapper
-    def observation(self, observation): 
-        return observation
 
     def _get_spec__env(self):
         root_env = self._get_root_env()
-        return asdict(root_env.spec)
+        return root_env.spec._data # TODO: make envspec more specific
 
     @cache
     def _get_root_env(self):
@@ -154,6 +194,10 @@ class EnvInfoWrapper(gym.ObservationWrapper):
             if isinstance(wrapper_metadata, dict):
                 metadata.update(wrapper_metadata)
         return metadata
+
+    # NOTE: required by ObservationWrapper
+    def observation(self, observation): 
+        return observation
 
 if __name__ == "__main__":
     env = gym.make("CartPole-v1")

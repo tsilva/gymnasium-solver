@@ -20,7 +20,7 @@ class EarlyStoppingCallback(pl.Callback):
     def __init__(
         self,
         metric_key: str,
-        threshold: Optional[float],
+        threshold: float,
         mode: str = "max",
     ) -> None:
         super().__init__()
@@ -45,7 +45,7 @@ class EarlyStoppingCallback(pl.Callback):
         # If value is not available yet, do nothing
         value = trainer.logged_metrics.get(self.metric_key)
         if value is None: return
-
+        
         # If threshold wasn't reached yet then return (do nothing)
         _should_stop_max = self.mode == "max" and float(value) >= self.threshold
         _should_stop_min = self.mode == "min" and float(value) <= self.threshold

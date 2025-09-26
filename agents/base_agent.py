@@ -455,8 +455,10 @@ class BaseAgent(pl.LightningModule):
 
         # Auto-wire hyperparameter schedulers: scan config for any *_schedule fields
         schedule_suffix = "_schedule"
-        for key, value in vars(self.config).items():
+        for key, value in vars(self.config).items(): # TODO: config.get_schedules()?
+            # Skip if not a schedule attribute
             if not key.endswith(schedule_suffix) or not value: continue # TODO: extract concern to config
+
             param = key[:-len(schedule_suffix)]
             assert hasattr(self, param), f"Module {self} has no attribute {param}"
             target_value = getattr(self.config, f"{param}_schedule_target_value", 0.0)
@@ -468,7 +470,7 @@ class BaseAgent(pl.LightningModule):
                     target_value=target_value,
                     target_progress=target_progress,
                     set_value_fn={
-                        "policy_lr": self._change_optimizers_lr,
+                        "policy_lr": lambda lr: self._change_optimizers_lr(lr),
                     }.get(param, None),
                 )
             )

@@ -36,6 +36,8 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
+from utils.env_spec import EnvSpec
+
 
 @dataclass
 class BanditSpec:
@@ -46,14 +48,8 @@ class BanditSpec:
 
 
 class MultiArmedBanditEnv(gym.Env):
+    render_mode = "rgb_array"
     metadata = {"render_modes": []}
-
-    # TODO: should I reuse gym class?
-    @dataclass
-    class EnvSpec:
-        id: str
-        max_episode_steps: int
-        reward_threshold: Optional[float] = None
 
     def __init__(
         self, 
@@ -99,11 +95,15 @@ class MultiArmedBanditEnv(gym.Env):
         self._timestep = 0
 
         # Minimal EnvSpec to cooperate with EnvInfoWrapper helpers
-        reward_threshold = max(self._means)
-        self.spec = MultiArmedBanditEnv.EnvSpec(
-            id="Bandit-v0",
-            max_episode_steps=self.spec_cfg.episode_length,
-            reward_threshold=reward_threshold,
+        return_threshold = max(self._means)
+        self.spec = EnvSpec(
+            #id="Bandit-v0",
+            _data=dict(
+                max_episode_steps=self.spec_cfg.episode_length,
+                returns=dict(
+                    threshold_solved=return_threshold,
+                ),
+            ),
         )
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
@@ -139,7 +139,7 @@ class MultiArmedBanditEnv(gym.Env):
 
     def step(self, action: int):
         # Assert that action is valid
-        if not self.action_space.contains(action): raise AssertionError("Action out of bounds")
+        if not self.action_space.contains(action): raise AssertionError("action out of bounds")
 
         # Sample reward from the arm's distribution
         reward = self._sample_reward(action)
@@ -183,7 +183,5 @@ class MultiArmedBanditEnv(gym.Env):
         if isinstance(stds, (int, float)): stds = np.full(n_arms, float(stds), dtype=np.float32)
         if len(stds) != n_arms: raise ValueError("stds list must be length n_arms")
         self._stds = np.asarray(stds, dtype=np.float32)
-
-
 
         

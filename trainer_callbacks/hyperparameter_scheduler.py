@@ -61,7 +61,7 @@ class HyperparameterSchedulerCallback(pl.Callback):
         new_value = scheduler_fn(self._base_value, self.target_value, progress, self.target_progress)
 
         # Set the new value of the parameter
-        self.set_value_fn(pl_module, new_value)
+        self.set_value_fn(new_value)
 
     def _get_parameter_value(self, pl_module: pl.LightningModule) -> float:
         assert hasattr(pl_module, self.parameter), f"module {pl_module} has no attribute {self.parameter}"

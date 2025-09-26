@@ -36,34 +36,30 @@ class EnvSpec(Mapping[str, Any]):
         value = self._data.get("id")
         return str(value) if value is not None else None
 
-    def max_episode_steps(self) -> Optional[int]:
+    def get_max_episode_steps(self) -> Optional[int]:
         value = self._data.get("max_episode_steps")
-        if not isinstance(value, (int, float)):
-            return None
-        if value <= 0:
-            return None
+        if not isinstance(value, (int, float)):  return None
+        if value <= 0: return None
         return int(value)
 
-    def render_fps(self) -> Optional[int]:
+    def get_render_fps(self) -> Optional[int]:
         value = self._data.get("render_fps")
-        if not isinstance(value, (int, float)):
-            return None
-        if value <= 0:
-            return None
+        if not isinstance(value, (int, float)): return None
+        if value <= 0: return None
         return int(value)
 
-    def action_labels(self) -> Dict[str, Any]:
+    def get_action_labels(self) -> Dict[str, Any]:
         action_space = self._section("action_space")
         labels = action_space.get("labels", {})
         return dict(labels) if isinstance(labels, Mapping) else {}
 
-    def reward_range(self) -> Optional[Sequence[float]]:
+    def get_reward_range(self) -> Optional[Sequence[float]]:
         return self._validated_range("rewards", "range", "Reward range")
 
-    def return_range(self) -> Optional[Sequence[float]]:
+    def get_return_range(self) -> Optional[Sequence[float]]:
         return self._validated_range("returns", "range", "Return range")
 
-    def return_threshold(self) -> Any:
+    def get_return_threshold(self) -> Any:
         returns = self._section("returns")
         return returns.get("threshold_solved")
 
@@ -75,10 +71,7 @@ class EnvSpec(Mapping[str, Any]):
     def _validated_range(self, section: str, field: str, label: str) -> Optional[Sequence[float]]:
         section_data = self._section(section)
         rng = section_data.get(field)
-        if rng is None:
-            return None
-        if not isinstance(rng, (list, tuple)):
-            raise ValueError(f"{label} must be a list or tuple, got {type(rng)}")
-        if len(rng) != 2:
-            raise ValueError(f"{label} must be a 2-element list or tuple, got {len(rng)}")
+        if rng is None: return None
+        if not isinstance(rng, (list, tuple)): raise ValueError(f"{label} must be a list or tuple, got {type(rng)}")
+        if len(rng) != 2: raise ValueError(f"{label} must be a 2-element list or tuple, got {len(rng)}")
         return [rng[0], rng[1]]

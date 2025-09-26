@@ -23,7 +23,6 @@ spec:
   returns:
     episodic: reward per step (episode_length typically 1)
     range: [-inf, inf]
-    threshold_solved: max_arm_mean
 
   versions:
     v0: MultiArmedBanditEnv baseline configuration
@@ -40,9 +39,13 @@ _env: &env
     stds: 1
     episode_length: 1
   max_timesteps: 20_000
+  gamma: 1.0
+  gae_lambda: 1.0
   n_envs: 16
   n_steps: 64
   batch_size: 0.25
+  eval_warmup_epochs: 5
+  eval_freq_epochs: 1
 
 _ppo: &ppo
   <<: *env
@@ -50,11 +53,7 @@ _ppo: &ppo
   n_epochs: 4
   policy_lr: lin_4e-2
   clip_range: 0.2
-  gamma: 1.0
-  gae_lambda: 1.0
   normalize_advantages: "rollout"
-  eval_warmup_epochs: 5
-  eval_freq_epochs: 1
 
 # PPO on Multi-Armed Bandit - standard configuration for bandit problem
 ppo:

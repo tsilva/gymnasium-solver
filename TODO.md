@@ -2,9 +2,6 @@
 
 # NEXT
 
-- BUG: bandit env crashes because it tries to record
-- BUG: bandit training not running due to missing spec
-- BUG: can't inspect bandit training
 - REFACTOR: get rid of prefit presentation callback, check how things are done right now
 - BUG: inspect not working because it cant retrieve action labels
 

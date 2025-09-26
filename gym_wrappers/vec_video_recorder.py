@@ -1,99 +1,26 @@
-from contextlib import contextmanager
-from typing import Optional
+from typing import Any
 
-from gymnasium import error
-from stable_baselines3.common.vec_env.base_vec_env import VecEnv, VecEnvWrapper
+from stable_baselines3.common.vec_env.base_vec_env import VecEnvWrapper
 
-from gym_wrappers.env_video_recorder import EnvVideoRecorder
-
-
-# TODO: this file should follow the same pattern as vec_env_info.py/env_info.py, in the sense that the vec wrappers should server mostly as proxies to the env wrapper, move as much code as you can to the env wrapper and leave this one as empty as possible, if possible even apply the dynamic method proxying strategy we used in vecenvinfo/envinfo
+# NOTE: once we softcode this wrapper to allow multiple envs, we should look at vec_env_info, apply same pattern and perhaps encapsulate logic somehow
 class VecVideoRecorder(VecEnvWrapper):
-    """Proxy VecEnv wrapper that delegates recording to EnvVideoRecorder instances."""
+    """VecEnv wrapper that proxies calls to a single underlying EnvVideoRecorder."""
 
-    def __init__(self, venv: VecEnv, record_env_idx: Optional[int] = 0):
-        super().__init__(venv)
-        self.record_env_idx = record_env_idx
-        self.recording = False
-        self.num_envs = venv.num_envs
-
-    # ------------------------------------------------------------------ helpers
-
-    def _resolve_env_index(self, idx_value: Optional[int], length: int) -> int:
-        if idx_value is None:
-            idx = 0
-        else:
-            try:
-                idx = int(idx_value)
-            except (TypeError, ValueError):
-                idx = 0
-        if length <= 0:
-            return idx
-        return max(0, min(idx, length - 1))
-
-    def _unwrap_base_vec_env(self):
-        base = self.venv
-        while isinstance(base, VecEnvWrapper):
-            base = base.venv
-        return base
-
-    def _get_env_recorder(self, env_idx: Optional[int] = None) -> EnvVideoRecorder:
-        base = self._unwrap_base_vec_env()
-        envs = getattr(base, "envs", None)
-        if not isinstance(envs, list):
-            raise error.Error(
-                "VecVideoRecorder requires a DummyVecEnv-style base with direct env access"
-            )
-        idx = self._resolve_env_index(env_idx if env_idx is not None else self.record_env_idx, len(envs))
-        target_env = envs[idx]
-        recorder = find_wrapper(target_env, EnvVideoRecorder)
-        if recorder is None:
-            raise error.Error(
-                "EnvVideoRecorder not found in the base env wrapper chain. Did you enable record_video?"
-            )
-        return recorder
-
-    # ------------------------------------------------------------------ API
-
-    def start_recording(self) -> None:
-        recorder = self._get_env_recorder()
-        recorder.start_recording()
-        self.recording = True
-
-    def stop_recording(self) -> None:
-        recorder = self._get_env_recorder()
-        recorder.stop_recording()
-        self.recording = False
-
-    def reset(self):
+    # ---- VecEnv overrides -------------------------------------------------
+    def reset(self) -> Any:
         return self.venv.reset()
 
-    def step_wait(self):
+    def step_wait(self) -> Any:
         return self.venv.step_wait()
 
-    @contextmanager
-    def recorder(self, video_path: str, record_video: bool = True):
-        if not record_video:
-            yield self
-            return
+    # ---- Internal helper --------------------------------------------------
+    def _call_env(self, method: str, *args, **kwargs) -> Any:
+        result = self.venv.env_method(method, *args, indices=[0], **kwargs)
+        return result[0]
 
-        recorder = self._get_env_recorder()
-        with recorder.recorder(video_path, record_video=True):
-            self.recording = True
-            try:
-                yield self
-            finally:
-                self.recording = False
-
-    def save_recording(self, video_path: str) -> None:
-        recorder = self._get_env_recorder()
-        recorder.save_recording(video_path)
-
-    def close(self) -> None:
-        if self.recording:
-            try:
-                self.stop_recording()
-            except AssertionError:
-                # Recorder may already be stopped by the underlying context manager
-                pass
-        super().close()
+    # ---- Dynamic proxying -------------------------------------------------
+    def __getattr__(self, name: str) -> Any:
+        assert not name.startswith("_"), f"Cannot proxy private/dunder name: {name}"
+        def _proxy_method(*args, **kwargs): return self._call_env(name, *args, **kwargs)
+        setattr(self, name, _proxy_method)
+        return _proxy_method

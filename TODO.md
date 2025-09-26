@@ -2,13 +2,16 @@
 
 # NEXT
 
+- BUG: bandit env crashes because it tries to record
+- BUG: bandit training not running due to missing spec
+- BUG: can't inspect bandit training
 - REFACTOR: get rid of prefit presentation callback, check how things are done right now
-- BUG: wrong project id logged in wandb
-- BUG: spec is being retrived from env config
 - BUG: inspect not working because it cant retrieve action labels
+
+
+- BUG: wrong project id logged in wandb
 - BUG: investigate mc_return in pong, seems busted
 - key eval freq from vec steps
-- BUG: fps seems slow
 - NEXT: only show certain metrics in table logger
 - Add alert for when ep_rew_mean starts stalling / downward trend
 - Make sure metrics.yaml is up to date with all metrics with correct names
@@ -19,9 +22,6 @@
 - FEAT: add support for agents to handle their own save/load logic
 - FEAT: track dead relus
 - TEST: empirically verify that initial policy distribution is uniform (check if action mean starts at middle of action space and std is 0)
-- BUG: bandit env crashes because it tries to record
-- BUG: bandit training not running due to missing spec
-- BUG: can't inspect bandit training
 - BUG: training epoch is still running after validation early stop
 - BUG: wandb run is being logged even when training is not started, bold terminal
 - TEST: are sweeps still working?

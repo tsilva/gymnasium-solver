@@ -212,7 +212,7 @@ def build_env(
     
     # Enable video recording if requested (proxies 
     # to the underlying env video recorder)
-    if record_video: env = VecVideoRecorder(env, record_env_idx=0)
+    if record_video: env = VecVideoRecorder(env)
 
     # Wrap with vec env info wrapper that proxies to 
     # the underlying env info wrapper (first env metadata)

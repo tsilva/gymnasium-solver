@@ -315,7 +315,6 @@ class Config:
 
         # Load all config files
         yaml_files = sorted(env_config_path.glob("*.yaml"))
-        yaml_files = [yf for yf in yaml_files if not yf.name.endswith(".spec.yaml")]
         for yf in yaml_files: _collect_from_file(yf)
 
         # Support passing a fully qualified id like "CartPole-v1_ppo" in config_id

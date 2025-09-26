@@ -2,9 +2,10 @@
 
 # NEXT
 
+- BUG: wrong project id logged in wandb
 - BUG: spec is being retrived from env config
 - BUG: inspect not working because it cant retrieve action labels
-
+- BUG: investigate mc_return in pong, seems busted
 - key eval freq from vec steps
 - BUG: fps seems slow
 - NEXT: only show certain metrics in table logger

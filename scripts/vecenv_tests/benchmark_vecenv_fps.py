@@ -1,9 +1,10 @@
 """Unified ALE throughput benchmark across three backends.
 
 Backends:
-- `alepy`  : ale-py native `AtariVectorEnv` (in-process, threaded)
-- `gym`    : Gymnasium `SyncVectorEnv` (default) or `AsyncVectorEnv` with `--subproc`
-- `sb3`    : Stable-Baselines3 `DummyVecEnv` (default) or `SubprocVecEnv` with `--subproc`
+- `alepy`    : ale-py native `AtariVectorEnv` (in-process, threaded)
+- `gym`      : Gymnasium `SyncVectorEnv` (default) or `AsyncVectorEnv` with `--subproc`
+- `gym-make` : Gymnasium `make_vec(..., vectorization_mode=sync|async)`
+- `sb3`      : Stable-Baselines3 `DummyVecEnv` (default) or `SubprocVecEnv` with `--subproc`
 
 If `--backend` is omitted, runs all three backends (using the provided flags
 like `--num-envs` and `--subproc`) and prints a ranked summary.
@@ -24,6 +25,10 @@ import os
 from dataclasses import dataclass
 from typing import Iterable, Optional
 
+import ale_py
+import gymnasium as gym
+gym.register_envs(ale_py)
+
 import glob
 import math
 import platform
@@ -31,14 +36,9 @@ import re
 import subprocess
 import time
 
-import numpy as np
+# numpy is imported lazily within benchmark functions to keep --help usable
 
 # --- Shared types and helpers (inlined from former scripts) ---
-
-import ale_py
-import gymnasium as gym
-gym.register_envs(ale_py)
-
 @dataclass
 class AleBinaryInfo:
     python_arch: str
@@ -242,6 +242,7 @@ def benchmark_alepy_vector_env(
     chunk_steps: int = 256,
 ) -> BenchmarkResult:
     from ale_py.vector_env import AtariVectorEnv  # local import
+    import numpy as np
 
     assert frames > 0, "Frame count must be positive"
     assert num_envs > 0, "Number of environments must be positive"
@@ -343,6 +344,7 @@ def benchmark_gym_vec_env(
     import gymnasium as gym  # local import
     from gymnasium.vector import AsyncVectorEnv, SyncVectorEnv
     from gymnasium.spaces import Discrete
+    import numpy as np
 
     if rom.is_custom:
         raise ValueError(
@@ -411,6 +413,94 @@ def _run_gym(env_id: str, rom: ResolvedRom, frames: int, num_envs: int, use_subp
     )
 
 
+def benchmark_gym_make_vec_env(
+    env_id: str,
+    rom: ResolvedRom,
+    frames: int,
+    num_envs: int,
+    *,
+    use_subproc: bool,
+    warmup_steps: int = 256,
+    chunk_steps: int = 256,
+) -> BenchmarkResult:
+    import gymnasium as gym  # local import
+    from gymnasium.spaces import Discrete
+    import numpy as np
+
+    if rom.is_custom:
+        raise ValueError(
+            "Custom ROM paths are not supported by Gymnasium ALE envs; pass a packaged ROM id like 'ALE/Pong-v5'."
+        )
+    assert frames > 0, "Frame count must be positive"
+    assert num_envs > 0, "Number of environments must be positive"
+    assert chunk_steps > 0, "Chunk size must be positive"
+
+    vec_mode = "async" if use_subproc else "sync"
+    env_kwargs = dict(
+        # frameskip=1,
+        # repeat_action_probability=0.0,
+        # full_action_space=False,
+        # noop_max=0,
+        # render_mode=None,
+        # obs_type="rgb",
+    )
+
+    if not hasattr(gym, "make_vec"):
+        raise ImportError("Your Gymnasium version does not expose gym.make_vec")
+
+    vec_env = gym.make_vec(env_id, num_envs=num_envs, vectorization_mode=vec_mode, **env_kwargs)
+
+    try:
+        out = vec_env.reset()
+        # reset() can return (obs, infos) in Gymnasium; accept both signature forms.
+        if isinstance(out, tuple) and len(out) == 2:
+            obs, _infos = out
+        else:
+            obs = out
+        _ = obs
+
+        if hasattr(vec_env, "single_action_space") and isinstance(vec_env.single_action_space, Discrete):
+            action_value = 0
+        elif hasattr(vec_env, "action_space") and isinstance(vec_env.action_space, Discrete):
+            action_value = 0
+        else:
+            raise ValueError("This benchmark only supports discrete ALE actions.")
+        actions = np.full((num_envs,), action_value, dtype=np.int64)
+
+        warmup_iters = max(1, math.ceil(warmup_steps / max(1, num_envs)))
+        for _ in range(warmup_iters):
+            vec_env.step(actions)
+
+        frames_done = 0
+        steps_remaining = max(1, math.ceil(frames / num_envs))
+        start = time.perf_counter()
+
+        while steps_remaining > 0:
+            steps_this_chunk = min(chunk_steps, steps_remaining)
+            for _ in range(steps_this_chunk):
+                vec_env.step(actions)
+                frames_done += num_envs
+            steps_remaining -= steps_this_chunk
+
+        elapsed = time.perf_counter() - start
+    finally:
+        vec_env.close()
+
+    return BenchmarkResult(frames=frames_done, elapsed=elapsed, requested=frames)
+
+
+def _run_gym_make(env_id: str, rom: ResolvedRom, frames: int, num_envs: int, use_subproc: bool) -> RunOutcome:
+    result = benchmark_gym_make_vec_env(
+        env_id, rom, frames=frames, num_envs=num_envs, use_subproc=use_subproc
+    )
+    backend = "async" if use_subproc else "sync"
+    return RunOutcome(
+        backend="gym-make",
+        result=result,
+        detail=f"backend=make_vec({backend}), num_envs={num_envs}",
+    )
+
+
 def benchmark_sb3_vec_env(
     env_id: str,
     rom: ResolvedRom,
@@ -424,6 +514,7 @@ def benchmark_sb3_vec_env(
     from stable_baselines3.common.env_util import make_vec_env  # local import
     from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
     from gymnasium.spaces import Discrete
+    import numpy as np
 
     if rom.is_custom:
         raise ValueError(
@@ -528,10 +619,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--backend",
-        choices=("alepy", "gym", "sb3"),
+        choices=("alepy", "gym", "gym-make", "sb3"),
         default=None,
         help=(
-            "Backend to run. If omitted, runs all (alepy + gym + sb3) sequentially "
+            "Backend to run. If omitted, runs all (alepy + gym + gym-make + sb3) sequentially "
             "and prints a ranked summary."
         ),
     )
@@ -582,6 +673,11 @@ def main() -> None:
             print(f"Skipping gym backend (missing dependency): {e}")
 
         try:
+            outcomes.append(_run_gym_make(env_id, rom, args.frames, args.num_envs, args.subproc))
+        except ImportError as e:
+            print(f"Skipping gym-make backend (missing dependency): {e}")
+
+        try:
             outcomes.append(_run_sb3(env_id, rom, args.frames, args.num_envs, args.subproc))
         except ImportError as e:
             print(f"Skipping sb3 backend (missing dependency): {e}")
@@ -610,6 +706,8 @@ def main() -> None:
         outcome = _run_alepy(rom, args.frames, args.num_envs, args.num_threads)
     elif args.backend == "gym":
         outcome = _run_gym(env_id, rom, args.frames, args.num_envs, args.subproc)
+    elif args.backend == "gym-make":
+        outcome = _run_gym_make(env_id, rom, args.frames, args.num_envs, args.subproc)
     elif args.backend == "sb3":
         outcome = _run_sb3(env_id, rom, args.frames, args.num_envs, args.subproc)
     else:  # pragma: no cover - argparse enforces choices

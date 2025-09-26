@@ -1,31 +1,33 @@
-from collections.abc import Mapping
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Dict, Optional
 
 import gymnasium as gym
 from gymnasium.wrappers import TimeLimit
 
-from gym_wrappers.utils import find_wrapper
-from utils.io import read_yaml
+# TODO: extract to utils
+from functools import wraps
+def cache(method):
+    cache = {}
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        key = (method.__name__, args, frozenset(kwargs.items()))
+        if key in cache: return cache[key]
+        result = method(self, *args, **kwargs)
+        cache[key] = result
+        return result
+    return wrapper
 
-# TODO: CLEANUP this file
+# TODO: create envspec dataclass, allows querying spec map
 
 class EnvInfoWrapper(gym.ObservationWrapper):
 
     def __init__(self, env, **kwargs):
         super().__init__(env)
+        # TODO: review these (is obs_type available inside the env?)
         self._obs_type = kwargs.get('obs_type', None)
         # Optional: project/challenge id (YAML filename stem) to prefer when resolving specs
         self._project_id = kwargs.get('project_id', None)
         self._spec = kwargs.get('spec', None)
-
-    def _get_root_env(self):
-        current = self
-        while isinstance(current, gym.Env):
-            if not hasattr(current, "env"): break
-            current = current.env
-        return current
 
     def get_id(self):
         root_env = self._get_root_env()
@@ -34,14 +36,12 @@ class EnvInfoWrapper(gym.ObservationWrapper):
     def _repo_root(self) -> Path:
         return Path(__file__).resolve().parents[1]
 
-    def _get_spec__env(self):
-        root_env = self._get_root_env()
-        return asdict(root_env.spec)
-
-    def get_spec(self):
-        _env_spec = self._get_spec__env()
-        spec = {**_env_spec, **self._spec} # TODO: cache
-        return spec
+    @cache
+    def get_render_mode(self):
+        wrappers = self._collect_wrappers()
+        for wrapper in wrappers:
+            if hasattr(wrapper, "render_mode"): return wrapper.render_mode
+        return None 
 
     def get_obs_type(self):
         return self._obs_type
@@ -55,62 +55,28 @@ class EnvInfoWrapper(gym.ObservationWrapper):
         return obs_type == 'ram'
 
     def get_return_threshold(self):
-        """Backward-compatible threshold accessor.
-
-        Prefers returns.threshold_solved when available; falls back to
-        rewards.threshold_solved for older specs.
-        """
         spec = self.get_spec()
-        # New style: prefer returns.threshold_solved
-        returns = spec.get('returns', {}) if isinstance(spec, dict) else {}
-        if isinstance(returns, dict) and 'threshold_solved' in returns:
-            return returns['threshold_solved']
-        # Legacy location: rewards.threshold_solved
-        rewards = spec.get('rewards', {}) if isinstance(spec, dict) else {}
-        if isinstance(rewards, dict) and 'threshold_solved' in rewards:
-            return rewards['threshold_solved']
-        return None
+        returns = spec.get('returns', {})
+        treshold_solved = returns.get('threshold_solved', None)
+        return treshold_solved
 
-    # TODO: CLEANUP this method
-    # Preferred names for external callers
     def get_reward_range(self):
-        """Per-step reward range [min, max] when provided in spec.
-
-        Looks under rewards.range (per-step). Returns None if unavailable.
-        """
-        try:
-            spec = self.get_spec()
-            rewards = spec.get('rewards') if isinstance(spec, dict) else None
-            if isinstance(rewards, dict):
-                rng = rewards.get('range')
-                if isinstance(rng, (list, tuple)) and len(rng) == 2:
-                    return list(rng)
-        except Exception:
-            pass
-        return None
+        spec = self.get_spec()
+        rewards = spec.get('rewards', {})
+        rng = rewards.get('range', None)
+        if rng is None: return None
+        if not isinstance(rng, (list, tuple)): raise ValueError(f"Reward range must be a list or tuple, got {type(rng)}")   
+        if len(rng) != 2: raise ValueError(f"Reward range must be a 2-element list or tuple, got {len(rng)}")
+        return list(rng)
 
     def get_return_range(self):
-        """Episodic return range [min, max] when provided in spec.
-
-        Prefers returns.range; falls back to legacy rewards.range when returns
-        section is missing.
-        """
-        try:
-            spec = self.get_spec()
-            returns = spec.get('returns') if isinstance(spec, dict) else None
-            if isinstance(returns, dict):
-                rng = returns.get('range')
-                if isinstance(rng, (list, tuple)) and len(rng) == 2:
-                    return list(rng)
-            # Fallback to legacy location
-            rewards = spec.get('rewards') if isinstance(spec, dict) else None
-            if isinstance(rewards, dict):
-                rng = rewards.get('range')
-                if isinstance(rng, (list, tuple)) and len(rng) == 2:
-                    return list(rng)
-        except Exception:
-            pass
-        return None
+        spec = self.get_spec()
+        rewards = spec.get('returns', {})
+        rng = rewards.get('range', None)
+        if rng is None: return None
+        if not isinstance(rng, (list, tuple)): raise ValueError(f"Return range must be a list or tuple, got {type(rng)}")   
+        if len(rng) != 2: raise ValueError(f"Return range must be a 2-element list or tuple, got {len(rng)}")
+        return list(rng)
 
     def get_time_limit(self):
         # If the time limit wrapper is found, return the max episode steps
@@ -125,38 +91,88 @@ class EnvInfoWrapper(gym.ObservationWrapper):
         value = spec.get("max_episode_steps", None)
         return value
     
-    # TODO: clean this up
+    def _get_render_fps__env(self):
+        render_fps = self._get_env_metadata().get("render_fps")
+        if not isinstance(render_fps, (int, float)): return None
+        if render_fps <= 0: return None
+        return int(render_fps)
+    
+    def _get_render_fps__spec(self):
+        spec = self.get_spec()
+        render_fps = spec.get("render_fps", None)
+        if not isinstance(render_fps, (int, float)): return None
+        if render_fps <= 0: return None
+        return int(render_fps)
+    
     def get_render_fps(self):
         """Best-effort render FPS from env metadata or spec file."""
-        current = self
-        while isinstance(current, gym.Env):
-            md = getattr(current, "metadata", None)
-            if isinstance(md, dict):
-                fps = md.get("render_fps")
-                if isinstance(fps, (int, float)) and fps > 0:
-                    return int(fps)
-            if not hasattr(current, "env"):
-                break
-            current = getattr(current, "env")
-        # Fallback: try spec file
-        try:
-            spec = self.get_spec()
-            fps = spec.get("render_fps", None)
-            if isinstance(fps, (int, float)) and fps > 0:
-                return int(fps)
-        except Exception:
-            pass
-        return 30
+
+        # Return FPS from env metadata if available
+        fps = self._get_render_fps__env()
+        if fps is not None: return fps
+
+        # Return FPS from spec file if available
+        fps = self._get_render_fps__spec()
+        if fps is not None: return fps
+
+        # Return default FPS if no FPS is available
+        return 30   
 
     def get_action_labels(self):
-        return self.get_spec().get("action_space", {}).get("labels", {})
+        spec = self.get_spec()
+        action_space = spec.get("action_space", {})
+        labels = action_space.get("labels", {})
+        if not isinstance(labels, dict): return {}
+        return labels
 
     # NOTE: required by ObservationWrapper
     def observation(self, observation): 
         return observation
 
+    def _get_spec__env(self):
+        root_env = self._get_root_env()
+        return asdict(root_env.spec)
+
+    @cache
+    def _get_root_env(self):
+        current = self
+        while isinstance(current, gym.Env):
+            if not hasattr(current, "env"): break
+            current = current.env
+        return current
+
+    @cache
     def _find_wrapper(self, wrapper_class):
-        return find_wrapper(self, wrapper_class)
+        wrappers = self._collect_wrappers()
+        for wrapper in wrappers:
+            if isinstance(wrapper, wrapper_class): return wrapper
+        return None
+
+    @cache
+    def _collect_wrappers(self):
+        wrappers = []
+        current = self
+        while isinstance(current, gym.Env):
+            wrappers.append(current)
+            if not hasattr(current, "env"): break
+            current = getattr(current, "env")
+        return wrappers
+
+    @cache
+    def get_spec(self):
+        _env_spec = self._get_spec__env()
+        spec = {**_env_spec, **self._spec}
+        return spec
+
+    @cache
+    def _get_env_metadata(self):
+        wrappers = self._collect_wrappers()
+        metadata = {}
+        for wrapper in reversed(wrappers):
+            wrapper_metadata = getattr(wrapper, "metadata", None)
+            if isinstance(wrapper_metadata, dict):
+                metadata.update(wrapper_metadata)
+        return metadata
 
 if __name__ == "__main__":
     env = gym.make("CartPole-v1")

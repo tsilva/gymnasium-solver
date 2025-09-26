@@ -78,14 +78,15 @@ class VecObsBarPrinter(VecEnvWrapper):
         bar_width: int = 40,
         env_index: int = 0,
         enable: bool = True,
-        # TODO: make target episodes non-optional, make rest of codebase remove optionality checks/branches
-        target_episodes: Optional[int] = None,
+        target_episodes: int,
     ) -> None:
         super().__init__(venv)
         self._bar_width = max(10, int(bar_width))
         self._env_index = int(env_index)
         self._enable = bool(enable)
-        self._target_episodes = int(target_episodes) if target_episodes is not None else None
+        target_episodes_int = int(target_episodes)
+        assert target_episodes_int >= 1, "target_episodes must be >= 1"
+        self._target_episodes: int = target_episodes_int
 
         # Labels and ranges derived from spec, when available
         self._labels: Optional[List[str]] = None
@@ -395,10 +396,7 @@ class VecObsBarPrinter(VecEnvWrapper):
 
         # Build header with episode info, last reward, and running mean reward
         curr_ep_idx = self._ep_count + 1  # 1-based index for current episode
-        if self._target_episodes is not None and self._target_episodes > 0:
-            ep_prog = f"Ep {curr_ep_idx}/{self._target_episodes}"
-        else:
-            ep_prog = f"Ep {curr_ep_idx}"
+        ep_prog = f"Ep {curr_ep_idx}/{self._target_episodes}"
 
         # Current episode progress (return and length)
         cur_ep = f"cur_ep_r={self._current_ep_return:+.3f}"

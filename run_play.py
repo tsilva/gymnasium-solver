@@ -28,6 +28,7 @@ def main():
         help="Pause for input each env step for visual debugging",
     )
     args = p.parse_args()
+    target_episodes = max(1, int(args.episodes))
 
     # Best-effort: prefer software renderer on WSL to avoid GLX issues
     is_wsl = ("microsoft" in platform.release().lower()) or ("WSL_INTEROP" in os.environ)
@@ -48,18 +49,18 @@ def main():
 
     # Attach a live observation bar printer for interactive play (vector-level wrapper)
     from gym_wrappers.vec_obs_printer import VecObsBarPrinter
-    env = VecObsBarPrinter(env, bar_width=40, env_index=0, enable=True, target_episodes=args.episodes)
+    env = VecObsBarPrinter(env, bar_width=40, env_index=0, enable=True, target_episodes=target_episodes)
 
     # Load configuration
     # TODO: we should be loading the agent and having it run the episode
     policy_model, _ = load_policy_model_from_checkpoint(run.best_checkpoint_path, env, config)
 
+    # TODO: make step-by-step mode use the same rollout collector but just with n_steps=1, meaning we can drop most code below use the same code loop as when we dont have step-by-step mode
     # Step-by-step interactive mode for visual debugging
     if args.step_by_step:
         import torch
 
-        target_eps = max(1, int(args.episodes))
-        print(f"Playing {target_eps} episode(s) step-by-step with render_mode='human'...")
+        print(f"Playing {target_episodes} episode(s) step-by-step with render_mode='human'...")
 
         device = _device_of(policy_model)
         obs = env.reset()
@@ -67,7 +68,7 @@ def main():
         step = 0
         # Offer a tiny hint once
         print("Press Enter to step, 'q' then Enter to quit.")
-        while reported_episodes < target_eps:
+        while reported_episodes < target_episodes:
             # Wait for user input before each step
             try:
                 user = input("")
@@ -107,10 +108,10 @@ def main():
                     # Prefer episode summary from info when available
                     last_len = ep_len if ep_len is not None else "--"
                     print(
-                        f"[episodes {reported_episodes}/{target_eps}] last_rew={ep_rew:+.3f} last_len={last_len}"
+                        f"[episodes {reported_episodes}/{target_episodes}] last_rew={ep_rew:+.3f} last_len={last_len}"
                     )
                 else:
-                    print(f"[episodes {reported_episodes}/{target_eps}] finished")
+                    print(f"[episodes {reported_episodes}/{target_episodes}] finished")
 
                 # Advance observation
                 obs = next_obs
@@ -130,19 +131,18 @@ def main():
     )
 
     # Initialize obs on first collect; keep collecting until target episodes reached
-    target_eps = max(1, int(args.episodes))
-    print(f"Playing {target_eps} episode(s) with render_mode='human'...")
+    print(f"Playing {target_episodes} episode(s) with render_mode='human'...")
 
     # Collect episodes until target episodes reached
     reported_episodes = 0
-    while reported_episodes < target_eps:
+    while reported_episodes < target_episodes:
         _ = collector.collect(deterministic=args.deterministic)
         finished_eps = collector.pop_recent_episodes()
         if not finished_eps:
             continue  # Keep collecting until we finish a full episode
 
         for _env_idx, ep_rew, _ep_len, _was_timeout in finished_eps:
-            if reported_episodes >= target_eps:
+            if reported_episodes >= target_episodes:
                 break
 
             reported_episodes += 1
@@ -152,7 +152,7 @@ def main():
             mean_len = metrics.get('roll/ep_len/mean', 0)
             fps = metrics.get('roll/fps', 0)
             print(
-                f"[episodes {reported_episodes}/{target_eps}] last_rew={ep_rew:.2f} last_len={last_len} "
+                f"[episodes {reported_episodes}/{target_episodes}] last_rew={ep_rew:.2f} last_len={last_len} "
                 f"mean_rew={mean_rew:.2f} mean_len={int(mean_len)} fps={fps:.1f}"
             )
 

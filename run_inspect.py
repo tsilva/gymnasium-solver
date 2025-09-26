@@ -120,16 +120,15 @@ def run_episode(
     policy_model, ckpt_data = load_policy_model_from_checkpoint(checkpoint_path / "policy.ckpt", env, config) # TODO: SOC violation; this is a Run SOC
 
     # Load action labels from vec env wrapper if available
+    act_labels_raw = env.get_action_labels()
     action_labels: List[str] | None = None
-    if hasattr(env, "get_action_labels"):
-        act_labels_raw = env.get_action_labels()
-        if isinstance(act_labels_raw, list):
-            action_labels = [str(x) for x in act_labels_raw]
+    if act_labels_raw is not None:
+        action_labels = [str(x) for x in act_labels_raw]
 
     # Collect environment spec for summary tabs (VecInfoWrapper exposes safe helpers)
-    env_spec_obj = env.get_spec() if hasattr(env, "get_spec") else None
-    reward_range = env.get_reward_range() if hasattr(env, "get_reward_range") else None
-    reward_threshold = env.get_return_threshold() if hasattr(env, "get_return_threshold") else None
+    env_spec_obj = env.get_spec()
+    reward_range = env.get_reward_range()
+    reward_threshold = env.get_return_threshold()
     observation_space_str = str(getattr(env, "observation_space", None))
     action_space_str = str(getattr(env, "action_space", None))
     env_spec_summary: Dict[str, Any] = {

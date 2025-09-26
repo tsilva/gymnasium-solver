@@ -35,6 +35,9 @@ import numpy as np
 
 # --- Shared types and helpers (inlined from former scripts) ---
 
+import ale_py
+import gymnasium as gym
+gym.register_envs(ale_py)
 
 @dataclass
 class AleBinaryInfo:

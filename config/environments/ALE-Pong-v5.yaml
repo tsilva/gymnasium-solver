@@ -111,9 +111,9 @@ _obj_env: &obj_env
 
 _obj_ppo: &obj_ppo
   <<: [*obj_env]
-  n_epochs: 6
-  ent_coef: 0.01
-  policy_lr: 0.006
+  n_epochs: 15
+  ent_coef: 0.005
+  policy_lr: 0.002
   normalize_advantages: "rollout"
   algo_id: ppo
   gamma: 0.99
@@ -122,10 +122,12 @@ _obj_ppo: &obj_ppo
   clip_range: 0.2
   n_envs: 32
   subproc: true
-  n_steps: 1024
-  batch_size: 0.25
+  n_steps: 256
+  batch_size: 2048
   hidden_dims: [256, 256]
-  target_kl: 0.025
+  eval_warmup_epochs: 100
+  eval_episodes: 10
+  eval_freq_epochs: 10
 
 # =====================
 # Public variants
@@ -134,13 +136,9 @@ _obj_ppo: &obj_ppo
 # Object-based observations with PPO - uses extracted game objects as features
 objects_ppo:
   <<: *obj_ppo
-  spec:
-    <<: *spec_objects
   description: "PPO with object-based observations using extracted game objects as features"
 
 # Object-based observations with PPO - deterministic version (no sticky actions)
 objects_deterministic_ppo:
   <<: [*obj_ppo, *env_deterministic]
-  spec:
-    <<: *spec_objects
   description: "PPO with object-based observations - deterministic version (no sticky actions)"

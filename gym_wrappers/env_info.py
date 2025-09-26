@@ -217,6 +217,9 @@ class EnvInfoWrapper(gym.ObservationWrapper):
             pass
         return 30
 
+    def get_action_labels(self):
+        return self.get_spec().get("action_space", {}).get("labels", {})
+
     # NOTE: required by ObservationWrapper
     def observation(self, observation): 
         return observation

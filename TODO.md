@@ -2,22 +2,8 @@
 
 # NEXT
 
-## Pong-v5_objects
-
-- TODO: add support for resuming with policy from previous run
-- try debug server
-- BUG: fix duplicate object error in feature extractor (run step by step in human mode and compare conflicted object data, against frame, create script for this)
-- add env normalization support (use that instead of normalization from feature extractor)
-- previous actions
-- Search for where to check for SOTA scores on each env (ask gpt to research)
-
-## LunarLander-v3
-
-- Solve baseline
-- Increase difficulty using domain randomization
-- Ensure eval uses domain randomization as well
- 
-## NEXT
+- BUG: spec is being retrived from env config
+- BUG: inspect not working because it cant retrieve action labels
 
 - key eval freq from vec steps
 - BUG: fps seems slow
@@ -41,6 +27,25 @@
 - REFACTOR: dont let callbacks inject variables int o
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 - TODO: learn how to read gradient graphs
+
+## Pong-v5_objects
+
+- https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/
+- TODO: rerun with these hyperparams https://wandb.ai/tsilva/ALE-Pong-v5_objects/runs/jfr90820/overview
+- Git bisect and find cause of deterministic not converging
+- Frame stacking should work to turn POMDP into MDP
+- TODO: add support for resuming with policy from previous run
+- try debug server
+- BUG: fix duplicate object error in feature extractor (run step by step in human mode and compare conflicted object data, against frame, create script for this)
+- add env normalization support (use that instead of normalization from feature extractor)
+- previous actions
+- Search for where to check for SOTA scores on each env (ask gpt to research)
+
+## LunarLander-v3
+
+- Solve baseline
+- Increase difficulty using domain randomization
+- Ensure eval uses domain randomization as well
 
 ## WISHLIST
 

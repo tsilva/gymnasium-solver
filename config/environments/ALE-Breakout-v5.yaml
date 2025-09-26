@@ -115,12 +115,8 @@ _obj_ppo: &obj_ppo
 # =====================
 objects_ppo:
   <<: *obj_ppo
-  spec:
-    <<: *spec_objects
   description: "PPO using OCAtari object features for Breakout"
 
 objects_deterministic_ppo:
   <<: [*obj_ppo, *env_deterministic]
-  spec:
-    <<: *spec_objects
   description: "PPO object features without sticky actions"

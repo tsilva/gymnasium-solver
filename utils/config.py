@@ -259,7 +259,6 @@ class Config:
         config_cls = {
             "reinforce": REINFORCEConfig,
             "ppo": PPOConfig,
-            "p3o": P3OConfig, 
         }[algo_id]
         config = config_cls(**_config_dict)
         return config
@@ -590,18 +589,6 @@ class PPOConfig(Config):
     @property
     def algo_id(self) -> str:
         return "ppo"
-
-@dataclass
-class P3OConfig(PPOConfig):
-    # PPO+Replay (off-policy mixing) — tuned for Atari object observations
-    # Defaults aim for better sample efficiency while keeping variance controlled.
-    replay_ratio: float = 4.0           # ~4x off-policy minibatches per on-policy minibatch
-    replay_buffer_size: int = 500_000   # transitions; suitable for small object-vector obs
-    replay_is_clip: float = 10.0        # cap IS weights to stabilize updates
-
-    @property
-    def algo_id(self) -> str:
-        return "p3o"
 
 def load_config(config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> Config:
     """Convenience function to load configuration."""

@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import os
 import shutil
+from collections.abc import Mapping
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -174,7 +175,11 @@ class VecObsBarPrinter(VecEnvWrapper):
         spec: Optional[Dict[str, Any]] = None
         try:
             if hasattr(self.venv, "get_spec"):
-                spec = self.venv.get_spec()
+                spec_obj = self.venv.get_spec()
+                if hasattr(spec_obj, "as_dict"):
+                    spec = spec_obj.as_dict()
+                elif isinstance(spec_obj, Mapping):
+                    spec = dict(spec_obj)
         except Exception:
             spec = None
         if not isinstance(spec, dict):

@@ -2,6 +2,7 @@
 
 # NEXT
 
+- REFACTOR: get rid of prefit presentation callback, check how things are done right now
 - BUG: wrong project id logged in wandb
 - BUG: spec is being retrived from env config
 - BUG: inspect not working because it cant retrieve action labels

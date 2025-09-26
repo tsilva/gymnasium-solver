@@ -78,6 +78,7 @@ class VecObsBarPrinter(VecEnvWrapper):
         bar_width: int = 40,
         env_index: int = 0,
         enable: bool = True,
+        # TODO: make target episodes non-optional, make rest of codebase remove optionality checks/branches
         target_episodes: Optional[int] = None,
     ) -> None:
         super().__init__(venv)
@@ -398,6 +399,7 @@ class VecObsBarPrinter(VecEnvWrapper):
             ep_prog = f"Ep {curr_ep_idx}/{self._target_episodes}"
         else:
             ep_prog = f"Ep {curr_ep_idx}"
+
         # Current episode progress (return and length)
         cur_ep = f"cur_ep_r={self._current_ep_return:+.3f}"
         cur_len = f"cur_len={int(self._current_ep_len)}"
@@ -421,14 +423,9 @@ class VecObsBarPrinter(VecEnvWrapper):
 
         # Episode timestep progress bar, if time limit is known
         if self._time_limit is None:
-            try:
-                if hasattr(self.venv, "get_time_limit"):
-                    tl = self.venv.get_time_limit()
-                    if isinstance(tl, (int, float)) and tl and int(tl) > 0:
-                        self._time_limit = int(tl)
-            except Exception:
-                self._time_limit = None
-        if isinstance(self._time_limit, int) and self._time_limit > 0:
+            tl = self.venv.get_time_limit()
+            self._time_limit = None if tl is None else int(tl)
+        if self._time_limit:
             steps = int(self._current_ep_len)
             total = int(self._time_limit)
             t_bar, _t_ratio, (_t_lo, _t_hi) = self._format_bar_scalar(steps, 0, total, width=self._bar_width)

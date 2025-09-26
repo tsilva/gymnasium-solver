@@ -5,9 +5,9 @@
 - add pong rgb cnn policy support, measure FPS
 - replace sb3.make_vec() with gym.make_vec(); provide vectorization_mode="sync/async", and initialize pong in old mode as described here (w/ Atari Preprocessing Wrapper): https://ale.farama.org/vector-environment/; measure FPS; check run_play and run_inspect
 - now remove vectorization_mode to default to fast AtariVecEnv, confirm 10x speedup in FPS, check actual epoch/FPS as well, because we want overall throughput to be higher
- 
+- mess with more atarivecenv flags to speed up further
 
- 
+
 - TODO: dont use eval recording freq, instead make the checkpointer render when required
 - Make sure metrics.yaml is up to date with all metrics with correct names
 

@@ -258,14 +258,14 @@ def benchmark_alepy_vector_env(
         game=rom.name,
         num_envs=num_envs,
         num_threads=threads,
-        grayscale=False,
-        stack_num=1,
-        frameskip=1,
-        img_height=210,
-        img_width=160,
-        maxpool=False,
+        grayscale=True,
+        stack_num=4,
+        frameskip=4,
+        img_height=84,
+        img_width=84,
+        maxpool=True,
         noop_max=0,
-        repeat_action_probability=0.0,
+        repeat_action_probability=0.25,
         reward_clipping=False,
         full_action_space=False,
         use_fire_reset=True,
@@ -436,19 +436,18 @@ def benchmark_gym_make_vec_env(
     assert chunk_steps > 0, "Chunk size must be positive"
 
     vec_mode = "async" if use_subproc else "sync"
-    env_kwargs = dict(
-        # frameskip=1,
-        # repeat_action_probability=0.0,
-        # full_action_space=False,
-        # noop_max=0,
-        # render_mode=None,
-        # obs_type="rgb",
+    vector_kwargs = dict(
+         frameskip=1, stack_num=4, grayscale=True, img_height=84, img_width=84,
+    use_fire_reset=True, reward_clipping=True, episodic_life=False,
+    noop_max=30, repeat_action_probability=0.0
+       # obs_type="rgb",
     )
+
 
     if not hasattr(gym, "make_vec"):
         raise ImportError("Your Gymnasium version does not expose gym.make_vec")
 
-    vec_env = gym.make_vec(env_id, num_envs=num_envs, vectorization_mode=vec_mode, **env_kwargs)
+    vec_env = gym.make_vec(env_id, num_envs=num_envs, vectorization_mode=vec_mode, **vector_kwargs)
 
     try:
         out = vec_env.reset()

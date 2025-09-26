@@ -2,13 +2,13 @@
 
 # NEXT
 
-- get rid of sb3 vecenv, use native gym.syncenv/ confirm if gym.make_vec("ALE/*-v5") already uses the correct fast backend when rgb, if so, we can use the same logic for everything
-- benchmark https://ale.farama.org/vector-environment/ vs sb3 vecenvs
-- PERF: drop SB3 env vectorization and use ale-py native vector env instead
+- add pong rgb cnn policy support, measure FPS
+- replace sb3.make_vec() with gym.make_vec(); provide vectorization_mode="sync/async", and initialize pong in old mode as described here (w/ Atari Preprocessing Wrapper): https://ale.farama.org/vector-environment/; measure FPS; check run_play and run_inspect
+- now remove vectorization_mode to default to fast AtariVecEnv, confirm 10x speedup in FPS, check actual epoch/FPS as well, because we want overall throughput to be higher
+ 
+
  
 - TODO: dont use eval recording freq, instead make the checkpointer render when required
-
-
 - Make sure metrics.yaml is up to date with all metrics with correct names
 
 

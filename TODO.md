@@ -2,8 +2,11 @@
 
 # NEXT
 
-- TODO: dont use eval recording freq, instead make the checkpointer render when required
 - benchmark https://ale.farama.org/vector-environment/ vs sb3 vecenvs
+- PERF: drop SB3 env vectorization and use ale-py native vector env instead
+ 
+- TODO: dont use eval recording freq, instead make the checkpointer render when required
+
 
 - Make sure metrics.yaml is up to date with all metrics with correct names
 

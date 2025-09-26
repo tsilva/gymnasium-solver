@@ -237,15 +237,16 @@ def benchmark_vector_env(
             action_value = int(getattr(env.single_action_space, "start", 0))
         actions = np.full((num_envs,), action_value, dtype=np.int32)
 
-        reset_mask = np.zeros(num_envs, dtype=np.bool_)
+        reset_mask = np.zeros((num_envs, 1), dtype=np.bool_)
 
         warmup_iters = max(1, math.ceil(warmup_steps / max(1, num_envs)))
         for _ in range(warmup_iters):
             _, _, terminations, truncations, _ = step(actions)
             dones = np.logical_or(terminations, truncations)
             if np.any(dones):
-                reset_mask[:] = dones
+                reset_mask[:, 0] = dones
                 reset(options={"reset_mask": reset_mask})
+                reset_mask[:, 0] = False
 
         reset()
 
@@ -260,8 +261,9 @@ def benchmark_vector_env(
                 frames_done += num_envs
                 dones = np.logical_or(terminations, truncations)
                 if np.any(dones):
-                    reset_mask[:] = dones
+                    reset_mask[:, 0] = dones
                     reset(options={"reset_mask": reset_mask})
+                    reset_mask[:, 0] = False
             steps_remaining -= steps_this_chunk
 
         elapsed = time.perf_counter() - start

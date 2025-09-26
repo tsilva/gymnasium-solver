@@ -7,8 +7,7 @@ from stable_baselines3.common.vec_env.base_vec_env import VecEnv, VecEnvWrapper
 from gym_wrappers.env_video_recorder import EnvVideoRecorder
 
 
-# TODO: CLEANUP this file
-
+# TODO: this file should follow the same pattern as vec_env_info.py/env_info.py, in the sense that the vec wrappers should server mostly as proxies to the env wrapper, move as much code as you can to the env wrapper and leave this one as empty as possible, if possible even apply the dynamic method proxying strategy we used in vecenvinfo/envinfo
 class VecVideoRecorder(VecEnvWrapper):
     """Proxy VecEnv wrapper that delegates recording to EnvVideoRecorder instances."""
 

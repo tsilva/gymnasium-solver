@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
@@ -455,23 +455,59 @@ class BaseAgent(pl.LightningModule):
 
         # Auto-wire hyperparameter schedulers: scan config for any *_schedule fields
         schedule_suffix = "_schedule"
-        for key, value in vars(self.config).items(): # TODO: config.get_schedules()?
-            # Skip if not a schedule attribute
-            if not key.endswith(schedule_suffix) or not value: continue # TODO: extract concern to config
+        max_timesteps = self.config.max_timesteps
 
-            param = key[:-len(schedule_suffix)]
+        def _schedule_pos_to_vec_steps(raw: Optional[float], *, param: str, default_to_max: bool) -> float:
+            if raw is None:
+                if default_to_max:
+                    if max_timesteps is None:
+                        raise ValueError(
+                            f"{param}_schedule requires config.max_timesteps or an explicit {param}_schedule_end."
+                        )
+                    return float(max_timesteps)
+                return 0.0
+
+            value = float(raw)
+            if value < 0.0:
+                raise ValueError(f"{param}_schedule start/end must be non-negative.")
+            if value <= 1.0:
+                if max_timesteps is None:
+                    raise ValueError(
+                        f"{param}_schedule uses fractional start/end but config.max_timesteps is not set."
+                    )
+                return value * float(max_timesteps)
+            return value
+
+        def _set_policy_lr(module: "BaseAgent", lr: float) -> None:
+            module._change_optimizers_lr(lr)
+
+        for key, value in vars(self.config).items():  # TODO: config.get_schedules()?
+            if not key.endswith(schedule_suffix) or not value:
+                continue
+
+            param = key[: -len(schedule_suffix)]
             assert hasattr(self, param), f"Module {self} has no attribute {param}"
-            target_value = getattr(self.config, f"{param}_schedule_target_value", 0.0)
-            target_progress = getattr(self.config, f"{param}_schedule_target_progress", 1.0)
+
+            start_value = getattr(self.config, f"{param}_schedule_start_value", None)
+            end_value = getattr(self.config, f"{param}_schedule_end_value", None)
+            if start_value is None or end_value is None:
+                raise ValueError(f"{param}_schedule requires start/end values in the config.")
+
+            start_pos_raw = getattr(self.config, f"{param}_schedule_start", None)
+            end_pos_raw = getattr(self.config, f"{param}_schedule_end", None)
+
+            start_step = _schedule_pos_to_vec_steps(start_pos_raw, param=param, default_to_max=False)
+            end_step = _schedule_pos_to_vec_steps(end_pos_raw, param=param, default_to_max=True)
+
             callbacks.append(
                 HyperparameterSchedulerCallback(
                     schedule=value,
                     parameter=param,
-                    target_value=target_value,
-                    target_progress=target_progress,
-                    set_value_fn={
-                        "policy_lr": lambda lr: self._change_optimizers_lr(lr),
-                    }.get(param, None),
+                    start_value=float(start_value),
+                    end_value=float(end_value),
+                    start_step=float(start_step),
+                    end_step=float(end_step),
+                    set_value_fn={"policy_lr": _set_policy_lr}.get(param, None),
                 )
             )
 

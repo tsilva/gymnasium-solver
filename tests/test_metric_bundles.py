@@ -72,6 +72,96 @@ def test_common_alerts_guard_config_bounds():
     assert "train/opt/ppo/clip_fraction/above_max" in alert_ids
 
 
+def test_common_alerts_detect_episode_reward_stall():
+    recorder = MetricsRecorder()
+    step_key = metrics_config.total_timesteps_key()
+    reward_key = "train/roll/ep_rew/mean"
+
+    values = [
+        0.0,
+        1.0,
+        2.0,
+        4.0,
+        9.9,
+        10.1,
+        10.0,
+        9.95,
+        10.05,
+        10.02,
+        10.01,
+        9.98,
+        10.04,
+        10.00,
+        10.02,
+        9.99,
+        10.01,
+        10.00,
+        9.97,
+        10.03,
+    ]
+
+    for idx, value in enumerate(values, start=1):
+        recorder.update_history({
+            step_key: idx * 128,
+            reward_key: value,
+        })
+
+    monitor = MetricsMonitor(recorder)
+    monitor.register_bundle(CoreMetricAlerts())
+    result = monitor.check()
+
+    assert reward_key in result["added"]
+    alert_ids = {alert._id for alert in monitor.active_alerts[reward_key]}
+    assert f"{reward_key}/stalling" in alert_ids
+
+
+def test_common_alerts_detect_episode_reward_downward_trend():
+    recorder = MetricsRecorder()
+    step_key = metrics_config.total_timesteps_key()
+    reward_key = "train/roll/ep_rew/mean"
+
+    values = [
+        0.0,
+        1.0,
+        3.0,
+        5.0,
+        7.0,
+        9.0,
+        11.0,
+        13.0,
+        20.0,
+        21.0,
+        19.5,
+        20.4,
+        20.2,
+        19.9,
+        20.1,
+        20.3,
+        15.0,
+        14.8,
+        14.5,
+        14.2,
+        14.0,
+        13.8,
+        13.5,
+        13.2,
+    ]
+
+    for idx, value in enumerate(values, start=1):
+        recorder.update_history({
+            step_key: idx * 256,
+            reward_key: value,
+        })
+
+    monitor = MetricsMonitor(recorder)
+    monitor.register_bundle(CoreMetricAlerts())
+    result = monitor.check()
+
+    assert reward_key in result["added"]
+    alert_ids = {alert._id for alert in monitor.active_alerts[reward_key]}
+    assert f"{reward_key}/downward_trend" in alert_ids
+
+
 def test_ppo_alerts_explained_var_low():
     bundle = PPOAlerts(agent=None)
     history = {

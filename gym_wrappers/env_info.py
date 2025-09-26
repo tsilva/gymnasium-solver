@@ -1,11 +1,53 @@
-from dataclasses import asdict
-from pathlib import Path
+from collections.abc import Mapping, Sequence
+import json
+from typing import Any, Dict
 
 import gymnasium as gym
 from gymnasium.wrappers import TimeLimit
 
 from utils.decorators import cache
 from utils.env_spec import EnvSpec
+
+
+def _sanitize_spec_value(value: Any) -> Any:
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if isinstance(value, Mapping):
+        return {key: _sanitize_spec_value(val) for key, val in value.items()}
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_sanitize_spec_value(v) for v in value]
+    return str(value)
+
+
+def _env_spec_to_mapping(spec: Any) -> Dict[str, Any]:
+    if spec is None:
+        return {}
+    if isinstance(spec, EnvSpec):
+        return spec.as_dict()
+    if isinstance(spec, Mapping):
+        return dict(spec)
+
+    # Try structured conversions for gymnasium.EnvSpec
+    if hasattr(spec, "to_json"):
+        try:
+            parsed = json.loads(spec.to_json())
+            if isinstance(parsed, dict):
+                return {k: _sanitize_spec_value(v) for k, v in parsed.items()}
+        except Exception:
+            pass
+
+    spec_dict: Dict[str, Any] = {}
+    for attr in dir(spec):
+        if attr.startswith("_"):
+            continue
+        try:
+            value = getattr(spec, attr)
+        except Exception:
+            continue
+        if callable(value):
+            continue
+        spec_dict[attr] = _sanitize_spec_value(value)
+    return spec_dict
 
 def deep_merge(a: dict, b: dict) -> dict:
     """
@@ -36,7 +78,7 @@ class EnvInfoWrapper(gym.ObservationWrapper):
         _env_spec = self._get_spec__env()
         spec = kwargs.get('spec', {})
         spec = deep_merge(_env_spec, spec)
-        self._spec = EnvSpec(spec)
+        self._spec = EnvSpec.from_mapping(spec)
 
     def get_id(self):
         root_env = self._get_root_env()
@@ -154,7 +196,8 @@ class EnvInfoWrapper(gym.ObservationWrapper):
 
     def _get_spec__env(self):
         root_env = self._get_root_env()
-        return root_env.spec._data # TODO: make envspec more specific
+        spec_obj = getattr(root_env, "spec", None)
+        return _env_spec_to_mapping(spec_obj)
 
     @cache
     def _get_root_env(self):

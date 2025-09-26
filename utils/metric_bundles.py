@@ -78,25 +78,64 @@ class MetricMonitorBundle:
         format_str = f"{{:.{precision}f}}"
         return format_str.format(float(value))
 
+    def _numeric_series(self, series: Iterable[tuple]) -> list[float]:
+        values: list[float] = []
+        for _step, raw in series:
+            try:
+                values.append(float(raw))
+            except (TypeError, ValueError):
+                continue
+        return values
+
 
 # TODO: call core
 class CoreMetricAlerts(MetricMonitorBundle):
     """Shared metric tripwires that apply to all algorithms."""
 
     _BOUNDS_SMOOTHING_WINDOW = 5
+    _EP_REWARD_WINDOW = 8
+    _EP_REWARD_STALL_DELTA_RATIO = 0.01
+    _EP_REWARD_STALL_DELTA_MIN = 0.1
+    _EP_REWARD_DECLINE_RATIO = 0.03
+    _EP_REWARD_DECLINE_MIN = 0.3
 
     def __init__(self, pl_module: pl.LightningModule | None = None) -> None:
         self.pl_module = pl_module
         self._step_key = metrics_config.total_timesteps_key()
 
     # ---- monitors ----
+    def _monitor_nan_metrics(self, history: dict):
+        alerts: List[MetricAlert] = []
+        for metric_key, series in history.items():
+            if not series:
+                continue
+            _step, value = series[-1]
+            try:
+                value_float = float(value)
+            except (TypeError, ValueError):
+                continue
+
+            if not (math.isnan(value_float) or math.isinf(value_float)):
+                continue
+
+            alerts.append(
+                MetricAlert(
+                    _id=f"{metric_key}/nan_or_inf",
+                    metric=metric_key,
+                    message="latest value is NaN/Inf",
+                    tip="Check gradients, reward scaling, or numerical stability to restore finite metrics.",
+                )
+            )
+
+        return alerts or None
+
+    def _episode_reward_metric_keys(self, history: dict) -> Iterable[str]:
+        for metric_key in history.keys():
+            if metric_key.endswith("roll/ep_rew/mean"):
+                yield metric_key
+
     def _monitor_step_progress(self, history: dict):
-        if self.pl_module is None:
-            return None
-        step = self.pl_module.current_epoch
-        if step is None:
-            return None
-        step_key = f"{self._step_key}/{step}"
+        step_key = self._step_key
         series = history.get(step_key)
         if not series or len(series) < 2:
             return None
@@ -379,3 +418,104 @@ class CoreMetricAlerts(MetricMonitorBundle):
             message=f"{window}-step early avg {early_fmt}{latest_suffix} vs expected {exp_fmt} (n={n})",
             tip="Initial action variability differs from uniform; check logits init and sampling path.",
         )
+
+    def _monitor_episode_reward_stalling(self, history: dict):
+        alerts: List[MetricAlert] = []
+        window = self._EP_REWARD_WINDOW
+        min_points = window * 2
+
+        for metric_key in self._episode_reward_metric_keys(history):
+            series = self._metric_series(history, metric_key)
+            if len(series) < min_points:
+                continue
+
+            values = self._numeric_series(series)
+            if len(values) < min_points:
+                continue
+
+            recent = values[-window:]
+            prior = values[-(2 * window):-window]
+            if len(recent) < window or len(prior) < window:
+                continue
+
+            recent_mean = fmean(recent)
+            prior_mean = fmean(prior)
+            delta = recent_mean - prior_mean
+            tolerance = max(
+                math.fabs(prior_mean) * self._EP_REWARD_STALL_DELTA_RATIO,
+                math.fabs(recent_mean) * self._EP_REWARD_STALL_DELTA_RATIO,
+                self._EP_REWARD_STALL_DELTA_MIN,
+            )
+
+            if math.fabs(delta) > tolerance:
+                continue
+
+            precision = metrics_config.precision_for_metric(metric_key)
+            recent_fmt = self._format_metric_value(metric_key, recent_mean)
+            prior_fmt = self._format_metric_value(metric_key, prior_mean)
+            delta_fmt = f"{delta:+.{precision}f}"
+            tol_fmt = f"{tolerance:.{precision}f}"
+
+            alerts.append(
+                MetricAlert(
+                    _id=f"{metric_key}/stalling",
+                    metric=metric_key,
+                    message=(
+                        f"{window}-step mean {recent_fmt} vs prior {prior_fmt} (Δ={delta_fmt}, tol≤{tol_fmt})"
+                    ),
+                    tip="Episode rewards plateaued; tweak lr, entropy bonus, or curriculum to regain momentum.",
+                )
+            )
+
+        return alerts or None
+
+    def _monitor_episode_reward_downward_trend(self, history: dict):
+        alerts: List[MetricAlert] = []
+        window = self._EP_REWARD_WINDOW
+        min_points = window * 2
+
+        for metric_key in self._episode_reward_metric_keys(history):
+            series = self._metric_series(history, metric_key)
+            if len(series) < min_points:
+                continue
+
+            values = self._numeric_series(series)
+            if len(values) < min_points:
+                continue
+
+            recent = values[-window:]
+            prior = values[-(2 * window):-window]
+            if len(recent) < window or len(prior) < window:
+                continue
+
+            recent_mean = fmean(recent)
+            prior_mean = fmean(prior)
+            delta = recent_mean - prior_mean
+            drop = prior_mean - recent_mean
+            threshold = max(
+                math.fabs(prior_mean) * self._EP_REWARD_DECLINE_RATIO,
+                math.fabs(recent_mean) * self._EP_REWARD_DECLINE_RATIO,
+                self._EP_REWARD_DECLINE_MIN,
+            )
+
+            if drop < threshold:
+                continue
+
+            precision = metrics_config.precision_for_metric(metric_key)
+            recent_fmt = self._format_metric_value(metric_key, recent_mean)
+            prior_fmt = self._format_metric_value(metric_key, prior_mean)
+            delta_fmt = f"{delta:+.{precision}f}"
+            threshold_fmt = f"{threshold:.{precision}f}"
+
+            alerts.append(
+                MetricAlert(
+                    _id=f"{metric_key}/downward_trend",
+                    metric=metric_key,
+                    message=(
+                        f"{window}-step mean {recent_fmt} dropped from {prior_fmt} (Δ={delta_fmt}, threshold={threshold_fmt})"
+                    ),
+                    tip="Episode rewards regressed; lower lr, revisit exploration, or inspect reward scaling for regressions.",
+                )
+            )
+
+        return alerts or None

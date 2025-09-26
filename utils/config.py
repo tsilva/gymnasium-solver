@@ -147,6 +147,10 @@ class Config:
 
     # The schedule for the policy learning rate
     policy_lr_schedule: Optional[str] = None
+    policy_lr_schedule_start_value: Optional[float] = None
+    policy_lr_schedule_end_value: Optional[float] = None
+    policy_lr_schedule_start: Optional[float] = None
+    policy_lr_schedule_end: Optional[float] = None
 
     # The maximum gradient norm for the policy
     max_grad_norm: Optional[float] = None
@@ -164,12 +168,13 @@ class Config:
 
     # The schedule for the entropy coefficient
     ent_coef_schedule: Optional[str] = None
+    ent_coef_schedule_start_value: Optional[float] = None
+    ent_coef_schedule_end_value: Optional[float] = None
+    ent_coef_schedule_start: Optional[float] = None
+    ent_coef_schedule_end: Optional[float] = None
 
-    # The minimum entropy coefficient for the 
-    # policy (scheduler can only decay down to this value)
+    # Legacy aliases kept for backward compatibility with older configs
     ent_coef_schedule_target_value: Optional[float] = None
-
-    # The progress at which the entropy coefficient will reach the target value
     ent_coef_schedule_target_progress: Optional[float] = None
 
     # The value function coefficient for the policy (algo defaults in subclasses)
@@ -177,12 +182,20 @@ class Config:
     
     # The schedule for the value function coefficient
     vf_coef_schedule: Optional[str] = None
+    vf_coef_schedule_start_value: Optional[float] = None
+    vf_coef_schedule_end_value: Optional[float] = None
+    vf_coef_schedule_start: Optional[float] = None
+    vf_coef_schedule_end: Optional[float] = None
 
     # The clip range for the policy (algo defaults in subclasses)
     clip_range: Optional[float] = None
 
     # The schedule for the clip range
     clip_range_schedule: Optional[str] = None
+    clip_range_schedule_start_value: Optional[float] = None
+    clip_range_schedule_end_value: Optional[float] = None
+    clip_range_schedule_start: Optional[float] = None
+    clip_range_schedule_end: Optional[float] = None
 
     # How to calculate rollout returns (algo defaults in subclasses)
     returns_type: Optional["Config.ReturnsType"] = None  # type: ignore[assignment]
@@ -330,6 +343,7 @@ class Config:
         self._resolve_numeric_strings()
         self._resolve_batch_size()
         self._resolve_schedules()
+        self._resolve_schedule_defaults()
         self.validate()
         
     def _resolve_defaults(self) -> None:
@@ -353,18 +367,48 @@ class Config:
         self.batch_size = new_batch_size
 
     def _resolve_schedules(self) -> None:
-        # Iterate over the dictionary items (as list) to avoid 
-        # modifying the dictionary size during iteration
-        for key, value in list(asdict(self).items()):
-            # Skip non-string values    
-            if not isinstance(value, str): continue
+        # Iterate over attribute names to avoid mutating during iteration
+        for key in list(vars(self).keys()):
+            value = getattr(self, key)
+            if not isinstance(value, str):
+                continue
 
-            # If linear schedule was requested unpack the 
-            # value into the corresponding fields
             val_lower = value.lower()
-            if val_lower.startswith('lin_'):
-                setattr(self, f"{key}_schedule", 'linear')
-                setattr(self, key, float(val_lower.split('lin_')[1]))
+            if val_lower.startswith("lin_"):
+                setattr(self, f"{key}_schedule", "linear")
+                setattr(self, key, float(val_lower.split("lin_")[1]))
+
+    def _resolve_schedule_defaults(self) -> None:
+        schedule_suffix = "_schedule"
+        for key in list(vars(self).keys()):
+            if not key.endswith(schedule_suffix):
+                continue
+            schedule = getattr(self, key)
+            if not schedule:
+                continue
+
+            param = key[: -len(schedule_suffix)]
+
+            # Start/end values default to the current parameter value and zero respectively
+            start_value_attr = f"{param}_schedule_start_value"
+            end_value_attr = f"{param}_schedule_end_value"
+            if getattr(self, start_value_attr, None) is None:
+                setattr(self, start_value_attr, getattr(self, param))
+
+            legacy_target_value = getattr(self, f"{param}_schedule_target_value", None)
+            if getattr(self, end_value_attr, None) is None:
+                setattr(self, end_value_attr, legacy_target_value if legacy_target_value is not None else 0.0)
+
+            # Default start/end positions use fractions of training progress
+            start_pos_attr = f"{param}_schedule_start"
+            end_pos_attr = f"{param}_schedule_end"
+
+            if getattr(self, start_pos_attr, None) is None:
+                setattr(self, start_pos_attr, 0.0)
+
+            legacy_target_progress = getattr(self, f"{param}_schedule_target_progress", None)
+            if getattr(self, end_pos_attr, None) is None:
+                setattr(self, end_pos_attr, legacy_target_progress if legacy_target_progress is not None else 1.0)
 
     def get_env_args(self) -> Dict[str, Any]:
         return dict(
@@ -467,6 +511,43 @@ class Config:
         ric = getattr(self, "replay_is_clip", 10.0)
         if ric is not None and ric <= 0:
             raise ValueError("replay_is_clip must be > 0.")
+
+        # Validate hyperparameter schedules
+        schedule_suffix = "_schedule"
+        for key in list(vars(self).keys()):
+            if not key.endswith(schedule_suffix):
+                continue
+            schedule = getattr(self, key)
+            if not schedule:
+                continue
+
+            param = key[: -len(schedule_suffix)]
+            start_value = getattr(self, f"{param}_schedule_start_value", None)
+            end_value = getattr(self, f"{param}_schedule_end_value", None)
+            if start_value is None or end_value is None:
+                raise ValueError(f"{param}_schedule requires start and end values to be defined.")
+
+            start_pos = getattr(self, f"{param}_schedule_start", None)
+            end_pos = getattr(self, f"{param}_schedule_end", None)
+
+            if start_pos is None:
+                start_pos = 0.0
+            if end_pos is None:
+                if self.max_timesteps is None:
+                    raise ValueError(
+                        f"{param}_schedule requires a max_timesteps or an explicit schedule_end value."
+                    )
+                end_pos = 1.0
+
+            if start_pos < 0 or end_pos < 0:
+                raise ValueError(f"{param}_schedule start/end must be non-negative.")
+            if end_pos < start_pos:
+                raise ValueError(f"{param}_schedule end must be >= start.")
+
+            if self.max_timesteps is None and (start_pos <= 1.0 or end_pos <= 1.0):
+                raise ValueError(
+                    f"{param}_schedule uses fractional start/end positions but config.max_timesteps is not set."
+                )
 
 # TODO: these config extensions should somehow be provided by the agent itself
 @dataclass

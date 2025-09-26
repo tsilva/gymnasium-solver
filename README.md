@@ -58,7 +58,7 @@ python inspector.py --run-id @latest-run --port 7860 --host 127.0.0.1
 ```
 
 ### ⚙️ Configs (YAML)
-Configs live in `config/environments/*.yaml`. New style puts base fields at the top and per-algorithm variants under their own key. Linear schedules like `lin_0.001` are parsed automatically. The loader selects an algo-specific config subclass based on `algo_id` (e.g., `PPOConfig`, `REINFORCEConfig`).
+Configs live in `config/environments/*.yaml`. New style puts base fields at the top and per-algorithm variants under their own key. Linear schedules like `lin_0.001` are parsed automatically, and you can optionally provide `*_schedule_start_value` / `*_schedule_end_value` plus `*_schedule_start` / `*_schedule_end` to control the interpolation window (values `<1` are treated as a fraction of `max_timesteps`, values `>1` as explicit vec steps). The loader selects an algo-specific config subclass based on `algo_id` (e.g., `PPOConfig`, `REINFORCEConfig`).
 
 ```yaml
 # New per-file style (with YAML anchors)

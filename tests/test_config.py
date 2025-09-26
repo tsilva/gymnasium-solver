@@ -13,14 +13,36 @@ def test_config_parse_schedules_and_legacy_normalize():
         "algo_id": "ppo",
         "n_steps": 32,
         "batch_size": 16,
+        "max_timesteps": 1000,
         "policy_lr": "lin_3e-4",
         "normalize": True,
         "hidden_dims": [64, 64],
     })
     assert cfg.policy_lr == pytest.approx(3e-4)
     assert cfg.policy_lr_schedule == "linear"
+    assert cfg.policy_lr_schedule_start_value == pytest.approx(3e-4)
+    assert cfg.policy_lr_schedule_end_value == pytest.approx(0.0)
+    assert cfg.policy_lr_schedule_start == pytest.approx(0.0)
+    assert cfg.policy_lr_schedule_end == pytest.approx(1.0)
     assert cfg.normalize_obs is True and cfg.normalize_reward is True
     assert isinstance(cfg.hidden_dims, tuple)
+
+
+@pytest.mark.unit
+def test_config_schedule_fraction_without_max_timesteps_errors():
+    with pytest.raises(ValueError):
+        Config.build_from_dict(
+            {
+                "algo_id": "ppo",
+                "env_id": "CartPole-v1",
+                "n_steps": 32,
+                "batch_size": 32,
+                "policy_lr": 3e-4,
+                "policy_lr_schedule": "linear",
+                "policy_lr_schedule_start": 0.0,
+                "policy_lr_schedule_end": 0.5,
+            }
+        )
 
 
 @pytest.mark.unit

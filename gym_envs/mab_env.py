@@ -96,14 +96,14 @@ class MultiArmedBanditEnv(gym.Env):
 
         # Minimal EnvSpec to cooperate with EnvInfoWrapper helpers
         return_threshold = max(self._means)
-        self.spec = EnvSpec(
-            #id="Bandit-v0",
-            _data=dict(
-                max_episode_steps=self.spec_cfg.episode_length,
-                returns=dict(
-                    threshold_solved=return_threshold,
-                ),
-            ),
+        self.spec = EnvSpec.from_mapping(
+            {
+                "id": "Bandit-v0",
+                "max_episode_steps": self.spec_cfg.episode_length,
+                "returns": {
+                    "threshold_solved": return_threshold,
+                },
+            }
         )
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):

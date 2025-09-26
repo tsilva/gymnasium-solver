@@ -1,10 +1,28 @@
 import math
+import sys
 from types import SimpleNamespace
 
 import pytest
 import torch
 
-from agents.ppo import PPO
+try:  # pragma: no cover - import guard for optional dependency in test envs
+    import pytorch_lightning as _pl  # type: ignore
+except Exception:
+    sys.modules["pytorch_lightning"] = SimpleNamespace(
+        Callback=object,
+        Trainer=object,
+        LightningModule=object,
+    )
+else:
+    if not all(hasattr(_pl, attr) for attr in ("Callback", "Trainer", "LightningModule")):
+        sys.modules["pytorch_lightning"] = SimpleNamespace(
+            Callback=object,
+            Trainer=object,
+            LightningModule=object,
+        )
+
+from agents.ppo.ppo_agent import PPOAgent
+from trainer_callbacks.hyperparameter_scheduler import HyperparameterSchedulerCallback
 
 
 class _FakeDist:
@@ -52,7 +70,7 @@ def test_ppo_policy_clipping_math():
     values = returns.clone()
 
     # Build a minimal PPO instance without running BaseAgent.__init__
-    agent = object.__new__(PPO)
+    agent = object.__new__(PPOAgent)
     agent.config = SimpleNamespace(
         normalize_advantages="off",  # do not renormalize in test
         ent_coef=0.0,
@@ -85,26 +103,40 @@ def test_ppo_policy_clipping_math():
 
 @pytest.mark.unit
 def test_ppo_clip_range_schedule_update():
+    class _StubModule:
+        def __init__(self, start: float) -> None:
+            self.clip_range = start
+            self.config = SimpleNamespace(clip_range=start)
+            self.collector = SimpleNamespace(total_vec_steps=0)
+
+        def get_rollout_collector(self, stage: str):
+            assert stage == "train"
+            return self.collector
+
     initial = 0.3
-    progress = 0.75  # 75% of training -> clip should be 25% of initial
+    stub = _StubModule(initial)
 
-    agent = object.__new__(PPO)
-    agent.config = SimpleNamespace(clip_range=initial, clip_range_schedule="linear")
-    agent.clip_range = initial
+    callback = HyperparameterSchedulerCallback(
+        schedule="linear",
+        parameter="clip_range",
+        start_value=initial,
+        end_value=0.0,
+        start_step=0.0,
+        end_step=100.0,
+    )
 
-    seen = {}
+    stub.collector.total_vec_steps = 0
+    callback.on_train_epoch_end(None, stub)
+    assert math.isclose(stub.clip_range, initial, rel_tol=0, abs_tol=1e-12)
+    assert math.isclose(stub.config.clip_range, initial, rel_tol=0, abs_tol=1e-12)
 
-    def _log(m, prefix=None):  # noqa: ARG001
-        seen.update(m)
+    stub.collector.total_vec_steps = 50
+    callback.on_train_epoch_end(None, stub)
+    assert math.isclose(stub.clip_range, initial * 0.5, rel_tol=0, abs_tol=1e-12)
 
-    agent.buffer_metrics = _log  # type: ignore
-    agent._calc_training_progress = lambda: progress  # type: ignore
-
-    agent._update_schedules__clip_range()
-
-    expected = max(initial * (1.0 - progress), 0.0)
-    assert math.isclose(agent.clip_range, expected, rel_tol=0, abs_tol=1e-12)
-    assert math.isclose(seen.get("clip_range", -1.0), expected, rel_tol=0, abs_tol=1e-12)
+    stub.collector.total_vec_steps = 150
+    callback.on_train_epoch_end(None, stub)
+    assert math.isclose(stub.clip_range, 0.0, rel_tol=0, abs_tol=1e-12)
 
 
 @pytest.mark.unit
@@ -113,7 +145,7 @@ def test_ppo_build_models_and_optimizer():
     class _Env:
         pass
 
-    agent = object.__new__(PPO)
+    agent = object.__new__(PPOAgent)
     agent.config = SimpleNamespace(hidden_dims=(32, 32), policy_lr=1e-3)
     agent.train_env = _Env()
 

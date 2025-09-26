@@ -173,7 +173,6 @@ def test_full_ppo_train_tiny_loop_progress(monkeypatch):
     # Disable eval to avoid validation hooks entirely
     cfg.eval_freq_epochs = None
     cfg.eval_episodes = None
-    cfg.eval_recording_freq = None
     # Simpler runtime
     cfg.accelerator = "cpu"
     cfg.devices = None

@@ -1,12 +1,12 @@
 """Measure raw ALE emulator throughput and report the compiled binary architecture.
 
 Usage example:
-    python scripts/benchmark_alepy_fps.py --rom ALE/Pong-v5 --frames 200000
+    python scripts/benchmark_alepy_fps.py --rom ALE/Pong-v5 --frames 200000 --num-envs 8
 
 The script keeps Python overhead minimal by:
-- pre-binding the `act` callable
-- using a single fixed action
-- unrolling the inner loop
+- vectorizing over ALE sub-envs with a pre-bound action batch
+- using a single fixed action to avoid sampling overhead
+- chunking work inside the timing loop with minimal Python bookkeeping
 - resetting only when the emulator signals game over
 
 It also reports whether the ale-py shared library is ARM64 (Apple Silicon)
@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import math
 import os
 import platform
 import re
@@ -25,6 +26,8 @@ from dataclasses import dataclass
 from typing import Iterable, Optional
 
 import ale_py
+import numpy as np
+from ale_py.vector_env import AtariVectorEnv
 
 
 @dataclass
@@ -33,6 +36,13 @@ class AleBinaryInfo:
     library_path: Optional[str]
     file_description: Optional[str]
     arch_note: str
+
+
+@dataclass
+class ResolvedRom:
+    name: str
+    path: str
+    is_custom: bool
 
 
 def detect_alepy_binary() -> AleBinaryInfo:
@@ -138,10 +148,14 @@ def _candidate_rom_names(spec: str) -> Iterable[str]:
     return tuple(candidates)
 
 
-def resolve_rom_path(rom: str) -> str:
-    """Resolve a ROM path from file path, ALE env id (e.g. ALE/Pong-v5), or ROM name."""
+def resolve_rom(rom: str) -> ResolvedRom:
+    """Resolve a ROM from file path, ALE env id (e.g. ALE/Pong-v5), or ROM name."""
     if os.path.isfile(rom):
-        return rom
+        return ResolvedRom(
+            name=os.path.splitext(os.path.basename(rom))[0],
+            path=rom,
+            is_custom=True,
+        )
 
     from ale_py import roms
 
@@ -157,7 +171,7 @@ def resolve_rom_path(rom: str) -> str:
             continue
 
         if os.path.isfile(resolved):
-            return resolved
+            return ResolvedRom(name=candidate, path=resolved, is_custom=False)
 
     raise FileNotFoundError(
         f"ROM '{rom}' not found. Provide a file path, an ALE env id (e.g. ALE/Pong-v5), or install ale-py ROMs."
@@ -168,88 +182,122 @@ def resolve_rom_path(rom: str) -> str:
 class BenchmarkResult:
     frames: int
     elapsed: float
+    requested: int
 
     @property
     def fps(self) -> float:
         return self.frames / self.elapsed if self.elapsed > 0 else float("inf")
 
 
-def benchmark_ale(rom_path: str, frames: int, unroll: int = 8, chunk: int = 1024) -> BenchmarkResult:
-    """Run the ALE emulator for a fixed number of frames with minimal Python overhead."""
+def benchmark_vector_env(
+    rom: ResolvedRom,
+    frames: int,
+    num_envs: int,
+    *,
+    num_threads: Optional[int] = None,
+    warmup_steps: int = 256,
+    chunk_steps: int = 256,
+) -> BenchmarkResult:
+    """Run a vectorized ALE benchmark for a fixed number of frames."""
     assert frames > 0, "Frame count must be positive"
-    assert chunk % unroll == 0, "Chunk size must be divisible by unroll factor"
+    assert num_envs > 0, "Number of environments must be positive"
+    assert chunk_steps > 0, "Chunk size must be positive"
 
-    ale = ale_py.ALEInterface()
-    ale.setInt("frame_skip", 1)
-    ale.setFloat("repeat_action_probability", 0.0)
-    ale.setBool("display_screen", False)
-    ale.setBool("sound", False)
+    if rom.is_custom:
+        raise ValueError(
+            "Custom ROM paths are not supported by the ALE vector interface; "
+            "pass a packaged ROM id like 'pong'."
+        )
 
-    ale.loadROM(rom_path)
-    minimal_actions = ale.getMinimalActionSet()
-    action = minimal_actions[0]
-    act = ale.act  # bind once to avoid attribute lookups
-    reset_game = ale.reset_game
-    game_over = ale.game_over
+    threads = num_threads if num_threads is not None else num_envs
+    env = AtariVectorEnv(
+        game=rom.name,
+        num_envs=num_envs,
+        num_threads=threads,
+        grayscale=False,
+        stack_num=1,
+        frameskip=1,
+        img_height=210,
+        img_width=160,
+        maxpool=False,
+        noop_max=0,
+        repeat_action_probability=0.0,
+        reward_clipping=False,
+        full_action_space=False,
+        use_fire_reset=True,
+    )
 
-    warmup_steps = 512
-    for _ in range(warmup_steps):
-        act(action)
-        if game_over():
-            reset_game()
+    try:
+        reset = env.reset
+        step = env.step
+        reset()
 
-    frames_remaining = frames
-    frames_done = 0
-    start = time.perf_counter()
+        action_value = 0
+        if hasattr(env, "single_action_space"):
+            action_value = int(getattr(env.single_action_space, "start", 0))
+        actions = np.full((num_envs,), action_value, dtype=np.int32)
 
-    while frames_remaining >= chunk:
-        loops = chunk // unroll
-        for _ in range(loops):
-            act(action)
-            act(action)
-            act(action)
-            act(action)
-            act(action)
-            act(action)
-            act(action)
-            act(action)
-        frames_remaining -= chunk
-        frames_done += chunk
-        if game_over():
-            reset_game()
+        reset_mask = np.zeros(num_envs, dtype=np.bool_)
 
-    if frames_remaining:
-        loops = frames_remaining // unroll
-        for _ in range(loops):
-            act(action)
-            act(action)
-            act(action)
-            act(action)
-            act(action)
-            act(action)
-            act(action)
-            act(action)
-        tail = frames_remaining % unroll
-        for _ in range(tail):
-            act(action)
-        frames_done += frames_remaining
-        if game_over():
-            reset_game()
+        warmup_iters = max(1, math.ceil(warmup_steps / max(1, num_envs)))
+        for _ in range(warmup_iters):
+            _, _, terminations, truncations, _ = step(actions)
+            dones = np.logical_or(terminations, truncations)
+            if np.any(dones):
+                reset_mask[:] = dones
+                reset(options={"reset_mask": reset_mask})
 
-    elapsed = time.perf_counter() - start
-    return BenchmarkResult(frames=frames_done, elapsed=elapsed)
+        reset()
+
+        frames_done = 0
+        steps_remaining = max(1, math.ceil(frames / num_envs))
+        start = time.perf_counter()
+
+        while steps_remaining > 0:
+            steps_this_chunk = min(chunk_steps, steps_remaining)
+            for _ in range(steps_this_chunk):
+                _, _, terminations, truncations, _ = step(actions)
+                frames_done += num_envs
+                dones = np.logical_or(terminations, truncations)
+                if np.any(dones):
+                    reset_mask[:] = dones
+                    reset(options={"reset_mask": reset_mask})
+            steps_remaining -= steps_this_chunk
+
+        elapsed = time.perf_counter() - start
+    finally:
+        env.close()
+
+    return BenchmarkResult(frames=frames_done, elapsed=elapsed, requested=frames)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Benchmark ALE emulator FPS and report build arch.")
     parser.add_argument("--rom", required=True, help="Path to ROM file or ALE game id (e.g. pong)")
     parser.add_argument("--frames", type=int, default=200_000, help="Number of frames to benchmark")
+    parser.add_argument(
+        "--num-envs",
+        type=int,
+        default=os.cpu_count() or 1,
+        help="Number of ALE environments to vectorize (default: CPU cores)",
+    )
+    parser.add_argument(
+        "--num-threads",
+        type=int,
+        default=None,
+        help="Threads to dedicate to ALE (default: match --num-envs)",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    rom_path = resolve_rom_path(args.rom)
+    if args.num_envs <= 0:
+        raise ValueError("--num-envs must be positive")
+    if args.num_threads is not None and args.num_threads <= 0:
+        raise ValueError("--num-threads must be positive when provided")
+
+    rom = resolve_rom(args.rom)
 
     binary_info = detect_alepy_binary()
     print("Python architecture:", binary_info.python_arch)
@@ -258,10 +306,27 @@ def main() -> None:
     if binary_info.file_description:
         print("Binary description:", binary_info.file_description)
     print(binary_info.arch_note)
+    print("ROM path:", rom.path)
+    print("ROM id:", rom.name)
 
-    result = benchmark_ale(rom_path, frames=args.frames)
+    result = benchmark_vector_env(
+        rom,
+        frames=args.frames,
+        num_envs=args.num_envs,
+        num_threads=args.num_threads,
+    )
+    per_env_fps = result.fps / args.num_envs
+    if result.frames == result.requested:
+        frames_clause = f"{result.frames:,} frames"
+    else:
+        frames_clause = (
+            f"{result.frames:,} frames executed ({result.requested:,} requested)"
+        )
     print(
-        f"\nThroughput: {result.fps:,.0f} FPS over {result.frames:,} frames in {result.elapsed:.2f}s"
+        "\nThroughput: "
+        f"{result.fps:,.0f} FPS total | {per_env_fps:,.0f} FPS/env "
+        f"over {frames_clause} in {result.elapsed:.2f}s "
+        f"(num_envs={args.num_envs}, num_threads={args.num_threads or args.num_envs})"
     )
 
 

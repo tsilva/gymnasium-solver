@@ -227,9 +227,6 @@ class Config:
     # How often to evaluate the policy (how many training epochs between evaluations)
     eval_freq_epochs: Optional[int] = None
 
-    # How often to record evaluation videos (in evaluation calls; None disables recording)
-    eval_recording_freq: Optional[int] = None
-
     # Whether to run evaluation deterministically
     # (when set, the selected actions will always be the most likely instead of sampling from policy)
     eval_deterministic: bool = False
@@ -252,9 +249,6 @@ class Config:
     @classmethod
     def build_from_dict(cls, config_dict: Dict[str, Any]) -> 'Config':
         _config_dict = config_dict.copy()
-        legacy_eval_key = "eval_recording_freq_epochs"
-        if legacy_eval_key in _config_dict and "eval_recording_freq" not in _config_dict:
-            _config_dict["eval_recording_freq"] = _config_dict.pop(legacy_eval_key)
         algo_id = _config_dict.pop("algo_id")
         config_cls = {
             "reinforce": REINFORCEConfig,
@@ -480,8 +474,6 @@ class Config:
             raise ValueError("eval_warmup_epochs must be a non-negative integer.")
         if self.eval_episodes is not None and not (self.eval_episodes > 0):
             raise ValueError("eval_episodes must be a positive integer when set.")
-        if self.eval_recording_freq is not None and not (self.eval_recording_freq > 0):
-            raise ValueError("eval_recording_freq must be a positive integer when set.")
         if self.reward_threshold is not None and not (self.reward_threshold > 0):
             raise ValueError("reward_threshold must be a positive float when set.")
         #if not (self.early_stop_on_train_threshold or self.early_stop_on_eval_threshold):

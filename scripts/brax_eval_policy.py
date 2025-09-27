@@ -139,7 +139,17 @@ def main() -> None:
             key_action, subkey = jax.random.split(key_action)
             action, _ = policy(state.obs, subkey)
             state = env.step(state, action)
-            ep_states.append(state)
+            # For HTML visualization, Brax expects a list of brax.base.State
+            # with physics fields (q, qd, x, xd, contact). Convert from
+            # the env state's pipeline_state.
+            try:
+                from brax import base as brax_base  # local import to avoid overhead
+                ps = state.pipeline_state
+                bs = brax_base.State(q=ps.q, qd=ps.qd, x=ps.x, xd=ps.xd, contact=getattr(ps, 'contact', None))
+                ep_states.append(bs)
+            except Exception:
+                # Fallback: skip frame if conversion fails
+                pass
             ep_reward += float(state.reward)
             if bool(state.done):
                 break

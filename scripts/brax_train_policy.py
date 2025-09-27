@@ -1,12 +1,16 @@
-"""Train a simple policy on a Brax environment using PPO.
+"""Train and/or evaluate a simple policy on a Brax environment using PPO.
 
 Minimal, self-contained example that depends on Brax/JAX. It does not
 integrate with this repo's training loop; it's a standalone sample to
 demonstrate Brax training end-to-end.
 
 Usage examples:
-- CPU-only (recommended quick try):
+- Train (defaults shown):
   python scripts/brax_train_policy.py --env inverted_pendulum --timesteps 200000
+- Evaluate from params (HTML export):
+  python scripts/brax_train_policy.py eval --env inverted_pendulum --params runs/brax-inverted_pendulum/<ts>/params.msgpack --episodes 1 --html runs/brax-inverted_pendulum/rollout.html
+- Evaluate from Brax checkpoint (when available):
+  python scripts/brax_train_policy.py eval --env inverted_pendulum --ckpt runs/brax-inverted_pendulum/<ts>/<step> --episodes 5
 
 If Brax/JAX are missing, the script prints an install hint, e.g.:
   pip install -U "jax[cpu]" brax flax optax
@@ -151,7 +155,17 @@ class BraxTrainConfig:
 
 
 def parse_args() -> BraxTrainConfig:
-    p = argparse.ArgumentParser(description="Train a PPO policy on a Brax environment")
+    p = argparse.ArgumentParser(
+        description="Train a PPO policy on a Brax environment",
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  # Train a simple policy (default mode)\n"
+            "  python scripts/brax_train_policy.py --env inverted_pendulum --timesteps 200000\n\n"
+            "  # Evaluate a saved policy with HTML export\n"
+            "  python scripts/brax_train_policy.py eval \\\n+            \n    --env inverted_pendulum \\\n+            \n    --params runs/brax-inverted_pendulum/<ts>/params.msgpack \\\n+            \n    --episodes 1 --html runs/brax-inverted_pendulum/rollout.html\n"
+        ),
+    )
     p.add_argument("--env", default="inverted_pendulum", help="Brax env name, e.g. inverted_pendulum, reacher, ant, halfcheetah")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--timesteps", type=int, default=200_000)
@@ -260,6 +274,120 @@ def _save(outdir: str, cfg: BraxTrainConfig, params: Any, metrics: Dict[str, Any
         print("Flax not available; skipping params serialization.")
 
 
+# =====================
+# Evaluation (subcommand)
+# =====================
+
+def _load_policy_from_ckpt(env, ckpt_dir: str):
+    from brax.training.agents.ppo import checkpoint as ppo_ckpt
+    return ppo_ckpt.load_policy(ckpt_dir, deterministic=True)
+
+
+def _coerce_params_tuple(obj: Any) -> Tuple[Any, Any, Any]:
+    # already a tuple/list
+    if isinstance(obj, (list, tuple)):
+        if len(obj) >= 3:
+            return (obj[0], obj[1], obj[2])
+        if len(obj) == 2:
+            return (obj[0], obj[1], None)
+    # dict with numeric or named keys
+    if isinstance(obj, dict):
+        if 0 in obj and 1 in obj:
+            return (obj[0], obj[1], obj.get(2))
+        if "0" in obj and "1" in obj:
+            return (obj["0"], obj["1"], obj.get("2"))
+        n = obj.get("normalizer") or obj.get("normalizer_params") or {}
+        p = obj.get("policy") or obj.get("policy_params")
+        v = obj.get("value") or obj.get("value_params")
+        if p is not None:
+            return (n, p, v)
+        try:
+            keys = sorted(obj.keys(), key=lambda x: int(x) if str(x).isdigit() else str(x))
+            vals = [obj[k] for k in keys]
+            if len(vals) >= 2:
+                return (vals[0], vals[1], vals[2] if len(vals) > 2 else None)
+        except Exception:
+            pass
+    raise ValueError("Unrecognized params structure in msgpack; cannot make inference.")
+
+
+def _load_policy_from_params(env, params_path: str):
+    from flax import serialization as flax_serial
+    from brax.training.agents.ppo import networks as ppo_networks
+    raw = open(params_path, "rb").read()
+    restored = flax_serial.msgpack_restore(raw)
+    params_tuple = _coerce_params_tuple(restored)
+    pnet = ppo_networks.make_ppo_networks(
+        observation_size=env.observation_size,
+        action_size=env.action_size,
+    )
+    make_policy = ppo_networks.make_inference_fn(pnet)
+    return make_policy(params_tuple, deterministic=True)
+
+
+def _eval_rollout(
+    env_name: str,
+    *,
+    ckpt_dir: Optional[str] = None,
+    params_path: Optional[str] = None,
+    episodes: int = 5,
+    episode_length: int = 256,
+    html_path: Optional[str] = None,
+) -> None:
+    jax, envs_mod, _, _ = _soft_import_brax()
+    env = _create_env(envs_mod, env_name, episode_length)
+
+    if ckpt_dir:
+        if not os.path.isdir(ckpt_dir):
+            raise FileNotFoundError(f"Checkpoint dir not found: {ckpt_dir}")
+        policy = _load_policy_from_ckpt(env, ckpt_dir)
+    else:
+        if not params_path or not os.path.isfile(params_path):
+            raise FileNotFoundError(f"Params file not found: {params_path}")
+        policy = _load_policy_from_params(env, params_path)
+
+    rng = jax.random.PRNGKey(0)
+    total_rewards = []
+    html_states = None
+    for ep in range(episodes):
+        rng, key_reset, key_action = jax.random.split(rng, 3)
+        state = env.reset(key_reset)
+        ep_reward = 0.0
+        steps = 0
+        ep_states = []
+        for _ in range(episode_length):
+            steps += 1
+            key_action, subkey = jax.random.split(key_action)
+            action, _ = policy(state.obs, subkey)
+            state = env.step(state, action)
+            # Convert to brax.base.State for HTML saving
+            try:
+                from brax import base as brax_base
+                ps = state.pipeline_state
+                bs = brax_base.State(q=ps.q, qd=ps.qd, x=ps.x, xd=ps.xd, contact=getattr(ps, 'contact', None))
+                ep_states.append(bs)
+            except Exception:
+                pass
+            ep_reward += float(state.reward)
+            if bool(state.done):
+                break
+        total_rewards.append(ep_reward)
+        print(f"Episode {ep+1}: reward={ep_reward:.2f}, steps={steps}")
+        if html_states is None:
+            html_states = ep_states
+
+    avg = sum(total_rewards) / max(1, len(total_rewards))
+    print(f"Average reward over {len(total_rewards)} episodes: {avg:.2f}")
+
+    if html_path and html_states:
+        try:
+            from brax.io import html
+            html.save(html_path, env.sys, html_states)
+            print(f"Saved HTML rollout to: {html_path}")
+        except Exception as e:
+            print(f"Warning: failed to save HTML ({e!r})")
+
+
 def _find_latest_ckpt_dir(base_dir: str) -> Optional[str]:
     try:
         entries = [d for d in os.listdir(base_dir) if d.isdigit()]
@@ -285,7 +413,44 @@ def _supports_brax_checkpoint() -> bool:
         return False
 
 
+def _parse_eval_args(argv: Optional[list[str]] = None):
+    p = argparse.ArgumentParser(
+        prog="brax_train_policy.py eval",
+        description="Evaluate a Brax PPO policy",
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  # Evaluate from Flax params\n"
+            "  python scripts/brax_train_policy.py eval \\\n+            \n    --env inverted_pendulum \\\n+            \n    --params runs/brax-inverted_pendulum/<ts>/params.msgpack --episodes 5\n\n"
+            "  # Evaluate from a Brax checkpoint (when available)\n"
+            "  python scripts/brax_train_policy.py eval \\\n+            \n    --env inverted_pendulum \\\n+            \n    --ckpt runs/brax-inverted_pendulum/<ts>/<step> --episodes 5\n"
+        ),
+    )
+    p.add_argument("--env", default="inverted_pendulum")
+    src = p.add_mutually_exclusive_group(required=True)
+    src.add_argument("--ckpt", help="Brax checkpoint step directory (contains config.json and checkpoint data)")
+    src.add_argument("--params", help="Flax params msgpack produced by training")
+    p.add_argument("--episodes", type=int, default=5)
+    p.add_argument("--episode_length", type=int, default=256)
+    p.add_argument("--html", type=str, default=None, help="Optional path to save the first episode as an HTML viewer")
+    return p.parse_args(argv)
+
+
 def main() -> None:
+    # Subcommand support: `eval` and `train` (default)
+    if len(sys.argv) > 1 and sys.argv[1] == "eval":
+        args = _parse_eval_args(sys.argv[2:])
+        _eval_rollout(
+            args.env,
+            ckpt_dir=args.ckpt,
+            params_path=args.params,
+            episodes=args.episodes,
+            episode_length=args.episode_length,
+            html_path=args.html,
+        )
+        return
+
+    # Default: train mode (backwards compatible flags)
     cfg = parse_args()
     outdir = cfg.outdir or _default_outdir(cfg)
     os.makedirs(outdir, exist_ok=True)
@@ -293,7 +458,7 @@ def main() -> None:
         save_ckpt = outdir if _supports_brax_checkpoint() else None
         if save_ckpt is None:
             print("Note: Brax checkpoint disabled (incompatible JAX/orbax). Using Flax params only.")
-        inference_fn, params, metrics = _train(cfg, save_ckpt_dir=save_ckpt)
+        _, params, metrics = _train(cfg, save_ckpt_dir=save_ckpt)
     except ImportError as e:
         # Provide actionable guidance for missing soft deps
         print(str(e), file=sys.stderr)
@@ -308,10 +473,12 @@ def main() -> None:
     if ckpt_dir:
         print(f"Saved Brax checkpoint to: {ckpt_dir}")
         print("Evaluate it with:")
-        print(f"  python scripts/brax_eval_policy.py --env {cfg.env} --ckpt {ckpt_dir} --episodes 5")
+        print(f"  python scripts/brax_train_policy.py eval --env {cfg.env} --ckpt {ckpt_dir} --episodes 5")
     else:
         print("Brax checkpoint not available; evaluate with Flax params:")
-        print(f"  python scripts/brax_eval_policy.py --env {cfg.env} --params {os.path.join(outdir, 'params.msgpack')} --episodes 5")
+        params_path = os.path.join(outdir, 'params.msgpack')
+        html_path = os.path.join(outdir, 'rollout.html')
+        print(f"  python scripts/brax_train_policy.py eval --env {cfg.env} --params {params_path} --episodes 5 --html {html_path}")
     print(f"Artifacts saved to: {outdir}")
 
 

@@ -2,6 +2,8 @@
 
 # NEXT
 
+- inspect pomg, see if ep lenght is accurate
+- inspect mc_returns and gae for unifinished episodes
 - add pong rgb cnn policy support, measure FPS
 - replace sb3.make_vec() with gym.make_vec(); provide vectorization_mode="sync/async", and initialize pong in old mode as described here (w/ Atari Preprocessing Wrapper): https://ale.farama.org/vector-environment/; measure FPS; check run_play and run_inspect
 - now remove vectorization_mode to default to fast AtariVecEnv, confirm 10x speedup in FPS, check actual epoch/FPS as well, because we want overall throughput to be higher

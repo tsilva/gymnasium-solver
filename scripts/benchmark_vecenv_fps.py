@@ -437,10 +437,10 @@ def benchmark_gym_make_vec_env(
 
     vec_mode = "async" if use_subproc else "sync"
     vector_kwargs = dict(
-         frameskip=1, stack_num=4, grayscale=True, img_height=84, img_width=84,
-    use_fire_reset=True, reward_clipping=True, episodic_life=False,
-    noop_max=30, repeat_action_probability=0.0
-       # obs_type="rgb",
+        # frameskip=1, stack_num=4, grayscale=True, img_height=84, img_width=84,
+        #use_fire_reset=True, reward_clipping=True, episodic_life=False,
+        #noop_max=30, repeat_action_probability=0.0
+        obs_type="rgb",
     )
 
 

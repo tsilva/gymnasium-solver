@@ -2,7 +2,7 @@
 name = "gymnasium-solver-env"
 version = "0.1.0"
 description = "Environment for gymnasium-solver (uv/jupyter kernel)"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 dependencies = [
     "gymnasium[classic-control,atari,box2d,mujoco,other]",
     "gymnasium-robotics",
@@ -13,7 +13,8 @@ dependencies = [
     "stable-baselines3>=2.0.0",
     "wandb",
     "wandb-workspaces",
-    "ocatari",
+    # Pin OCAtari to avoid broken sdists (e.g., 1.1.5 missing requirements.txt)
+    "ocatari>=2.2.1",
     "pytorch-lightning",
     "ipykernel",
     "jupyter",
@@ -27,6 +28,10 @@ dependencies = [
     "gradio>=4.0.0",
     "vizdoom",
     "pettingzoo>=1.25.0",
+    "jax[cuda12]>=0.5.3",
+    "brax>=0.13.0",
+    "flax>=0.10.6",
+    "optax>=0.2.6",
 ]
 
 [tool.pytest.ini_options]
@@ -56,3 +61,24 @@ markers = [
 
 # Minimum version requirement
 minversion = "6.0"
+
+# Optional dependency groups
+[project.optional-dependencies]
+# CPU-only Brax/JAX stack for scripts/brax_train_policy.py
+brax = [
+  "brax",
+  "flax",
+  "optax",
+  "jax[cpu]",
+]
+
+# GPU (CUDA 12) Brax/JAX stack. Requires installing with the JAX CUDA wheels index, e.g.:
+#   pip install -U "jax[cuda12]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+# Or with uv:
+#   uv add 'jax[cuda12]' --find-links https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+brax-cuda12 = [
+  "brax",
+  "flax",
+  "optax",
+  "jax[cuda12]",
+]

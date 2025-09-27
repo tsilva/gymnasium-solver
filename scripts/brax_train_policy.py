@@ -333,9 +333,26 @@ def _eval_rollout(
     episodes: int = 5,
     episode_length: int = 256,
     html_path: Optional[str] = None,
+    prefer_gym: bool = True,
 ) -> None:
     jax, envs_mod, _, _ = _soft_import_brax()
     env = _create_env(envs_mod, env_name, episode_length)
+
+    # Try to wrap with Brax Gym compatibility so stepping uses gym.step
+    gym_env = None
+    used_gym = False
+    if prefer_gym:
+        try:
+            from brax.envs.wrappers.gym import GymWrapper  # type: ignore
+            # GymWrapper requires the classic gym package; import to verify availability
+            import gym  # noqa: F401
+            gym_env = GymWrapper(env)
+            used_gym = True
+            print("Using Brax GymWrapper for evaluation (gym-style step/reset).")
+        except ModuleNotFoundError:
+            print("Gym not installed; falling back to native Brax stepping. Install 'gym' to enable GymWrapper.")
+        except Exception as e:
+            print(f"GymWrapper unavailable ({e!r}); falling back to native Brax.")
 
     if ckpt_dir:
         if not os.path.isdir(ckpt_dir):
@@ -351,26 +368,44 @@ def _eval_rollout(
     html_states = None
     for ep in range(episodes):
         rng, key_reset, key_action = jax.random.split(rng, 3)
-        state = env.reset(key_reset)
+        if used_gym:
+            obs = gym_env.reset()
+        else:
+            state = env.reset(key_reset)
         ep_reward = 0.0
         steps = 0
         ep_states = []
         for _ in range(episode_length):
             steps += 1
             key_action, subkey = jax.random.split(key_action)
-            action, _ = policy(state.obs, subkey)
-            state = env.step(state, action)
-            # Convert to brax.base.State for HTML saving
-            try:
-                from brax import base as brax_base
-                ps = state.pipeline_state
-                bs = brax_base.State(q=ps.q, qd=ps.qd, x=ps.x, xd=ps.xd, contact=getattr(ps, 'contact', None))
-                ep_states.append(bs)
-            except Exception:
-                pass
-            ep_reward += float(state.reward)
-            if bool(state.done):
-                break
+            if used_gym:
+                action, _ = policy(obs, subkey)
+                obs, reward, done, info = gym_env.step(action)
+                # Grab physics state for HTML from the wrapper's internal state
+                try:
+                    from brax import base as brax_base
+                    ps = gym_env._state.pipeline_state  # type: ignore[attr-defined]
+                    bs = brax_base.State(q=ps.q, qd=ps.qd, x=ps.x, xd=ps.xd, contact=getattr(ps, 'contact', None))
+                    ep_states.append(bs)
+                except Exception:
+                    pass
+                ep_reward += float(reward)
+                if bool(done):
+                    break
+            else:
+                action, _ = policy(state.obs, subkey)
+                state = env.step(state, action)
+                # Convert to brax.base.State for HTML saving
+                try:
+                    from brax import base as brax_base
+                    ps = state.pipeline_state
+                    bs = brax_base.State(q=ps.q, qd=ps.qd, x=ps.x, xd=ps.xd, contact=getattr(ps, 'contact', None))
+                    ep_states.append(bs)
+                except Exception:
+                    pass
+                ep_reward += float(state.reward)
+                if bool(state.done):
+                    break
         total_rewards.append(ep_reward)
         print(f"Episode {ep+1}: reward={ep_reward:.2f}, steps={steps}")
         if html_states is None:
@@ -433,6 +468,8 @@ def _parse_eval_args(argv: Optional[list[str]] = None):
     p.add_argument("--episodes", type=int, default=5)
     p.add_argument("--episode_length", type=int, default=256)
     p.add_argument("--html", type=str, default=None, help="Optional path to save the first episode as an HTML viewer")
+    p.add_argument("--no-gym", dest="prefer_gym", action="store_false", help="Disable GymWrapper even if available")
+    p.set_defaults(prefer_gym=True)
     return p.parse_args(argv)
 
 
@@ -447,6 +484,7 @@ def main() -> None:
             episodes=args.episodes,
             episode_length=args.episode_length,
             html_path=args.html,
+            prefer_gym=args.prefer_gym,
         )
         return
 

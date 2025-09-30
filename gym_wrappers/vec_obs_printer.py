@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
-from stable_baselines3.common.vec_env.base_vec_env import VecEnvWrapper
+from gymnasium.vector import VectorWrapper
 from gymnasium import spaces
 
 # TODO: CLEANUP this file
@@ -56,9 +56,9 @@ def _get_terminal_width(default: int = 80) -> int:
         return default
 
 
-class VecObsBarPrinter(VecEnvWrapper):
+class VecObsBarPrinter(VectorWrapper):
     """
-    VecEnv wrapper that prints a per-dimension observation table with bars.
+    VectorEnv wrapper that prints a per-dimension observation table with bars.
 
     - Uses environment spec (YAML) to label observation components when available.
     - If the spec provides finite ranges, uses them; otherwise, tracks running
@@ -73,14 +73,14 @@ class VecObsBarPrinter(VecEnvWrapper):
 
     def __init__(
         self,
-        venv,
+        env,
         *,
         bar_width: int = 40,
         env_index: int = 0,
         enable: bool = True,
         target_episodes: int,
     ) -> None:
-        super().__init__(venv)
+        super().__init__(env)
         self._bar_width = max(10, int(bar_width))
         self._env_index = int(env_index)
         self._enable = bool(enable)
@@ -119,9 +119,9 @@ class VecObsBarPrinter(VecEnvWrapper):
         # Try reading spec to pre-populate labels/ranges
         self._init_from_spec()
 
-    # ---- VecEnv overrides ----
-    def reset(self):
-        obs = self.venv.reset()
+    # ---- VectorEnv overrides ----
+    def reset(self, **kwargs):
+        obs, info = self.env.reset(**kwargs)
         self._maybe_init_from_obs(obs)
         # Reset episode tracking on full env reset
         self._ep_count = 0
@@ -133,19 +133,20 @@ class VecObsBarPrinter(VecEnvWrapper):
         # Print initial observation if enabled
         if self._enable:
             self._print_obs(obs, rewards=None, dones=None)
-        return obs
+        return obs, info
 
-    def step_async(self, actions):
+    def step(self, actions):
         # Cache last actions for rendering (best-effort; shapes vary by env)
         try:
             self._last_actions = np.asarray(actions)
         except Exception:
             self._last_actions = None
-        return self.venv.step_async(actions)
 
-    def step_wait(self):
-        obs, rewards, dones, infos = self.venv.step_wait()
+        obs, rewards, terminated, truncated, infos = self.env.step(actions)
         self._maybe_init_from_obs(obs)
+
+        # Combine terminated and truncated into dones for internal tracking
+        dones = np.logical_or(terminated, truncated)
 
         # Update episode accounting for the selected env index
         try:
@@ -169,15 +170,15 @@ class VecObsBarPrinter(VecEnvWrapper):
 
         if self._enable:
             self._print_obs(obs, rewards=rewards, dones=dones)
-        return obs, rewards, dones, infos
+        return obs, rewards, terminated, truncated, infos
 
     # ---- Internal helpers ----
     def _init_from_spec(self) -> None:
         # VecEnvInfoWrapper provides get_spec(); if missing, we skip labels
         spec: Optional[Dict[str, Any]] = None
         try:
-            if hasattr(self.venv, "get_spec"):
-                spec_obj = self.venv.get_spec()
+            if hasattr(self.env, "get_spec"):
+                spec_obj = self.env.get_spec()
                 if hasattr(spec_obj, "as_dict"):
                     spec = spec_obj.as_dict()
                 elif isinstance(spec_obj, Mapping):
@@ -389,8 +390,8 @@ class VecObsBarPrinter(VecEnvWrapper):
 
         env_id = None
         try:
-            if hasattr(self.venv, "get_id"):
-                env_id = self.venv.get_id()
+            if hasattr(self.env, "get_id"):
+                env_id = self.env.get_id()
         except Exception:
             env_id = None
 
@@ -421,7 +422,7 @@ class VecObsBarPrinter(VecEnvWrapper):
 
         # Episode timestep progress bar, if time limit is known
         if self._time_limit is None:
-            tl = self.venv.get_max_episode_steps()
+            tl = self.env.get_max_episode_steps()
             self._time_limit = None if tl is None else int(tl)
         if self._time_limit:
             steps = int(self._current_ep_len)

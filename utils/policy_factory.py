@@ -13,6 +13,7 @@ import torch
 import torch.nn as nn
 
 from .models import (
+    CNNActorCritic,
     MLPActorCritic,
     MLPPolicy,
 )
@@ -30,8 +31,9 @@ def build_policy(
     policy_cls = {
         "mlp": MLPPolicy,
         "mlp_actorcritic": MLPActorCritic,
+        "cnn_actorcritic": CNNActorCritic,
     }[policy_type]
-    
+
     policy = policy_cls(
         input_shape=input_shape,
         hidden_dims=hidden_dims,
@@ -43,12 +45,16 @@ def build_policy(
 
 def build_policy_from_env_and_config(env, config):
     # TODO: hack to force embeddings
-    input_shape = env.observation_space.shape
+    # Use single_observation_space for Gymnasium VectorEnv (excludes batch dimension)
+    obs_space = getattr(env, 'single_observation_space', env.observation_space)
+    input_shape = obs_space.shape
     if len(input_shape) == 1 and input_shape[0] == 1:
-        input_shape = env.observation_space.high[0]
+        input_shape = obs_space.high[0]
 
-    output_shape = env.action_space.shape
-    if not output_shape: output_shape = (env.action_space.n,)
+    # Use single_action_space for Gymnasium VectorEnv (excludes batch dimension)
+    act_space = getattr(env, 'single_action_space', env.action_space)
+    output_shape = act_space.shape
+    if not output_shape: output_shape = (act_space.n,)
 
     return build_policy(
         config.policy,

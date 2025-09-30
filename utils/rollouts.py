@@ -549,19 +549,40 @@ class RolloutCollector():
         self,
         *,
         done_idxs: np.ndarray,
-        infos: list,
+        infos: dict,
         step_idx: int
     ) -> None:
         """Process episode-complete infos for all done envs at a step."""
         assert len(done_idxs) > 0, "No done environments at a step"
 
+        # Gymnasium VectorEnv with RecordEpisodeStatistics stores episode stats as:
+        # info['episode'] = {'r': array([reward1, reward2, ...]), 'l': array([len1, len2, ...]), ...}
+        # info['_episode'] = array([True, False, ...])  # mask of which envs finished episodes
+        episode_dict = infos.get("episode", None)
+        episode_mask = infos.get("_episode", None)
+
+        # Also check for final_info/final_observation (alternative Gymnasium format)
+        final_infos = infos.get("final_info", None)
+        final_observations = infos.get("final_observation", None)
+
         # Process episode-complete infos for all done envs at a step
-        for env_idx in done_idxs:
-            # Retrieve episode data from info
-            info = infos[env_idx]
-            episode = info['episode']
-            episode_reward = episode['r']
-            episode_length = episode['l']
+        for idx, env_idx in enumerate(done_idxs):
+            # Try to get episode stats from the Gymnasium RecordEpisodeStatistics format
+            episode_reward = 0.0
+            episode_length = 0
+
+            if episode_dict is not None and episode_mask is not None:
+                # RecordEpisodeStatistics format: arrays indexed by env_idx
+                if episode_mask[env_idx]:
+                    episode_reward = float(episode_dict['r'][env_idx])
+                    episode_length = int(episode_dict['l'][env_idx])
+            elif final_infos is not None:
+                # Alternative format: list of info dicts
+                info = final_infos[idx] if idx < len(final_infos) else {}
+                if info is not None:
+                    episode = info.get('episode', {})
+                    episode_reward = episode.get('r', 0.0)
+                    episode_length = episode.get('l', 0)
 
             # Add episode data to deques (for stats tracking)
             self.episode_reward_deque.append(episode_reward)
@@ -576,17 +597,29 @@ class RolloutCollector():
             # Track best episode reward
             self._best_episode_reward = max(self._best_episode_reward, episode_reward)
 
-            # In case the episode ended due to time limit then mark it as such and 
-            # retrieve the last observation (truncated episode observations are the 
-            # observation from the next episode, we'll need the actual last 
+            # In case the episode ended due to time limit (truncation) then
+            # retrieve the last observation (truncated episode observations are the
+            # observation from the next episode, we'll need the actual last
             # observation to bootstrap the value function)
-            if info.get("TimeLimit.truncated"):
-                # Mark episode as timed out
-                self._step_timeouts[env_idx] = True  # TODO: don't think I need this, seems like I can merge this with terminal_obs_info
+            # Note: self._step_timeouts is set before calling this method based on truncated array
+            is_timeout = bool(self._step_timeouts[env_idx])
+            if is_timeout:
+                # Try to get terminal observation from various formats
+                terminal_observation = None
 
-                # Store last episode observation
-                terminal_observation = info["terminal_observation"]
-                self.terminal_obs_info.append((step_idx, env_idx, terminal_observation))
+                # Check final_observations list format
+                if final_observations is not None and idx < len(final_observations):
+                    terminal_observation = final_observations[idx]
+
+                # Check if there's a final_observation dict indexed by env_idx
+                if terminal_observation is None and "final_observation" in infos:
+                    final_obs = infos["final_observation"]
+                    if isinstance(final_obs, np.ndarray) and final_obs.ndim > 1:
+                        # Array format: shape (n_envs, *obs_shape)
+                        terminal_observation = final_obs[env_idx]
+
+                if terminal_observation is not None:
+                    self.terminal_obs_info.append((step_idx, env_idx, terminal_observation))
 
             # Record this finished episode for evaluation accounting
             self._recent_episodes.append(
@@ -594,7 +627,7 @@ class RolloutCollector():
                     int(env_idx),
                     float(episode_reward),
                     int(episode_length),
-                    bool(info.get("TimeLimit.truncated", False)),
+                    is_timeout,
                 )
             )
 
@@ -619,7 +652,7 @@ class RolloutCollector():
 
         # If this is the first collection, reset the 
         # environment to get the first observation
-        self.obs = self.env.reset()
+        self.obs, _ = self.env.reset()
 
         # For discrete observations, VecEnv returns (n_envs,), treat as 1-feature
         obs_shape = (1,) if self.obs.ndim == 1 else self.obs.shape[1:]
@@ -768,11 +801,17 @@ class RolloutCollector():
 
             # Perform environment step
             actions_np = actions_t.detach().cpu().numpy()
-            next_obs, rewards, dones, infos = self.env.step(actions_np)
+            next_obs, rewards, terminated, truncated, infos = self.env.step(actions_np)
+
+            # Combine terminated and truncated into dones for backward compatibility
+            dones = np.logical_or(terminated, truncated)
 
             # In case there are any done environments, process the episode info
             # (eg: add final reward to stats, store last observation for value bootstrapping, etc.)
-            self._step_timeouts.fill(False) 
+            self._step_timeouts.fill(False)
+            # Mark timeouts based on truncated (not terminated)
+            self._step_timeouts[truncated] = True
+
             done_indices = np.where(dones)[0]  # TODO: why zero indexing?
             if len(done_indices) > 0:
                 self._process_done_infos(

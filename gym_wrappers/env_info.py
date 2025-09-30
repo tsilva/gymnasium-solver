@@ -148,8 +148,8 @@ class EnvInfoWrapper(gym.ObservationWrapper):
         # TODO: pass this to spec instead of storing property
         self._obs_type = kwargs.get('obs_type', None)
 
-        override_spec = kwargs.get('spec', {})
-        merged_spec = deep_merge(collected, override_spec)
+        override_spec = kwargs.get('spec', None)
+        merged_spec = deep_merge(collected, override_spec if override_spec is not None else {})
 
         self._spec = EnvSpec.from_mapping(merged_spec)
     

@@ -1,14 +1,11 @@
 
 import numpy as np
 from gymnasium import spaces
-from stable_baselines3.common.vec_env.base_vec_env import (
-    VecEnv,
-    VecEnvStepReturn,
-    VecEnvWrapper,
-)
+from gymnasium.vector import VectorWrapper, VectorEnv
+from typing import Tuple, Any
 
 
-class VecNormalizeStatic(VecEnvWrapper):
+class VecNormalizeStatic(VectorWrapper):
     """Statically normalize observations based on the env's Box bounds.
 
     - For dimensions with finite and non-degenerate bounds (low < high), map to [0, 1].
@@ -21,13 +18,13 @@ class VecNormalizeStatic(VecEnvWrapper):
     bounds for unbounded dims.
     """
 
-    def __init__(self, venv: VecEnv):
-        super().__init__(venv)
-        assert isinstance(venv.observation_space, spaces.Box), "Only supports Box observation spaces."
+    def __init__(self, env: VectorEnv):
+        super().__init__(env)
+        assert isinstance(env.single_observation_space, spaces.Box), "Only supports Box observation spaces."
 
         # Capture original bounds
-        self.low = venv.observation_space.low.astype(np.float32)
-        self.high = venv.observation_space.high.astype(np.float32)
+        self.low = env.single_observation_space.low.astype(np.float32)
+        self.high = env.single_observation_space.high.astype(np.float32)
 
         # Masks for normalization behavior
         finite = np.isfinite(self.low) & np.isfinite(self.high)
@@ -42,7 +39,7 @@ class VecNormalizeStatic(VecEnvWrapper):
         # Build the wrapped observation space reflecting the mixed normalization
         low_norm = np.where(self._mask_pos_scale | self._mask_zero_scale, 0.0, self.low).astype(np.float32)
         high_norm = np.where(self._mask_pos_scale, 1.0, np.where(self._mask_zero_scale, 0.0, self.high)).astype(np.float32)
-        self.observation_space = spaces.Box(low=low_norm, high=high_norm, dtype=np.float32)
+        self.single_observation_space = spaces.Box(low=low_norm, high=high_norm, dtype=np.float32)
 
     def _normalize_obs(self, obs: np.ndarray) -> np.ndarray:
         obs = obs.astype(np.float32, copy=False)
@@ -62,10 +59,10 @@ class VecNormalizeStatic(VecEnvWrapper):
             out[..., passthrough_mask] = obs[..., passthrough_mask]
         return out
 
-    def reset(self) -> np.ndarray:
-        obs = self.venv.reset()
-        return self._normalize_obs(obs)
+    def reset(self, **kwargs) -> Tuple[np.ndarray, Any]:
+        obs, info = self.env.reset(**kwargs)
+        return self._normalize_obs(obs), info
 
-    def step_wait(self) -> VecEnvStepReturn:
-        obs, rewards, dones, infos = self.venv.step_wait()
-        return self._normalize_obs(obs), rewards, dones, infos
+    def step(self, actions) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, Any]:
+        obs, rewards, terminated, truncated, infos = self.env.step(actions)
+        return self._normalize_obs(obs), rewards, terminated, truncated, infos

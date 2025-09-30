@@ -83,6 +83,16 @@ _spec_objects: &spec_objects
           - {name: LastAction.RIGHT, range: [0.0, 1.0]}
           - {name: LastAction.LEFT, range: [0.0, 1.0]}
 
+_spec_rgb: &spec_rgb
+  <<: *spec_base
+  observation_space:
+    default: rgb
+    variants:
+      rgb:
+        shape: [3, 210, 160]
+        dtype: uint8
+        note: RGB frames from ALE (channel-first format)
+
 # =====================
 # Configuration Anchors
 # =====================
@@ -126,6 +136,41 @@ _obj_ppo: &obj_ppo
   eval_episodes: 10
   eval_freq_epochs: 10
 
+# ==========================
+# RGB observation setup
+# ==========================
+_rgb_env: &rgb_env
+  <<: *env
+  obs_type: "rgb"
+  grayscale_obs: true
+  resize_obs: [84, 84]
+
+_rgb_ppo: &rgb_ppo
+  <<: [*rgb_env]
+  policy: "cnn_actorcritic"
+  accelerator: "auto"  # Use GPU if available, fall back to CPU
+  n_epochs: 4
+  ent_coef: 0.01
+  policy_lr: 0.0001
+  normalize_advantages: true
+  algo_id: ppo
+  gamma: 0.99
+  gae_lambda: 0.95
+  vf_coef: 0.5
+  clip_range: 0.1
+  n_envs: 8
+  subproc: false
+  n_steps: 128
+  batch_size: 256
+  hidden_dims: [512]
+  policy_kwargs:
+    channels: [32, 64, 64]
+    kernel_sizes: [8, 4, 3]
+    strides: [4, 2, 1]
+  eval_warmup_epochs: 50
+  eval_episodes: 10
+  eval_freq_epochs: 10
+
 # =====================
 # Public variants
 # =====================
@@ -139,3 +184,17 @@ objects_ppo:
 objects_deterministic_ppo:
   <<: [*obj_ppo, *env_deterministic]
   description: "PPO with object-based observations - deterministic version (no sticky actions)"
+
+# RGB observations with PPO - uses raw pixel observations (84x84 grayscale)
+# Uses ALE native vectorization for 10x faster training
+rgb_ppo:
+  <<: *rgb_ppo
+  spec: *spec_rgb
+  description: "PPO with RGB observations - uses ALE native vectorization for fast training"
+
+# RGB observations with PPO - deterministic version (no sticky actions)
+# Uses ALE native vectorization for 10x faster training
+rgb_deterministic_ppo:
+  <<: [*rgb_ppo, *env_deterministic]
+  spec: *spec_rgb
+  description: "PPO with RGB observations - deterministic version with ALE native vectorization"

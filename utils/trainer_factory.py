@@ -7,12 +7,12 @@ import pytorch_lightning as pl
 
 def build_trainer(
     config,
-    *, 
+    *,
     logger: List[pl.loggers.Logger],
     callbacks: List[pl.callbacks.Callback],
 ) -> pl.Trainer:
-    # When number of devices is not specified, set to 1 for CPU
-    if config.devices is None and config.accelerator == "cpu": config.devices = 1
+    # When number of devices is not specified, default to 1
+    if config.devices is None: config.devices = 1
 
     # If warmup is active, request validation every epoch and gate in hooks
     eval_freq_epochs = 1 if (config.eval_freq_epochs is not None and config.eval_warmup_epochs > 0) else config.eval_freq_epochs

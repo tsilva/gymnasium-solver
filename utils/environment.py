@@ -153,6 +153,16 @@ def build_env(
         and n_envs > 1
     )
 
+    # When using ALE RGB with n_envs=1, we need to match the native vectorization behavior
+    # by forcing frame_stack=4 (native vectorization always uses 4 stacked frames)
+    _is_ale_rgb_single_env = (
+        _is_alepy_env
+        and obs_type == "rgb"
+        and n_envs == 1
+    )
+    if _is_ale_rgb_single_env and (frame_stack is None or frame_stack == 1):
+        frame_stack = 4
+
     # Video recording not supported with ALE native vectorization
     if _use_ale_native_vectorization and record_video:
         record_video = False
@@ -174,7 +184,10 @@ def build_env(
         # (ALE native vectorization handles grayscale, resize, frame_stack automatically)
         if not _use_ale_native_vectorization:
             if grayscale_obs:
-                env = GrayscaleObservation(env, keep_dim=True)
+                # For ALE RGB single envs, use keep_dim=False to match native vectorization's CHW format
+                # (native vec produces (4, 84, 84) after frame stacking, not (84, 84, 4))
+                keep_dim = not _is_ale_rgb_single_env
+                env = GrayscaleObservation(env, keep_dim=keep_dim)
             if resize_obs:
                 # resize_obs can be True (default to 84x84) or [height, width]
                 if resize_obs is True:

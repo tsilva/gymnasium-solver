@@ -494,6 +494,8 @@ class Config:
                 )
         if self.policy_targets is not None and self.policy_targets not in {Config.PolicyTargetsType.returns, Config.PolicyTargetsType.advantages}:  # type: ignore[operator]
             raise ValueError("policy_targets must be 'returns' or 'advantages'.")
+        if self.normalize_advantages is not None and self.normalize_advantages not in {Config.AdvantageNormType.rollout, Config.AdvantageNormType.batch, Config.AdvantageNormType.off}:  # type: ignore[operator]
+            raise ValueError("normalize_advantages must be 'rollout', 'batch', or 'off'.")
         # PPO replay-specific checks (only if fields exist)
         rr = getattr(self, "replay_ratio", 0.0)
         if rr is not None and rr < 0:

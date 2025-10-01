@@ -106,6 +106,18 @@ _env_deterministic: &env_deterministic
   env_kwargs:
     repeat_action_probability: 0.0
 
+# Shared PPO hyperparameters across all observation types
+_ppo_base: &ppo_base
+  algo_id: ppo
+  gamma: 0.99
+  gae_lambda: 0.95
+  vf_coef: 0.5
+  n_epochs: 15
+  normalize_advantages: "rollout"
+  eval_warmup_epochs: 50
+  eval_freq_epochs: 5
+  eval_episodes: 30
+
 # ==========================
 # Object observation setup
 # ==========================
@@ -117,24 +129,16 @@ _obj_env: &obj_env
     - { id: DiscreteActionSpaceRemapperWrapper, mapping: [0, 2, 3] }
 
 _obj_ppo: &obj_ppo
-  <<: [*obj_env]
-  n_epochs: 15
+  <<: [*obj_env, *ppo_base]
+  max_timesteps: 15625
   ent_coef: 0.005
   policy_lr: 0.002
-  normalize_advantages: "rollout"
-  algo_id: ppo
-  gamma: 0.99
-  gae_lambda: 0.95
-  vf_coef: 0.5
   clip_range: 0.2
   n_envs: 32
   subproc: true
   n_steps: 256
   batch_size: 2048
   hidden_dims: [256, 256]
-  eval_warmup_epochs: 100
-  eval_episodes: 10
-  eval_freq_epochs: 10
 
 # ==========================
 # RGB observation setup
@@ -145,8 +149,8 @@ _rgb_env: &rgb_env
   obs_type: "rgb"
 
 _rgb_ppo: &rgb_ppo
-  <<: [*rgb_env]
-  algo_id: ppo
+  <<: [*rgb_env, *ppo_base]
+  max_timesteps: 156250
   n_envs: 64
   accelerator: "auto"
   policy: "cnn_actorcritic"
@@ -155,20 +159,13 @@ _rgb_ppo: &rgb_ppo
     channels: [32, 64, 64]
     kernel_sizes: [8, 4, 3]
     strides: [4, 2, 1]
-  n_epochs: 15
   ent_coef: 0.01
   policy_lr: 0.00025
-  normalize_advantages: true
-  gamma: 0.99
-  gae_lambda: 0.95
-  vf_coef: 0.5
+  normalize_advantages: "batch"
   clip_range: 0.1
   subproc: false
   n_steps: 128
   batch_size: 0.5
-  eval_warmup_epochs: 50
-  eval_episodes: 30
-  eval_freq_epochs: 5
   #env_kwargs:
   #  repeat_action_probability: 0.0
   #  difficulty: 0

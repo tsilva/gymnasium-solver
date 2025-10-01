@@ -161,25 +161,6 @@ def build_env(
         # Apply seed to envs
         if seed is not None: env.reset(seed=seed)
 
-        # TODO: why is rollout fps not 11k like here?
-        # TODO: create autotuner that figures out n_envs, batch_size, combo that results in highest fps
-        # TODO: create same autotuner but for rollout collector
-        """
-        x = 0
-        import time
-        start = time.perf_counter() 
-        for i in range(10_000):
-            actions_np = env.action_space.sample()  
-            env.step(actions_np)
-            x += actions_np.shape[0]
-        end = time.perf_counter()
-        elapsed = end - start
-        fps = x / elapsed
-        print(str(fps) + " fps")
-        import sys
-        sys.exit()
-        """
-
         # Set attributes before wrapping (some wrappers don't allow setting attributes)
         # TODO: not sure why this is needed
         setattr(env, "render_mode", render_mode)

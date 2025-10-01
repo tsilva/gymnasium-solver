@@ -223,12 +223,21 @@ class RunningStats:
         self.sum_squared = 0.0
 
     def update(self, values: np.ndarray) -> None:
-        value_flat = np.asarray(values, dtype=np.float32).ravel()
-        if value_flat.size == 0: return
+        # Fast path: skip stats collection if values are empty
+        if values.size == 0: return
 
-        self.count += int(value_flat.size)
-        self.sum += float(value_flat.sum())
-        self.sum_squared += float((value_flat * value_flat).sum())
+        self.count += values.size
+
+        # Work with flattened view directly (no copy)
+        vals_flat = values.ravel()
+
+        # Convert to float32 only if needed
+        if vals_flat.dtype != np.float32:
+            vals_flat = vals_flat.astype(np.float32)
+
+        # Accumulate stats (keep in float32 for speed)
+        self.sum += float(vals_flat.sum())
+        self.sum_squared += float((vals_flat * vals_flat).sum())
 
     def mean(self) -> float:
         if self.count == 0: return 0.0
@@ -670,20 +679,15 @@ class RolloutCollector():
 
     def _update_running_stats_after_rollout(self, start: int, end: int) -> None:
         """Update obs/reward/action stats and perform any deferred CPU copies."""
-        # Add observations to observation stats
-        obs_block = self._buffer.obs_buf[start:end]
-        obs_block_flat = obs_block.astype(np.float32).ravel()
-        self._obs_stats.update(obs_block_flat)
-
-        # Add rewards to reward stats 
-        rewards_block = self._buffer.rewards_buf[start:end]
-        rewards_block_flat = rewards_block.ravel()
-        self._rew_stats.update(rewards_block_flat)
+        # Pass slices directly - RunningStats.update now handles dtypes efficiently
+        self._obs_stats.update(self._buffer.obs_buf[start:end])
+        self._rew_stats.update(self._buffer.rewards_buf[start:end])
 
         # Add actions to action histogram
         actions_block = self._buffer.actions_buf[start:end]
-        actions_block_flat = actions_block.astype(np.int64).ravel()
-        self._update_action_histogram(actions_block_flat)
+        if actions_block.dtype != np.int64:
+            actions_block = actions_block.astype(np.int64)
+        self._update_action_histogram(actions_block.ravel())
 
     def _compute_targets(self, start: int, end: int, last_obs: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Compute advantages and returns for the slice [start, end)."""

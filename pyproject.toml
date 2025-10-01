@@ -56,24 +56,3 @@ markers = [
 
 # Minimum version requirement
 minversion = "6.0"
-
-# Optional dependency groups
-[project.optional-dependencies]
-# CPU-only Brax/JAX stack for scripts/brax_train_policy.py
-brax = [
-  "brax",
-  "flax",
-  "optax",
-  "jax[cpu]",
-]
-
-# GPU (CUDA 12) Brax/JAX stack. Requires installing with the JAX CUDA wheels index, e.g.:
-#   pip install -U "jax[cuda12]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-# Or with uv:
-#   uv add 'jax[cuda12]' --find-links https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-brax-cuda12 = [
-  "brax",
-  "flax",
-  "optax",
-  "jax[cuda12]",
-]

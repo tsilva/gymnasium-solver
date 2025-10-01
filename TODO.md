@@ -2,6 +2,9 @@
 
 # NEXT
 
+batch size
+n_threads
+
 - inspect pomg, see if ep lenght is accurate
 - inspect mc_returns and gae for unifinished episodes
 - add pong rgb cnn policy support, measure FPS

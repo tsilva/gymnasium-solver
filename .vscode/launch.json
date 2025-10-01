@@ -70,6 +70,19 @@
       "env": {}
     },
     {
+      "name": "Debug: train.py (ALE-Pong-v5:rgb_ppo)",
+      "type": "python",
+      "request": "launch",
+      "program": "train.py",
+      "justMyCode": false,
+      "args": [
+        "--config_id",
+        "ALE-Pong-v5:rgb_ppo"
+      ],
+      "console": "integratedTerminal",
+      "env": {}
+    },
+    {
       "name": "Debug: run_play.py (best)",
       "type": "python",
       "request": "launch",

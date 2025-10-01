@@ -172,7 +172,7 @@ _rgb_ppo: &rgb_ppo
 # Object-based observations with PPO - uses extracted game objects as features
 objects_ppo:
   <<: *obj_ppo
-  eval_warmup_epochs: 100
+  eval_warmup_epochs: 200
   description: "PPO with object-based observations using extracted game objects as features"
 
 # Object-based observations with PPO - deterministic version (no sticky actions)

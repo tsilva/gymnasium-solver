@@ -213,6 +213,7 @@ epoch:
   min: 0
 
 cnt/epoch:
+  show_in_table: true
   description: "Current training epoch number"
   precision: 0
   delta_rule: ">="  # Should always increase

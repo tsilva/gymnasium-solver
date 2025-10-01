@@ -37,11 +37,13 @@ def main():
     assert run.best_checkpoint_dir is not None, "run has no best checkpoint"
 
     # Build a single-env environment with human rendering
+    # Force vectorization_mode='sync' to ensure render() is supported (ALE native vectorization doesn't support it)
     config = run.load_config()
     env = build_env_from_config(
         config,
         n_envs=1,
         subproc=False,
+        vectorization_mode='sync',
         render_mode="human" if not args.no_render else None
     )
 

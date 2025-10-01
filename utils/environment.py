@@ -19,13 +19,13 @@ def _build_env_alepy(env_id, obs_type, render_mode, **env_kwargs):
     import ale_py
     import gymnasium as gym
     gym.register_envs(ale_py)
-    
-    assert obs_type != "rgb", "use native vectorization for alepy RGB environments"
 
-    # In case the observation type is objects, use OCAtari 
+    # In case the observation type is objects, use OCAtari
     # to extract object-based observations from game RAM
     if obs_type == "objects": return _build_env_alepy__objects(env_id, obs_type, render_mode, **env_kwargs)
     elif obs_type == "ram": return _build_env_alepy__ram(env_id, obs_type, render_mode, **env_kwargs)
+    elif obs_type == "rgb": return _build_env_alepy__rgb(env_id, obs_type, render_mode, **env_kwargs)
+    else: raise ValueError(f"Unsupported obs_type for ALE: {obs_type}")
         
 def _build_env_alepy__objects(env_id, obs_type, render_mode, **env_kwargs):
     from ocatari.core import OCAtari
@@ -33,6 +33,11 @@ def _build_env_alepy__objects(env_id, obs_type, render_mode, **env_kwargs):
     return env
 
 def _build_env_alepy__ram(env_id, obs_type, render_mode, **env_kwargs):
+    import gymnasium as gym
+    env = gym.make(env_id, obs_type=obs_type, render_mode=render_mode, **env_kwargs)
+    return env
+
+def _build_env_alepy__rgb(env_id, obs_type, render_mode, **env_kwargs):
     import gymnasium as gym
     env = gym.make(env_id, obs_type=obs_type, render_mode=render_mode, **env_kwargs)
     return env
@@ -103,6 +108,7 @@ def build_env(
     subproc=None,
     record_video=False,
     record_video_kwargs={},
+    vectorization_mode=None,
     env_kwargs={}
 ):
     import gymnasium as gym
@@ -134,8 +140,9 @@ def build_env(
     # ALE native vectorization for RGB environments (10x faster than standard vectorization)
     # Always use native vectorization for ALE RGB (includes grayscale, resize, frame_stack=4 by default)
     # Only supported for rgb obs_type; other obs_types (ram, objects) use standard vectorization
+    # Disable native vectorization if vectorization_mode='sync' is explicitly requested (e.g., for human rendering)
     _is_ale_rgb_rgb_env = _is_alepy_env and obs_type == "rgb"
-    _use_ale_native_vectorization = _is_ale_rgb_rgb_env
+    _use_ale_native_vectorization = _is_ale_rgb_rgb_env and vectorization_mode != 'sync'
 
     # TODO: break if/else into separate functions
     # Create the vectorized environment
@@ -199,6 +206,15 @@ def build_env(
             elif _is_stable_retro_env: env = _build_env_stable_retro(env_id, obs_type, render_mode, **env_kwargs)
             elif _is_bandit_env: env = _build_env_mab(env_id, obs_type, render_mode, **env_kwargs)
             else: env = _build_env_gym(env_id, obs_type, render_mode, **env_kwargs)
+
+            # Apply preprocessing wrappers (grayscale, resize, frame_stack) for ALE RGB in standard vectorization
+            # to match ALE native vectorization preprocessing
+            if _is_ale_rgb_rgb_env:
+                from gymnasium.wrappers import GrayscaleObservation, ResizeObservation, FrameStackObservation
+                # Always use 4-frame stack to match ALE native vectorization (ignores config.frame_stack)
+                env = GrayscaleObservation(env, keep_dim=False)
+                env = ResizeObservation(env, shape=(84, 84))
+                env = FrameStackObservation(env, stack_size=4)
 
             # Apply configured env wrappers
             for wrapper in env_wrappers:

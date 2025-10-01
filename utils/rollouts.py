@@ -806,6 +806,10 @@ class RolloutCollector():
             actions_np = actions_t.detach().cpu().numpy()
             next_obs, rewards, terminated, truncated, infos = self.env.step(actions_np)
 
+            # Render if environment has human rendering enabled
+            if hasattr(self.env, 'render_mode') and self.env.render_mode == 'human':
+                self.env.render()
+
             # Combine terminated and truncated into dones for backward compatibility
             dones = np.logical_or(terminated, truncated)
 

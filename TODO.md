@@ -2,6 +2,8 @@
 
 # NEXT
 
+- try tanh for objectgs
+- FEAT: add video recording support for native ale vec env
 - FEAT: don't print out all metrics, make some of them optional
 - FEAT: when subproc = "auto" chose depending on situation (eg: n_envs + atari)
 - inspect pomg, see if ep lenght is accurate

@@ -158,7 +158,8 @@ _rgb_ppo: &rgb_ppo
     kernel_sizes: [8, 4, 3]
     strides: [4, 2, 1]
   ent_coef: 0.01
-  policy_lr: 0.00025
+  n_epochs: 20
+  policy_lr: 0.0025
   normalize_advantages: "batch"
   clip_range: 0.1
   subproc: false

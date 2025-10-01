@@ -320,7 +320,26 @@ opt/grads/norm/value_head:
   precision: 4
   min: 0.0
 
+opt/grads/norm/cnn:
+  description: "Gradient L2 norm for CNN backbone (CNN models only)"
+  precision: 4
+  min: 0.0
+
+opt/grads/norm/mlp:
+  description: "Gradient L2 norm for MLP trunk after CNN (CNN models only)"
+  precision: 4
+  min: 0.0
+
 # Algorithm-specific metrics
+policy_targets_mean:
+  description: "Mean of policy targets (returns or advantages) used in REINFORCE loss"
+  precision: 4
+
+policy_targets_std:
+  description: "Standard deviation of policy targets (returns or advantages) used in REINFORCE loss"
+  precision: 4
+  min: 0.0
+
 advantage_mean:
   description: "Mean advantage estimate across batch (should be near zero when normalized)"
   precision: 4

@@ -22,11 +22,14 @@ class DispatchMetricsCallback(pl.Callback):
         self._dispatch_metrics(pl_module, "val")
 
     def _dispatch_metrics(self, pl_module: pl.LightningModule, stage: str):
-        # Don't log until we have at least one episode completed 
+        # Don't log until we have at least one episode completed
         # (otherwise we won't be able to get reliable metrics)
         rollout_collector = pl_module.get_rollout_collector(stage)
         rollout_metrics = rollout_collector.get_metrics()
-        # TODO: review this, causes issues for "val" stage
+
+        # Skip logging if no episodes have completed yet (prevents -inf for ep_rew_best)
+        if rollout_metrics.get("cnt/total_episodes", 0) == 0:
+            return
 
         # Calculate timing metrics
         time_elapsed = pl_module.timings.seconds_since("on_fit_start")

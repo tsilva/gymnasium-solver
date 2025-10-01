@@ -130,7 +130,6 @@ _obj_env: &obj_env
 
 _obj_ppo: &obj_ppo
   <<: [*obj_env, *ppo_base]
-  max_timesteps: 15625
   ent_coef: 0.005
   policy_lr: 0.002
   clip_range: 0.2
@@ -150,7 +149,6 @@ _rgb_env: &rgb_env
 
 _rgb_ppo: &rgb_ppo
   <<: [*rgb_env, *ppo_base]
-  max_timesteps: 156250
   n_envs: 64
   accelerator: "auto"
   policy: "cnn_actorcritic"
@@ -166,9 +164,6 @@ _rgb_ppo: &rgb_ppo
   subproc: false
   n_steps: 128
   batch_size: 0.5
-  #env_kwargs:
-  #  repeat_action_probability: 0.0
-  #  difficulty: 0
 
 # =====================
 # Public variants
@@ -177,6 +172,7 @@ _rgb_ppo: &rgb_ppo
 # Object-based observations with PPO - uses extracted game objects as features
 objects_ppo:
   <<: *obj_ppo
+  eval_warmup_epochs: 100
   description: "PPO with object-based observations using extracted game objects as features"
 
 # Object-based observations with PPO - deterministic version (no sticky actions)

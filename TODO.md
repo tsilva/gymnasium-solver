@@ -2,35 +2,20 @@
 
 # NEXT
 
-- BUG: first epoch print is empty
-batch size
-n_threads
-
+- FEAT: don't print out all metrics, make some of them optional
+- FEAT: when subproc = "auto" chose depending on situation (eg: n_envs + atari)
 - inspect pomg, see if ep lenght is accurate
 - inspect mc_returns and gae for unifinished episodes
-- add pong rgb cnn policy support, measure FPS
-- replace sb3.make_vec() with gym.make_vec(); provide vectorization_mode="sync/async", and initialize pong in old mode as described here (w/ Atari Preprocessing Wrapper): https://ale.farama.org/vector-environment/; measure FPS; check run_play and run_inspect
-- now remove vectorization_mode to default to fast AtariVecEnv, confirm 10x speedup in FPS, check actual epoch/FPS as well, because we want overall throughput to be higher
-- mess with more atarivecenv flags to speed up further
-
-
 - TODO: dont use eval recording freq, instead make the checkpointer render when required
-- Make sure metrics.yaml is up to date with all metrics with correct names
-
-
 - TEST: do highlighted rows also show alerts correctly?
 - CHECK: ensure model runs validation in eval mode (rollout collector)
 - REFACTOR: get rid of prefit presentation callback, check how things are done right now
 - BUG: inspect not working because it cant retrieve action labels
-
 - FEAT: use torch lightning schedulers, but key them to RL cycle
 - BUG: wrong project id logged in wandb
 - BUG: investigate mc_return in pong, seems busted
-- NEXT: only show certain metrics in table logger
-
 - FEAT: add support for cosine scheduler
 - FEAT: add support for scheduler min and progress decoupled from timesteps, perhaps by specifying percentage -> value tuples and have the scheduler interpolate between those, allowing dynamic linear schedules that perform differently across the training (eg: higher early, lower late); generalize decay schedule further by specifying decay start
-
 - FEAT: add ability to tell LLM to inspect last N runs by providing a run registry json that has timestamps and other metadata, always sort by timestamp descending, ensure lock on write
 - BUG: env smoke tests not passing
 - FEAT: add support for agents to handle their own save/load logic
@@ -44,7 +29,6 @@ n_threads
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 - TODO: learn how to read gradient graphs
 - REFACTOR: search for occurrences where states naming is used instead of observations
-- TODO: assert that ALE-py is not running with rosetta on M1
 
 ## Pong-v5_objects
 

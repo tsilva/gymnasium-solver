@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.13' and platform_machine == 'aarch64' and sys_platform == 'linux'",
@@ -1036,20 +1036,15 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "ale-py" },
-    { name = "brax" },
-    { name = "flax" },
     { name = "gradio" },
     { name = "gymnasium", extra = ["atari", "box2d", "classic-control", "mujoco", "other"] },
     { name = "gymnasium-robotics" },
     { name = "huggingface-hub" },
     { name = "ipykernel" },
-    { name = "jax", extra = ["cuda12"] },
     { name = "jupyter" },
     { name = "minari", extra = ["hdf5"] },
     { name = "numpy" },
     { name = "ocatari" },
-    { name = "optax" },
-    { name = "pettingzoo" },
     { name = "pytest" },
     { name = "pytorch-lightning" },
     { name = "pyyaml" },
@@ -1081,10 +1076,8 @@ brax-cuda12 = [
 [package.metadata]
 requires-dist = [
     { name = "ale-py" },
-    { name = "brax", specifier = ">=0.13.0" },
     { name = "brax", marker = "extra == 'brax'" },
     { name = "brax", marker = "extra == 'brax-cuda12'" },
-    { name = "flax", specifier = ">=0.10.6" },
     { name = "flax", marker = "extra == 'brax'" },
     { name = "flax", marker = "extra == 'brax-cuda12'" },
     { name = "gradio", specifier = ">=4.0.0" },
@@ -1093,16 +1086,13 @@ requires-dist = [
     { name = "huggingface-hub", specifier = ">=0.22.0" },
     { name = "ipykernel" },
     { name = "jax", extras = ["cpu"], marker = "extra == 'brax'" },
-    { name = "jax", extras = ["cuda12"], specifier = ">=0.5.3" },
     { name = "jax", extras = ["cuda12"], marker = "extra == 'brax-cuda12'" },
     { name = "jupyter" },
     { name = "minari", extras = ["hdf5"] },
     { name = "numpy" },
     { name = "ocatari", specifier = ">=2.2.1" },
-    { name = "optax", specifier = ">=0.2.6" },
     { name = "optax", marker = "extra == 'brax'" },
     { name = "optax", marker = "extra == 'brax-cuda12'" },
-    { name = "pettingzoo", specifier = ">=1.25.0" },
     { name = "pytest" },
     { name = "pytorch-lightning" },
     { name = "pyyaml" },

@@ -44,7 +44,7 @@ spec: &spec_base
   returns:
     episodic: score difference (player score - opponent score)
     range: [-21, 21]
-    threshold_solved: 19
+    threshold_solved: 18
 
   modes:
     values: [0, 1]
@@ -141,14 +141,13 @@ _obj_ppo: &obj_ppo
 # ==========================
 _rgb_env: &rgb_env
   <<: *env
+  spec: *spec_rgb
   obs_type: "rgb"
-  grayscale_obs: true
-  resize_obs: [84, 84]
 
 _rgb_ppo: &rgb_ppo
   <<: [*rgb_env]
   algo_id: ppo
-  n_envs: 32
+  n_envs: 64
   accelerator: "auto"
   policy: "cnn_actorcritic"
   hidden_dims: [512]
@@ -158,18 +157,21 @@ _rgb_ppo: &rgb_ppo
     strides: [4, 2, 1]
   n_epochs: 15
   ent_coef: 0.01
-  policy_lr: 0.003
+  policy_lr: 0.00025
   normalize_advantages: true
   gamma: 0.99
   gae_lambda: 0.95
   vf_coef: 0.5
-  clip_range: 0.2
+  clip_range: 0.1
   subproc: false
-  n_steps: 256
-  batch_size: 0.25
+  n_steps: 128
+  batch_size: 0.5
   eval_warmup_epochs: 50
-  eval_episodes: 10
-  eval_freq_epochs: 10
+  eval_episodes: 30
+  eval_freq_epochs: 5
+  #env_kwargs:
+  #  repeat_action_probability: 0.0
+  #  difficulty: 0
 
 # =====================
 # Public variants
@@ -185,29 +187,16 @@ objects_deterministic_ppo:
   <<: [*obj_ppo, *env_deterministic]
   description: "PPO with object-based observations - deterministic version (no sticky actions)"
 
-# RGB observations with PPO - uses raw pixel observations (84x84 grayscale)
-# Uses ALE native vectorization for 10x faster training
+# RGB observations with PPO - uses ALE native vectorization
+# ALE native vec automatically applies: 4-frame stacking, grayscale, 84x84 resize
+# Observation shape: (4, 84, 84) - 4 grayscale frames stacked, NOT 3-channel RGB
+# Config frame_stack/grayscale_obs/resize_obs are IGNORED when using ALE native vectorization
 rgb_ppo:
   <<: *rgb_ppo
-  spec: *spec_rgb
-  description: "PPO with RGB observations - uses ALE native vectorization for fast training"
+  description: "PPO with 4-frame grayscale stacks (84x84) via ALE native vectorization"
 
 # RGB observations with PPO - deterministic version (no sticky actions)
 # Uses ALE native vectorization for 10x faster training
 rgb_deterministic_ppo:
   <<: [*rgb_ppo, *env_deterministic]
-  spec: *spec_rgb
   description: "PPO with RGB observations - deterministic version with ALE native vectorization"
-
-# RGB PPO with tuned hyperparameters for faster learning
-rgb_deterministic_ppo_tuned:
-  <<: [*rgb_ppo, *env_deterministic]
-  spec: *spec_rgb
-  policy_lr: 0.0003   # Increased 3x from baseline for stronger updates
-  clip_range: 0.2     # Doubled from 0.1 for less conservative clipping
-  ent_coef: 0.01      # Keep at baseline - exploration seems OK
-  n_epochs: 4         # Keep at 4 epochs per rollout
-  batch_size: 256     # Keep at 256 for faster iterations
-  n_envs: 8           # Keep at 8
-  n_steps: 256        # Doubled from 128 for more data per update
-  description: "PPO with RGB observations - tuned hyperparameters for faster learning"

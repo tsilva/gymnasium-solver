@@ -2,6 +2,7 @@
 
 # NEXT
 
+- BUG: first epoch print is empty
 batch size
 n_threads
 

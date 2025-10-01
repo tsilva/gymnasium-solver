@@ -161,6 +161,21 @@ def build_env(
         # Apply seed to envs
         if seed is not None: env.reset(seed=seed)
 
+        # Assert that ALE native vectorization applies expected preprocessing:
+        # - Frame stacking (4 frames)
+        # - Grayscale conversion
+        # - 84x84 resizing
+        # Expected shape: (4, 84, 84) for grayscale frame-stacked observations
+        obs_space = env.single_observation_space
+        assert hasattr(obs_space, 'shape'), "ALE native vec env must expose observation space with shape"
+        assert obs_space.shape == (4, 84, 84), (
+            f"ALE native vectorization expected to produce (4, 84, 84) observations "
+            f"(4 grayscale frames, 84x84), but got {obs_space.shape}. "
+            f"This indicates ALE native preprocessing may have changed. "
+            f"Config specified frame_stack={frame_stack}, grayscale_obs={grayscale_obs}, "
+            f"resize_obs={resize_obs}, but these are ignored when using ALE native vectorization."
+        )
+
         # Set attributes before wrapping (some wrappers don't allow setting attributes)
         # TODO: not sure why this is needed
         setattr(env, "render_mode", render_mode)

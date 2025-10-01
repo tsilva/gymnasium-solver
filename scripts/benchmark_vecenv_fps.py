@@ -241,6 +241,7 @@ def benchmark_gym_make_vec_env(
     chunk_steps: int = 256,
 ) -> BenchmarkResult:
     import gymnasium as gym  # local import
+    from gymnasium.vector import SyncVectorEnv, AsyncVectorEnv
     from gymnasium.spaces import Discrete
     import numpy as np
 
@@ -252,13 +253,38 @@ def benchmark_gym_make_vec_env(
     assert num_envs > 0, "Number of environments must be positive"
     assert chunk_steps > 0, "Chunk size must be positive"
 
-    # Only pass obs_type when not using AleVecEnv (vectorization_mode=None)
-    vector_kwargs = {} if vectorization_mode is None else {"obs_type": "rgb"}
+    if vectorization_mode is None:
+        # Use native AtariVectorEnv via gym.make_vec
+        if not hasattr(gym, "make_vec"):
+            raise ImportError("Your Gymnasium version does not expose gym.make_vec")
 
-    if not hasattr(gym, "make_vec"):
-        raise ImportError("Your Gymnasium version does not expose gym.make_vec")
+        vec_env = gym.make_vec(
+            env_id,
+            num_envs=num_envs,
+            vectorization_mode=None,
+            use_fire_reset=True,
+            reward_clipping=True,
+            repeat_action_probability=0.0,
+        )
+    else:
+        # Mimic AtariVectorEnv preprocessing with AtariPreprocessing + FrameStackObservation
+        def make_env():
+            env = gym.make(env_id, frameskip=1, repeat_action_probability=0.0)
+            env = gym.wrappers.AtariPreprocessing(
+                env,
+                noop_max=30,
+                frame_skip=4,
+                screen_size=84,
+                terminal_on_life_loss=False,
+                grayscale_obs=True,
+                grayscale_newaxis=False,
+                scale_obs=False,
+            )
+            env = gym.wrappers.FrameStackObservation(env, stack_size=4, padding_type="zero")
+            return env
 
-    vec_env = gym.make_vec(env_id, num_envs=num_envs, vectorization_mode=vectorization_mode, **vector_kwargs)
+        VecEnvClass = AsyncVectorEnv if vectorization_mode == "async" else SyncVectorEnv
+        vec_env = VecEnvClass([make_env for _ in range(num_envs)])
 
     try:
         out = vec_env.reset()
@@ -267,7 +293,13 @@ def benchmark_gym_make_vec_env(
             obs, _infos = out
         else:
             obs = out
-        _ = obs
+
+        # Assert observation shape matches expected AtariVectorEnv format: (num_envs, stack_size, height, width)
+        expected_shape = (num_envs, 4, 84, 84)
+        assert obs.shape == expected_shape, (
+            f"Observation shape mismatch for vectorization_mode={vectorization_mode}: "
+            f"expected {expected_shape}, got {obs.shape}"
+        )
 
         if hasattr(vec_env, "single_action_space") and isinstance(vec_env.single_action_space, Discrete):
             action_value = 0

@@ -448,8 +448,18 @@ class MetricsTableLogger(LightningLoggerBase):
         # Add metrics to the logger history (eg: used for sparklines)
         self._update_history(metrics)
 
+        # Filter metrics to only show those marked with show_in_table=true
+        filtered_metrics = {
+            k: v for k, v in metrics.items()
+            if metrics_config.show_in_table(k)
+        }
+
+        # If no metrics pass the filter, show all metrics as fallback
+        if not filtered_metrics:
+            filtered_metrics = metrics
+
         # Group metrics by namespace (eg: train and val namespaces)
-        grouped_metrics = group_dict_by_key_namespace(metrics)
+        grouped_metrics = group_dict_by_key_namespace(filtered_metrics)
 
         # Order namespaces using reusable util (prefers self.group_keys_order)
         sorted_grouped_metrics = order_grouped_namespaces(grouped_metrics, self.group_keys_order)

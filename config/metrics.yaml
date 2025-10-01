@@ -102,6 +102,7 @@ total_timesteps:
 
 cnt/total_timesteps:
   highlight: true
+  show_in_table: true
   # Note: delta_rule removed because eval/total_timesteps can legitimately decrease
   # between evaluation runs when using different eval strategies or env resets
   description: "Cumulative number of environment steps taken across all training"
@@ -149,25 +150,30 @@ roll/episodes:
 roll/ep_rew/mean:
   bold: true
   highlight: true
+  show_in_table: true
   description: "Average episode reward over recent episodes window"
   precision: 2
 
 roll/ep_len/mean:
+  show_in_table: true
   description: "Average episode length over recent episodes window"
   precision: 0
   min: 0
 
 # Immediate episode stats
 roll/ep_rew/last:
+  show_in_table: true
   description: "Reward of the most recent completed episode"
   precision: 2
 
 roll/ep_len/last:
+  show_in_table: true
   description: "Length of the most recent completed episode"
   precision: 0
   min: 0
 
 roll/ep_rew/best:
+  show_in_table: true
   description: "Running best of ep_rew/mean across epochs"
   precision: 2
 
@@ -226,6 +232,7 @@ sys/timing/time_elapsed:
   min: 0.0
 
 sys/timing/fps:
+  show_in_table: true
   description: "Training throughput in frames (environment steps) per second"
   precision: 0
   min: 0.0
@@ -270,6 +277,7 @@ opt/loss/entropy_scaled:
 # Algorithm-specific metrics
 opt/ppo/approx_kl:
   highlight: true
+  show_in_table: true
   description: "Approximate KL divergence between old and new policy distributions"
   precision: 4
   min: 0.0
@@ -282,12 +290,14 @@ opt/ppo/kl:
 
 opt/ppo/clip_fraction:
   highlight: true
+  show_in_table: true
   description: "Fraction of probability ratios that were clipped in PPO objective"
   precision: 3
   min: 0.0
   max: 1.0
 
 opt/value/explained_var:
+  show_in_table: true
   description: "How well the value function predicts returns (1.0 = perfect, 0.0 = no better than mean, <0.0 = worse than mean)"
   precision: 3
   min: -1.0
@@ -387,6 +397,7 @@ roll/actions/std:
   min: 0.0
 
 roll/fps:
+  show_in_table: true
   description: "Collector throughput in frames per second (rollout only)"
   precision: 0
   min: 0.0

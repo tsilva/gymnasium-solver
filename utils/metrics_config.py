@@ -139,6 +139,12 @@ class MetricsConfig:
         }
         return style
 
+    def show_in_table(self, metric_name: str) -> bool:
+        """Check if a metric should be displayed in the table logger."""
+        metric_name = self.ensure_unnamespaced_metric(metric_name)
+        config = self._config.get(metric_name, {})
+        return config.get("show_in_table", False)
+
     def assert_metrics_within_bounds(self, metrics: Dict[str, Any]) -> None:
         bound_violations = self.get_metrics_bounds_violations(metrics)
         if bound_violations: raise ValueError("Out-of-bounds metrics: " + "; ".join(bound_violations))

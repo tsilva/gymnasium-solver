@@ -30,9 +30,13 @@
 - TODO: learn how to read gradient graphs
 - REFACTOR: search for occurrences where states naming is used instead of observations
 
-## Pong-v5_objects
+## Pong-v5
 
 - https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/
+- Check best performance on deterministic env, if it reaches 20-21 then the feature extractor is probably ok (note: raise threshold for this env?)
+- Confirm that we can get >=18 in stochastic env
+- Confirm that Pong-v5 deterministic env reaches 20-21
+- Check if we can get to 20-21 with RGB observations
 - Frame stacking should work to turn POMDP into MDP
 - TODO: add support for resuming with policy from previous run
 - try debug server

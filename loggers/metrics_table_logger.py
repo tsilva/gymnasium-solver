@@ -121,6 +121,9 @@ class MetricsTableLogger(LightningLoggerBase):
         self._prev: Optional[Dict[str, Any]] = None
         self._last_height: int = 0
         self._history: Dict[str, List[float]] = {}
+        # Track metrics that have triggered alerts during this session
+        # so they remain visible in the table even after alert clears
+        self._metrics_with_triggered_alerts: set[str] = set()
 
 
     # --- Lightning Logger API ---
@@ -448,10 +451,15 @@ class MetricsTableLogger(LightningLoggerBase):
         # Add metrics to the logger history (eg: used for sparklines)
         self._update_history(metrics)
 
-        # Filter metrics to only show those marked with show_in_table=true
+        # Get active alerts and track any newly triggered alerts for this session
+        active_alerts = self.metrics_monitor.get_active_alerts()
+        self._metrics_with_triggered_alerts.update(active_alerts.keys())
+
+        # Filter metrics to show those marked with show_in_table=true OR
+        # any metric that has triggered an alert during this training session
         filtered_metrics = {
             k: v for k, v in metrics.items()
-            if metrics_config.show_in_table(k)
+            if metrics_config.show_in_table(k) or k in self._metrics_with_triggered_alerts
         }
 
         # If no metrics pass the filter, show all metrics as fallback
@@ -475,7 +483,7 @@ class MetricsTableLogger(LightningLoggerBase):
         # Compute deltas once and validate delta rules
         deltas_map = self._calc_deltas(metrics)
 
-        active_alerts = self.metrics_monitor.get_active_alerts()
+        # active_alerts already retrieved earlier in this method
         prepared = self._prepare_sections(grouped_metrics, sorted_grouped_metrics, active_alerts, deltas_map)
         dims = self._compute_dimensions(prepared)
         lines = self._compose_lines(grouped_metrics, prepared, dims, active_alerts)

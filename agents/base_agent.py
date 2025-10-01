@@ -606,9 +606,18 @@ class BaseAgent(pl.LightningModule):
         loaded_config = asdict(self.run.load_config())
         current_config = asdict(self.config)
 
+        # Identify parameters with active schedules (to skip reloading them)
+        scheduled_params = set()
+        for key in current_config.keys():
+            if key.endswith("_schedule") and current_config.get(key):
+                param = key[: -len("_schedule")]
+                scheduled_params.add(param)
+
         changes_map = {}
         for key, value in loaded_config.items():
             if type(value) in [list, tuple, dict, None]: continue
+            # Skip parameters with active schedules
+            if key in scheduled_params: continue
             current_value = current_config.get(key, None)
             if value != current_value: changes_map[key] = value
 

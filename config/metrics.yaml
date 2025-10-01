@@ -123,6 +123,7 @@ roll/timesteps:
 
 # Vectorized-step counters (one per env.step() call across the vector)
 cnt/total_vec_steps:
+  show_in_table: true
   highlight: true
   description: "Cumulative number of vectorized env.step() calls across training"
   precision: 0

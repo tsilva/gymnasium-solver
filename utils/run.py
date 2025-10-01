@@ -4,7 +4,7 @@ Encapsulates read-only access to a training run directory under `runs/`.
 
 Usage:
     from utils.run import Run, list_run_ids
-    run = Run.from_id("@latest-run")
+    run = Run.from_id("@last")
     cfg = run.load_config()
     labels, mapping, default = run.checkpoint_choices()
 """

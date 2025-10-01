@@ -319,7 +319,7 @@ class BaseAgent(pl.LightningModule):
         from utils.logging import stream_output_to_log
 
         # Initialize run directory management and convenience Run accessor
-        # Initialize run directory (creates runs/<id>/, checkpoints/, and @latest-run symlink)
+        # Initialize run directory (creates runs/<id>/, checkpoints/, and @last symlink)
         self.run = Run.create(
             run_id=wandb.run.id,
             config=self.config

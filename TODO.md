@@ -2,6 +2,7 @@
 
 # NEXT
 
+- try creating agents with /agent command
 - try tanh for objectgs
 - FEAT: add video recording support for native ale vec env
 - FEAT: don't print out all metrics, make some of them optional

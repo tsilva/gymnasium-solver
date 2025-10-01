@@ -20,8 +20,8 @@ def resolve_run_dir(run_id: Optional[str]) -> Path:
 
     if not run_id:
         # Prefer the most recently modified real run directory with artifacts,
-        # but keep supporting the @latest-run symlink (or legacy latest-run) if it points to a valid dir.
-        latest = RUNS_DIR / "@latest-run"
+        # but keep supporting the @last symlink (or legacy latest-run) if it points to a valid dir.
+        latest = RUNS_DIR / "@last"
         latest_target: Optional[Path] = None
         if latest.exists():
             try:
@@ -40,7 +40,7 @@ def resolve_run_dir(run_id: Optional[str]) -> Path:
         # Collect candidate run dirs (exclude the latest-run entries themselves)
         candidates = [
             p for p in RUNS_DIR.iterdir()
-            if p.is_dir() and p.name not in {"@latest-run", "latest-run"}
+            if p.is_dir() and p.name not in {"@last", "latest-run"}
         ]
         if not candidates and not latest_target:
             raise FileNotFoundError("No runs found in runs/")
@@ -116,8 +116,8 @@ def _find_videos_for_run(run_dir: Path) -> List[Path]:
             if path.is_dir():
                 vids = sorted(Path(path).rglob("*.mp4"))
                 videos.extend(vids)
-        # Also check wandb/@latest-run link if present (fallback to legacy)
-        latest = wandb_root / "@latest-run" / "files" / "runs" / run_id / "videos"
+        # Also check wandb/@last link if present (fallback to legacy)
+        latest = wandb_root / "@last" / "files" / "runs" / run_id / "videos"
         if latest.exists():
             videos.extend(sorted(latest.rglob("*.mp4")))
         else:
@@ -528,7 +528,7 @@ def publish_run(
 
 def main():
     parser = argparse.ArgumentParser(description="Publish a training run to Hugging Face Hub")
-    parser.add_argument("--run-id", type=str, default=None, help="Run ID under runs/ (defaults to @latest-run)")
+    parser.add_argument("--run-id", type=str, default=None, help="Run ID under runs/ (defaults to @last)")
     parser.add_argument("--repo", type=str, default=None, help="Target repo id (e.g. user/repo). If omitted, inferred.")
     parser.add_argument("--private", action="store_true", help="Create repo as private")
     args = parser.parse_args()

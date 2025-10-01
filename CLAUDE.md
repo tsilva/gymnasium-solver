@@ -39,10 +39,10 @@ pytest -m "not slow" -q
 ### Evaluation & Inspection
 ```bash
 # Play trained policy (auto-loads best/last checkpoint)
-python run_play.py --run-id @latest-run --episodes 5
+python run_play.py --run-id @last --episodes 5
 
 # Launch Gradio inspector UI
-python run_inspect.py --run-id @latest-run --port 7860
+python run_inspect.py --run-id @last --port 7860
 ```
 
 ### Publishing
@@ -174,7 +174,7 @@ python scripts/brax_eval_policy.py
   - **`EndOfTrainingReportCallback`**: Writes `report.md` summarizing training.
 
 ### Runs & Outputs (`utils/run.py`)
-- **Structure**: `Run` creates `runs/<id>/`, ensures `checkpoints/`, manages `@latest-run` symlink.
+- **Structure**: `Run` creates `runs/<id>/`, ensures `checkpoints/`, manages `@last` symlink.
 - **Artifacts**: Each run contains `config.json`, `checkpoints/*.ckpt`, `logs/`, `videos/`, `metrics.csv`, `run.log`.
 - **Best/last symlinks**: `best.ckpt` and `last.ckpt` auto-updated by `ModelCheckpointCallback`.
 

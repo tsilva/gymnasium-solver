@@ -492,11 +492,11 @@ def run_episode(
     }
 
 
-def build_ui(default_run_id: str = "@latest-run"):
+def build_ui(default_run_id: str = "@last"):
     import gradio as gr
 
     runs = list_run_ids()
-    initial_run = default_run_id if default_run_id else (runs[0] if runs else "@latest-run")
+    initial_run = default_run_id if default_run_id else (runs[0] if runs else "@last")
 
     def _checkpoint_choices_for_run(run_identifier: str):
         checkpoints = Run.load(run_identifier).list_checkpoints()
@@ -513,7 +513,7 @@ def build_ui(default_run_id: str = "@latest-run"):
         with gr.Row():
             run_id = gr.Dropdown(
                 label="Run ID",
-                choices=["@latest-run"] + runs,
+                choices=["@last"] + runs,
                 value=initial_run,
                 interactive=True,
             )

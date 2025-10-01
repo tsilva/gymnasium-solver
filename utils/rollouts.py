@@ -797,7 +797,6 @@ class RolloutCollector():
         rollout_start = time.time()
         for step_idx in range(self.n_steps):
             # Convert current observations to torch tensor (ship to device)
-            # NOTE: autocast because observations may be int (eg: mebedding indices)
             obs_t = torch.as_tensor(self.obs, device=self.device)
 
             # Perform policy step to determine actions, log probabilities, and value estimates
@@ -811,24 +810,18 @@ class RolloutCollector():
             dones = np.logical_or(terminated, truncated)
 
             # In case there are any done environments, process the episode info
-            # (eg: add final reward to stats, store last observation for value bootstrapping, etc.)
             self._step_timeouts.fill(False)
-            # Mark timeouts based on truncated (not terminated)
             self._step_timeouts[truncated] = True
 
-            done_indices = np.where(dones)[0]  # TODO: why zero indexing?
+            done_indices = np.where(dones)[0]
             if len(done_indices) > 0:
-                self._process_done_infos(
-                    done_idxs=done_indices,
-                    infos=infos,
-                    step_idx=step_idx
-                )
+                self._process_done_infos(done_idxs=done_indices, infos=infos, step_idx=step_idx)
 
             # Persist environment outputs for this step
             logps_np = _to_np(logps_t, np.float32)
             values_np = _to_np(values_t, np.float32)
             self._buffer.add(
-                start + step_idx, # TODO: move this inside
+                start + step_idx,
                 self.obs,
                 next_obs,
                 actions_np,
@@ -844,7 +837,6 @@ class RolloutCollector():
 
             # Advance rollout stats
             self.rollout_steps += self.n_envs
-            # One vectorized step per env.step() call
             self.rollout_vec_steps += 1
             self.rollout_episodes += int(dones.sum())
 

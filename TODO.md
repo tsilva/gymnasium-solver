@@ -17,7 +17,6 @@
 - TODO: dont use eval recording freq, instead make the checkpointer render when required
 - TEST: do highlighted rows also show alerts correctly?
 - CHECK: ensure model runs validation in eval mode (rollout collector)
-- REFACTOR: get rid of prefit presentation callback, check how things are done right now
 - BUG: inspect not working because it cant retrieve action labels
 - FEAT: use torch lightning schedulers, but key them to RL cycle
 - BUG: investigate mc_return in pong, seems busted

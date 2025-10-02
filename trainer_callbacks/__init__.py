@@ -6,7 +6,6 @@ from .early_stopping import EarlyStoppingCallback
 from .hyperparameter_scheduler import HyperparameterSchedulerCallback
 from .model_checkpoint import ModelCheckpointCallback
 from .monitor_metrics import MonitorMetricsCallback
-from .prefit_presentation import PrefitPresentationCallback
 from .wandb_video_logger import WandbVideoLoggerCallback
 from .warmup_eval import WarmupEvalCallback
 
@@ -18,6 +17,5 @@ __all__ = [
     "WarmupEvalCallback",
     "MonitorMetricsCallback",
     "ConsoleSummaryCallback",
-    "PrefitPresentationCallback",
     "HyperparameterSchedulerCallback",
 ]

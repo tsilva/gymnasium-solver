@@ -424,17 +424,13 @@ class BaseAgent(pl.LightningModule):
             HyperparameterSchedulerCallback,
             ModelCheckpointCallback,
             MonitorMetricsCallback,
-            #PrefitPresentationCallback,
             WandbVideoLoggerCallback,
             WarmupEvalCallback,
         )
 
         # Initialize callbacks list
         callbacks = []
-
-        # Present config and confirm start at fit start
-        #callbacks.append(PrefitPresentationCallback())
-
+        
         # In case eval warmup is active, add a callback to enable validation only after warmup
         if self.config.eval_warmup_epochs > 0: 
             callbacks.append(WarmupEvalCallback(

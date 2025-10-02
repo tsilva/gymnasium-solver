@@ -62,4 +62,4 @@ class EarlyStoppingCallback(pl.Callback):
 
         # Store the reason in the module so that it is
         # available for the end of training report
-        pl_module._early_stop_reason = early_stop_reason
+        pl_module.set_early_stop_reason(early_stop_reason)

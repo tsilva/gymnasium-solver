@@ -52,6 +52,7 @@ class BaseAgent(pl.LightningModule):
         self._early_stop_epoch = False
         self._fit_elapsed_seconds = 0.0
         self._final_stop_reason = ""
+        self._early_stop_reason = ""
 
         # Initialize schedulable hyperparameters (mutable during training)
         self.policy_lr = config.policy_lr
@@ -507,6 +508,7 @@ class BaseAgent(pl.LightningModule):
 
             start_step = _schedule_pos_to_vec_steps(start_pos_raw, param=param, default_to_max=False)
             end_step = _schedule_pos_to_vec_steps(end_pos_raw, param=param, default_to_max=True)
+            warmup_fraction = getattr(self.config, f"{param}_schedule_warmup", 0.0)
 
             callbacks.append(
                 HyperparameterSchedulerCallback(
@@ -516,6 +518,7 @@ class BaseAgent(pl.LightningModule):
                     end_value=float(end_value),
                     start_step=float(start_step),
                     end_step=float(end_step),
+                    warmup_fraction=float(warmup_fraction),
                     set_value_fn={"policy_lr": _set_policy_lr}.get(param, None),
                 )
             )
@@ -596,7 +599,8 @@ class BaseAgent(pl.LightningModule):
             # using the computed gradients
             optimizer.step()
 
-    def _calc_training_progress(self):
+    def calc_training_progress(self):
+        """Calculate training progress as a fraction of max_env_steps (0.0 to 1.0)."""
         max_env_steps = self.config.max_env_steps
         if max_env_steps is None: return 0.0
         train_collector = self.get_rollout_collector("train")
@@ -671,3 +675,17 @@ class BaseAgent(pl.LightningModule):
         }
         prefixed = {f"hp/{k}": v for k, v in metrics.items()}
         self.metrics_recorder.record("train", prefixed)
+
+    # -------------------------
+    # Public API for callbacks
+    # -------------------------
+
+    def set_early_stop_reason(self, reason: str) -> None:
+        """Set the early stopping reason. Called by EarlyStoppingCallback."""
+        self._early_stop_reason = reason
+
+    def set_hyperparameter(self, param: str, value: float) -> None:
+        """Set a hyperparameter value. Called by HyperparameterSchedulerCallback."""
+        setattr(self, param, value)
+        if hasattr(self.config, param):
+            setattr(self.config, param, value)

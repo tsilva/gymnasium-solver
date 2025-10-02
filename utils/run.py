@@ -11,11 +11,14 @@ Usage:
 
 from __future__ import annotations
 
+import fcntl
+import json
 import os
 import shutil
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from utils.config import Config
 from utils.io import read_json
@@ -30,6 +33,7 @@ CONFIG_FILENAME = Path("config.json")
 RUN_LOG_FILENAME = Path("run.log")
 METRICS_CSV_FILENAME = Path("metrics.csv")
 POLICY_CHECKPOINT_FILENAME = Path("policy.ckpt")
+REGISTRY_FILENAME = RUNS_DIR / Path("runs.json")
 
 # TODO: move this to a more appropriate util location
 def _symlink_to_dir(symlink_path: Path, target_dir: Path):
@@ -38,6 +42,57 @@ def _symlink_to_dir(symlink_path: Path, target_dir: Path):
 
 def list_run_ids() -> List[str]:
     return [p.name for p in RUNS_DIR.iterdir() if p.is_dir()]
+
+def _read_registry() -> List[Dict[str, Any]]:
+    """Read the runs registry from runs.json. Returns empty list if file doesn't exist."""
+    if not REGISTRY_FILENAME.exists():
+        return []
+    with open(REGISTRY_FILENAME, "r") as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+        try:
+            data = json.load(f)
+            assert isinstance(data, list), f"Registry must be a list, got {type(data)}"
+            return data
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+def _write_registry(entries: List[Dict[str, Any]]) -> None:
+    """Write the runs registry to runs.json with exclusive lock."""
+    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    # Sort by timestamp descending (newest first)
+    sorted_entries = sorted(entries, key=lambda x: x["timestamp"], reverse=True)
+    with open(REGISTRY_FILENAME, "w") as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        try:
+            json.dump(sorted_entries, f, indent=2)
+            f.write("\n")
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+def _add_run_to_registry(run_id: str, config: Config) -> None:
+    """Add a run to the registry with metadata from config."""
+    entries = _read_registry()
+
+    # Remove existing entry if present (idempotent)
+    entries = [e for e in entries if e["run_id"] != run_id]
+
+    # Create new entry
+    entry = {
+        "run_id": run_id,
+        "timestamp": datetime.now().isoformat(),
+        "env_id": config.env_id,
+        "algo": config.algo_id,
+        "project_id": config.project_id,
+    }
+    entries.append(entry)
+
+    _write_registry(entries)
+
+def _remove_run_from_registry(run_id: str) -> None:
+    """Remove a run from the registry."""
+    entries = _read_registry()
+    entries = [e for e in entries if e["run_id"] != run_id]
+    _write_registry(entries)
 
 @dataclass(frozen=True)
 class Run:
@@ -54,15 +109,18 @@ class Run:
         # Ensure rundir exists
         run_dir = cls._resolve_run_dir(run_id)
         run_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Symlink latest-run to this run dir (latest created)
         # TODO: extract symlink creation util
         if os.path.islink(LAST_RUN_DIR): os.unlink(LAST_RUN_DIR)
         LAST_RUN_DIR.symlink_to(run_dir.resolve(), target_is_directory=True)
-        
+
         # Save config to run dir
         config_path = run_dir / "config.json"
         config.save_to_json(config_path)
+
+        # Update registry
+        _add_run_to_registry(run_id, config)
 
         # Create and return run
         return cls(run_id, run_dir, read_only=False)
@@ -159,3 +217,17 @@ class Run:
         if self.read_only and not target_dir.exists(): raise FileNotFoundError(f"Path not found: {target_dir}")
         else: target_dir.mkdir(parents=True, exist_ok=True)
         return full_path
+
+    def delete(self) -> None:
+        """Delete the run directory and remove from registry."""
+        assert not self.read_only, "Cannot delete a read-only run"
+
+        # Update @last symlink if it points to this run
+        if LAST_RUN_DIR.exists() and LAST_RUN_DIR.resolve() == self.run_dir.resolve():
+            os.unlink(LAST_RUN_DIR)
+
+        # Remove from registry
+        _remove_run_from_registry(self.run_id)
+
+        # Delete run directory
+        shutil.rmtree(self.run_dir)

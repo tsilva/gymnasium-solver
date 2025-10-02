@@ -344,15 +344,8 @@ class Config:
                 base_config.update({k: v for k, v in base_section.items() if k in config_field_names})
             base_config.update({k: v for k, v in doc.items() if k in config_field_names})
 
-            # Allow project_id to be provided under a `_base` section as well
-            project_id = (
-                base_config.get("project_id")
-                or (base_section or {}).get("project_id")
-                or path.stem
-            )
-
             # Search for variant configs in the YAML file
-            # and add them to the all_configs dictionary 
+            # and add them to the all_configs dictionary
             # (they inherit from base config)
             for k, v in doc.items():
                 # Skip base config fields
@@ -369,7 +362,23 @@ class Config:
                 variant_id = str(k)
                 variant_cfg = dict(base_config)
                 variant_cfg.update(v)
-                variant_cfg["project_id"] = project_id
+
+                # Construct default project_id from env_id + obs_type at variant level
+                # (each variant may have different env_id/obs_type)
+                if "project_id" not in variant_cfg or not variant_cfg["project_id"]:
+                    env_id = variant_cfg.get("env_id", "")
+                    obs_type = variant_cfg.get("obs_type", "rgb")
+                    # Handle both string and enum cases
+                    obs_type_str = obs_type.value if hasattr(obs_type, 'value') else str(obs_type)
+                    # Only append obs_type if it's not the default "rgb"
+                    if env_id and obs_type_str != "rgb":
+                        variant_cfg["project_id"] = f"{env_id}_{obs_type_str}"
+                    elif env_id:
+                        variant_cfg["project_id"] = env_id
+                    else:
+                        variant_cfg["project_id"] = path.stem
+
+                project_id = variant_cfg["project_id"]
                 variant_config_id = f"{project_id}_{variant_id}"
                 all_configs[variant_config_id] = variant_cfg
 
@@ -441,10 +450,14 @@ class Config:
                 end_value = value.get('end', 0.0)
                 from_pos = value.get('from', 0.0)
                 to_pos = value.get('to', 1.0)
+                warmup = value.get('warmup', 0.0)
 
                 assert start_value is not None, f"{key} schedule dict must have 'start' key"
 
                 self._set_schedule_attrs(key, schedule_type, start_value, end_value, from_pos, to_pos)
+                # Set warmup if specified
+                if warmup > 0.0:
+                    setattr(self, f"{key}_schedule_warmup", warmup)
 
     def _resolve_schedule_defaults(self) -> None:
         schedule_suffix = "_schedule"

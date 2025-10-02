@@ -2,26 +2,16 @@
 
 # NEXT
 
-- FEAT: add support for other types of schedulers, namely cosine, pleateau, onecycle, etc.
 - REFACTOR: ensure agents are themselves responsible for saving all of their artifacts to the run, in the same fashion it should also be possible to load back an agent by pointing to a run dir. NOTE: when saving/loading we need to make sure that we can get the agent back to the exact training state it was in when it was saved.
-- BUG: wandb project ids are innacurate
-- THINK: am I manually implementing schedulers without needing to? does lighting already implement them for me? should I use those instead? just think and let me know
 - inspect mc_returns and gae for unifinished episodes
 - TEST: do highlighted rows also show alerts correctly?
 - BUG: inspect not working because it cant retrieve action labels
-- BUG: investigate mc_return in pong, seems busted
-- FEAT: add ability to tell LLM to inspect last N runs by providing a run registry json that has timestamps and other metadata, always sort by timestamp descending, ensure lock on write
 - BUG: env smoke tests not passing
-- FEAT: add support for agents to handle their own save/load logic
 - FEAT: track dead relus
-- TEST: empirically verify that initial policy distribution is uniform (check if action mean starts at middle of action space and std is 0)
 - BUG: training epoch is still running after validation early stop
 - TEST: are sweeps still working?
-- FEAT: track output distribution
-- REFACTOR: dont let callbacks inject variables int o
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 - TODO: learn how to read gradient graphs
-- REFACTOR: search for occurrences where states naming is used instead of observations
 
 - FEAT: Create MCP server that provides useful tools for claude code to be able to run training sessions and inspect training runs. This tool should have tools like the ability to list available environments and configs, list runs, start a run, etc.
 
@@ -35,7 +25,6 @@
 - Check if we can get to 20-21 with RGB observations
 - Frame stacking should work to turn POMDP into MDP
 - TODO: add support for resuming with policy from previous run
-- BUG: fix duplicate object error in feature extractor (run step by step in human mode and compare conflicted object data, against frame, create script for this)
 - add env normalization support (use that instead of normalization from feature extractor)
 - previous actions
 - Search for where to check for SOTA scores on each env (ask gpt to research)

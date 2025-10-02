@@ -164,3 +164,42 @@ def test_config_max_vec_steps_property():
         "batch_size": 64,
     })
     assert cfg_no_max.max_vec_steps is None
+
+
+@pytest.mark.unit
+def test_config_schedule_types():
+    """Test that all scheduler types can be configured"""
+    scheduler_types = ["linear", "cosine", "exponential"]
+
+    for scheduler_type in scheduler_types:
+        cfg = Config.build_from_dict({
+            "algo_id": "ppo",
+            "env_id": "CartPole-v1",
+            "n_steps": 128,
+            "n_envs": 4,
+            "batch_size": 64,
+            "max_env_steps": 10000,
+            "policy_lr": {"start": 0.003, "end": 0.0001, "schedule": scheduler_type},
+        })
+
+        assert cfg.policy_lr_schedule == scheduler_type
+        assert cfg.policy_lr == pytest.approx(0.003)
+        assert cfg.policy_lr_schedule_start_value == pytest.approx(0.003)
+        assert cfg.policy_lr_schedule_end_value == pytest.approx(0.0001)
+
+
+@pytest.mark.unit
+def test_config_schedule_with_warmup():
+    """Test that warmup_fraction can be configured"""
+    cfg = Config.build_from_dict({
+        "algo_id": "ppo",
+        "env_id": "CartPole-v1",
+        "n_steps": 128,
+        "n_envs": 4,
+        "batch_size": 64,
+        "max_env_steps": 10000,
+        "policy_lr": {"start": 0.003, "end": 0.0001, "schedule": "cosine", "warmup": 0.1},
+    })
+
+    assert cfg.policy_lr_schedule == "cosine"
+    assert cfg.policy_lr_schedule_warmup == pytest.approx(0.1)

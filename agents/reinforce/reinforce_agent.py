@@ -24,14 +24,14 @@ class REINFORCEAgent(BaseAgent):
     # TODO: only does something with normalization off, but even that way it doesnt converge
     def losses_for_batch(self, batch, batch_idx):
         # Retrieve tensors from batch
-        states = batch.observations
+        observations = batch.observations
         actions = batch.actions
         old_logprobs = batch.logprobs
         returns = batch.returns
         advantages = batch.advantages
 
         # Assert that the tensors are detached
-        assert_detached(states, actions, returns, advantages)
+        assert_detached(observations, actions, returns, advantages)
         
         # Normalize returns if requested
         if self.config.normalize_returns == "batch": 
@@ -51,12 +51,12 @@ class REINFORCEAgent(BaseAgent):
         else: 
             raise ValueError(f"Invalid policy targets: {self.config.policy_targets}")
 
-        # Get the log probabilities for each 
-        # action given the current state
-        dist, _ = self.policy_model(states)
+        # Get the log probabilities for each
+        # action given the current observation
+        dist, _ = self.policy_model(observations)
         logprobs = dist.log_prob(actions)
 
-        # Scale each action log probability by the monte carlo return for that state;
+        # Scale each action log probability by the monte carlo return for that observation;
         # this will boost confident action that lead to high returns more than inconfident 
         # actions tthat lead to high returns or confident actions that lead to low returns 
         # or incofident actions that lead to low returns; after this calculate the mean

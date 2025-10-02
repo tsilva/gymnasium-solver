@@ -44,6 +44,10 @@ if "pytorch_lightning" not in sys.modules:
                 self._optimizers = opt
             return opt
 
+    class Callback:  # pragma: no cover - placeholder for callbacks
+        """Minimal callback shim for testing."""
+        pass
+
     class Trainer:  # pragma: no cover - placeholder for annotations
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             self.logger = SimpleNamespace(log_metrics=lambda *a, **k: None)
@@ -70,6 +74,7 @@ if "pytorch_lightning" not in sys.modules:
 
     # Attach to module and register
     pl.LightningModule = LightningModule
+    pl.Callback = Callback
     pl.Trainer = Trainer
     pl.loggers = loggers
 

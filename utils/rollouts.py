@@ -95,8 +95,8 @@ def compute_batched_mc_returns(
     returns_buf = np.zeros_like(rewards, dtype=np.float32)
     returns_acc = np.zeros(n_envs, dtype=np.float32)
     
-    # Create a mask of non-terminals state 
-    # (all states that are not done and not timeout)
+    # Create a mask of non-terminal observations
+    # (all observations that are not done and not timeout)
     non_terminal = _non_terminal_float_mask(dones, timeouts)
 
     for t in range(T - 1, -1, -1):
@@ -339,11 +339,11 @@ class RolloutBuffer:
         obs_t_env_major = obs_t.transpose(0, 1)  # (N, T, *obs_shape)
         # Preserve image tensors (C,H,W) without flattening; flatten only vectors/scalars
         if len(self.obs_shape) == 0:
-            states = obs_t_env_major.reshape(n_envs * T, 1)
+            observations = obs_t_env_major.reshape(n_envs * T, 1)
         elif len(self.obs_shape) == 1:
-            states = obs_t_env_major.reshape(n_envs * T, int(self.obs_shape[0]))
+            observations = obs_t_env_major.reshape(n_envs * T, int(self.obs_shape[0]))
         else:
-            states = obs_t_env_major.reshape(n_envs * T, *self.obs_shape)
+            observations = obs_t_env_major.reshape(n_envs * T, *self.obs_shape)
 
         def _flat_env_major_cpu_to_torch(arr: np.ndarray, dtype: torch.dtype) -> torch.Tensor:
             return torch.as_tensor(_flat_env_major(arr, start, end), dtype=dtype, device=self.device)
@@ -362,14 +362,14 @@ class RolloutBuffer:
         next_obs_tensor = torch.as_tensor(self.next_obs_buf[start:end], device=self.device)
         next_obs_env_major = next_obs_tensor.transpose(0, 1)
         if len(self.obs_shape) == 0:
-            next_states = next_obs_env_major.reshape(n_envs * T, 1)
+            next_observations = next_obs_env_major.reshape(n_envs * T, 1)
         elif len(self.obs_shape) == 1:
-            next_states = next_obs_env_major.reshape(n_envs * T, int(self.obs_shape[0]))
+            next_observations = next_obs_env_major.reshape(n_envs * T, int(self.obs_shape[0]))
         else:
-            next_states = next_obs_env_major.reshape(n_envs * T, *self.obs_shape)
+            next_observations = next_obs_env_major.reshape(n_envs * T, *self.obs_shape)
 
         return RolloutTrajectory(
-            observations=states,
+            observations=observations,
             actions=actions,
             rewards=rewards,
             dones=dones,
@@ -377,7 +377,7 @@ class RolloutBuffer:
             values=values,
             advantages=advantages,
             returns=returns,
-            next_observations=next_states,
+            next_observations=next_observations,
         )
 
 
@@ -716,7 +716,7 @@ class RolloutCollector():
             # Monte Carlo returns for REINFORCE (no bootstrap added here)
             # Optionally treat time-limit truncations as terminals when not bootstrapping
             # to avoid return leakage across episode boundaries.
-            # A real terminal state is one that is "done" but not a "timeout". However
+            # A real terminal observation is one that is "done" but not a "timeout". However
             # for methods that don't bootstrap, we treat timeouts as terminals to avoid
             # return leakage across episode boundaries.
             _timeouts_slice = timeouts_slice
@@ -1004,7 +1004,8 @@ class RolloutCollector():
             var_a = float(((idxs - mean_a) ** 2 * self._action_counts).sum() / total)
             action_mean = mean_a
             action_std = float(np.sqrt(max(0.0, var_a)))
-            action_dist = None  # keep optional distribution disabled to avoid large logs
+            # Return action counts for histogram logging (will be filtered from regular metrics)
+            action_dist = self._action_counts.copy()
         else:
             action_mean, action_std, action_dist = 0.0, 0.0, None
 

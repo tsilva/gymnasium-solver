@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import numpy as np
 import pytorch_lightning as pl
+import wandb
 
 
 class DispatchMetricsCallback(pl.Callback):
@@ -42,6 +44,9 @@ class DispatchMetricsCallback(pl.Callback):
         # Aggregate metrics for the this epoch
         epoch_metrics = pl_module.metrics_recorder.compute_epoch_means(stage)
 
+        # Extract action distribution for histogram logging before filtering
+        action_dist = rollout_metrics.get("action_dist", None)
+
         # Discard distribution metrics (not loggable)
         filtered_rollout_metrics = {k:v for k, v in rollout_metrics.items() if not k.endswith("_dist")}
 
@@ -60,7 +65,7 @@ class DispatchMetricsCallback(pl.Callback):
         # and early stopping logic (0.0 at start → 1.0 at/after max_env_steps).
         if stage == "train" and getattr(pl_module.config, "max_env_steps", None) is not None:
             try:
-                progress = float(pl_module._calc_training_progress())
+                progress = float(pl_module.calc_training_progress())
             except Exception:
                 progress = None
             if progress is not None:
@@ -75,6 +80,16 @@ class DispatchMetricsCallback(pl.Callback):
 
         # Flush metrics to Lightning (W&B, CSV logger, etc.)
         pl_module.log_dict(prefixed_metrics)
+
+        # Log action distribution histogram to wandb separately (not sent to other loggers)
+        if action_dist is not None and wandb.run is not None:
+            # Create histogram from action counts
+            # action_dist is an array where index i contains count for action i
+            action_indices = []
+            for action_idx, count in enumerate(action_dist):
+                action_indices.extend([action_idx] * int(count))
+            if len(action_indices) > 0:
+                wandb.log({f"{stage}/roll/actions/histogram": wandb.Histogram(np_histogram=(action_dist, np.arange(len(action_dist) + 1)))})
 
         # Update step-aware history with aggregated snapshot
         pl_module.metrics_recorder.update_history(prefixed_metrics)

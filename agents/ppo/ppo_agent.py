@@ -25,14 +25,14 @@ class PPOAgent(BaseAgent):
         target_kl = self.config.target_kl
 
         # use type for this? check sb3
-        states = batch.observations
+        observations = batch.observations
         actions = batch.actions
         old_logprobs = batch.logprobs
         advantages = batch.advantages
         returns = batch.returns
 
         # Assert that the tensors are detached
-        assert_detached(states, actions, old_logprobs, advantages, returns)
+        assert_detached(observations, actions, old_logprobs, advantages, returns)
 
         # TODO: perform these ops before calling losses_for_batch?
         # Batch-normalize advantage if requested
@@ -41,7 +41,7 @@ class PPOAgent(BaseAgent):
             advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
         # Infer policy_distribution and value_predictions from the actor critic model
-        policy_dist, values_pred = self.policy_model(states)
+        policy_dist, values_pred = self.policy_model(observations)
         if values_pred is None:
             raise ValueError(
                 "PPO requires a policy with a value head; set config.policy to 'mlp_actorcritic'."

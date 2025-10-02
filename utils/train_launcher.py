@@ -39,11 +39,11 @@ def _maybe_merge_wandb_config(config, *, wandb_sweep_flag: bool):
     return merged_config
 
 def _maybe_merge_debugger_config(config):
-    """When a debugger is attached, force single-env, in-process execution.
+    """When a debugger is attached, force single-env, synchronous vectorization.
 
-    Rationale: debuggers and subprocess-based vec envs don't play nicely. To
-    keep breakpoints usable, clamp to `n_envs=1` and `subproc=False`. Also
-    adjust `batch_size` to remain a clean divisor of the rollout size so
+    Rationale: debuggers and async vec envs don't play nicely. To keep
+    breakpoints usable, clamp to `n_envs=1` and `vectorization_mode='sync'`.
+    Also adjust `batch_size` to remain a clean divisor of the rollout size so
     training proceeds without violating config invariants.
     """
     # Detect common debuggers (e.g., pdb, debugpy) via active trace function
@@ -52,7 +52,7 @@ def _maybe_merge_debugger_config(config):
 
     # Preserve original values for logging and ratio-based batch recompute
     orig_n_envs = int(getattr(config, "n_envs", 1) or 1)
-    orig_subproc = getattr(config, "subproc", None)
+    orig_vectorization_mode = getattr(config, "vectorization_mode", "auto")
     n_steps = int(getattr(config, "n_steps", 1) or 1)
     orig_batch = int(getattr(config, "batch_size", 1) or 1)
 
@@ -62,7 +62,7 @@ def _maybe_merge_debugger_config(config):
 
     # Apply debugger-safe settings
     config.n_envs = 1
-    config.subproc = False
+    config.vectorization_mode = "sync"
 
     # Recompute batch_size to fit the new rollout while preserving ratio when possible
     new_rollout = max(1, int(config.n_envs) * int(n_steps))
@@ -76,8 +76,8 @@ def _maybe_merge_debugger_config(config):
     config.batch_size = int(new_batch)
 
     print(
-        f"Debugger detected: forcing n_envs=1, subproc=False; "
-        f"batch_size {old_batch}→{config.batch_size} (was n_envs={orig_n_envs}, subproc={orig_subproc})."
+        f"Debugger detected: forcing n_envs=1, vectorization_mode='sync'; "
+        f"batch_size {old_batch}→{config.batch_size} (was n_envs={orig_n_envs}, vectorization_mode='{orig_vectorization_mode}')."
     )
     return config
 
@@ -141,7 +141,12 @@ def _present_prefit_summary(config) -> None:
         "env_id": _format_summary_value(config.env_id),
         "obs_type": _format_summary_value(config.obs_type),
         "wrappers": _format_summary_value(config.env_wrappers),
-        "subproc": _format_summary_value(config.subproc),
+        "vectorization_mode": _format_summary_value(config.vectorization_mode),
+        "frame_stack": _format_summary_value(getattr(config, "frame_stack", None)),
+        "normalize_obs": _format_summary_value(getattr(config, "normalize_obs", None)),
+        "normalize_reward": _format_summary_value(getattr(config, "normalize_reward", None)),
+        "grayscale_obs": _format_summary_value(getattr(config, "grayscale_obs", None)),
+        "resize_obs": _format_summary_value(getattr(config, "resize_obs", None)),
         "spec/action_space": _format_summary_value(spec.get("action_space")),
         "spec/observation_space": _format_summary_value(spec.get("observation_space")),
         "reward_threshold": _format_summary_value(reward_threshold),
@@ -153,11 +158,22 @@ def _present_prefit_summary(config) -> None:
         "policy": _format_summary_value(getattr(config, "policy", None)),
         "hidden_dims": _format_summary_value(getattr(config, "hidden_dims", None)),
         "activation": _format_summary_value(getattr(config, "activation", None)),
+        "optimizer": _format_summary_value(getattr(config, "optimizer", None)),
         "seed": _format_summary_value(getattr(config, "seed", None)),
         "n_envs": _format_summary_value(getattr(config, "n_envs", None)),
         "n_steps": _format_summary_value(getattr(config, "n_steps", None)),
+        "n_epochs": _format_summary_value(getattr(config, "n_epochs", None)),
         "batch_size": _format_summary_value(getattr(config, "batch_size", None)),
         "max_timesteps": _format_summary_value(getattr(config, "max_timesteps", None)),
+        "policy_lr": _format_summary_value(getattr(config, "policy_lr", None)),
+        "gamma": _format_summary_value(getattr(config, "gamma", None)),
+        "gae_lambda": _format_summary_value(getattr(config, "gae_lambda", None)),
+        "ent_coef": _format_summary_value(getattr(config, "ent_coef", None)),
+        "vf_coef": _format_summary_value(getattr(config, "vf_coef", None)),
+        "clip_range": _format_summary_value(getattr(config, "clip_range", None)),
+        "max_grad_norm": _format_summary_value(getattr(config, "max_grad_norm", None)),
+        "returns_type": _format_summary_value(getattr(config, "returns_type", None)),
+        "advantages_type": _format_summary_value(getattr(config, "advantages_type", None)),
     }
 
     project_id = getattr(config, "project_id", None) or getattr(config, "env_id", None)

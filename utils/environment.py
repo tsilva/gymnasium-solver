@@ -105,10 +105,9 @@ def build_env(
     frame_stack=None,
     obs_type=None,
     render_mode=None,
-    subproc=None,
+    vectorization_mode="auto",
     record_video=False,
     record_video_kwargs={},
-    vectorization_mode=None,
     env_kwargs={}
 ):
     import gymnasium as gym
@@ -121,9 +120,9 @@ def build_env(
     from gym_wrappers.vec_normalize_static import VecNormalizeStatic
     from gym_wrappers.vec_video_recorder import VecVideoRecorder
         
-    # If recording video was requrested, assert valid render mode and subproc disabled 
+    # If recording video was requested, assert valid render mode and async vectorization disabled
     if record_video and render_mode != "rgb_array": raise ValueError("Video recording requires render_mode='rgb_array'")
-    if record_video and subproc: raise ValueError("Subprocess vector environments do not support video recording yet")
+    if record_video and vectorization_mode == "async": raise ValueError("Async vector environments do not support video recording yet")
 
     # Determine the environment type
     _is_alepy_env = is_alepy_env_id(env_id)
@@ -138,11 +137,12 @@ def build_env(
         gym.register_envs(ale_py)
 
     # ALE native vectorization for RGB environments (10x faster than standard vectorization)
-    # Always use native vectorization for ALE RGB (includes grayscale, resize, frame_stack=4 by default)
+    # When vectorization_mode="auto" and env is ALE RGB, use ALE native vectorization
+    # (includes grayscale, resize, frame_stack=4 by default)
     # Only supported for rgb obs_type; other obs_types (ram, objects) use standard vectorization
-    # Disable native vectorization if vectorization_mode='sync' is explicitly requested (e.g., for human rendering)
+    # Disable native vectorization if vectorization_mode='sync' or 'async' is explicitly requested
     _is_ale_rgb_rgb_env = _is_alepy_env and obs_type == "rgb"
-    _use_ale_native_vectorization = _is_ale_rgb_rgb_env and vectorization_mode != 'sync'
+    _use_ale_native_vectorization = _is_ale_rgb_rgb_env and vectorization_mode == "auto"
 
     # TODO: break if/else into separate functions
     # Create the vectorized environment
@@ -241,8 +241,11 @@ def build_env(
         # Standard vectorization for non-ALE envs or non-RGB obs types
         from gymnasium.vector import AsyncVectorEnv, SyncVectorEnv
 
-        vec_env_cls = AsyncVectorEnv if subproc else SyncVectorEnv
-        vector_kwargs = {"context": "spawn"} if subproc else {} # TODO: not sure if spawn is required
+        # Resolve vectorization_mode to vec env class
+        # "auto" defaults to sync for standard vectorization
+        use_async = vectorization_mode == "async"
+        vec_env_cls = AsyncVectorEnv if use_async else SyncVectorEnv
+        vector_kwargs = {"context": "spawn"} if use_async else {} # TODO: not sure if spawn is required
         env_fns = [env_fn for _ in range(n_envs)]
 
         # TODO; this is overkill

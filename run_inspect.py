@@ -114,7 +114,7 @@ def run_episode(
         config,
         n_envs=1,
         render_mode="rgb_array",
-        subproc=False,
+        vectorization_mode='sync',
     )
 
     policy_model, ckpt_data = load_policy_model_from_checkpoint(checkpoint_path / "policy.ckpt", env, config) # TODO: SOC violation; this is a Run SOC

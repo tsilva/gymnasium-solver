@@ -36,15 +36,15 @@ if __name__ == "__main__":
         sys.exit(1)
     vec_env = build_env(
         cfg.env_id,
-        seed=cfg.seed, 
-        n_envs=cfg.n_envs, 
-        subproc=getattr(cfg, "subproc", None),
-        project_id=cfg.project_id, 
-        spec=cfg.spec, 
+        seed=cfg.seed,
+        n_envs=cfg.n_envs,
+        vectorization_mode=getattr(cfg, "vectorization_mode", "auto"),
+        project_id=cfg.project_id,
+        spec=cfg.spec,
         obs_type=cfg.obs_type,
-        env_wrappers=cfg.env_wrappers, 
+        env_wrappers=cfg.env_wrappers,
         normalize_obs=cfg.normalize_obs,
-        frame_stack=cfg.frame_stack, 
+        frame_stack=cfg.frame_stack,
         env_kwargs=cfg.env_kwargs
     )
    

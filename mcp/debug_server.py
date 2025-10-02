@@ -328,7 +328,7 @@ class MCPDebugServer:
             env_wrappers=[{"id": "PongV5_FeatureExtractor"}]
             if obs_type == "objects"
             else [],
-            subproc=False,
+            vectorization_mode='sync',
             render_mode=None,
         )
         try:

@@ -134,7 +134,7 @@ _obj_ppo: &obj_ppo
   policy_lr: 0.002
   clip_range: 0.2
   n_envs: 32
-  subproc: true
+  vectorization_mode: "async"
   n_steps: 256
   batch_size: 2048
   hidden_dims: [256, 256]
@@ -164,7 +164,7 @@ _rgb_ppo: &rgb_ppo
   policy_lr: 0.0025
   normalize_advantages: "batch"
   clip_range: 0.1
-  subproc: false
+  vectorization_mode: "sync"
   n_steps: 128
   batch_size: 0.5
   eval_warmup_epochs: 200

@@ -42,7 +42,6 @@ def main():
     env = build_env_from_config(
         config,
         n_envs=1,
-        subproc=False,
         vectorization_mode='sync',
         render_mode="human" if not args.no_render else None
     )

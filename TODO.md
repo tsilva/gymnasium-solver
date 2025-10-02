@@ -8,11 +8,11 @@
 
 - BUG: wandb project ids are innacurate
 
-- try tanh for objectgs
+- THINK: think about how we define training 
+
 - FEAT: add support for cosine scheduler
 - FEAT: add video recording support for native ale vec env
 - FEAT: when subproc = "auto" chose depending on situation (eg: n_envs + atari)
-- inspect pomg, see if ep lenght is accurate
 - inspect mc_returns and gae for unifinished episodes
 - TODO: dont use eval recording freq, instead make the checkpointer render when required
 - TEST: do highlighted rows also show alerts correctly?
@@ -35,10 +35,13 @@
 - TODO: learn how to read gradient graphs
 - REFACTOR: search for occurrences where states naming is used instead of observations
 
+- FEAT: Create MCP server that provides useful tools for claude code to be able to run training sessions and inspect training runs. This tool should have tools like the ability to list available environments and configs, list runs, start a run, etc.
+
 ## Pong-v5
 
 - https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/
 - Check best performance on deterministic env, if it reaches 20-21 then the feature extractor is probably ok (note: raise threshold for this env?)
+- Try tanh and check if performance improves
 - Confirm that we can get >=18 in stochastic env
 - Confirm that Pong-v5 deterministic env reaches 20-21
 - Check if we can get to 20-21 with RGB observations

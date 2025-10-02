@@ -33,13 +33,15 @@ def _index_objects_by_category(objects):
     for object in objects:
         # Skip HUD objects
         if getattr(object, "hud", False): continue
-       
-        # TODO: figure out what causes this
-        # Skip objects that already exist in map
-        if object.category in objects_map: continue
 
-        # Assert that object category is not already in map
-        #assert object.category not in objects_map, f"Object {object.category} already exists in map"
+        # Skip NoObject placeholders (OCAtari returns these for undetected object slots)
+        if object.category == "NoObject": continue
+
+        # Assert no duplicate real game objects (Player, Enemy, Ball should be unique)
+        assert object.category not in objects_map, (
+            f"Duplicate game object detected: {object.category} already exists in map. "
+            f"This indicates OCAtari returned multiple objects with the same category."
+        )
 
         # Add object to map
         objects_map[object.category] = object

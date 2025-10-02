@@ -104,20 +104,20 @@ class BaseAgent(pl.LightningModule):
             "train": {
                 "seed": self.config.seed,
             },
-            # Record truncated video of first env (requires subproc=False, render_mode="rgb_array")
+            # Record truncated video of first env (requires vectorization_mode='sync', render_mode="rgb_array")
             "val": {
                 "seed": self.config.seed + 1000,
-                "subproc": False,
+                "vectorization_mode": "sync",
                 "render_mode": "rgb_array",
                 "record_video": True,
                 "record_video_kwargs": {
                     "video_length": 100,
                 },
             },
-            # Record truncated video of first env (requires subproc=False, render_mode="rgb_array")
+            # Record truncated video of first env (requires vectorization_mode='sync', render_mode="rgb_array")
             "test": {
                 "seed": self.config.seed + 2000,
-                "subproc": False,
+                "vectorization_mode": "sync",
                 "render_mode": "rgb_array",
                 "record_video": True,
                 "record_video_kwargs": {

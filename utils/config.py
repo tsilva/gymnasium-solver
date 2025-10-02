@@ -105,9 +105,11 @@ class Config:
     # Additional kwargs to pass to the environment factory
     env_kwargs: dict = field(default_factory=dict)
 
-    # Whether to use subprocesses to run the parallel environments
-    # (may slowdown or speedup depending on the environment)
-    subproc: Optional[bool] = None
+    # Vectorization mode for parallel environments
+    # - "auto": Automatically select based on environment (uses ALE native for Atari RGB, sync otherwise)
+    # - "sync": Synchronous vectorization (SyncVectorEnv)
+    # - "async": Asynchronous vectorization with subprocesses (AsyncVectorEnv)
+    vectorization_mode: Optional[str] = "auto"
 
     # How many N last observations to stack (N=1 means no stacking, only current observation)
     frame_stack: int = 1
@@ -461,8 +463,8 @@ class Config:
             frame_stack=self.frame_stack,
             obs_type=self.obs_type,
             render_mode=None,
-            subproc=self.subproc,
-            record_video=False, 
+            vectorization_mode=self.vectorization_mode,
+            record_video=False,
             record_video_kwargs={},
             env_kwargs=self.env_kwargs
         )

@@ -90,7 +90,7 @@ _obj_env: &obj_env
   accelerator: "gpu"
   devices: "auto"
   n_envs: 32
-  subproc: true
+  vectorization_mode: "async"
   n_steps: 256
   batch_size: 0.25
 

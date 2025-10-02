@@ -2,8 +2,6 @@
 
 # NEXT
 
-- BUG: CartPole-v1:ppo ends with no checkpoint saved even though it stopped due to eval early stop threshold
-
 - TEST: all running
 - TEST: logged to correct projects
 - TEST: run registry
@@ -12,19 +10,9 @@
 - BUG: why no action historgram for cartpole?
 - BUG: training epoch is still running after validation early stop
 
-- REFACTOR: simplify vec_obs_printer.py code
-- REFACTOR: .ini  files
-
-I'm thinking about the following big refactor, I want you to think deeply about it, and tell me your intervention plan, let me know if we should change the approach somehow:
-- Checkpoints should be self contained all data required to restore training from exact same state (eg: model state, optimizer state, epoch, env config, run id, etc.)
-- Saving checkpoints should be delegated to the agent itself by calling a save_checkpoint method on the agent and giving it a target directory to save to. 
-- Loading checkpoints should be delegated to the agent itself by calling a load_checkpoint method on the agent and giving it a target directory to load from. 
-- train.py should have a resume feature where one can point to a run id and epoch to resume training from (if not epoch provided default to best, if no best default to last).
-
 - TEST: do highlighted rows also show alerts correctly?
 - BUG: inspect not working because it cant retrieve action labels
 - TEST: are sweeps still working?
-- TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 - TODO: learn how to read gradient graphs
 - FEAT: Create MCP server that provides useful tools for claude code to be able to run training sessions and inspect training runs. This tool should have tools like the ability to list available environments and configs, list runs, start a run, etc. Ask agent to figure out exactly which tools would be optimal for it to be easily launch, stop and inspect training runs then add them.
 - FEAT: zip and upload runs to wandb
@@ -33,6 +21,7 @@ I'm thinking about the following big refactor, I want you to think deeply about 
 - FEAT: allow downloading old runs from wandb when not available locally
 - FEAT: add support to only start eval when ep_rew_mean crosses eval threshold (or at fraction of)
 - REFACTOR: simplify run_inspect.py code
+- TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 
 ## REFACTOR
 

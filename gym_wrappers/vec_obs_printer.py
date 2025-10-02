@@ -30,9 +30,6 @@ def _parse_inf(x: Any) -> Optional[float]:
     if x is None:
         return None
     if isinstance(x, (int, float)):
-        # Normalize string-y NaN/Inf already parsed to float
-        if math.isfinite(float(x)):
-            return float(x)
         return float(x)
     if isinstance(x, str):
         s = x.strip().lower()
@@ -40,7 +37,6 @@ def _parse_inf(x: Any) -> Optional[float]:
             return float("inf")
         if s in {"-inf", "-infinity", "-∞"}:
             return float("-inf")
-        # Best-effort float parse
         try:
             return float(s)
         except Exception:
@@ -151,18 +147,13 @@ class VecObsBarPrinter(VectorWrapper):
         # Update episode accounting for the selected env index
         try:
             if isinstance(rewards, np.ndarray) and rewards.size > 0:
-                r = float(rewards[self._env_index])
-                self._current_ep_return += r
+                self._current_ep_return += float(rewards[self._env_index])
                 self._current_ep_len += 1
             if isinstance(dones, np.ndarray) and dones.size > 0 and bool(dones[self._env_index]):
-                self._last_ep_return = float(self._current_ep_return)
-                self._last_ep_len = int(self._current_ep_len)
+                self._last_ep_return = self._current_ep_return
+                self._last_ep_len = self._current_ep_len
                 self._ep_count += 1
-                # Update running sum for mean across played episodes
-                try:
-                    self._sum_ep_returns += float(self._last_ep_return)
-                except Exception:
-                    pass
+                self._sum_ep_returns += self._current_ep_return
                 self._current_ep_return = 0.0
                 self._current_ep_len = 0
         except Exception:
@@ -173,6 +164,21 @@ class VecObsBarPrinter(VectorWrapper):
         return obs, rewards, terminated, truncated, infos
 
     # ---- Internal helpers ----
+    def _parse_range_from_comp(self, comp: dict) -> Tuple[Optional[float], Optional[float]]:
+        """Parse range from a component dict, trying 'range' key first, then 'values'."""
+        if "range" in comp:
+            rng = comp.get("range")
+            if isinstance(rng, Sequence) and len(rng) == 2:
+                return _parse_inf(rng[0]), _parse_inf(rng[1])
+        elif "values" in comp:
+            vals = comp.get("values")
+            if isinstance(vals, Sequence) and len(vals) > 0:
+                try:
+                    return float(min(float(v) for v in vals)), float(max(float(v) for v in vals))
+                except Exception:
+                    pass
+        return None, None
+
     def _init_from_spec(self) -> None:
         # VecEnvInfoWrapper provides get_spec(); if missing, we skip labels
         spec: Optional[Dict[str, Any]] = None
@@ -209,29 +215,18 @@ class VecObsBarPrinter(VectorWrapper):
             if not isinstance(name, str):
                 continue
             labels.append(str(name))
-            # Prefer explicit numeric range; otherwise, derive from values
-            lo, hi = None, None
-            if "range" in comp:
-                rng = comp.get("range")
-                if isinstance(rng, Sequence) and len(rng) == 2:
-                    lo = _parse_inf(rng[0])
-                    hi = _parse_inf(rng[1])
-            elif "values" in comp:
-                vals = comp.get("values")
-                if isinstance(vals, Sequence) and len(vals) > 0:
-                    try:
-                        min_v = min(float(v) for v in vals)
-                        max_v = max(float(v) for v in vals)
-                        lo, hi = float(min_v), float(max_v)
-                    except Exception:
-                        lo, hi = None, None
-            ranges.append((lo, hi))
+            ranges.append(self._parse_range_from_comp(comp))
 
         if labels:
             self._labels = labels
             self._ranges = ranges if len(ranges) == len(labels) else None
 
         # Parse reward range from spec when available
+        self._parse_reward_range_from_spec(spec)
+        # Parse action space metadata (discrete count, optional labels)
+        self._parse_action_metadata_from_spec(spec)
+
+    def _parse_reward_range_from_spec(self, spec: Optional[dict]) -> None:
         try:
             rewards = spec.get("rewards") if isinstance(spec, dict) else None
             if isinstance(rewards, dict):
@@ -243,7 +238,7 @@ class VecObsBarPrinter(VectorWrapper):
         except Exception:
             pass
 
-        # Parse action space metadata (discrete count, optional labels)
+    def _parse_action_metadata_from_spec(self, spec: Optional[dict]) -> None:
         try:
             act = spec.get("action_space") if isinstance(spec, dict) else None
             if isinstance(act, dict):
@@ -302,49 +297,67 @@ class VecObsBarPrinter(VectorWrapper):
             return self._ranges
         return [(None, None) for _ in range(dim)]
 
+    def _normalize_range(self, lo: Optional[float], hi: Optional[float]) -> Tuple[float, float]:
+        """Normalize a range to valid finite bounds, defaulting to [-1, 1]."""
+        lo_eff = float(lo) if (lo is not None and math.isfinite(lo)) else None
+        hi_eff = float(hi) if (hi is not None and math.isfinite(hi)) else None
+        if lo_eff is None or hi_eff is None or hi_eff == lo_eff:
+            return -1.0, 1.0
+        return lo_eff, hi_eff
+
+    def _draw_bar(self, value: float, lo_eff: float, hi_eff: float, width: int) -> Tuple[str, float]:
+        """Draw a bar with given value and effective range."""
+        ratio = 0.0 if hi_eff == lo_eff else (float(value) - lo_eff) / (hi_eff - lo_eff)
+        ratio = max(0.0, min(1.0, ratio))
+        filled = int(round(ratio * width))
+        empty = width - filled
+        bar = "█" * filled + "·" * empty
+        return bar, ratio
+
     def _format_bar(self, value: float, lo: Optional[float], hi: Optional[float], i: int) -> Tuple[str, float, Tuple[float, float]]:
         # Update dynamic ranges when finite bounds are not available
         if lo is None or hi is None or not (math.isfinite(lo) and math.isfinite(hi)):
             if self._min_seen is not None and self._max_seen is not None:
-                # Track running min/max for dynamic scaling
                 self._min_seen[i] = min(self._min_seen[i], float(value))
                 self._max_seen[i] = max(self._max_seen[i], float(value))
-                lo_eff = float(self._min_seen[i])
-                hi_eff = float(self._max_seen[i])
-            else:
-                lo_eff, hi_eff = -1.0, 1.0
-        else:
-            lo_eff, hi_eff = float(lo), float(hi)
-
-        # Avoid zero-width ranges
-        if not math.isfinite(lo_eff) or not math.isfinite(hi_eff) or hi_eff == lo_eff:
-            lo_eff, hi_eff = -1.0, 1.0
-
-        # Compute fill ratio
-        ratio = 0.0 if hi_eff == lo_eff else (float(value) - lo_eff) / (hi_eff - lo_eff)
-        ratio = max(0.0, min(1.0, ratio))
-        filled = int(round(ratio * self._bar_width))
-        empty = self._bar_width - filled
-        bar = "█" * filled + "·" * empty
+                lo, hi = float(self._min_seen[i]), float(self._max_seen[i])
+        lo_eff, hi_eff = self._normalize_range(lo, hi)
+        bar, ratio = self._draw_bar(value, lo_eff, hi_eff, self._bar_width)
         return bar, ratio, (lo_eff, hi_eff)
 
     def _format_bar_scalar(self, value: float, lo: Optional[float], hi: Optional[float], *, width: Optional[int] = None) -> Tuple[str, float, Tuple[float, float]]:
-        """Format a bar for a single scalar value using provided bounds only.
-
-        Unlike _format_bar, this does not update dynamic observation ranges and is
-        suitable for non-observation quantities such as rewards.
-        """
-        lo_eff = float(lo) if (lo is not None and math.isfinite(float(lo))) else None
-        hi_eff = float(hi) if (hi is not None and math.isfinite(float(hi))) else None
-        if lo_eff is None or hi_eff is None or hi_eff == lo_eff:
-            lo_eff, hi_eff = -1.0, 1.0
+        """Format a bar for a single scalar value using provided bounds only."""
+        lo_eff, hi_eff = self._normalize_range(lo, hi)
         bw = self._bar_width if width is None else max(1, int(width))
-        ratio = 0.0 if hi_eff == lo_eff else (float(value) - lo_eff) / (hi_eff - lo_eff)
-        ratio = max(0.0, min(1.0, ratio))
-        filled = int(round(ratio * bw))
-        empty = bw - filled
-        bar = "█" * filled + "·" * empty
+        bar, ratio = self._draw_bar(value, lo_eff, hi_eff, bw)
         return bar, ratio, (lo_eff, hi_eff)
+
+    def _print_bar_line(self, label: str, value_str: str, bar: str, lo_eff: float, hi_eff: float, label_w: int, value_w: int) -> None:
+        """Print a formatted bar line with label, value, bar, and range."""
+        label_fmt = label[:label_w].ljust(label_w)
+        val_fmt = value_str.rjust(value_w)
+        rng_fmt = f"[{lo_eff:+.2f}, {hi_eff:+.2f}]"
+        print(f"{label_fmt}  {val_fmt}  {bar}  {rng_fmt}")
+
+    def _extract_env_value(self, arr: Optional[np.ndarray]) -> Optional[float]:
+        """Extract value from env-indexed array."""
+        try:
+            return float(arr[self._env_index]) if isinstance(arr, np.ndarray) and arr.size > 0 else None
+        except Exception:
+            return None
+
+    def _extract_action_index(self) -> Optional[int]:
+        """Extract action index from last actions array."""
+        try:
+            if self._last_actions is not None:
+                arr = np.asarray(self._last_actions)
+                if arr.ndim == 0:
+                    return int(arr.item())
+                elif arr.size > self._env_index:
+                    return int(np.asarray(arr[self._env_index]).flatten()[0])
+        except Exception:
+            pass
+        return None
 
     def _print_obs(
         self,
@@ -378,115 +391,65 @@ class VecObsBarPrinter(VectorWrapper):
         self._bar_width = bar_w
 
         # Optional status line (only done flag now; reward shown below as a bar)
-        status_parts: List[str] = []
-        if isinstance(dones, np.ndarray) and dones.size > 0:
-            try:
-                d = bool(dones[self._env_index])
-                if d:
-                    status_parts.append("done=True")
-            except Exception:
-                pass
-        status = "  ".join(status_parts)
-
-        env_id = None
         try:
-            if hasattr(self.env, "get_id"):
-                env_id = self.env.get_id()
+            is_done = isinstance(dones, np.ndarray) and dones.size > 0 and bool(dones[self._env_index])
         except Exception:
-            env_id = None
+            is_done = False
+        status = "done=True" if is_done else ""
+
+        env_id = self.env.get_id() if hasattr(self.env, "get_id") else None
 
         # Build header with episode info, last reward, and running mean reward
         curr_ep_idx = self._ep_count + 1  # 1-based index for current episode
         ep_prog = f"Ep {curr_ep_idx}/{self._target_episodes}"
 
         # Current episode progress (return and length)
-        cur_ep = f"cur_ep_r={self._current_ep_return:+.3f}"
-        cur_len = f"cur_len={int(self._current_ep_len)}"
-
-        last_ep = (
-            f"last_ep_r={self._last_ep_return:+.3f}"
-            if isinstance(self._last_ep_return, (int, float))
-            else "last_ep_r=--"
-        )
-        mean_ep = (
-            f"ep_rew_mean={(self._sum_ep_returns / self._ep_count):+.3f}"
-            if isinstance(self._ep_count, int) and self._ep_count > 0
-            else "ep_rew_mean=--"
-        )
-        header_main = "  ".join(
-            x for x in [env_id or "", ep_prog, cur_len, cur_ep, last_ep, mean_ep] if x
-        )
+        parts = [
+            env_id or "",
+            ep_prog,
+            f"cur_len={int(self._current_ep_len)}",
+            f"cur_ep_r={self._current_ep_return:+.3f}",
+            f"last_ep_r={self._last_ep_return:+.3f}" if isinstance(self._last_ep_return, (int, float)) else "last_ep_r=--",
+            f"ep_rew_mean={(self._sum_ep_returns / self._ep_count):+.3f}" if isinstance(self._ep_count, int) and self._ep_count > 0 else "ep_rew_mean=--"
+        ]
+        header_main = "  ".join(x for x in parts if x)
         print(header_main)
         if status:
             print(status)
 
         # Episode timestep progress bar, if time limit is known
         if self._time_limit is None:
-            tl = self.env.get_max_episode_steps()
-            self._time_limit = None if tl is None else int(tl)
+            self._time_limit = self.env.get_max_episode_steps()
         if self._time_limit:
             steps = int(self._current_ep_len)
             total = int(self._time_limit)
-            t_bar, _t_ratio, (_t_lo, _t_hi) = self._format_bar_scalar(steps, 0, total, width=self._bar_width)
-            label_fmt = "timestep"[:label_w].ljust(label_w)
-            val_fmt = f"{steps}/{total}".rjust(value_w)
-            t_rng_fmt = f"[0, {total}]"
-            print(f"{label_fmt}  {val_fmt}  {t_bar}  {t_rng_fmt}")
+            t_bar, _t_ratio, (t_lo_eff, t_hi_eff) = self._format_bar_scalar(steps, 0, total, width=self._bar_width)
+            self._print_bar_line("timestep", f"{steps}/{total}", t_bar, t_lo_eff, t_hi_eff, label_w, value_w)
 
         # Reward bar (scaled using spec reward range when available)
-        reward_val: Optional[float] = None
-        try:
-            if isinstance(rewards, np.ndarray) and rewards.size > 0:
-                reward_val = float(rewards[self._env_index])
-        except Exception:
-            reward_val = None
+        reward_val = self._extract_env_value(rewards)
         if reward_val is not None:
             r_lo, r_hi = self._reward_range
             r_bar, _r_ratio, (r_lo_eff, r_hi_eff) = self._format_bar_scalar(reward_val, r_lo, r_hi, width=self._bar_width)
-            label_fmt = "reward"[:label_w].ljust(label_w)
-            val_fmt = f"{reward_val:+.4f}".rjust(value_w)
-            r_rng_fmt = f"[{r_lo_eff:+.2f}, {r_hi_eff:+.2f}]"
-            print(f"{label_fmt}  {val_fmt}  {r_bar}  {r_rng_fmt}")
+            self._print_bar_line("reward", f"{reward_val:+.4f}", r_bar, r_lo_eff, r_hi_eff, label_w, value_w)
 
         # Action bar (discrete only): scale 0..N-1 with last action value
-        action_idx: Optional[int] = None
-        try:
-            if self._last_actions is not None:
-                arr = np.asarray(self._last_actions)
-                if arr.ndim == 0:
-                    action_idx = int(arr.item())
-                elif arr.ndim == 1 and arr.size > self._env_index:
-                    action_idx = int(arr[self._env_index])
-                elif arr.ndim >= 2 and arr.shape[0] > self._env_index:
-                    # Handle shapes like (n_envs, 1)
-                    action_idx = int(np.asarray(arr[self._env_index]).flatten()[0])
-        except Exception:
-            action_idx = None
-        # Determine discrete action count
-        act_n: Optional[int] = None
-        if isinstance(self.action_space, spaces.Discrete):
-            act_n = int(self.action_space.n)
-        elif isinstance(self._action_discrete_n, int) and self._action_discrete_n > 0:
-            act_n = int(self._action_discrete_n)
+        action_idx = self._extract_action_index()
+        act_n = (
+            int(self.action_space.n) if isinstance(self.action_space, spaces.Discrete)
+            else self._action_discrete_n if isinstance(self._action_discrete_n, int) and self._action_discrete_n > 0
+            else None
+        )
         if (action_idx is not None) and (act_n is not None) and act_n > 0:
             a_lo, a_hi = 0, act_n - 1
-            a_bar, _a_ratio, (_a_lo, _a_hi) = self._format_bar_scalar(float(action_idx), float(a_lo), float(a_hi), width=self._bar_width)
-            label_fmt = "action"[:label_w].ljust(label_w)
-            # Include action label from spec when available
+            a_bar, _a_ratio, (a_lo_eff, a_hi_eff) = self._format_bar_scalar(float(action_idx), float(a_lo), float(a_hi), width=self._bar_width)
             action_label = self._action_labels.get(action_idx) if self._action_labels else None
-            val_fmt = f"{action_idx} {action_label}" if action_label else f"{action_idx}"
-            val_fmt = val_fmt.rjust(value_w)
-            a_rng_fmt = f"[{a_lo}, {a_hi}]"
-            print(f"{label_fmt}  {val_fmt}  {a_bar}  {a_rng_fmt}")
+            val_str = f"{action_idx} {action_label}" if action_label else f"{action_idx}"
+            self._print_bar_line("action", val_str, a_bar, a_lo_eff, a_hi_eff, label_w, value_w)
 
         for i in range(dim):
             name = labels[i] if i < len(labels) else f"obs[{i}]"
             val = float(obs_arr[i])
             lo, hi = ranges[i] if i < len(ranges) else (None, None)
             bar, ratio, (lo_eff, hi_eff) = self._format_bar(val, lo, hi, i)
-
-            # Format line: label | value | [bar] | min..max
-            label_fmt = name[:label_w].ljust(label_w)
-            val_fmt = f"{val:+.4f}".rjust(value_w)
-            rng_fmt = f"[{lo_eff:+.2f}, {hi_eff:+.2f}]"
-            print(f"{label_fmt}  {val_fmt}  {bar}  {rng_fmt}")
+            self._print_bar_line(name, f"{val:+.4f}", bar, lo_eff, hi_eff, label_w, value_w)

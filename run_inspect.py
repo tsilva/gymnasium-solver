@@ -37,10 +37,14 @@ from utils.rollouts import (
 from utils.run import Run, list_run_ids
 
 
+def _to_batched_array(arr: np.ndarray, dtype) -> np.ndarray:
+    """Convert 1D array to batched (T, 1) format."""
+    return np.asarray(arr, dtype=dtype).reshape(-1, 1)
+
+
 def compute_mc_returns(rewards: np.ndarray, gamma: float) -> np.ndarray:
     """Compute discounted Monte Carlo returns for a single trajectory (batch size 1 wrapper)."""
-    rewards = np.asarray(rewards, dtype=np.float32)
-    rewards_b = rewards.reshape(-1, 1)
+    rewards_b = _to_batched_array(rewards, np.float32)
     T = rewards_b.shape[0]
     dones_b = np.zeros((T, 1), dtype=bool)
     timeouts_b = np.zeros((T, 1), dtype=bool)
@@ -58,14 +62,10 @@ def compute_gae_advantages_and_returns(
     gae_lambda: float,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Compute GAE(λ) advantages and returns for a single (T,) trajectory (batch size 1 wrapper)."""
-    values_b = np.asarray(values, dtype=np.float32).reshape(-1, 1)
-    rewards_b = np.asarray(rewards, dtype=np.float32).reshape(-1, 1)
-    dones_b = np.asarray(dones, dtype=bool).reshape(-1, 1)
-    if timeouts is None:
-        timeouts_b = np.zeros_like(dones_b, dtype=bool)
-    else:
-        timeouts_b = np.asarray(timeouts, dtype=bool).reshape(-1, 1)
-
+    values_b = _to_batched_array(values, np.float32)
+    rewards_b = _to_batched_array(rewards, np.float32)
+    dones_b = _to_batched_array(dones, bool)
+    timeouts_b = np.zeros_like(dones_b, dtype=bool) if timeouts is None else _to_batched_array(timeouts, bool)
     last_values = np.asarray([float(last_value)], dtype=np.float32)
 
     adv_b, ret_b = compute_batched_gae_advantages_and_returns(
@@ -248,21 +248,13 @@ def run_episode(
         if x.ndim != 3:
             return []
         H, W, C = x.shape
-        frames: List[np.ndarray] = []
-        if assume_rgb_groups and C % 3 == 0:
-            n = C // 3
-            if n_stack_hint is not None and n_stack_hint > 0:
-                n = min(n, int(n_stack_hint))
-            for i in range(n):
-                frames.append(x[:, :, 3 * i: 3 * (i + 1)])
-        else:
-            # Treat as n grayscale channels
-            n = C
-            if n_stack_hint is not None and n_stack_hint > 0:
-                n = min(n, int(n_stack_hint))
-            for i in range(n):
-                frames.append(x[:, :, i:i + 1])
-        return frames
+        # Determine split size and stride
+        use_rgb = assume_rgb_groups and C % 3 == 0
+        stride = 3 if use_rgb else 1
+        n = (C // stride)
+        if n_stack_hint is not None and n_stack_hint > 0:
+            n = min(n, int(n_stack_hint))
+        return [x[:, :, i * stride: (i + 1) * stride] for i in range(n)]
 
     def _make_grid(frames_hwc: List[np.ndarray], cols: int | None = None) -> np.ndarray | None:
         if not frames_hwc:
@@ -294,16 +286,13 @@ def run_episode(
         bar if splitting is not possible or the hint is invalid.
         """
         v = np.asarray(vec).reshape(-1)
-        n = int(n_stack_hint) if (n_stack_hint is not None) else 1
-        if n <= 1:
-            n = 1
+        n = int(n_stack_hint) if (n_stack_hint is not None and int(n_stack_hint) > 1) else 1
         L = v.shape[0]
+        # Split into chunks
+        seg = L // n
+        chunks = [v[i * seg:(i + 1) * seg] for i in range(n)] if n > 1 and L % n == 0 else [v]
+        # Convert each chunk to a normalized bar image
         frames: List[np.ndarray] = []
-        if n > 1 and L % n == 0:
-            seg = L // n
-            chunks = [v[i * seg:(i + 1) * seg] for i in range(n)]
-        else:
-            chunks = [v]
         for chunk in chunks:
             c = np.asarray(chunk, dtype=np.float32)
             c_min = float(np.nanmin(c)) if c.size > 0 else 0.0
@@ -352,31 +341,23 @@ def run_episode(
             # Build processed/stack views from current observation (pre-step)
             obs0 = _obs_first_env(obs)
             stack_img = None
-            # Build a stack grid from the observation channels when frame stacking is enabled
-            if isinstance(obs0, np.ndarray) and obs0.ndim in (2, 3):
-                hwc = _ensure_hwc(obs0)
-                if has_stack_hint:
+            if has_stack_hint:
+                # Build a stack grid from the observation channels when frame stacking is enabled
+                if isinstance(obs0, np.ndarray) and obs0.ndim in (2, 3):
+                    hwc = _ensure_hwc(obs0)
                     split = _split_stack(hwc, assume_rgb_groups=True, n_stack_hint=n_stack_hint)
                     if isinstance(split, list) and len(split) >= 2:
-                        grid = _make_grid(split, cols=None)
-                        if grid is not None:
-                            stack_img = grid
-            # Vector observation fallback
-            elif stack_img is None and isinstance(obs0, np.ndarray) and (obs0.ndim == 1 or (obs0.ndim == 2 and 1 in obs0.shape)) and obs_type_cfg not in {"ram", "objects"}:
-                if has_stack_hint:
+                        stack_img = _make_grid(split, cols=None)
+                # Vector observation fallback
+                elif isinstance(obs0, np.ndarray) and (obs0.ndim == 1 or (obs0.ndim == 2 and 1 in obs0.shape)) and obs_type_cfg not in {"ram", "objects"}:
                     vec = obs0.reshape(-1)
                     frames_vec = _vector_stack_to_frames(vec, n_stack_hint=n_stack_hint, row_height=8)
                     if frames_vec:
-                        grid = _make_grid(frames_vec, cols=None)
-                        if grid is not None:
-                            stack_img = grid
-
-            # As a final fallback for non-image observations, build a grid from the last N rendered frames
-            if stack_img is None and has_stack_hint and isinstance(frames, list) and len(frames) >= 1:
-                last = frames[-int(n_stack_hint):]
-                grid_from_frames = _make_grid([_ensure_hwc(f) for f in last], cols=None)
-                if grid_from_frames is not None:
-                    stack_img = grid_from_frames
+                        stack_img = _make_grid(frames_vec, cols=None)
+                # As a final fallback for non-image observations, build a grid from the last N rendered frames
+                elif isinstance(frames, list) and len(frames) >= 1:
+                    last = frames[-int(n_stack_hint):]
+                    stack_img = _make_grid([_ensure_hwc(f) for f in last], cols=None)
 
             if stack_img is not None:
                 stack_frames.append(stack_img)
@@ -410,34 +391,36 @@ def run_episode(
                 obs, reward, done, info = step_result
                 terminated, truncated = done, False
 
-            if isinstance(reward, (list, np.ndarray)):
-                reward = float(reward[0])
-            if isinstance(terminated, (list, np.ndarray)):
-                terminated = bool(terminated[0])
-            if isinstance(truncated, (list, np.ndarray)):
-                truncated = bool(truncated[0])
+            # Unwrap vectorized outputs
+            def _unwrap_vec(val):
+                return val[0] if isinstance(val, (list, np.ndarray)) else val
 
-            total_reward += float(reward)
-            rewards_buf.append(float(reward))
+            reward = float(_unwrap_vec(reward))
+            terminated = bool(_unwrap_vec(terminated))
+            truncated = bool(_unwrap_vec(truncated))
+            done = terminated or truncated
+
+            total_reward += reward
+            rewards_buf.append(reward)
             values_buf.append(float(val) if val is not None else 0.0)
-            dones_buf.append(bool(terminated or truncated))
-            truncated_buf.append(bool(truncated))
+            dones_buf.append(done)
+            truncated_buf.append(truncated)
 
             action_idx = int(action[0]) if isinstance(action, np.ndarray) else int(action)
             steps.append({
                 "step": t,
                 "action": action_idx,
                 "action_label": (action_labels[action_idx] if action_labels is not None and 0 <= action_idx < len(action_labels) else None),
-                "reward": float(reward),
-                "cum_reward": float(total_reward),
+                "reward": reward,
+                "cum_reward": total_reward,
                 "value": float(val) if val is not None else None,
-                "done": bool(terminated or truncated),
+                "done": done,
                 "probs": probs,
             })
 
             t += 1
 
-            if terminated or truncated:
+            if done:
                 break
     finally:
         env.close()
@@ -634,6 +617,14 @@ def build_ui(default_run_id: str = "@last"):
                 return "[" + ", ".join(_format_stat_value(x) for x in v) + "]"
             return str(v) if v is not None else ""
 
+        def _round3(x):
+            return round(float(x), 3)
+
+        def _format_probs(probs: Any) -> str | None:
+            if isinstance(probs, list):
+                return "[" + ", ".join(f"{float(p):.3f}" for p in probs) + "]"
+            return str(probs) if probs is not None else None
+
         def _verticalize_row(row: List[Any]) -> List[List[str]]:
             pairs: List[List[str]] = []
             for name, val in zip(table_headers, row):
@@ -676,41 +667,28 @@ def build_ui(default_run_id: str = "@last"):
                 gr.update(value=vert),
             )
 
+        def _table_row_from_step(s: Dict[str, Any]) -> List[Any]:
+            return [
+                s["done"],
+                s["step"],
+                s["action"],
+                s.get("action_label"),
+                _format_probs(s.get("probs")),
+                s["reward"],
+                s["cum_reward"],
+                _round3(s.get("mc_return", None)),
+                _round3(s.get("value", None)),
+                _round3(s.get("gae_adv", None)),
+            ]
+
         def _inspect(rid: str, ckpt_label: str | None, det: bool, nsteps: int):
             frames_raw, _frames_proc_unused, frames_stack, steps, info = run_episode(rid, ckpt_label, det, int(nsteps))
-            def _round3(x):
-                return round(float(x), 3)
-            def _format_probs(probs: Any) -> str | None:
-                if isinstance(probs, list):
-                    return "[" + ", ".join(f"{float(p):.3f}" for p in probs) + "]"
-                return str(probs) if probs is not None else None
-            def _table_row_from_step(s: Dict[str, Any]) -> List[Any]:
-                return [
-                    s["done"],
-                    s["step"],
-                    s["action"],
-                    s.get("action_label"),
-                    _format_probs(s.get("probs")),
-                    s["reward"],
-                    s["cum_reward"],
-                    _round3(s.get("mc_return", None)),
-                    _round3(s.get("value", None)),
-                    _round3(s.get("gae_adv", None)),
-                ]
             rows = [_table_row_from_step(s) for s in steps]
             # Initialize gallery selection, states, play button, and slider range
             # Compute available display modes
             has_stack = isinstance(frames_stack, list) and len(frames_stack) > 0
             choices = [DISPLAY_RAW] + ([DISPLAY_STACK] if has_stack else [])
-
-            if has_stack:
-                display_value = DISPLAY_STACK
-                frame_label = FRAME_LABEL_STACK
-                active_frames = frames_stack
-            else:
-                display_value = DISPLAY_RAW
-                frame_label = FRAME_LABEL_RAW
-                active_frames = frames_raw
+            display_value, frame_label, active_frames = (DISPLAY_STACK, FRAME_LABEL_STACK, frames_stack) if has_stack else (DISPLAY_RAW, FRAME_LABEL_RAW, frames_raw)
 
             frame_img_upd, slider_upd, active_list, idx_val, playing_val, play_btn_upd, vert_pairs = _initial_display_state(active_frames, frame_label, steps)
 
@@ -789,16 +767,20 @@ def build_ui(default_run_id: str = "@last"):
             row_val = _vertical_from_steps_index(steps, i)
             return img, row_val, i
 
+        def _build_slider_output(img, row_val, i, playing: bool):
+            """Build standard tuple for slider change handlers."""
+            return gr.update(value=img), gr.update(value=row_val), i, playing, gr.update(value=(PAUSE_ICON if playing else PLAY_ICON))
+
         def _on_slider_change(frames: List[np.ndarray], val: int, playing: bool, steps: List[Dict[str, Any]] | None):
             """Update current frame when user releases the slider, preserving play state."""
             img, row_val, i = _current_view_updates(frames, val, steps)
-            return gr.update(value=img), gr.update(value=row_val), i, playing, gr.update(value=(PAUSE_ICON if playing else PLAY_ICON))
+            return _build_slider_output(img, row_val, i, playing)
         play_pause_btn.click(_on_play_pause, inputs=[playing_state], outputs=[playing_state, play_pause_btn])
         # While dragging, update the frame live for fast visual scanning (and pause playback)
         def _on_slider_input(frames: List[np.ndarray], val: int | float | None, steps: List[Dict[str, Any]] | None):
             # Pause while scrubbing for smoother UX and to avoid race with autoplay
             img, row_val, i = _current_view_updates(frames, val, steps)
-            return gr.update(value=img), gr.update(value=row_val), i, False, gr.update(value=PLAY_ICON)
+            return _build_slider_output(img, row_val, i, False)
 
         frame_slider.input(
             _on_slider_input,
@@ -813,14 +795,10 @@ def build_ui(default_run_id: str = "@last"):
         def _on_tick(frames: List[np.ndarray], idx: int, playing: bool, steps: List[Dict[str, Any]] | None):
             if not playing or not frames:
                 return gr.update(), gr.update(), gr.update(), idx, playing, gr.update()
-            if int(idx) < len(frames) - 1:
-                new_idx = int(idx) + 1
-                img, row_val, _ = _current_view_updates(frames, new_idx, steps)
-                return gr.update(value=img), gr.update(value=new_idx), gr.update(value=row_val), new_idx, True, gr.update(value=PAUSE_ICON)
-            # Reached end: stop
-            last_idx = len(frames) - 1
-            img, row_val, _ = _current_view_updates(frames, last_idx, steps)
-            return gr.update(value=img), gr.update(value=last_idx), gr.update(value=row_val), last_idx, False, gr.update(value=PLAY_ICON)
+            new_idx = int(idx) + 1 if int(idx) < len(frames) - 1 else len(frames) - 1
+            img, row_val, _ = _current_view_updates(frames, new_idx, steps)
+            still_playing = int(idx) < len(frames) - 1
+            return gr.update(value=img), gr.update(value=new_idx), gr.update(value=row_val), new_idx, still_playing, gr.update(value=(PAUSE_ICON if still_playing else PLAY_ICON))
 
         if timer is not None:
             timer.tick(_on_tick, inputs=[frames_state, index_state, playing_state, steps_state], outputs=[frame_image, frame_slider, current_step_table, index_state, playing_state, play_pause_btn])
@@ -828,12 +806,9 @@ def build_ui(default_run_id: str = "@last"):
         # Display mode switcher
         def _on_display_mode(mode: str, raw: List[np.ndarray], stack: List[np.ndarray], steps: List[Dict[str, Any]] | None):
             mode = str(mode or DISPLAY_RAW)
-            if mode == DISPLAY_STACK and isinstance(stack, list) and len(stack) > 0:
-                active = stack
-                label = FRAME_LABEL_STACK
-            else:
-                active = raw if isinstance(raw, list) else []
-                label = FRAME_LABEL_RAW
+            use_stack = mode == DISPLAY_STACK and isinstance(stack, list) and len(stack) > 0
+            active = stack if use_stack else (raw if isinstance(raw, list) else [])
+            label = FRAME_LABEL_STACK if use_stack else FRAME_LABEL_RAW
             return _initial_display_state(active, label, steps)
 
         display_mode.change(
@@ -841,6 +816,10 @@ def build_ui(default_run_id: str = "@last"):
             inputs=[display_mode, frames_raw_state, frames_stack_state, steps_state],
             outputs=[frame_image, frame_slider, frames_state, index_state, playing_state, play_pause_btn, current_step_table],
         )
+
+        def _sanitize_filename(s: str) -> str:
+            """Sanitize string for use in filenames."""
+            return str(s).replace("/", "-").replace(" ", "_")
 
         # CSV export handler
         def _export_csv(rows: List[List[Any]] | None, rid: str, ckpt_label: str | None):
@@ -859,16 +838,13 @@ def build_ui(default_run_id: str = "@last"):
                     rows = rows.to_numpy().tolist()  # type: ignore[assignment]
 
             # Ensure rows is a list and check emptiness safely
-            if isinstance(rows, list):
-                if len(rows) == 0:
-                    return None, gr.update(visible=False)
-            else:
+            if not isinstance(rows, list):
                 rows = list(rows)  # type: ignore[arg-type]
-                if len(rows) == 0:
-                    return None, gr.update(visible=False)
+            if len(rows) == 0:
+                return None, gr.update(visible=False)
 
-            safe_rid = str(rid).replace("/", "-").replace(" ", "_")
-            safe_ckpt = str(ckpt_label or "ckpt").replace("/", "-").replace(" ", "_")
+            safe_rid = _sanitize_filename(rid)
+            safe_ckpt = _sanitize_filename(ckpt_label or "ckpt")
             file_name = f"{safe_rid}_{safe_ckpt}_steps.csv"
             tmp_dir = tempfile.gettempdir()
             file_path = os.path.join(tmp_dir, file_name)

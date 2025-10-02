@@ -193,6 +193,147 @@ def _present_prefit_summary(config) -> None:
     })
 
 
+def _launch_training_resume(args) -> None:
+    """Launch training in resume mode from an existing checkpoint."""
+    from utils.config import Config
+    from utils.formatting import format_duration
+    from utils.random import set_random_seed
+    from utils.run import Run
+    from utils.io import read_json
+    import wandb
+
+    # Resolve run ID (handle @last symlink)
+    run_id = args.resume
+    if run_id == "@last":
+        from utils.run import LAST_RUN_DIR
+        if not LAST_RUN_DIR.exists():
+            raise FileNotFoundError("No @last run found. Train a model first.")
+        run_id = LAST_RUN_DIR.resolve().name
+
+    # Load run
+    print(f"Resuming run: {run_id}")
+    run = Run.load(run_id)
+
+    # Resolve checkpoint directory
+    checkpoint_dir = _resolve_checkpoint_dir(run, args.epoch)
+    print(f"Loading checkpoint from: {checkpoint_dir}")
+
+    # Load config from checkpoint (prefer state.json, fallback to run's config.json)
+    state_path = checkpoint_dir / "state.json"
+    if state_path.exists():
+        state = read_json(state_path)
+        config_dict = state.get("config")
+        if config_dict and "algo_id" in config_dict:
+            config = Config.build_from_dict(config_dict)
+        else:
+            # Old checkpoint format, fallback to run's config.json
+            print("Warning: Checkpoint uses old format, loading config from run directory")
+            config = run.load_config()
+            state = None
+    else:
+        # Very old checkpoint format without state.json
+        print("Warning: Checkpoint missing state.json, loading config from run directory")
+        config = run.load_config()
+        state = None
+
+    # Allow overriding max_env_steps from CLI
+    cli_max_env_steps = int(args.max_env_steps) if args.max_env_steps else None
+    if cli_max_env_steps is not None:
+        print(f"Overriding max_env_steps: {config.max_env_steps} → {cli_max_env_steps}")
+        config.max_env_steps = cli_max_env_steps
+
+    # Initialize W&B if enabled
+    if getattr(config, 'enable_wandb', True):
+        # Resume existing W&B run
+        from utils.formatting import sanitize_name
+        project_name = config.project_id if config.project_id else sanitize_name(config.env_id)
+        from dataclasses import asdict
+        wandb.init(
+            project=project_name,
+            id=run_id,
+            resume="must",
+            config=asdict(config)
+        )
+
+    # Set random seed (will be overridden by checkpoint RNG states)
+    set_random_seed(config.seed)
+
+    # Build agent
+    from agents import build_agent
+    agent = build_agent(config)
+
+    # Attach run to agent (reuse existing run, don't create new one)
+    agent.run = run
+
+    # Load checkpoint into agent
+    agent.load_checkpoint(checkpoint_dir, resume_training=True)
+
+    # Set the epoch to resume from (trainer will continue from this epoch)
+    if state:
+        loaded_epoch = state.get("epoch", 0)
+        agent._resume_from_epoch = loaded_epoch
+        print(f"Continuing training from epoch {loaded_epoch}")
+    else:
+        print("Warning: Cannot determine checkpoint epoch, starting from 0")
+
+    # Train (trainer will start from loaded epoch)
+    agent.learn()
+
+    # Print completion message
+    elapsed_seconds = _extract_elapsed_seconds(agent)
+    human = format_duration(elapsed_seconds) if isinstance(elapsed_seconds, (int, float)) else "unknown"
+    reason = (
+        getattr(agent, "_final_stop_reason", None)
+        or getattr(agent, "_early_stop_reason", None)
+        or "completed."
+    )
+    if isinstance(reason, str) and reason and not str(reason).endswith(".") and reason != "completed.":
+        reason = f"{reason}."
+    print(f"Training completed in {human}. Reason: {reason}")
+
+
+def _resolve_checkpoint_dir(run, epoch_spec: Optional[str]) -> Path:
+    """Resolve checkpoint directory from epoch spec.
+
+    Args:
+        run: Run object
+        epoch_spec: Epoch specifier: None, '@best', '@last', or epoch number
+
+    Returns:
+        Path to checkpoint directory
+    """
+    from pathlib import Path
+
+    # Default: prefer @best if exists, else @last
+    if epoch_spec is None:
+        if run.best_checkpoint_dir.exists():
+            return run.best_checkpoint_dir
+        elif run.last_checkpoint_dir.exists():
+            return run.last_checkpoint_dir
+        else:
+            raise FileNotFoundError(f"No checkpoints found for run {run.run_id}")
+
+    # Handle symlinks
+    if epoch_spec == "@best":
+        if not run.best_checkpoint_dir.exists():
+            raise FileNotFoundError(f"No best checkpoint found for run {run.run_id}")
+        return run.best_checkpoint_dir
+    elif epoch_spec == "@last":
+        if not run.last_checkpoint_dir.exists():
+            raise FileNotFoundError(f"No last checkpoint found for run {run.run_id}")
+        return run.last_checkpoint_dir
+
+    # Handle specific epoch number
+    try:
+        epoch = int(epoch_spec)
+        checkpoint_dir = run.checkpoint_dir_for_epoch(epoch)
+        if not checkpoint_dir.exists():
+            raise FileNotFoundError(f"Checkpoint for epoch {epoch} not found in run {run.run_id}")
+        return checkpoint_dir
+    except ValueError:
+        raise ValueError(f"Invalid epoch spec: {epoch_spec}. Use '@best', '@last', or an integer.")
+
+
 def launch_training_from_args(args) -> None:
     """End-to-end training launcher extracted from train.py.
 
@@ -200,10 +341,16 @@ def launch_training_from_args(args) -> None:
     function handles config resolution, seeding, agent setup, and
     post-training reporting.
     """
-    from utils.config import load_config
+    from utils.config import Config, load_config
     from utils.formatting import format_duration
     from utils.random import set_random_seed
+    from utils.run import Run
     from utils.wandb_workspace import create_or_update_workspace_for_current_run
+
+    # Handle resume mode
+    if args.resume:
+        _launch_training_resume(args)
+        return
 
     # Resolve configuration spec from positional, then flag, then default
     config_spec = args.config or args.config_id or "Bandit-v0:ppo"

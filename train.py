@@ -36,18 +36,41 @@ def main():
         metavar="SEARCH",
         help="List all available environment targets with descriptions and exit. Optionally provide a search term to filter environments (e.g., 'Pong' or 'CartPole')."
     )
+    parser.add_argument(
+        "--resume",
+        type=str,
+        default=None,
+        metavar="RUN_ID",
+        help="Resume training from a checkpoint. Use run ID (e.g., 'abc123') or '@last' for most recent run."
+    )
+    parser.add_argument(
+        "--epoch",
+        type=str,
+        default=None,
+        metavar="EPOCH",
+        help="Specific epoch to resume from. Use epoch number, '@best', or '@last' (default: '@best' if exists, else '@last')."
+    )
     args = parser.parse_args()
 
 
-    # In case list envs flag is passed, use argument as search 
+    # In case list envs flag is passed, use argument as search
     # term and show all available environments matching it
     # (exits after printing)
-    config_id = args.config or args.config_id or "Bandit-v0:ppo" # TODO: move default up
-    should_search = ":" not in config_id or args.list_envs is not None
-    if should_search:
-        search_term = args.list_envs if args.list_envs else config_id
-        if not search_term: search_term = None
+    if args.list_envs is not None:
+        search_term = args.list_envs if args.list_envs else None
         list_available_environments(search_term)
+        return
+
+    # If resuming, skip environment search
+    if args.resume:
+        launch_training_from_args(args)
+        return
+
+    # Otherwise, check if we need to search for environment
+    config_id = args.config or args.config_id or "Bandit-v0:ppo" # TODO: move default up
+    should_search = ":" not in config_id
+    if should_search:
+        list_available_environments(config_id)
         return
 
     # Parse args and start training

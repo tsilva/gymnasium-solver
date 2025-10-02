@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from torch.utils.data import DataLoader
@@ -320,20 +321,20 @@ class BaseAgent(pl.LightningModule):
             write_json(json_path, prepare_metrics_for_json(final_metrics))
     
     def learn(self):
-        assert self.run is None, "learn() should only be called once at the start of training"
-
         from datetime import datetime
         from utils.logging import stream_output_to_log
 
-        # Initialize run directory management and convenience Run accessor
-        # Initialize run directory (creates runs/<id>/, checkpoints/, and @last symlink)
-        # Generate local run ID when W&B is disabled
-        run_id = wandb.run.id if wandb.run is not None else f"local-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-        self.run = Run.create(
-            run_id=run_id,
-            config=self.config
-        )
-        
+        # If run is already attached (resume mode), skip run creation
+        if self.run is None:
+            # Initialize run directory management and convenience Run accessor
+            # Initialize run directory (creates runs/<id>/, checkpoints/, and @last symlink)
+            # Generate local run ID when W&B is disabled
+            run_id = wandb.run.id if wandb.run is not None else f"local-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+            self.run = Run.create(
+                run_id=run_id,
+                config=self.config
+            )
+
         # TODO: create run context (with run, do log handling inside)
         # Set up comprehensive logging using run-specific logs directory
         log_path = self.run._ensure_path("run.log")
@@ -353,6 +354,14 @@ class BaseAgent(pl.LightningModule):
             logger=loggers,
             callbacks=callbacks
         )
+
+        # If resuming from a checkpoint, set the starting epoch
+        # (Lightning will increment from this value)
+        resume_epoch = getattr(self, '_resume_from_epoch', None)
+        if resume_epoch is not None:
+            # Set Lightning's internal epoch counter
+            trainer.fit_loop.epoch_progress.current.completed = resume_epoch
+            trainer.fit_loop.epoch_progress.current.processed = resume_epoch
 
         # Train the agent
         trainer.fit(self)
@@ -702,3 +711,194 @@ class BaseAgent(pl.LightningModule):
         setattr(self, param, value)
         if hasattr(self.config, param):
             setattr(self.config, param, value)
+
+    # -------------------------
+    # Checkpoint save/load
+    # -------------------------
+
+    def save_checkpoint(self, checkpoint_dir: Path) -> None:
+        """Save complete training state to directory for resuming.
+
+        Saves:
+        - Model state dict
+        - Optimizer state dict(s)
+        - Training counters (epoch, timesteps)
+        - RNG states (torch, numpy, random, cuda)
+        - Config
+        - Run ID
+        - Metrics recorder state (best rewards, etc.)
+        """
+        import random
+        import numpy as np
+        import torch
+        from pathlib import Path
+
+        checkpoint_dir = Path(checkpoint_dir)
+
+        # Save model state
+        model_path = checkpoint_dir / "model.pt"
+        torch.save(self.policy_model.state_dict(), model_path)
+
+        # Save optimizer state(s) if trainer is attached (during training)
+        try:
+            optimizers = self.optimizers()
+            if not isinstance(optimizers, (list, tuple)):
+                optimizers = [optimizers]
+
+            optimizer_states = [opt.state_dict() for opt in optimizers]
+            optimizer_path = checkpoint_dir / "optimizer.pt"
+            torch.save(optimizer_states, optimizer_path)
+        except RuntimeError:
+            # Trainer not attached yet (e.g., checkpoint being saved before training)
+            # This is fine, we'll skip optimizer state
+            pass
+
+        # Gather training state
+        train_collector = self.get_rollout_collector("train")
+        train_metrics = train_collector.get_metrics()
+
+        # Get best rewards from collectors
+        val_collector = self.get_rollout_collector("val")
+
+        # Serialize config (same as save_to_json)
+        from dataclasses import asdict
+        config_dict = asdict(self.config)
+        config_dict["algo_id"] = self.config.algo_id  # Add algo_id explicitly
+
+        state = {
+            "epoch": int(self.current_epoch),
+            "total_timesteps": train_metrics.get("cnt/total_env_steps", 0),
+            "total_vec_steps": train_metrics.get("cnt/total_vec_steps", 0),
+            "run_id": self.run.run_id if self.run else None,
+            "config": config_dict,
+            "best_train_reward": float(train_collector._best_episode_reward),
+            "best_val_reward": float(val_collector._best_episode_reward),
+            "rng_states": {
+                "torch": torch.get_rng_state().tolist(),
+                "torch_cuda": [s.tolist() for s in torch.cuda.get_rng_state_all()] if torch.cuda.is_available() else None,
+                "numpy": {
+                    "state_type": np.random.get_state()[0],
+                    "state_keys": np.random.get_state()[1].tolist(),
+                    "state_pos": int(np.random.get_state()[2]),
+                    "state_has_gauss": int(np.random.get_state()[3]),
+                    "state_cached_gaussian": float(np.random.get_state()[4]),
+                },
+                "random": random.getstate(),
+            },
+        }
+
+        # Save state as JSON
+        state_path = checkpoint_dir / "state.json"
+        from utils.io import write_json
+        write_json(state_path, state)
+
+    def load_checkpoint(self, checkpoint_dir: Path, resume_training: bool = True) -> None:
+        """Restore complete training state from directory.
+
+        Args:
+            checkpoint_dir: Directory containing checkpoint files
+            resume_training: If True, restore optimizer and RNG states for exact resumption
+        """
+        import random
+        import numpy as np
+        import torch
+        from pathlib import Path
+
+        checkpoint_dir = Path(checkpoint_dir)
+
+        # Load model state (support both new and old formats)
+        model_path = checkpoint_dir / "model.pt"
+        old_model_path = checkpoint_dir / "policy.ckpt"
+
+        if model_path.exists():
+            model_state = torch.load(model_path, map_location='cpu', weights_only=True)
+            self.policy_model.load_state_dict(model_state)
+        elif old_model_path.exists():
+            # Old checkpoint format
+            print("Loading from old checkpoint format (policy.ckpt)")
+            checkpoint = torch.load(old_model_path, map_location='cpu', weights_only=False)
+            if "model_state_dict" in checkpoint:
+                self.policy_model.load_state_dict(checkpoint["model_state_dict"])
+            else:
+                # Even older format, direct state dict
+                self.policy_model.load_state_dict(checkpoint)
+        else:
+            raise FileNotFoundError(f"Model checkpoint not found at {model_path} or {old_model_path}")
+
+        # Load state JSON (if it exists)
+        state_path = checkpoint_dir / "state.json"
+        if state_path.exists():
+            from utils.io import read_json
+            state = read_json(state_path)
+        else:
+            # Old checkpoint without state.json
+            print("Warning: Checkpoint missing state.json, skipping optimizer/RNG restoration")
+            state = None
+            resume_training = False  # Can't fully resume without state
+
+        # If resuming training, restore optimizer and RNG states
+        if resume_training and state:
+            # Load optimizer state(s) - only works if trainer is attached
+            optimizer_path = checkpoint_dir / "optimizer.pt"
+            if optimizer_path.exists():
+                try:
+                    optimizer_states = torch.load(optimizer_path, map_location='cpu', weights_only=False)
+                    if not isinstance(optimizer_states, list):
+                        optimizer_states = [optimizer_states]
+
+                    optimizers = self.optimizers()
+                    if not isinstance(optimizers, (list, tuple)):
+                        optimizers = [optimizers]
+
+                    for opt, opt_state in zip(optimizers, optimizer_states):
+                        opt.load_state_dict(opt_state)
+                except RuntimeError:
+                    # Trainer not attached yet, optimizer will be initialized fresh
+                    print("Note: Optimizer will be initialized fresh (trainer not attached yet)")
+                    pass
+
+            # Restore RNG states
+            if state and "rng_states" in state:
+                rng_states = state["rng_states"]
+                torch.set_rng_state(torch.ByteTensor(rng_states["torch"]))
+                if rng_states.get("torch_cuda") and torch.cuda.is_available():
+                    torch.cuda.set_rng_state_all([torch.ByteTensor(s) for s in rng_states["torch_cuda"]])
+
+                # Restore numpy RNG state
+                numpy_state = rng_states["numpy"]
+                np_state_tuple = (
+                    numpy_state["state_type"],
+                    np.array(numpy_state["state_keys"], dtype=np.uint32),
+                    numpy_state["state_pos"],
+                    numpy_state["state_has_gauss"],
+                    numpy_state["state_cached_gaussian"],
+                )
+                np.random.set_state(np_state_tuple)
+
+                # Restore random module state
+                # random.getstate() returns a tuple that we need to reconstruct
+                random_state = rng_states["random"]
+                # Convert list back to proper tuple structure
+                random.setstate((random_state[0], tuple(random_state[1]), random_state[2]))
+
+            # Restore best episode rewards in collectors
+            if state and "best_train_reward" in state and state["best_train_reward"] is not None:
+                train_collector = self.get_rollout_collector("train")
+                train_collector._best_episode_reward = float(state["best_train_reward"])
+            if state and "best_val_reward" in state and state["best_val_reward"] is not None:
+                val_collector = self.get_rollout_collector("val")
+                val_collector._best_episode_reward = float(state["best_val_reward"])
+
+        # Print checkpoint info
+        if state:
+            epoch = state.get("epoch", "unknown")
+            total_timesteps = state.get("total_timesteps", "unknown")
+            best_train = state.get("best_train_reward", "unknown")
+            best_val = state.get("best_val_reward", "unknown")
+
+            print(f"Checkpoint loaded from epoch {epoch}:")
+            print(f"  Total timesteps: {total_timesteps}")
+            print(f"  Best train reward: {best_train}")
+            print(f"  Best val reward: {best_val}")
+        else:
+            print("Checkpoint loaded (model weights only, no training state)")

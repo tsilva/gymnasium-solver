@@ -58,7 +58,6 @@ class MetricsTableLogger(LightningLoggerBase):
     CsvLightningLogger) so all receive the same metrics payload.
     """
     
-    # TODO: this method is a bit clunky, organize it bette, group related properties together and comment them as a group, remove any unused properties
     def __init__(
         self,
         *,
@@ -68,63 +67,49 @@ class MetricsTableLogger(LightningLoggerBase):
         min_value_column_width: int = 15,
         chart_column_width: int | None = None,
     ) -> None:
-        """Create a pretty-print logger with sensible defaults.
-
-        When explicit rule/formatting dicts are not provided, defaults are
-        sourced from `utils.metrics_config.metrics_config` so callers can simply
-        instantiate `PrintMetricsLogger()` without wiring config plumbing.
-        """
-        from utils.metrics_config import metrics_config
-
-        # -- Core metadata --
+        """Create a pretty-print logger with sensible defaults."""
+        # Core metadata
         self._name = "print"
         self._version: str | int = "0"
 
-        # -- Dependencies --
+        # Dependencies
         self.metrics_monitor = metrics_monitor
         self.run = run
 
-        # -- Output environment --
+        # Output environment
         self.stream = sys.stdout
         self.colors_enabled: bool = sys.stdout.isatty()
         self.use_ansi_inplace: bool = False
         self.indent: int = 4
 
-        # -- Table layout --
+        # Table layout
         self.min_table_width = int(min_table_width)
         self.min_val_width = int(min_value_column_width)
         self.sparkline_width: int = 32
         self.sparkline_history_cap: int = 512
         self.chart_column_width = self.sparkline_width
 
-        # -- Ordering/prioritization --
-        # Accept unnamespaced priorities from config and expand to full keys
-        # for common namespaces so per-section sorting is preserved.
+        # Ordering/prioritization
         self.key_priority: Tuple[str, ...] = tuple(metrics_config.key_priority())
-        _namespaces = ("train", "val", "test")
         self._key_priority_map: Dict[str, int] = {
             f"{ns}/{sub}": idx
             for idx, sub in enumerate(self.key_priority)
-            for ns in _namespaces
+            for ns in ("train", "val", "test")
         }
         self.group_keys_order: Tuple[str, ...] | None = ("train", "val")
         self.group_subkeys_order: bool = True
 
-        # -- Formatting and thresholds --
+        # Formatting and thresholds
         self.delta_tol: float = 1e-12
-        # Highlight behavior is resolved on-the-fly via helper methods that
-        # consult the metrics config lazily (avoids upfront extraction/copy).
         self.bgcolor_highlight: str = "bg_blue"
         self.bgcolor_alert: str = "bg_yellow"
         self.better_when_increasing: Dict[str, bool] = {}
 
-        # -- State (updated as we log) --
+        # State (updated as we log)
         self.previous_metrics: Dict[str, Any] = {}
         self._prev: Optional[Dict[str, Any]] = None
         self._last_height: int = 0
         self._history: Dict[str, List[float]] = {}
-        # Track metrics that have triggered alerts during this session
-        # so they remain visible in the table even after alert clears
         self._metrics_with_triggered_alerts: set[str] = set()
 
 
@@ -166,34 +151,25 @@ class MetricsTableLogger(LightningLoggerBase):
         Returns a mapping of full metric key -> (delta_str, color_name or None).
         Missing/invalid deltas map to ("", None).
         """
+        prev_snapshot = self._prev if self._prev is not None else self.previous_metrics
         deltas: Dict[str, Tuple[str, Optional[str]]] = {}
 
-        # Choose previous snapshot to compare against
-        prev_snapshot = self._prev if self._prev is not None else self.previous_metrics
-
-        # Pre-validate against configured delta rules (rules are defined per bare metric name)
         for full_key, current_value in metrics.items():
-            # Ensure keys are properly namespaced and valid
             assert metrics_config.is_namespaced_metric(full_key), f"Invalid metric key '{full_key}'"
 
-            # Lookup previous value for the same full key
             if full_key not in prev_snapshot:
-                # No previous value → no delta
                 deltas[full_key] = ("", None)
                 continue
 
-            # If either is non-numeric, we don't compute a delta
             prev_val = prev_snapshot[full_key]
             assert is_number(current_value) and is_number(prev_val), f"Invalid metric value '{current_value}' or '{prev_val}'"
 
-            # Apply delta rule if one exists for the bare metric name
             rule_fn = metrics_config.delta_rules_for_metric(full_key)
             if rule_fn is not None:
                 assert rule_fn(prev_val, current_value), (
                     f"Delta rule violation for '{full_key}': previous={prev_val}, current={current_value}."
                 )
 
-            # Compute display delta
             delta = float(current_value) - float(prev_val)
             if abs(delta) <= self.delta_tol:
                 deltas[full_key] = ("→0", "gray")
@@ -210,11 +186,6 @@ class MetricsTableLogger(LightningLoggerBase):
             )
             deltas[full_key] = (f"{arrow}{mag}", color)
 
-        # For any metric without previous, ensure there's a default entry
-        for k in metrics.keys():
-            if k not in deltas:
-                deltas[k] = ("", None)
-
         return deltas
 
     def _spark_for_key(self, full_key: str, width: int) -> str:
@@ -228,64 +199,108 @@ class MetricsTableLogger(LightningLoggerBase):
             return text
         return f"\x1b]8;;{url}\x1b\\{text}\x1b]8;;\x1b\\"
 
+    def _pad_right(self, text: str, width: int) -> str:
+        """Right-align text within given width (accounts for ANSI codes)."""
+        clean = _strip_ansi(text)
+        padding = " " * (width - len(clean))
+        return padding + text
+
+    def _pad_left(self, text: str, width: int) -> str:
+        """Left-align text within given width (accounts for ANSI codes)."""
+        clean = text[:width]
+        return f"{clean:<{width}}"
+
+    def _extract_alert_message(self, alert: object) -> str:
+        """Extract alert message from MetricAlert or string."""
+        try:
+            from utils.metrics_monitor import MetricAlert as _MetricAlert
+            if isinstance(alert, _MetricAlert):
+                return alert._id
+        except Exception:
+            pass
+        return str(alert) if not isinstance(alert, str) else alert
+
+    def _format_alert_display(self, alerts: Iterable[object]) -> str:
+        """Format alerts as a colored warning string."""
+        messages = [self._extract_alert_message(a) for a in alerts]
+        alerts_str = " | ".join([m for m in messages if m])
+        return _ansi(f"⚠️  {alerts_str}", "yellow", enable=self.colors_enabled) if alerts_str else ""
+
+    def _format_row_cells(
+        self,
+        metric_name: str,
+        metric_value_s: str,
+        chart_s: str,
+        alerts_s: str,
+        dimensions: _TableDimensions,
+    ) -> Tuple[str, str, str]:
+        """Format and pad the three main cells of a metrics row."""
+        metric_padded = self._pad_right(metric_value_s, dimensions.val_width)
+        chart_padded = self._pad_left(chart_s, self.chart_column_width)
+        alert_padded = self._pad_right(alerts_s, dimensions.alert_width)
+        return metric_padded, chart_padded, alert_padded
+
+    def _apply_row_highlight(
+        self,
+        row: str,
+        group_key: str,
+        metric_name: str,
+        alert_active: bool,
+    ) -> str:
+        """Apply background highlighting to a row based on alerts or config."""
+        highlight = False
+        row_bg_color = None
+
+        if alert_active:
+            highlight = True
+            row_bg_color = self.bgcolor_alert
+        elif metrics_config.style_for_metric(metric_name).get("highlight"):
+            highlight = True
+            row_bg_color = self.bgcolor_highlight
+
+        if highlight:
+            enable_bg = self.colors_enabled or alert_active
+            row = _apply_bg(row, row_bg_color or self.bgcolor_highlight, enable=enable_bg)
+            if alert_active and not enable_bg:
+                row = f"⚠️  {row}"
+
+        return row
+
     def _format_header_line(self, metrics: Dict[str, Any]) -> Optional[str]:
         """Format a header line showing run ID, FPS, and time elapsed."""
         if not self.run:
             return None
-
-        # Extract header metrics
-        roll_fps = metrics.get("train/roll/fps")
-        sys_fps = metrics.get("train/sys/timing/fps")
-        time_elapsed = metrics.get("train/sys/timing/time_elapsed")
 
         # Format run ID with hyperlink to wandb if available
         run_id = self.run.id
         try:
             import wandb
             if wandb.run is not None and wandb.run.url:
-                run_id_display = self._hyperlink(run_id, wandb.run.url)
-            else:
-                run_id_display = run_id
+                run_id = self._hyperlink(run_id, wandb.run.url)
         except Exception:
-            run_id_display = run_id
+            pass
 
-        # Build header parts
-        parts = [f"Run: {run_id_display}"]
+        parts = [f"Run: {run_id}"]
 
-        if roll_fps is not None:
-            roll_fps_str = number_to_string(roll_fps, precision=0, humanize=True)
-            parts.append(f"roll/fps: {roll_fps_str}")
+        if (roll_fps := metrics.get("train/roll/fps")) is not None:
+            parts.append(f"roll/fps: {number_to_string(roll_fps, precision=0, humanize=True)}")
 
-        if sys_fps is not None:
-            sys_fps_str = number_to_string(sys_fps, precision=0, humanize=True)
-            parts.append(f"sys/fps: {sys_fps_str}")
+        if (sys_fps := metrics.get("train/sys/timing/fps")) is not None:
+            parts.append(f"sys/fps: {number_to_string(sys_fps, precision=0, humanize=True)}")
 
-        if time_elapsed is not None:
-            # Format time elapsed as HH:MM:SS
-            elapsed_seconds = int(time_elapsed)
-            hours = elapsed_seconds // 3600
-            minutes = (elapsed_seconds % 3600) // 60
-            seconds = elapsed_seconds % 60
-            time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-            parts.append(f"elapsed: {time_str}")
+        if (time_elapsed := metrics.get("train/sys/timing/time_elapsed")) is not None:
+            elapsed = int(time_elapsed)
+            parts.append(f"elapsed: {elapsed // 3600:02d}:{(elapsed % 3600) // 60:02d}:{elapsed % 60:02d}")
 
         return " | ".join(parts)
 
     def _update_history(self, data: Dict[str, Any]) -> None:
         for k, v in data.items():
-            # Skip if the value is not a number
             if not is_number(v): continue
-
-            # Add the value to the history
-            val = float(v)
             hist = self._history.setdefault(k, [])
-            hist.append(val)
-
-            # Skip if the history is less than the capacity
-            if len(hist) <= self.sparkline_history_cap: continue
-
-            # Set the history for the key
-            self._history[k] = hist[-self.sparkline_history_cap :]
+            hist.append(float(v))
+            if len(hist) > self.sparkline_history_cap:
+                self._history[k] = hist[-self.sparkline_history_cap:]
 
     def _render_lines(self, lines: List[str]) -> None:
         text = "\n".join(lines)
@@ -331,28 +346,10 @@ class MetricsTableLogger(LightningLoggerBase):
                     metric_value_s = _ansi(metric_value_s, "bold", enable=self.colors_enabled)
 
                 delta_str, color_name = deltas_map.get(full_key, ("", None))
-                if delta_str:
-                    delta_disp = _ansi(delta_str, color_name, enable=self.colors_enabled)
-                    val_disp = f"{metric_value_s} {delta_disp}"
-                else:
-                    val_disp = metric_value_s
+                val_disp = f"{metric_value_s} {_ansi(delta_str, color_name, enable=self.colors_enabled)}" if delta_str else metric_value_s
 
                 chart_disp = self._spark_for_key(full_key, self.sparkline_width)
-
-                _alerts = active_alerts.get(full_key, [])
-                def _alert_message(a: object) -> str:
-                    # Supports MetricAlert dataclass and plain strings (tests)
-                    try:
-                        from utils.metrics_monitor import MetricAlert as _MetricAlert
-                        if isinstance(a, _MetricAlert):
-                            return a._id
-                    except Exception:
-                        pass
-                    if isinstance(a, str):
-                        return a
-                    return str(a)
-                alerts_str = " | ".join([_alert_message(alert) for alert in _alerts if _alert_message(alert)])
-                alert_disp = _ansi(f"⚠️  {alerts_str}", "yellow", enable=self.colors_enabled) if alerts_str else ""
+                alert_disp = self._format_alert_display(active_alerts.get(full_key, []))
 
                 formatted_sub[metric_name] = val_disp
                 charts_sub[metric_name] = chart_disp
@@ -379,29 +376,22 @@ class MetricsTableLogger(LightningLoggerBase):
 
     def _compute_dimensions(self, prepared: _PreparedSections) -> _TableDimensions:
         key_width = max((len(k) for k in prepared.key_candidates), default=0)
-        val_width = max((len(v) for v in prepared.val_candidates), default=0)
-        val_width = max(val_width, self.min_val_width)
+        val_width = max(max((len(v) for v in prepared.val_candidates), default=0), self.min_val_width)
         alert_width = max((len(v) for v in prepared.alert_candidates), default=0)
 
         def _sample_row(width: int) -> str:
-            return (
-                f"| {' ' * (self.indent + key_width)} | "
-                f"{' ' * width} | "
-                f"{' ' * self.chart_column_width} | "
-                f"{' ' * alert_width} |"
-            )
+            return f"| {' ' * (self.indent + key_width)} | {' ' * width} | {' ' * self.chart_column_width} | {' ' * alert_width} |"
 
         sample = _sample_row(val_width)
         if len(sample) < self.min_table_width:
             val_width += self.min_table_width - len(sample)
             sample = _sample_row(val_width)
 
-        border = "-" * len(sample)
         return _TableDimensions(
             key_width=key_width,
             val_width=val_width,
             alert_width=alert_width,
-            border=border,
+            border="-" * len(sample),
         )
 
     def _compose_lines(
@@ -414,10 +404,8 @@ class MetricsTableLogger(LightningLoggerBase):
     ) -> List[str]:
         lines: List[str] = [""]
 
-        # Add header line if provided
         if header_line:
-            lines.append(header_line)
-            lines.append("")
+            lines.extend([header_line, ""])
 
         key_width = dimensions.key_width
         value_width = dimensions.val_width
@@ -431,68 +419,35 @@ class MetricsTableLogger(LightningLoggerBase):
             metrics_chart_map = prepared.charts.get(group_key, {})
             metrics_alerts_map = prepared.alerts.get(group_key, {})
 
-            header = f"{group_key}/"
             alert_header = "alert" if alert_width else ""
-            header_line = (
-                f"| {header:<{self.indent + key_width}} | "
+            section_header = (
+                f"| {group_key + '/':<{self.indent + key_width}} | "
                 f"{'':>{value_width}} | "
                 f"{'':<{self.chart_column_width}} | "
                 f"{alert_header:<{alert_width}} |"
             )
-            lines.append(_ansi(header_line, "bold", enable=self.colors_enabled)) # TODO: what is self.color
+            lines.append(_ansi(section_header, "bold", enable=self.colors_enabled))
 
             for metric_name, metric_value_s in metrics_formatted_map.items():
-                # Pad metric value to the right
-                metric_value_clean_s = _strip_ansi(metric_value_s)
-                metric_value_len = len(metric_value_clean_s)
-                metric_value_padding_s = " " * (value_width - metric_value_len)
-                metric_value_padded_s = metric_value_padding_s + metric_value_s
-
-                # Pad chart to the left
                 chart_s = metrics_chart_map.get(metric_name, "")
-                chart_clean_s = chart_s[: self.chart_column_width]
-                chart_padded_s = f"{chart_clean_s:<{self.chart_column_width}}"
-
-                # Pad alert to the right
                 alerts_s = metrics_alerts_map.get(metric_name, "")
-                alert_clean = _strip_ansi(alerts_s)
-                alert_len = len(alert_clean)
-                alert_padding_s = " " * (alert_width - alert_len)
-                alert_padded = alert_padding_s + alerts_s
 
-                # Resolve row highlight
+                metric_padded, chart_padded, alert_padded = self._format_row_cells(
+                    metric_name, metric_value_s, chart_s, alerts_s, dimensions
+                )
+
                 namespaced_metric_name = metrics_config.add_namespace_to_metric(group_key, metric_name)
                 alert_active = namespaced_metric_name in active_alerts
                 key_cell = f"{metric_name:<{key_width}}"
-                
-                highlight = False
-                if alert_active:
-                    highlight = True
-                    row_bg_color = self.bgcolor_alert
-
-                if not highlight and metrics_config.style_for_metric(metric_name).get("highlight"):
+                if not alert_active and metrics_config.style_for_metric(metric_name).get("highlight"):
                     key_cell = _ansi(key_cell, "bold", enable=self.colors_enabled)
-                    highlight = True
-                    row_bg_color = self.bgcolor_highlight
-                    
-                key_padding_s = " " * self.indent
-                row = (
-                    f"| {key_padding_s}{key_cell} | {metric_value_padded_s} | {chart_padded_s} | {alert_padded} |"
-                )
 
-                if highlight:
-                    enable_bg = self.colors_enabled or alert_active
-                    row = _apply_bg(row, row_bg_color or self.bgcolor_highlight, enable=enable_bg)
-                    if alert_active and not enable_bg:
-                        row = f"⚠️  {row}"
-
-                # Add row to lines
+                key_padding = " " * self.indent
+                row = f"| {key_padding}{key_cell} | {metric_padded} | {chart_padded} | {alert_padded} |"
+                row = self._apply_row_highlight(row, group_key, metric_name, alert_active)
                 lines.append(row)
 
-        # Add border to lines
         lines.append(dimensions.border)
-
-        # Return lines
         return lines
 
     def _render_table(self, metrics: Dict[str, Any]) -> None:

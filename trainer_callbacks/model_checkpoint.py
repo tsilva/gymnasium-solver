@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 import pytorch_lightning as pl
-import torch
 
 from utils.io import write_json
 from utils.metrics_serialization import prepare_metrics_for_json
@@ -66,8 +65,9 @@ class ModelCheckpointCallback(pl.Callback):
         # (this allows run to be agnostic to the contents of the checkpoint data)
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_dir = Path(tmp_dir)
-            # TODO: softcode, let agent decide what to save
-            torch.save({"model_state_dict": agent.policy_model.state_dict()}, tmp_dir / "policy.ckpt")
+
+            # Delegate checkpoint saving to agent (model, optimizer, RNG states, etc.)
+            agent.save_checkpoint(tmp_dir)
 
             # Serialize metrics with configured precision and key priority
             json_metrics = prepare_metrics_for_json(metrics)

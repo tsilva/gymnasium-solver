@@ -20,6 +20,57 @@ from utils.config import Config
 from utils.training_summary import present_prefit_summary
 from utils.environment_registry import list_available_environments
 
+def _parse_config_overrides(override_list):
+    """Parse KEY=VALUE strings into dict of overrides.
+
+    Handles type inference:
+    - Numeric values: converted to int or float
+    - Boolean values: 'true'/'false' (case-insensitive) → bool
+    - Otherwise: kept as string
+    """
+    if not override_list:
+        return {}
+
+    overrides = {}
+    for item in override_list:
+        if "=" not in item:
+            raise ValueError(f"Invalid override format: {item}. Expected KEY=VALUE")
+
+        key, value = item.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+
+        # Type inference
+        if value.lower() in ("true", "false"):
+            overrides[key] = value.lower() == "true"
+        elif value.replace(".", "", 1).replace("-", "", 1).isdigit():
+            # Numeric value
+            overrides[key] = float(value) if "." in value else int(value)
+        else:
+            # String value
+            overrides[key] = value
+
+    return overrides
+
+def _apply_config_overrides(config, overrides):
+    """Apply dict of overrides to config object.
+
+    Validates that each key exists as a config field before applying.
+    """
+    if not overrides:
+        return config
+
+    from dataclasses import fields
+    valid_fields = {f.name for f in fields(config)}
+
+    for key, value in overrides.items():
+        if key not in valid_fields:
+            raise ValueError(f"Invalid config field: {key}. Not a valid Config attribute.")
+        setattr(config, key, value)
+        print(f"Override applied: {key} = {value}")
+
+    return config
+
 def _maybe_merge_wandb_config(config, *, wandb_sweep_flag: bool):
     """Optionally merge W&B sweep overrides into Config.
 
@@ -174,7 +225,12 @@ def _launch_training_resume(args) -> None:
         config = run.load_config()
         state = None
 
-    # Allow overriding max_env_steps from CLI
+    # Apply CLI overrides (generic --override flags)
+    if hasattr(args, 'overrides') and args.overrides:
+        overrides_dict = _parse_config_overrides(args.overrides)
+        config = _apply_config_overrides(config, overrides_dict)
+
+    # Allow overriding max_env_steps from CLI (takes precedence over --override)
     cli_max_env_steps = int(args.max_env_steps) if args.max_env_steps else None
     if cli_max_env_steps is not None:
         print(f"Overriding max_env_steps: {config.max_env_steps} → {cli_max_env_steps}")
@@ -314,11 +370,16 @@ def launch_training_from_args(args) -> None:
     # In case this is a wandb sweep, merge the sweep config
     config = _maybe_merge_wandb_config(config, wandb_sweep_flag=args.wandb_sweep)
 
-    # When running with a debugger, force single-env, 
+    # When running with a debugger, force single-env,
     # in-process execution (easier to debug)
     config = _maybe_merge_debugger_config(config)
 
-    # Override max env steps if provided through CLI
+    # Apply CLI overrides (generic --override flags)
+    if hasattr(args, 'overrides') and args.overrides:
+        overrides_dict = _parse_config_overrides(args.overrides)
+        config = _apply_config_overrides(config, overrides_dict)
+
+    # Override max env steps if provided through CLI (takes precedence over --override)
     cli_max_env_steps = int(args.max_env_steps) if args.max_env_steps else None
     if cli_max_env_steps is not None: config.max_env_steps = cli_max_env_steps
 

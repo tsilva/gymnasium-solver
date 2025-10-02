@@ -3,6 +3,7 @@
 # NEXT
 
 - TEST: logged to correct projects
+- TEST: tune with agent
 - TEST: are sweeps still working?
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 

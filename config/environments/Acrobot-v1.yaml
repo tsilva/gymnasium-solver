@@ -53,6 +53,7 @@ _ppo: &ppo
   n_steps: 256
   gae_lambda: 0.94
   ent_coef: 0.0
+  clip_range: 0.3
 
 # Standard PPO on Acrobot - baseline configuration for acrobot swing-up task
 ppo:

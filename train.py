@@ -31,6 +31,13 @@ def main():
         help="Override config max_env_steps (total environment steps/frames). Accepts integers or scientific notation.",
     )
     parser.add_argument(
+        "--override",
+        action="append",
+        dest="overrides",
+        metavar="KEY=VALUE",
+        help="Override any config field (e.g., --override policy_lr=0.001 --override batch_size=64). Can be specified multiple times.",
+    )
+    parser.add_argument(
         "--list-envs",
         nargs="?",
         const="",

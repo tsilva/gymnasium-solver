@@ -176,6 +176,10 @@ async def handle_list_tools() -> list[types.Tool]:
                         "type": "integer",
                         "description": "Override max environment steps"
                     },
+                    "overrides": {
+                        "type": "object",
+                        "description": "Dict of config field overrides (e.g., {'policy_lr': 0.001, 'batch_size': 64})"
+                    },
                     "quiet": {
                         "type": "boolean",
                         "description": "Run in quiet mode (default: true)"
@@ -313,6 +317,7 @@ async def handle_call_tool(
             result = await start_training(
                 args["config_id"],
                 args.get("max_env_steps"),
+                args.get("overrides"),
                 args.get("quiet", True),
                 args.get("wandb_mode", "disabled")
             )
@@ -536,6 +541,7 @@ async def get_run_logs(run_id: str, lines: int = 100) -> Dict[str, Any]:
 async def start_training(
     config_id: str,
     max_env_steps: Optional[int] = None,
+    overrides: Optional[Dict[str, Any]] = None,
     quiet: bool = True,
     wandb_mode: str = "disabled"
 ) -> Dict[str, Any]:
@@ -546,6 +552,11 @@ async def start_training(
 
     if max_env_steps:
         cmd.extend(["--max-env-steps", str(max_env_steps)])
+
+    # Add config overrides
+    if overrides:
+        for key, value in overrides.items():
+            cmd.extend(["--override", f"{key}={value}"])
 
     # Set environment variables
     env = dict(os.environ)

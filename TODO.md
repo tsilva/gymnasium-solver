@@ -3,8 +3,9 @@
 # NEXT
 
 - REFACTOR: ensure agents are themselves responsible for saving all of their artifacts to the run, in the same fashion it should also be possible to load back an agent by pointing to a run dir. NOTE: when saving/loading we need to make sure that we can get the agent back to the exact training state it was in when it was saved.
-- REFACTOR: we currently have vectorization_mode = "auto" / "sync" / "async". We should add a fourth option "native" that uses the native vectorization if the env is atari and rgb. This makes things clearer and more consistent. However do take into account that when passing the flag to gym.make_env you still have to convert it to None. Also assert that user cant request native when not atari+rgb.
 - REFACTOR: drop all SB3 integration, use alternatives provided by gymnasium or use our own instead
+
+- REFACTOR: we currently have eval recording disabled for the following reason. We only require a video when a "best" checkpoint is saved. So the way we have things we are currently wasting a lot of time in validaiton recording videos that we aren't going to need. Think deeply on how we could structure things such that we only record videos along with saved checkpoints (but based on the rolllout that resulted in that checkpioint). Don'y make any changes without showing me the plan first.
 
 - TODO: dont use eval recording freq, instead make the checkpointer render when required
 
@@ -12,14 +13,13 @@
 
 - THINK: think about how we define training 
 
-- FEAT: add support for cosine scheduler
+- FEAT: add support for cosine scheduler, lightning schedulers
 - inspect mc_returns and gae for unifinished episodes
 - TEST: do highlighted rows also show alerts correctly?
-- CHECK: ensure model runs validation in eval mode (rollout collector)
+
+
 - BUG: inspect not working because it cant retrieve action labels
-- FEAT: use torch lightning schedulers, but key them to RL cycle
 - BUG: investigate mc_return in pong, seems busted
-- FEAT: add support for scheduler min and progress decoupled from timesteps, perhaps by specifying percentage -> value tuples and have the scheduler interpolate between those, allowing dynamic linear schedules that perform differently across the training (eg: higher early, lower late); generalize decay schedule further by specifying decay start
 - FEAT: add ability to tell LLM to inspect last N runs by providing a run registry json that has timestamps and other metadata, always sort by timestamp descending, ensure lock on write
 - BUG: env smoke tests not passing
 - FEAT: add support for agents to handle their own save/load logic

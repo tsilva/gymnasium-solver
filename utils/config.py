@@ -107,6 +107,7 @@ class Config:
 
     # Vectorization mode for parallel environments
     # - "auto": Automatically select based on environment (uses ALE native for Atari RGB, sync otherwise)
+    # - "native": Use native vectorization (only valid for Atari RGB environments)
     # - "sync": Synchronous vectorization (SyncVectorEnv)
     # - "async": Asynchronous vectorization with subprocesses (AsyncVectorEnv)
     vectorization_mode: Optional[str] = "auto"
@@ -507,6 +508,18 @@ class Config:
 
         if self.devices is not None and not (isinstance(self.devices, int) or self.devices == "auto"):
             raise ValueError("devices may be an int, 'auto', or None.")
+
+        # Validate vectorization_mode
+        if self.vectorization_mode not in {"auto", "native", "sync", "async", None}:
+            raise ValueError(f"vectorization_mode must be 'auto', 'native', 'sync', 'async', or None, got: {self.vectorization_mode}")
+
+        # Validate that 'native' is only used for Atari RGB environments
+        if self.vectorization_mode == "native":
+            from utils.environment import is_alepy_env_id
+            if not is_alepy_env_id(self.env_id):
+                raise ValueError(f"vectorization_mode='native' is only valid for Atari environments (ALE/*), got env_id: {self.env_id}")
+            if self.obs_type != Config.ObsType.rgb:
+                raise ValueError(f"vectorization_mode='native' is only valid for RGB observations, got obs_type: {self.obs_type}")
 
         if self.n_envs is not None and self.n_steps is not None and self.batch_size is not None:
             rollout_size = self.n_envs * self.n_steps

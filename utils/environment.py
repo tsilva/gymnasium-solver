@@ -135,12 +135,12 @@ def build_env(
         gym.register_envs(ale_py)
 
     # ALE native vectorization for RGB environments (10x faster than standard vectorization)
-    # When vectorization_mode="auto" and env is ALE RGB, use ALE native vectorization
+    # When vectorization_mode="auto" or "native" and env is ALE RGB, use ALE native vectorization
     # (includes grayscale, resize, frame_stack=4 by default)
     # Only supported for rgb obs_type; other obs_types (ram, objects) use standard vectorization
     # Disable native vectorization if vectorization_mode='sync' or 'async' is explicitly requested
     _is_ale_rgb_rgb_env = _is_alepy_env and obs_type == "rgb"
-    _use_ale_native_vectorization = _is_ale_rgb_rgb_env and vectorization_mode == "auto"
+    _use_ale_native_vectorization = _is_ale_rgb_rgb_env and vectorization_mode in ("auto", "native")
 
     # TODO: break if/else into separate functions
     # Create the vectorized environment

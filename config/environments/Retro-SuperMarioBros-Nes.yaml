@@ -3,7 +3,7 @@
 # =====================
 # Environment Specification
 # =====================
-spec:
+spec: &spec
   source: https://github.com/Farama-Foundation/stable-retro
   description: >
     Side-scrolling platformer. Guide Mario through levels to reach the flagpole

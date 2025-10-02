@@ -3,7 +3,7 @@
 # =====================
 # Environment Specification
 # =====================
-spec:
+spec: &spec
   source: https://gymnasium.farama.org/environments/toy_text/taxi/
   description: Navigate a taxi to pick up and drop off a passenger at a destination.
 
@@ -56,21 +56,7 @@ _ppo: &ppo
   normalize_advantages: "batch"
   vf_coef: 0.25
 
-_reinforce: &reinforce
-  <<: *env
-  algo_id: reinforce
-  max_env_steps: 5e5
-  n_steps: 256
-  batch_size: 32
-  policy_lr: 0.01
-  hidden_dims: [128]
-
 # PPO on Taxi - standard configuration for taxi navigation task
 ppo:
   <<: *ppo
   description: "PPO on Taxi - standard configuration for taxi navigation task"
-
-# REINFORCE on Taxi - basic policy gradient for taxi navigation
-reinforce:
-  <<: *reinforce
-  description: "REINFORCE on Taxi - basic policy gradient for taxi navigation"

@@ -1,7 +1,7 @@
 # =====================
 # Environment Specification
 # =====================
-spec:
+spec: &spec
   source: local gym_envs.mab_env.MultiArmedBanditEnv
   description: Stateless multi-armed bandit; pull an arm to receive a stochastic reward.
 
@@ -53,7 +53,17 @@ _ppo: &ppo
   clip_range: 0.2
   normalize_advantages: "rollout"
 
+_reinforce: &reinforce
+  <<: *env
+  algo_id: reinforce
+  policy_lr: {start: 4e-2, end: 0.0}
+
 # PPO on Multi-Armed Bandit - standard configuration for bandit problem
 ppo:
   <<: *ppo
   description: "PPO on Multi-Armed Bandit - standard configuration for bandit problem"
+
+# REINFORCE on Multi-Armed Bandit - smoke testing configuration
+reinforce:
+  <<: *reinforce
+  description: "REINFORCE on Multi-Armed Bandit - smoke testing configuration"

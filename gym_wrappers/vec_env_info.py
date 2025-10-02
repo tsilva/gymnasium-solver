@@ -21,21 +21,13 @@ class VecEnvInfoWrapper(VectorWrapper):
 
     def _ale_fallbacks(self, env) -> dict[str, Callable]:
         """Map of fallback implementations for ALE native vectorization."""
-        spec = getattr(env, "_spec", None)
+        spec = env._spec
 
         def get_return_threshold():
-            if spec and isinstance(spec, dict):
-                return spec.get("returns", {}).get("threshold_solved")
-            elif spec and hasattr(spec, "get_return_threshold"):
-                return spec.get_return_threshold()
-            return None
+            return spec.get_return_threshold()
 
         def get_max_episode_steps():
-            if spec and isinstance(spec, dict):
-                return spec.get("time_limit")
-            elif spec and hasattr(spec, "get_max_episode_steps"):
-                return spec.get_max_episode_steps()
-            return None
+            return spec.get_max_episode_steps()
 
         def is_rgb_env():
             return getattr(env, "_obs_type", None) == "rgb"
@@ -58,7 +50,7 @@ class VecEnvInfoWrapper(VectorWrapper):
 
     def _general_fallbacks(self, env) -> dict[str, Callable]:
         """General fallback implementations for common getter methods."""
-        spec = getattr(env, "_spec", None) or getattr(env, "spec", None)
+        spec = env._spec
 
         def get_spec():
             return spec

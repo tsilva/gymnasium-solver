@@ -1,7 +1,7 @@
 # =====================
 # Environment Specification
 # =====================
-spec:
+spec: &spec
   source: https://github.com/mwydmuch/ViZDoom/tree/master/scenarios#health-gathering
   description: Survive in a toxic environment by gathering health vials to avoid death.
   goal: survive in a toxic environment by gathering health vials to avoid death.
@@ -48,6 +48,7 @@ spec:
 # =====================
 
 _env: &env
+  spec: *spec
   env_id: VizDoom-HealthGathering-v0
   render_mode: 'rgb_array'
   policy: 'cnn_actorcritic'

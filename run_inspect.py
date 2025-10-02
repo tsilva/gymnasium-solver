@@ -144,7 +144,7 @@ def run_episode(
         "frame_stack": getattr(config, "frame_stack", None),
         "normalize_obs": getattr(config, "normalize_obs", None),
         "normalize_reward": getattr(config, "normalize_reward", None),
-        "spec_id": (str(getattr(env_spec_obj, "id", None)) if env_spec_obj is not None else None),
+        "spec_id": env_spec_obj.id,
         "action_labels": action_labels,
     }
 
@@ -335,6 +335,9 @@ def run_episode(
         while t < max_steps:
             # Capture current frame BEFORE stepping (VecEnv resets on done)
             frame = env.render()
+            # Handle vectorized env render output (tuple/list of frames)
+            if isinstance(frame, (tuple, list)) and len(frame) > 0:
+                frame = frame[0]
             if isinstance(frame, np.ndarray):
                 if frame.dtype != np.uint8:
                     frame = np.clip(frame, 0, 255).astype(np.uint8)

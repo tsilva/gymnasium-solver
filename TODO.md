@@ -16,7 +16,7 @@
 - TODO: learn how to read gradient graphs
 - FEAT: Create MCP server that provides useful tools for claude code to be able to run training sessions and inspect training runs. This tool should have tools like the ability to list available environments and configs, list runs, start a run, etc. Ask agent to figure out exactly which tools would be optimal for it to be easily launch, stop and inspect training runs then add them.
 - FEAT: zip and upload runs to wandb
-- FEAT: add support for run_play to run with random actions and/or user actions
+- FEAT: add support for run_play to run with random actions or user actions (map actions to number keys)
 - FEAT: add support for running sweep from existing run (using previous resume support)
 - FEAT: allow downloading old runs from wandb when not available locally
 - FEAT: add support to only start eval when ep_rew_mean crosses eval threshold (or at fraction of)

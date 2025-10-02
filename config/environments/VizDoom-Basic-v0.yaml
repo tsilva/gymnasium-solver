@@ -1,7 +1,7 @@
 # =====================
 # Environment Specification
 # =====================
-spec:
+spec: &spec
   source: https://github.com/mwydmuch/ViZDoom/blob/master/scenarios/basic.cfg
   description: Simple scenario. Agent must pick up a can of health.
 
@@ -34,6 +34,7 @@ spec:
 # =====================
 
 _env: &env
+  spec: *spec
   env_id: VizDoom-Basic-v0
   render_mode: 'rgb_array'
   policy: 'cnn_actorcritic'

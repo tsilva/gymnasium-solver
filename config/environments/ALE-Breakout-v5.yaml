@@ -3,7 +3,7 @@
 # =====================
 # Environment Specification
 # =====================
-spec: &spec_base
+spec: &spec
   source: https://ale.farama.org/environments/breakout/
   description: Deflect the ball with the paddle to clear bricks without losing lives.
   goal: clear all bricks without losing lives
@@ -61,7 +61,7 @@ spec: &spec_base
 # Spec Anchors
 # =====================
 _spec_objects: &spec_objects
-  <<: *spec_base
+  <<: *spec
 
 # =====================
 # Configuration Anchors

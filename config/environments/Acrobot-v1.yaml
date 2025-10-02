@@ -3,7 +3,7 @@
 # =====================
 # Environment Specification
 # =====================
-spec:
+spec: &spec
   source: https://gymnasium.farama.org/environments/classic_control/acrobot/
   description: Swing the double pendulum to raise the end effector above a threshold.
   goal: end effector above threshold height
@@ -54,21 +54,7 @@ _ppo: &ppo
   gae_lambda: 0.94
   ent_coef: 0.0
 
-_reinforce: &reinforce
-  <<: *env
-  algo_id: reinforce
-  n_envs: 16
-  n_steps: 512
-  policy_lr: 5e-4
-  hidden_dims: [128, 128]
-  max_epochs: 2000
-
 # Standard PPO on Acrobot - baseline configuration for acrobot swing-up task
 ppo:
   <<: *ppo
   description: "Standard PPO on Acrobot - baseline configuration for acrobot swing-up task"
-
-# Standard REINFORCE on Acrobot - basic policy gradient baseline
-reinforce:
-  <<: *reinforce
-  description: "Standard REINFORCE on Acrobot - basic policy gradient baseline"

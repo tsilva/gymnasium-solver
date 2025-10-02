@@ -1,7 +1,7 @@
 # =====================
 # Environment Specification
 # =====================
-spec:
+spec: &spec
   source: https://vizdoom.cs.put.edu.pl/competitions/cig-2017/scenarios/#deadly-corridor
   description: Reach the armor vest through a corridor of enemies; survive and progress forward.
 
@@ -35,6 +35,7 @@ spec:
 # =====================
 
 _env: &env
+  spec: *spec
   env_id: VizDoom-DeadlyCorridor-v0
   render_mode: 'rgb_array'
   policy: 'cnn_actorcritic'

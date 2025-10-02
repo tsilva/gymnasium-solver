@@ -3,8 +3,7 @@ from __future__ import annotations
 import math
 import os
 import shutil
-from collections.abc import Mapping
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 from gymnasium.vector import VectorWrapper
@@ -164,58 +163,36 @@ class VecObsBarPrinter(VectorWrapper):
         return obs, rewards, terminated, truncated, infos
 
     # ---- Internal helpers ----
-    def _parse_range_from_comp(self, comp: dict) -> Tuple[Optional[float], Optional[float]]:
-        """Parse range from a component dict, trying 'range' key first, then 'values'."""
-        if "range" in comp:
-            rng = comp.get("range")
-            if isinstance(rng, Sequence) and len(rng) == 2:
-                return _parse_inf(rng[0]), _parse_inf(rng[1])
-        elif "values" in comp:
-            vals = comp.get("values")
-            if isinstance(vals, Sequence) and len(vals) > 0:
-                try:
-                    return float(min(float(v) for v in vals)), float(max(float(v) for v in vals))
-                except Exception:
-                    pass
-        return None, None
-
     def _init_from_spec(self) -> None:
-        # VecEnvInfoWrapper provides get_spec(); if missing, we skip labels
-        spec: Optional[Dict[str, Any]] = None
-        try:
-            if hasattr(self.env, "get_spec"):
-                spec_obj = self.env.get_spec()
-                if hasattr(spec_obj, "as_dict"):
-                    spec = spec_obj.as_dict()
-                elif isinstance(spec_obj, Mapping):
-                    spec = dict(spec_obj)
-        except Exception:
-            spec = None
-        if not isinstance(spec, dict):
-            return
+        # VecEnvInfoWrapper provides get_spec(); all envs must have it
+        spec = self.env.get_spec()
 
-        obs_space = spec.get("observation_space")
-        if not isinstance(obs_space, dict):
+        # Extract observation components from spec
+        if spec.observation_space is None:
             return
-        default_name = obs_space.get("default")
-        variants = obs_space.get("variants", {})
-        variant = variants.get(default_name) if isinstance(variants, dict) else None
-        if not isinstance(variant, dict):
+        obs_space = spec.observation_space
+        if obs_space.default is None:
             return
-        components = variant.get("components")
-        if not isinstance(components, Sequence):
+        variant = obs_space.variants.get(obs_space.default)
+        if variant is None or not variant.components:
             return
 
         labels: List[str] = []
         ranges: List[Tuple[Optional[float], Optional[float]]] = []
-        for comp in components:
-            if not isinstance(comp, dict):
+        for comp in variant.components:
+            if comp.name is None:
                 continue
-            name = comp.get("name")
-            if not isinstance(name, str):
-                continue
-            labels.append(str(name))
-            ranges.append(self._parse_range_from_comp(comp))
+            labels.append(comp.name)
+            # Extract range from component
+            if comp.range is not None:
+                ranges.append((float(comp.range[0]), float(comp.range[1])))
+            elif comp.values:
+                try:
+                    ranges.append((float(min(comp.values)), float(max(comp.values))))
+                except (ValueError, TypeError):
+                    ranges.append((None, None))
+            else:
+                ranges.append((None, None))
 
         if labels:
             self._labels = labels
@@ -226,36 +203,31 @@ class VecObsBarPrinter(VectorWrapper):
         # Parse action space metadata (discrete count, optional labels)
         self._parse_action_metadata_from_spec(spec)
 
-    def _parse_reward_range_from_spec(self, spec: Optional[dict]) -> None:
-        try:
-            rewards = spec.get("rewards") if isinstance(spec, dict) else None
-            if isinstance(rewards, dict):
-                rr = rewards.get("range")
-                if isinstance(rr, Sequence) and len(rr) == 2:
-                    lo = _parse_inf(rr[0])
-                    hi = _parse_inf(rr[1])
-                    self._reward_range = (lo, hi)
-        except Exception:
-            pass
+    def _parse_reward_range_from_spec(self, spec) -> None:
+        rr = spec.get_reward_range()
+        if rr is not None and len(rr) == 2:
+            lo = _parse_inf(rr[0])
+            hi = _parse_inf(rr[1])
+            self._reward_range = (lo, hi)
 
-    def _parse_action_metadata_from_spec(self, spec: Optional[dict]) -> None:
-        try:
-            act = spec.get("action_space") if isinstance(spec, dict) else None
-            if isinstance(act, dict):
-                if "discrete" in act and isinstance(act.get("discrete"), (int, float)):
-                    self._action_discrete_n = int(act.get("discrete"))
-                labels_map = act.get("labels")
-                if isinstance(labels_map, dict):
-                    parsed: Dict[int, str] = {}
-                    for k, v in labels_map.items():
-                        try:
-                            parsed[int(k)] = str(v)
-                        except Exception:
-                            continue
-                    if parsed:
-                        self._action_labels = parsed
-        except Exception:
-            pass
+    def _parse_action_metadata_from_spec(self, spec) -> None:
+        if spec.action_space is not None:
+            if spec.action_space.discrete is not None:
+                self._action_discrete_n = int(spec.action_space.discrete)
+
+        action_labels = spec.get_action_labels()
+        if action_labels:
+            parsed: Dict[int, str] = {}
+            for k, v in action_labels.items():
+                if isinstance(k, int):
+                    parsed[k] = str(v)
+                elif isinstance(k, str):
+                    try:
+                        parsed[int(k)] = str(v)
+                    except ValueError:
+                        pass
+            if parsed:
+                self._action_labels = parsed
 
     def _maybe_init_from_obs(self, obs: np.ndarray) -> None:
         if self._initialized:
@@ -451,5 +423,5 @@ class VecObsBarPrinter(VectorWrapper):
             name = labels[i] if i < len(labels) else f"obs[{i}]"
             val = float(obs_arr[i])
             lo, hi = ranges[i] if i < len(ranges) else (None, None)
-            bar, ratio, (lo_eff, hi_eff) = self._format_bar(val, lo, hi, i)
+            bar, _ratio, (lo_eff, hi_eff) = self._format_bar(val, lo, hi, i)
             self._print_bar_line(name, f"{val:+.4f}", bar, lo_eff, hi_eff, label_w, value_w)

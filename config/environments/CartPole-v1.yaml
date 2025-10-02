@@ -3,7 +3,7 @@
 # =====================
 # Environment Specification
 # =====================
-spec:
+spec: &spec
   source: https://gymnasium.farama.org/environments/classic_control/cart_pole/
   description: Balance a pole on a moving cart by applying forces to the cart.
 
@@ -38,6 +38,7 @@ spec:
 # =====================
 
 _env: &env
+  spec: *spec
   env_id: CartPole-v1
   seed: 42
   max_env_steps: 3e5

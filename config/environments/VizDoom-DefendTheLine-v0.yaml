@@ -1,7 +1,7 @@
 # =====================
 # Environment Specification
 # =====================
-spec:
+spec: &spec
   source: https://github.com/mwydmuch/ViZDoom/tree/master/scenarios#defend-the-line
   description: Defend a line by eliminating enemies approaching from a single direction.
 
@@ -35,6 +35,7 @@ spec:
 # =====================
 
 _env: &env
+  spec: *spec
   env_id: VizDoom-DefendTheLine-v0
   render_mode: 'rgb_array'
   policy: 'cnn_actorcritic'

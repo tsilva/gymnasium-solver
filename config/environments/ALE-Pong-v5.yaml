@@ -3,7 +3,7 @@
 # =====================
 # Environment Specification
 # =====================
-spec: &spec_base
+spec: &spec
   source: https://ale.farama.org/environments/pong/
   description: Control right paddle; score when ball passes opponent, lose when it passes you.
 
@@ -58,7 +58,7 @@ spec: &spec_base
 # Spec Anchors
 # =====================
 _spec_objects: &spec_objects
-  <<: *spec_base
+  <<: *spec
   action_space:
     discrete: 3
     labels: {0: NOOP, 1: RIGHT, 2: LEFT}
@@ -84,7 +84,7 @@ _spec_objects: &spec_objects
           - {name: LastAction.LEFT, range: [0.0, 1.0]}
 
 _spec_rgb: &spec_rgb
-  <<: *spec_base
+  <<: *spec
   observation_space:
     default: rgb
     variants:

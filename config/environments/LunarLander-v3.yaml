@@ -1,7 +1,7 @@
 # =====================
 # Environment Specification
 # =====================
-spec:
+spec: &spec
   source: https://gymnasium.farama.org/environments/box2d/lunar_lander/
   description: Land a lunar module safely between flags on the surface.
 

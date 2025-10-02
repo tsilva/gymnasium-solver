@@ -3,7 +3,7 @@
 # =====================
 # Environment Specification
 # =====================
-spec:
+spec: &spec
   source: https://gymnasium.farama.org/environments/classic_control/mountain_car/
   description: Drive up the mountain by building momentum on a 1D track.
 
@@ -61,21 +61,10 @@ _ppo: &ppo
   n_epochs: 10
   policy_lr: 1e-4
 
-_reinforce: &reinforce
-  <<: *env
-  algo_id: reinforce
-  n_envs: 8
-  policy_lr: 1e-3
-
 # Standard PPO on MountainCar - baseline configuration for mountain car task
 ppo:
   <<: *ppo
   description: "Standard PPO on MountainCar - baseline configuration for mountain car task"
-
-# Standard REINFORCE on MountainCar - basic policy gradient baseline
-reinforce:
-  <<: *reinforce
-  description: "Standard REINFORCE on MountainCar - basic policy gradient baseline"
 
 # PPO with reward shaping - uses shaped rewards to guide learning up the mountain
 ppo_rewardshaped:
@@ -88,14 +77,3 @@ ppo_rewardshaped:
   hidden_dims: [256, 256]
   max_epochs: 1000
   description: "PPO with reward shaping - uses shaped rewards to guide learning up the mountain"
-
-# REINFORCE with reward shaping - uses shaped rewards with policy gradient
-reinforce_rewardshaped:
-  <<: [*env_rewardshaped, *reinforce]
-  max_env_steps: 1e6
-  normalize_obs: true
-  batch_size: 128
-  gamma: 0.999
-  hidden_dims: [128, 128]
-  max_epochs: 2000
-  description: "REINFORCE with reward shaping - uses shaped rewards with policy gradient"

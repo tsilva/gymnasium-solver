@@ -3,7 +3,7 @@
 # =====================
 # Environment Specification
 # =====================
-spec:
+spec: &spec
   source: https://gymnasium.farama.org/environments/toy_text/frozen_lake/
   description: Navigate a grid world from start to goal without falling into holes.
 
@@ -57,13 +57,6 @@ _ppo: &ppo
   n_epochs: 10
   policy_lr: 9e-3
 
-_reinforce: &reinforce
-  <<: *env
-  algo_id: reinforce
-  max_env_steps: 2e5
-  batch_size: 64
-  policy_lr: 0.005
-
 # PPO on FrozenLake - standard configuration for grid navigation task
 ppo:
   <<: *ppo
@@ -73,13 +66,3 @@ ppo:
 ppo_deterministic:
   <<: [*env_deterministic, *ppo]
   description: "PPO on FrozenLake deterministic - no slippery ice, easier navigation"
-
-# REINFORCE on FrozenLake - basic policy gradient for grid navigation
-reinforce:
-  <<: *reinforce
-  description: "REINFORCE on FrozenLake - basic policy gradient for grid navigation"
-
-# REINFORCE on FrozenLake deterministic - no slippery ice, easier navigation
-reinforce_deterministic:
-  <<: [*env_deterministic, *reinforce]
-  description: "REINFORCE on FrozenLake deterministic - no slippery ice, easier navigation"

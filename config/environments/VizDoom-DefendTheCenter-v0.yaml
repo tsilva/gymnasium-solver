@@ -1,7 +1,7 @@
 # =====================
 # Environment Specification
 # =====================
-spec:
+spec: &spec
   source: https://github.com/mwydmuch/ViZDoom/tree/master/scenarios#defend-the-center
   description: Stand in the center and defend against approaching enemies from all sides.
 
@@ -34,6 +34,7 @@ spec:
 # =====================
 
 _env: &env
+  spec: *spec
   env_id: VizDoom-DefendTheCenter-v0
   render_mode: 'rgb_array'
   policy: 'cnn_actorcritic'

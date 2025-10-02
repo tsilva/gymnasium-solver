@@ -2,6 +2,7 @@
 
 # NEXT
 
+- TASK: run stable-retro compile.sh
 - TEST: logged to correct projects
 - TEST: tune with agent
 - TEST: are sweeps still working?

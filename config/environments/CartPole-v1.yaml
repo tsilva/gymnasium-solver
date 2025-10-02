@@ -57,7 +57,7 @@ _ppo: &ppo
   <<: *env
   algo_id: ppo
   max_env_steps: 50000
-  n_steps: 32
+  n_steps: 32  # TODO: try 64, should be faster
   batch_size: 0.25
   n_epochs: 20
   gae_lambda: 0.8

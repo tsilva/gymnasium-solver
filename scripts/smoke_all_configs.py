@@ -5,12 +5,17 @@ Usage:
     python scripts/smoke_all_configs.py --epochs 5         # 5 epochs per config
     python scripts/smoke_all_configs.py --filter CartPole  # only configs matching 'CartPole'
     python scripts/smoke_all_configs.py --limit 3          # stop after 3 configs
+    python scripts/smoke_all_configs.py --workers 4        # run 4 tests in parallel
 """
 
 from __future__ import annotations
 
 import argparse
+import io
+import os
 import sys
+from contextlib import redirect_stdout, redirect_stderr
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional
 
@@ -54,49 +59,67 @@ def discover_all_configs() -> list[tuple[str, str]]:
     return sorted(all_configs)
 
 
-def smoke_test_config(env_id: str, variant_id: str, n_epochs: int) -> tuple[bool, Optional[str]]:
+def smoke_test_config(env_id: str, variant_id: str, n_epochs: int) -> tuple[str, bool, Optional[str]]:
     """Train a single config for N epochs.
 
     Returns:
-        (success, error_message) tuple. success=True if training completes without exception.
+        (config_spec, success, error_message) tuple. success=True if training completes without exception.
     """
+    config_spec = f"{env_id}:{variant_id}"
+
+    # Redirect all output to buffers
+    stdout_buffer = io.StringIO()
+    stderr_buffer = io.StringIO()
+
     try:
-        # Load config
-        config = load_config(env_id, variant_id)
+        with redirect_stdout(stdout_buffer), redirect_stderr(stderr_buffer):
+            # Suppress session logs and checkpoint logs for cleaner parallel output
+            os.environ["VIBES_DISABLE_SESSION_LOGS"] = "1"
+            os.environ["VIBES_QUIET"] = "1"
 
-        # Disable W&B for smoke tests (avoid polluting workspace)
-        config.enable_wandb = False
-        config.quiet = True
+            # Load config
+            config = load_config(env_id, variant_id)
 
-        # Force n_envs=2 and sync vectorization for faster smoke tests
-        config.n_envs = 2
-        config.vectorization_mode = 'sync'
+            # Disable W&B for smoke tests (avoid polluting workspace)
+            config.enable_wandb = False
+            config.quiet = True
 
-        # Use fractional batch size to ensure it divides the new rollout size
-        config.batch_size = 0.5  # 50% of rollout size
-        config._resolve_batch_size()  # Re-resolve batch_size after changing n_envs
+            # Force n_envs=2 and sync vectorization for faster smoke tests
+            config.n_envs = 2
+            config.vectorization_mode = 'sync'
 
-        # Disable evaluation for smoke tests (faster and avoids eval-related issues)
-        config.eval_freq_epochs = None
+            # Use fractional batch size to ensure it divides the new rollout size
+            config.batch_size = 0.5  # 50% of rollout size
+            config._resolve_batch_size()  # Re-resolve batch_size after changing n_envs
 
-        # Override to run for only N epochs
-        # We'll use max_env_steps to control duration indirectly via early stopping
-        # But simpler: just set very low n_epochs or max_eval_episodes
-        # Actually, let's just override max_env_steps to be small
-        config.max_env_steps = config.n_envs * config.n_steps * n_epochs
+            # Disable evaluation for smoke tests (faster and avoids eval-related issues)
+            config.eval_freq_epochs = None
 
-        # Set global seed
-        set_random_seed(config.seed)
+            # Override to run for only N epochs
+            # We'll use max_env_steps to control duration indirectly via early stopping
+            # But simpler: just set very low n_epochs or max_eval_episodes
+            # Actually, let's just override max_env_steps to be small
+            config.max_env_steps = config.n_envs * config.n_steps * n_epochs
 
-        # Build agent and train
-        agent = build_agent(config)
-        agent.learn()
+            # Set global seed
+            set_random_seed(config.seed)
 
-        return True, None
+            # Build agent and train
+            agent = build_agent(config)
+            agent.learn()
+
+        return config_spec, True, None
 
     except Exception as e:
         import traceback
-        return False, traceback.format_exc()
+        # Include both traceback and stderr output in error message
+        error_parts = [traceback.format_exc()]
+
+        stderr_output = stderr_buffer.getvalue().strip()
+        if stderr_output:
+            error_parts.append("\n--- stderr output ---\n" + stderr_output)
+
+        return config_spec, False, "\n".join(error_parts)
 
 
 def main():
@@ -121,6 +144,13 @@ def main():
         default=None,
         help="Stop after testing N configs (useful for quick checks)"
     )
+    parser.add_argument(
+        "--workers",
+        "-j",
+        type=int,
+        default=1,
+        help="Number of parallel workers (default: 1 for sequential execution)"
+    )
 
     args = parser.parse_args()
 
@@ -144,23 +174,49 @@ def main():
         print("No configs found matching criteria.")
         return
 
-    print(f"Found {len(all_configs)} config(s) to smoke test (running {args.epochs} epochs each):\n")
+    workers = max(1, args.workers)
+    print(f"Found {len(all_configs)} config(s) to smoke test (running {args.epochs} epochs each)")
+    print(f"Workers: {workers}\n")
 
     # Track results
     results = []
+    completed = 0
 
-    for i, (env_id, variant_id) in enumerate(all_configs, 1):
-        config_spec = f"{env_id}:{variant_id}"
-        print(f"[{i}/{len(all_configs)}] Testing {config_spec}...", end=" ", flush=True)
+    if workers == 1:
+        # Sequential execution
+        for i, (env_id, variant_id) in enumerate(all_configs, 1):
+            config_spec = f"{env_id}:{variant_id}"
+            print(f"[{i}/{len(all_configs)}] Testing {config_spec}...", end=" ", flush=True)
 
-        success, error = smoke_test_config(env_id, variant_id, args.epochs)
+            config_spec, success, error = smoke_test_config(env_id, variant_id, args.epochs)
 
-        if success:
-            print("✓")
-            results.append((config_spec, True, None))
-        else:
-            print(f"✗ {error}")
-            results.append((config_spec, False, error))
+            if success:
+                print("✓")
+            else:
+                print("✗")
+
+            results.append((config_spec, success, error))
+    else:
+        # Parallel execution
+        with ProcessPoolExecutor(max_workers=workers) as executor:
+            # Submit all jobs
+            future_to_config = {
+                executor.submit(smoke_test_config, env_id, variant_id, args.epochs): f"{env_id}:{variant_id}"
+                for env_id, variant_id in all_configs
+            }
+
+            # Process results as they complete
+            for future in as_completed(future_to_config):
+                completed += 1
+                config_spec, success, error = future.result()
+
+                status = "✓" if success else "✗"
+                print(f"[{completed}/{len(all_configs)}] {config_spec} {status}")
+
+                results.append((config_spec, success, error))
+
+    # Sort results for consistent reporting
+    results.sort(key=lambda x: x[0])
 
     # Summary
     print("\n" + "=" * 80)
@@ -172,12 +228,25 @@ def main():
 
     print(f"Total: {len(results)} | Passed: {passed} | Failed: {failed}\n")
 
+    # Show passed configs
+    if passed > 0:
+        print("Passed configs:")
+        for config_spec, success, error in results:
+            if success:
+                print(f"  ✓ {config_spec}")
+        print()
+
+    # Show failed configs with tracebacks
     if failed > 0:
         print("Failed configs:")
         for config_spec, success, error in results:
             if not success:
-                print(f"  ✗ {config_spec}")
-                print(f"    Error: {error}")
+                print(f"\n  ✗ {config_spec}")
+                print("  " + "-" * 76)
+                # Indent the traceback
+                for line in error.splitlines():
+                    print(f"  {line}")
+                print("  " + "-" * 76)
         sys.exit(1)
     else:
         print("All configs passed! ✓")

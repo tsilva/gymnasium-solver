@@ -37,9 +37,10 @@ class TrainerLoggersBuilder:
         csv_logger = self._build_csv_logger()
         loggers.append(csv_logger)
 
-        # Prepare a terminal print logger that formats metrics from the unified logging stream
-        print_logger = self._build_print_logger()
-        loggers.append(print_logger)
+        # Prepare a terminal print logger that formats metrics from the unified logging stream (skip if quiet)
+        if not getattr(self.config, "quiet", False):
+            print_logger = self._build_print_logger()
+            loggers.append(print_logger)
 
         return loggers
 

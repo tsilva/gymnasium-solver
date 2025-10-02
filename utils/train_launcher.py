@@ -15,9 +15,10 @@ from typing import Optional
 
 from agents import build_agent
 
-from utils.logging import display_config_summary
 from utils.user import prompt_confirm
 from utils.config import Config
+from utils.training_summary import present_prefit_summary
+from utils.environment_registry import list_available_environments
 
 def _maybe_merge_wandb_config(config, *, wandb_sweep_flag: bool):
     """Optionally merge W&B sweep overrides into Config.
@@ -121,76 +122,6 @@ def _extract_elapsed_seconds(agent) -> Optional[float]:
         return float(timings.seconds_since("on_fit_start"))
     except (TypeError, ValueError, KeyError, RuntimeError):
         return None
-
-
-def _format_summary_value(value):
-    if isinstance(value, (dict, list, tuple, set)):
-        return str(value)
-    return value
-
-
-def _present_prefit_summary(config) -> None:
-    spec = config.spec if isinstance(getattr(config, "spec", None), dict) else {}
-    returns = spec.get("returns") if isinstance(spec, dict) else {}
-    rewards = spec.get("rewards") if isinstance(spec, dict) else {}
-
-    reward_threshold = None
-    if isinstance(returns, dict) and returns.get("threshold_solved") is not None:
-        reward_threshold = returns.get("threshold_solved")
-    elif isinstance(rewards, dict) and rewards.get("threshold_solved") is not None:
-        reward_threshold = rewards.get("threshold_solved")
-
-    env_block = {
-        "env_id": _format_summary_value(config.env_id),
-        "obs_type": _format_summary_value(config.obs_type),
-        "wrappers": _format_summary_value(config.env_wrappers),
-        "vectorization_mode": _format_summary_value(config.vectorization_mode),
-        "frame_stack": _format_summary_value(getattr(config, "frame_stack", None)),
-        "normalize_obs": _format_summary_value(getattr(config, "normalize_obs", None)),
-        "normalize_reward": _format_summary_value(getattr(config, "normalize_reward", None)),
-        "grayscale_obs": _format_summary_value(getattr(config, "grayscale_obs", None)),
-        "resize_obs": _format_summary_value(getattr(config, "resize_obs", None)),
-        "spec/action_space": _format_summary_value(spec.get("action_space")),
-        "spec/observation_space": _format_summary_value(spec.get("observation_space")),
-        "reward_threshold": _format_summary_value(reward_threshold),
-        "time_limit": _format_summary_value(spec.get("max_episode_steps")),
-    }
-
-    training_block = {
-        "algo_id": _format_summary_value(getattr(config, "algo_id", None)),
-        "policy": _format_summary_value(getattr(config, "policy", None)),
-        "hidden_dims": _format_summary_value(getattr(config, "hidden_dims", None)),
-        "activation": _format_summary_value(getattr(config, "activation", None)),
-        "optimizer": _format_summary_value(getattr(config, "optimizer", None)),
-        "seed": _format_summary_value(getattr(config, "seed", None)),
-        "n_envs": _format_summary_value(getattr(config, "n_envs", None)),
-        "n_steps": _format_summary_value(getattr(config, "n_steps", None)),
-        "n_epochs": _format_summary_value(getattr(config, "n_epochs", None)),
-        "batch_size": _format_summary_value(getattr(config, "batch_size", None)),
-        "max_env_steps": _format_summary_value(getattr(config, "max_env_steps", None)),
-        "policy_lr": _format_summary_value(getattr(config, "policy_lr", None)),
-        "gamma": _format_summary_value(getattr(config, "gamma", None)),
-        "gae_lambda": _format_summary_value(getattr(config, "gae_lambda", None)),
-        "ent_coef": _format_summary_value(getattr(config, "ent_coef", None)),
-        "vf_coef": _format_summary_value(getattr(config, "vf_coef", None)),
-        "clip_range": _format_summary_value(getattr(config, "clip_range", None)),
-        "max_grad_norm": _format_summary_value(getattr(config, "max_grad_norm", None)),
-        "returns_type": _format_summary_value(getattr(config, "returns_type", None)),
-        "advantages_type": _format_summary_value(getattr(config, "advantages_type", None)),
-    }
-
-    project_id = getattr(config, "project_id", None) or getattr(config, "env_id", None)
-    run_block = {
-        "project_id": _format_summary_value(project_id),
-        "run_id": "<pending>",
-        "quiet": _format_summary_value(getattr(config, "quiet", False)),
-    }
-
-    display_config_summary({
-        "Run": run_block,
-        "Environment": env_block,
-        "Training": training_block,
-    })
 
 
 def _launch_training_resume(args) -> None:
@@ -367,7 +298,12 @@ def launch_training_from_args(args) -> None:
     # Load the requested configuration
     config = load_config(env_id, variant_id)
 
-    _present_prefit_summary(config)
+    # Disable W&B if WANDB_MODE is set to disabled
+    import os
+    if os.environ.get("WANDB_MODE") == "disabled":
+        config.enable_wandb = False
+
+    present_prefit_summary(config)
 
     # Prompt if user wants to start training
     start_training = prompt_confirm("Start training?", default=True)
@@ -411,112 +347,3 @@ def launch_training_from_args(args) -> None:
     if isinstance(reason, str) and reason and not str(reason).endswith(".") and reason != "completed.":
         reason = f"{reason}."
     print(f"Training completed in {human}. Reason: {reason}")
-
-def find_closest_match(search_term, candidates):
-    """Find the closest match for a search term among candidates using fuzzy matching."""
-    if not search_term:
-        return None
-    
-    search_lower = search_term.lower()
-    candidates_lower = [c.lower() for c in candidates]
-    
-    # Exact match first
-    for i, candidate in enumerate(candidates_lower):
-        if search_lower == candidate:
-            return candidates[i]
-    
-    # Substring match
-    for i, candidate in enumerate(candidates_lower):
-        if search_lower in candidate or candidate in search_lower:
-            return candidates[i]
-    
-    # Word-based matching (split on hyphens and underscores)
-    search_words = set(search_lower.replace('-', ' ').replace('_', ' ').split())
-    
-    best_match = None
-    best_score = 0
-    
-    for i, candidate in enumerate(candidates_lower):
-        candidate_words = set(candidate.replace('-', ' ').replace('_', ' ').split())
-        
-        # Calculate overlap score
-        overlap = len(search_words.intersection(candidate_words))
-        if overlap > best_score:
-            best_score = overlap
-            best_match = candidates[i]
-    
-    return best_match if best_score > 0 else None
-
-
-# TODO: create environment registry class instead
-def list_available_environments(search_term=None, exact_match=None):
-    """List all available environment targets with their descriptions."""
-    from utils.config import Config
-    from utils.io import read_yaml
-    
-    # ANSI escape codes for styling
-    BOLD = '\033[1m'
-    RESET = '\033[0m'
-    BULLET = '•'
-    
-    # Assert that config/environments directory exists
-    config_dir = Path("config/environments")
-    if not config_dir.exists(): raise FileNotFoundError("config/environments directory not found")
-    
-    # List all env names
-    yaml_files = sorted(config_dir.glob("*.yaml"))
-    env_names = [f.stem for f in yaml_files]
-    
-    # If exact_match provided, use it directly
-    if exact_match:
-        yaml_files = [f for f in yaml_files if f.stem == exact_match]
-        if not yaml_files:
-            print(f"Environment '{exact_match}' not found.")
-            return
-        print(f"{BOLD}Environment targets for '{exact_match}':{RESET}")
-    # If search term provided, find closest match
-    elif search_term:
-        matched_env = find_closest_match(search_term, env_names)
-        if not matched_env:
-            print(f"No environment found matching '{search_term}'")
-            print(f"Available environments: {', '.join(env_names)}")
-            return
-        
-        # Filter to only the matched environment
-        yaml_files = [f for f in yaml_files if f.stem == matched_env]
-        print(f"{BOLD}Environment targets for '{matched_env}':{RESET}")
-    else:
-        print(f"{BOLD}Available Environment Targets:{RESET}")
-    
-    print()
-    
-    for yaml_file in yaml_files:
-        # Load the YAML file
-        doc = read_yaml(yaml_file) or {}
-        
-        # Get the environment name from the filename
-        env_name = yaml_file.stem
-        
-        # Find all public targets (non-underscore keys that are dictionaries)
-        config_field_names = set(Config.__dataclass_fields__.keys())
-        public_targets = []
-        
-        for key, value in doc.items():
-            # Skip base config fields and non-dict fields
-            if key in config_field_names or not isinstance(value, dict):
-                continue
-                
-            # Skip meta/utility sections (e.g., anchors) prefixed with underscore
-            if isinstance(key, str) and key.startswith("_"):
-                continue
-                
-            # This is a public target
-            description = value.get("description", "No description available")
-            public_targets.append((key, description))
-        
-        if public_targets:
-            # Use bold formatting for environment name
-            print(f"{BOLD}{env_name}:{RESET}")
-            for target, description in sorted(public_targets):
-                print(f"  {BULLET} {env_name}:{target} - {description}")
-            print()

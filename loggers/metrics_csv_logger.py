@@ -35,6 +35,9 @@ class MetricsCSVLogger:
         self._ignore_legacy_fields = {"name", "value"}
         self._fieldnames = list(self._base_fields)
 
+        # Lock to protect file handle and fieldnames from concurrent access
+        self._lock = threading.Lock()
+
         # If file exists with a header, adopt it unless it's legacy long-form
         header = self._read_existing_header(self.path)
         if header is not None:
@@ -122,11 +125,12 @@ class MetricsCSVLogger:
         try:
             self._flush_remaining()
         finally:
-            try:
-                self._fh.flush()
-                self._fh.close()
-            except Exception:
-                pass
+            with self._lock:
+                try:
+                    self._fh.flush()
+                    self._fh.close()
+                except Exception:
+                    pass
 
     # -------- internals --------
     def _run(self) -> None:
@@ -154,28 +158,30 @@ class MetricsCSVLogger:
         if not batched:
             return
 
-        # Determine if header upgrade is needed
-        current_set = set(self._fieldnames)
-        # Collect any new metric keys excluding base and legacy fields
-        new_keys = set()
-        for d in batched:
-            for k in d.keys():
-                if k in self._base_fields or k in self._ignore_legacy_fields:
-                    continue
-                if k not in current_set:
-                    new_keys.add(k)
+        # Acquire lock for all file operations and fieldname updates
+        with self._lock:
+            # Determine if header upgrade is needed
+            current_set = set(self._fieldnames)
+            # Collect any new metric keys excluding base and legacy fields
+            new_keys = set()
+            for d in batched:
+                for k in d.keys():
+                    if k in self._base_fields or k in self._ignore_legacy_fields:
+                        continue
+                    if k not in current_set:
+                        new_keys.add(k)
 
-        if new_keys:
-            # Build new fieldnames: base + sorted(existing_metrics ∪ new_keys)
-            existing_metrics = [f for f in self._fieldnames if f not in self._base_fields and f not in self._ignore_legacy_fields]
-            merged = sorted(set(existing_metrics).union(new_keys))
-            new_fieldnames = [*self._base_fields, *merged]
-            self._rewrite_file_with_new_header(new_fieldnames, batched)
-            return
+            if new_keys:
+                # Build new fieldnames: base + sorted(existing_metrics ∪ new_keys)
+                existing_metrics = [f for f in self._fieldnames if f not in self._base_fields and f not in self._ignore_legacy_fields]
+                merged = sorted(set(existing_metrics).union(new_keys))
+                new_fieldnames = [*self._base_fields, *merged]
+                self._rewrite_file_with_new_header(new_fieldnames, batched)
+                return
 
-        # Fast path: write rows with current header
-        self._writer.writerows(batched)
-        self._fh.flush()
+            # Fast path: write rows with current header
+            self._writer.writerows(batched)
+            self._fh.flush()
 
     def _flush_remaining(self) -> None:
         # Write anything still in the queue
@@ -186,23 +192,25 @@ class MetricsCSVLogger:
             except Empty:
                 break
         if remaining:
-            # Ensure no header change needed unexpectedly
-            current_set = set(self._fieldnames)
-            extra = set()
-            for d in remaining:
-                for k in d.keys():
-                    if k in self._base_fields or k in self._ignore_legacy_fields:
-                        continue
-                    if k not in current_set:
-                        extra.add(k)
-            if extra:
-                existing_metrics = [f for f in self._fieldnames if f not in self._base_fields and f not in self._ignore_legacy_fields]
-                merged = sorted(set(existing_metrics).union(extra))
-                new_fieldnames = [*self._base_fields, *merged]
-                self._rewrite_file_with_new_header(new_fieldnames, remaining)
-            else:
-                self._writer.writerows(remaining)
-                self._fh.flush()
+            # Acquire lock for all file operations and fieldname updates
+            with self._lock:
+                # Ensure no header change needed unexpectedly
+                current_set = set(self._fieldnames)
+                extra = set()
+                for d in remaining:
+                    for k in d.keys():
+                        if k in self._base_fields or k in self._ignore_legacy_fields:
+                            continue
+                        if k not in current_set:
+                            extra.add(k)
+                if extra:
+                    existing_metrics = [f for f in self._fieldnames if f not in self._base_fields and f not in self._ignore_legacy_fields]
+                    merged = sorted(set(existing_metrics).union(extra))
+                    new_fieldnames = [*self._base_fields, *merged]
+                    self._rewrite_file_with_new_header(new_fieldnames, remaining)
+                else:
+                    self._writer.writerows(remaining)
+                    self._fh.flush()
 
     @staticmethod
     def _is_number(x: Any) -> bool:
@@ -283,13 +291,22 @@ class MetricsCSVLogger:
         self._fh.flush()
         self._fh.close()
 
+        # Read actual file header and merge with proposed new_fieldnames to handle
+        # cases where self._fieldnames is out of sync with the file (e.g., from a
+        # previous failed rewrite attempt)
+        old_header = self._read_existing_header(self.path)
+        if old_header is not None and not ({"name", "value"}.issubset(set(old_header))):
+            old_metrics = [f for f in old_header if f not in self._base_fields and f not in self._ignore_legacy_fields]
+            new_metrics = [f for f in new_fieldnames if f not in self._base_fields]
+            merged_metrics = sorted(set(old_metrics).union(new_metrics))
+            new_fieldnames = [*self._base_fields, *merged_metrics]
+
         tmp_path = self.path.with_suffix(self.path.suffix + ".tmp")
         with open(tmp_path, mode="w", encoding="utf-8", newline="") as out_fh:
             writer = csv.DictWriter(out_fh, fieldnames=new_fieldnames)
             writer.writeheader()
 
             # Copy old rows if any and if header was already wide
-            old_header = self._read_existing_header(self.path)
             if old_header is not None and not ({"name", "value"}.issubset(set(old_header))):
                 with open(self.path, mode="r", encoding="utf-8", newline="") as in_fh:
                     reader = csv.DictReader(in_fh)

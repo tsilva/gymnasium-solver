@@ -547,12 +547,11 @@ async def start_training(
     if max_env_steps:
         cmd.extend(["--max-env-steps", str(max_env_steps)])
 
-    if quiet:
-        cmd.append("-q")
-
     # Set environment variables
     env = dict(os.environ)
     env["WANDB_MODE"] = wandb_mode
+    if quiet:
+        env["VIBES_QUIET"] = "1"
 
     # Start process
     process = subprocess.Popen(

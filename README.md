@@ -15,7 +15,7 @@ Fast, config-first reinforcement learning framework built on PyTorch Lightning a
 - **Config-first**: YAML configs with inheritance, variants, and dict-based schedules (`{start: 0.001, end: 0.0}`)
 - **Vectorized environments**: Sync/async modes, frame stacking, observation/reward normalization
 - **Atari support**: ALE with `obs_type` rgb/ram/objects via [Gymnasium](https://gymnasium.farama.org) and [OCAtari](https://github.com/Kautenja/oc-atari)
-- **Retro support**: Classic console games via [stable-retro](https://github.com/Farama-Foundation/stable-retro)
+- **Retro support**: Classic console games via [stable-retro](https://github.com/Farama-Foundation/stable-retro) (optional; broken on M1 Mac)
 - **VizDoom support**: First-person shooter environments
 - **Wrapper registry**: Plug-in environment wrappers by name
 - **Run management**: Clean `runs/` structure with `@last` symlink, automatic best/last checkpoints

@@ -34,7 +34,14 @@ def _build_env_vizdoom(env_id, obs_type, render_mode, **env_kwargs):
     return VizDoomEnv(scenario=scenario, render_mode=render_mode, **env_kwargs)
 
 def _build_env_stable_retro(env_id, obs_type, render_mode, **env_kwargs):
-    import retro  # type: ignore
+    try:
+        import retro  # type: ignore
+    except ImportError as e:
+        raise ImportError(
+            f"stable-retro is required for {env_id} but not installed. "
+            f"Note: stable-retro 0.9.5 is broken on M1 Mac (arm64 wheel contains x86_64 binary). "
+            f"Install with: uv pip install .[retro]"
+        ) from e
 
     game = env_id.replace("Retro/", "")
     make_kwargs = dict(env_kwargs)
@@ -135,7 +142,11 @@ def build_env(
             else:
                 env = _build_env_gym(env_id, obs_type, render_mode, **env_kwargs)
 
-            from gymnasium.wrappers import GrayscaleObservation, ResizeObservation, FrameStackObservation
+            from gymnasium.wrappers import GrayscaleObservation, ResizeObservation, FrameStackObservation, FlattenObservation
+
+            # Apply custom wrappers first (before frame stacking) so they operate on raw observations
+            for wrapper in env_wrappers:
+                env = EnvWrapperRegistry.apply(env, wrapper)
 
             if _is_ale_rgb_env:
                 env = GrayscaleObservation(env, keep_dim=False)
@@ -149,9 +160,10 @@ def build_env(
                     env = ResizeObservation(env, shape=resize_shape)
                 if frame_stack and frame_stack > 1:
                     env = FrameStackObservation(env, stack_size=frame_stack)
-
-            for wrapper in env_wrappers:
-                env = EnvWrapperRegistry.apply(env, wrapper)
+                    # Flatten stacked vector observations for MLP compatibility
+                    # Images (3D obs) stay multi-dimensional; vectors (1D->2D after stacking) get flattened
+                    if len(env.observation_space.shape) == 2:
+                        env = FlattenObservation(env)
 
             env = RecordEpisodeStatistics(env)
             env = EnvInfoWrapper(env, obs_type=obs_type, project_id=project_id, spec=spec)

@@ -128,7 +128,7 @@ python scripts/brax_eval_policy.py
 - **`build_env(...)`**: Builds vectorized environments with support for:
   - **ALE/Atari**: `obs_type` in {'rgb', 'ram', 'objects'} (objects uses OCAtari)
   - **VizDoom**: Matches `VizDoom-*` env_id
-  - **Retro**: Matches `Retro/*` env_id (uses stable-retro)
+  - **Retro**: Matches `Retro/*` env_id (uses stable-retro, optional dependency). **WARNING**: stable-retro 0.9.5 is broken on M1 Mac (arm64 wheel contains x86_64 binary). Install with `uv pip install .[retro]` or use Rosetta.
   - **Multi-armed bandits**: Matches `Bandit-*` or `Bandit/<name>`
   - **Standard Gymnasium**: Everything else
 - **Preprocessing**: Optional `GrayScaleObservation` (when `grayscale_obs` set), `ResizeObservation` (when `resize_obs` provided; `True` defaults to `(84, 84)`).

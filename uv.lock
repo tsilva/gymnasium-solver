@@ -930,6 +930,7 @@ dependencies = [
     { name = "huggingface-hub" },
     { name = "ipykernel" },
     { name = "jupyter" },
+    { name = "mcp" },
     { name = "minari", extra = ["hdf5"] },
     { name = "numpy" },
     { name = "ocatari" },
@@ -938,6 +939,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "ruamel-yaml" },
     { name = "setuptools" },
+    { name = "stable-retro" },
     { name = "torch" },
     { name = "torchvision" },
     { name = "vizdoom" },
@@ -955,6 +957,7 @@ requires-dist = [
     { name = "huggingface-hub", specifier = ">=0.22.0" },
     { name = "ipykernel" },
     { name = "jupyter" },
+    { name = "mcp" },
     { name = "minari", extras = ["hdf5"] },
     { name = "numpy" },
     { name = "ocatari", specifier = ">=2.2.1" },
@@ -963,6 +966,7 @@ requires-dist = [
     { name = "pyyaml" },
     { name = "ruamel-yaml" },
     { name = "setuptools", specifier = "<80" },
+    { name = "stable-retro", specifier = ">=0.9.5" },
     { name = "torch" },
     { name = "torchvision" },
     { name = "vizdoom" },
@@ -1042,6 +1046,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b1/df/48c586a5fe32a0f01324ee087459e112ebb7224f646c0b5023f5e79e9956/httpx-0.28.1.tar.gz", hash = "sha256:75e98c5f16b0f35b567856f597f06ff2270a374470a5c2392242528e3e3e42fc", size = 141406, upload-time = "2024-12-06T15:37:23.222Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2a/39/e50c7c3a983047577ee07d2a9e53faf5a69493943ec3f6a384bdc792deb2/httpx-0.28.1-py3-none-any.whl", hash = "sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad", size = 73517, upload-time = "2024-12-06T15:37:21.509Z" },
+]
+
+[[package]]
+name = "httpx-sse"
+version = "0.4.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/6e/fa/66bd985dd0b7c109a3bcb89272ee0bfb7e2b4d06309ad7b38ff866734b2a/httpx_sse-0.4.1.tar.gz", hash = "sha256:8f44d34414bc7b21bf3602713005c5df4917884f76072479b21f68befa4ea26e", size = 12998, upload-time = "2025-06-24T13:21:05.71Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/25/0a/6269e3473b09aed2dab8aa1a600c70f31f00ae1349bee30658f7e358a159/httpx_sse-0.4.1-py3-none-any.whl", hash = "sha256:cba42174344c3a5b06f255ce65b350880f962d99ead85e776f23c6618a377a37", size = 8054, upload-time = "2025-06-24T13:21:04.772Z" },
 ]
 
 [[package]]
@@ -1678,6 +1691,28 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/99/5b/a36a337438a14116b16480db471ad061c36c3694df7c2084a0da7ba538b7/matplotlib_inline-0.1.7.tar.gz", hash = "sha256:8423b23ec666be3d16e16b60bdd8ac4e86e840ebd1dd11a30b9f117f2fa0ab90", size = 8159, upload-time = "2024-04-15T13:44:44.803Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8f/8e/9ad090d3553c280a8060fbf6e24dc1c0c29704ee7d1c372f0c174aa59285/matplotlib_inline-0.1.7-py3-none-any.whl", hash = "sha256:df192d39a4ff8f21b1895d72e6a13f5fcc5099f00fa84384e0ea28c2cc0653ca", size = 9899, upload-time = "2024-04-15T13:44:43.265Z" },
+]
+
+[[package]]
+name = "mcp"
+version = "1.15.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "httpx" },
+    { name = "httpx-sse" },
+    { name = "jsonschema" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "python-multipart" },
+    { name = "pywin32", marker = "sys_platform == 'win32'" },
+    { name = "sse-starlette" },
+    { name = "starlette" },
+    { name = "uvicorn", marker = "sys_platform != 'emscripten'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0c/9e/e65114795f359f314d7061f4fcb50dfe60026b01b52ad0b986b4631bf8bb/mcp-1.15.0.tar.gz", hash = "sha256:5bda1f4d383cf539d3c035b3505a3de94b20dbd7e4e8b4bd071e14634eeb2d72", size = 469622, upload-time = "2025-09-25T15:39:51.995Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c9/82/4d0df23d5ff5bb982a59ad597bc7cb9920f2650278ccefb8e0d85c5ce3d4/mcp-1.15.0-py3-none-any.whl", hash = "sha256:314614c8addc67b663d6c3e4054db0a5c3dedc416c24ef8ce954e203fdc2333d", size = 166963, upload-time = "2025-09-25T15:39:50.538Z" },
 ]
 
 [[package]]
@@ -2549,6 +2584,20 @@ wheels = [
 ]
 
 [[package]]
+name = "pydantic-settings"
+version = "2.11.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "python-dotenv" },
+    { name = "typing-inspection" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/20/c5/dbbc27b814c71676593d1c3f718e6cd7d4f00652cefa24b75f7aa3efb25e/pydantic_settings-2.11.0.tar.gz", hash = "sha256:d0e87a1c7d33593beb7194adb8470fc426e95ba02af83a0f23474a04c9a08180", size = 188394, upload-time = "2025-09-24T14:19:11.764Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/83/d6/887a1ff844e64aa823fb4905978d882a633cfe295c32eacad582b78a7d8b/pydantic_settings-2.11.0-py3-none-any.whl", hash = "sha256:fe2cea3413b9530d10f3a5875adffb17ada5c1e1bab0b2885546d7310415207c", size = 48608, upload-time = "2025-09-24T14:19:10.015Z" },
+]
+
+[[package]]
 name = "pydub"
 version = "0.25.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2586,6 +2635,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/85/b5/aa23aa2e70bcba42c989c02e7228273c30f3b44b9b264abb93eaeff43ad7/pygame-2.6.1-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ef07c0103d79492c21fced9ad68c11c32efa6801ca1920ebfd0f15fb46c78b1c", size = 13951197, upload-time = "2024-09-29T11:40:06.785Z" },
     { url = "https://files.pythonhosted.org/packages/a6/06/29e939b34d3f1354738c7d201c51c250ad7abefefaf6f8332d962ff67c4b/pygame-2.6.1-cp313-cp313-win32.whl", hash = "sha256:3acd8c009317190c2bfd81db681ecef47d5eb108c2151d09596d9c7ea9df5c0e", size = 10249309, upload-time = "2024-09-29T11:10:23.329Z" },
     { url = "https://files.pythonhosted.org/packages/7e/11/17f7f319ca91824b86557e9303e3b7a71991ef17fd45286bf47d7f0a38e6/pygame-2.6.1-cp313-cp313-win_amd64.whl", hash = "sha256:813af4fba5d0b2cb8e58f5d95f7910295c34067dcc290d34f1be59c48bd1ea6a", size = 10620084, upload-time = "2024-09-29T11:48:51.587Z" },
+]
+
+[[package]]
+name = "pyglet"
+version = "1.5.31"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f7/c0/59130a7edbcc8f84e35870b00a712538ca05415ff02d17181277b8ef8f05/pyglet-1.5.31.zip", hash = "sha256:a5e422b4c27b0fc99e92103bf493109cca5c18143583b868b3b4631a98ae9417", size = 6900712, upload-time = "2024-12-24T07:10:58.022Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e2/43/46aa0ab49f2f5145d201780c7595cf0c305fb4fb5d00d6639792a3d0e770/pyglet-1.5.31-py3-none-any.whl", hash = "sha256:f68413564bbec380e4815898fef0fb7a4a494dc3f8718bfbf28ce2a802634c88", size = 1143660, upload-time = "2024-12-24T07:10:50.769Z" },
 ]
 
 [[package]]
@@ -5856,6 +5914,33 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/3f/f4/4a80cd6ef364b2e8b65b15816a843c0980f7a5a2b4dc701fc574952aa19f/soupsieve-2.7.tar.gz", hash = "sha256:ad282f9b6926286d2ead4750552c8a6142bc4c783fd66b0293547c8fe6ae126a", size = 103418, upload-time = "2025-04-20T18:50:08.518Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e7/9c/0e6afc12c269578be5c0c1c9f4b49a8d32770a080260c333ac04cc1c832d/soupsieve-2.7-py3-none-any.whl", hash = "sha256:6e60cc5c1ffaf1cebcc12e8188320b72071e922c2e897f737cadce79ad5d30c4", size = 36677, upload-time = "2025-04-20T18:50:07.196Z" },
+]
+
+[[package]]
+name = "sse-starlette"
+version = "3.0.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/42/6f/22ed6e33f8a9e76ca0a412405f31abb844b779d52c5f96660766edcd737c/sse_starlette-3.0.2.tar.gz", hash = "sha256:ccd60b5765ebb3584d0de2d7a6e4f745672581de4f5005ab31c3a25d10b52b3a", size = 20985, upload-time = "2025-07-27T09:07:44.565Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ef/10/c78f463b4ef22eef8491f218f692be838282cd65480f6e423d7730dfd1fb/sse_starlette-3.0.2-py3-none-any.whl", hash = "sha256:16b7cbfddbcd4eaca11f7b586f3b8a080f1afe952c15813455b162edea619e5a", size = 11297, upload-time = "2025-07-27T09:07:43.268Z" },
+]
+
+[[package]]
+name = "stable-retro"
+version = "0.9.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "farama-notifications" },
+    { name = "gymnasium" },
+    { name = "pyglet" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ca/27/58d7da779d45dac3c98571fec001b269ba40f99b008a749c9ccace5b9f15/stable_retro-0.9.5.tar.gz", hash = "sha256:736741d19a091efd5b12b164a2f6b4bda562147bb96751f629bedd1551cefb97", size = 112223924, upload-time = "2025-05-22T03:19:08.068Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3a/53/93bdb2d68b6e340f4d36ade311764f84ce846913430af79ee62417556b95/stable_retro-0.9.5-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:59129ad98c0104df4c6d7abfc3a1842679dfc9d4a34ce373b7993904bfe64f36", size = 86920197, upload-time = "2025-05-22T03:18:34.038Z" },
+    { url = "https://files.pythonhosted.org/packages/10/ee/a36f10e287d0a0746787799a7493d66cb2dc90af8c4296effa1919034e9b/stable_retro-0.9.5-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:6d2a1bc8bcbf750187c97fb5f35c3fa08e1b20e3748f80dc5a7197a4db33b6c2", size = 96373503, upload-time = "2025-05-22T03:18:39.333Z" },
 ]
 
 [[package]]

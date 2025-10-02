@@ -1,6 +1,7 @@
 import argparse
 
-from utils.train_launcher import launch_training_from_args, list_available_environments
+from utils.train_launcher import launch_training_from_args
+from utils.environment_registry import list_available_environments
 
 
 def main():

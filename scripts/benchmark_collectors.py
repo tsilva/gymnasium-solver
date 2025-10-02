@@ -11,7 +11,7 @@ from utils.config import load_config
 from utils.environment import build_env
 from utils.policy_factory import build_policy_from_env_and_config
 from utils.rollouts import RolloutCollector
-from utils.train_launcher import list_available_environments
+from utils.environment_registry import list_available_environments
 
 
 if __name__ == "__main__":

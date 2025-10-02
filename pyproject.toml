@@ -26,7 +26,14 @@ dependencies = [
     "huggingface_hub>=0.22.0",
     "gradio>=4.0.0",
     "vizdoom",
-    "mcp"
+    "mcp",
+]
+
+[project.optional-dependencies]
+retro = [
+    # NOTE: stable-retro 0.9.5 is BROKEN on M1 Mac (arm64 wheel contains x86_64 binary)
+    # Building from source also fails. Use with Rosetta or wait for upstream fix.
+    "stable-retro>=0.9.5",
 ]
 
 [tool.pytest.ini_options]

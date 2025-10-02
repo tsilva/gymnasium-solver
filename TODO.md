@@ -3,9 +3,6 @@
 # NEXT
 
 - TEST: logged to correct projects
-- BUG: training epoch is still running after validation early stop
-- run_play.py show action histogram
-- make sure all smoke tests are passing
 - TEST: are sweeps still working?
 - TODO: learn how to read gradient graphs
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
@@ -25,20 +22,6 @@ Opportunities:
 - Extract episode processing logic from RolloutCollector
 - Separate metrics computation from collection logic
 - Move utility functions (lines 12-175) to dedicated module
-
----
-
-4. utils/train_launcher.py (369 lines)
-
-Why: Multiple unrelated concerns in one module
-- Config merging logic (W&B, debugger) (lines 22-82)
-- Pre-fit summary building (lines 132-193, 62 lines)
-- Environment listing with fuzzy matching (lines 261-369, 109 lines)
-
-Opportunities:
-- Extract summary building to utils/training_summary.py
-- Move environment listing to utils/environment_registry.py
-- Keep only core launch logic in train_launcher.py
 
 ## Pong-v5
 

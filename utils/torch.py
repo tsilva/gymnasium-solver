@@ -107,7 +107,10 @@ def compute_kl_diagnostics(old_logprobs: torch.Tensor, new_logprobs: torch.Tenso
         kl_div: KL divergence (old_logprobs - new_logprobs).mean()
         approx_kl: Approximate KL divergence using ratio expansion
     """
-    ratio = torch.exp(new_logprobs - old_logprobs)
+    # Clamp log probability difference to prevent overflow in exp()
+    # exp(20) ≈ 4.9e8, exp(-20) ≈ 2e-9, which covers typical policy shifts
+    logprob_diff = torch.clamp(new_logprobs - old_logprobs, min=-20.0, max=20.0)
+    ratio = torch.exp(logprob_diff)
     kl_div = (old_logprobs - new_logprobs).mean()
     approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
     return kl_div, approx_kl

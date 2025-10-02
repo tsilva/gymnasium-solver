@@ -173,7 +173,10 @@ class BaseAgent(pl.LightningModule):
     def train_dataloader(self):
         # Some lightweight Trainer stubs used in tests don't manage current_epoch on the module.
         # Guard the assertion to avoid AttributeError while still catching repeated calls.
-        assert self.current_epoch == 0, "train_dataloader should only be called once at the start of training"
+        # When resuming training, current_epoch will be non-zero, so check for _resume_from_epoch
+        resume_epoch = getattr(self, '_resume_from_epoch', None)
+        is_resuming = resume_epoch is not None
+        assert self.current_epoch == 0 or is_resuming, "train_dataloader should only be called once at the start of training"
 
         # Collect the first rollout
         train_collector = self.get_rollout_collector("train")

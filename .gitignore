@@ -220,3 +220,5 @@ roms/
 stable-retro/
 
 _vizdoom.ini
+artifacts/
+.DS_Store

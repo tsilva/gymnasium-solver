@@ -25,7 +25,8 @@ dependencies = [
     "setuptools<80",
     "huggingface_hub>=0.22.0",
     "gradio>=4.0.0",
-    "vizdoom"
+    "vizdoom",
+    "mcp"
 ]
 
 [tool.pytest.ini_options]

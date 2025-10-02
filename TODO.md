@@ -2,37 +2,19 @@
 
 # NEXT
 
-- TEST: all running
 - TEST: logged to correct projects
-- TEST: run registry
-- TEST: videos recorded?
-- BUG: env smoke tests not passing
-- BUG: why no action historgram for cartpole?
 - BUG: training epoch is still running after validation early stop
-
-- add support for resuming run from wandb
+- run_play.py show action histogram
 - make sure all smoke tests are passing
 - TEST: are sweeps still working?
 - TODO: learn how to read gradient graphs
-- FEAT: Create MCP server that provides useful tools for claude code to be able to run training sessions and inspect training runs. This tool should have tools like the ability to list available environments and configs, list runs, start a run, etc. Ask agent to figure out exactly which tools would be optimal for it to be easily launch, stop and inspect training runs then add them.
-- FEAT: add support for running sweep from existing run (using previous resume support)
-- FEAT: allow downloading old runs from wandb when not available locally
-- FEAT: add support to only start eval when ep_rew_mean crosses eval threshold (or at fraction of)
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 
 ## REFACTOR
 
-Tier 1: Highest ROI (Quick Wins)
-
-4. Object center extraction - Duplicated OCAtari helper functions in BreakoutV5/PongV5 (~30 lines)
-5. Velocity normalization - Identical tanh normalization in 2 feature extractors (~12 lines)
-
 Tier 2: High ROI (Moderate Effort)
 
 6. Agent model building - Identical build_models() in PPO/REINFORCE (~10 lines)
-7. KL divergence calculation - Same KL diagnostics in both agents (~8 lines)
-8. Linear position normalization - Repeated linear mapping to [-1,1] range (~20 lines)
-9. Object categorization - Similar OCAtari object grouping patterns (~15 lines)
 
 Tier 3: Medium ROI (Higher Effort)
 
@@ -40,113 +22,63 @@ Tier 3: Medium ROI (Higher Effort)
 
 1. utils/rollouts.py (1,067 lines)
 
-Why: Massively complex single file with
-multiple concerns
+Why: Massively complex single file with multiple concerns
 - RolloutCollector class alone is 683 lines
-- Mixes multiple classes: RolloutTrajectory,
-RollingWindow, RunningStats, RolloutBuffer,
-RolloutCollector
-- Complex return/advantage computation logic
-intertwined with rollout collection
-- Episode tracking, metrics aggregation,
-evaluation logic all in one class
+- Mixes multiple classes: RolloutTrajectory, RollingWindow, RunningStats, RolloutBuffer, RolloutCollector
+- Complex return/advantage computation logic intertwined with rollout collection
+- Episode tracking, metrics aggregation, evaluation logic all in one class
 
 Opportunities:
-- Split into separate files:
-rollout_buffer.py, rollout_collector.py,
-rollout_stats.py, returns_advantages.py
-- Extract episode processing logic from
-RolloutCollector
-- Separate metrics computation from
-collection logic
-- Move utility functions (lines 12-175) to
-dedicated module
+- Split into separate files: rollout_buffer.py, rollout_collector.py, rollout_stats.py, returns_advantages.py
+- Extract episode processing logic from RolloutCollector
+- Separate metrics computation from collection logic
+- Move utility functions (lines 12-175) to dedicated module
 
 ---
 2. agents/base_agent.py (690 lines)
 
-Why: God class with too many
-responsibilities
-- Complex callback building with inline
-schedule resolution (lines 416-566, 150 
-lines)
-- Logger building scattered across 3 methods
-(lines 353-414)
-- Hyperparameter management mixed with
-training logic (lines 629-676)
-- Environment/rollout collector building
-could be extracted
+Why: God class with too many responsibilities
+- Complex callback building with inline schedule resolution (lines 416-566, 150  lines)
+- Logger building scattered across 3 methods (lines 353-414)
+- Hyperparameter management mixed with training logic (lines 629-676)
+- Environment/rollout collector building could be extracted
 
 Opportunities:
-- Extract CallbackBuilder class for callback
-construction
-- Extract ScheduleResolver helper for
-schedule configuration (lines 452-522)
-- Move logger building to
-utils/trainer_loggers.py
-- Extract hyperparameter management to
-separate mixin/class
+- Extract CallbackBuilder class for callback construction
+- Extract ScheduleResolver helper for schedule configuration (lines 452-522)
+- Move logger building to utils/trainer_loggers.py
+- Extract hyperparameter management to separate mixin/class
 
 ---
 3. utils/config.py (649 lines)
 ---
 4. utils/train_launcher.py (369 lines)
 
-Why: Multiple unrelated concerns in one
-module
-- Config merging logic (W&B, debugger)
-(lines 22-82)
-- Pre-fit summary building (lines 132-193,
-62 lines)
-- Environment listing with fuzzy matching
-(lines 261-369, 109 lines)
+Why: Multiple unrelated concerns in one module
+- Config merging logic (W&B, debugger) (lines 22-82)
+- Pre-fit summary building (lines 132-193, 62 lines)
+- Environment listing with fuzzy matching (lines 261-369, 109 lines)
 
 Opportunities:
-- Extract summary building to
-utils/training_summary.py
-- Move environment listing to
-utils/environment_registry.py
-- Keep only core launch logic in
-train_launcher.py
+- Extract summary building to utils/training_summary.py
+- Move environment listing to utils/environment_registry.py
+- Keep only core launch logic in train_launcher.py
 
 ---
 🟡 MEDIUM PRIORITY
 
 5. utils/environment.py (298 lines)
 
-Why: Long function with duplication between
-vectorization paths
-- build_env function is 201 lines (lines
-91-291)
-- Two major conditional branches: ALE native
-(lines 147-198) vs standard (lines 199-264)
-- Duplication in wrapper application,
-seeding, video recording setup
-- Multiple _build_env_* builders with
-similar structure (lines 16-87)
+Why: Long function with duplication between vectorization paths
+- build_env function is 201 lines (lines 91-291)
+- Two major conditional branches: ALE native (lines 147-198) vs standard (lines 199-264)
+- Duplication in wrapper application, seeding, video recording setup
+- Multiple _build_env_* builders with similar structure (lines 16-87)
 
 Opportunities:
-- Extract vectorization paths into separate
-builder functions
-- Create env builder registry/strategy
-pattern for different env types
-- Unify common setup logic (seeding,
-wrappers, video recording)
-
----
-Summary Stats:
-
-- 5 files identified for simplification
-- Total lines: 3,073 lines across these
-files
-- Estimated reduction potential: 30-40%
-through encapsulation and extraction
-- Primary patterns: God classes, mixed
-concerns, long methods, duplication
-
-Would you like me to deep-dive into any
-specific file to create a detailed
-refactoring plan?
+- Extract vectorization paths into separate builder functions
+- Create env builder registry/strategy pattern for different env types
+- Unify common setup logic (seeding, wrappers, video recording)
 
 ## Pong-v5
 

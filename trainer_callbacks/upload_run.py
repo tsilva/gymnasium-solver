@@ -35,7 +35,7 @@ class UploadRunCallback(pl.Callback):
 
         # Prompt user if they want to upload
         from utils.user import prompt_confirm
-        should_upload = prompt_confirm("Upload run folder to W&B?", default=False)
+        should_upload = prompt_confirm("Upload run folder to W&B?", default=True)
         if not should_upload:
             print("Skipping run folder upload.")
             return

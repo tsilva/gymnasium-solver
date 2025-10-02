@@ -19,6 +19,12 @@ python train.py CartPole-v1:reinforce -q
 # Override max timesteps from CLI
 python train.py CartPole-v1:ppo --max-timesteps 5000
 
+# Resume training from checkpoint (downloads from W&B if not found locally)
+python train.py --resume @last
+python train.py --resume <run-id>
+python train.py --resume <run-id> --epoch @best
+python train.py --resume <run-id> --epoch 42
+
 # List available environments (optionally filtered)
 python train.py --list-envs
 python train.py --list-envs CartPole
@@ -102,6 +108,7 @@ python scripts/brax_eval_policy.py
 ### Entry Point & Training Flow
 - **`train.py`**: Accepts `<env>:<variant>` config specs (e.g., `CartPole-v1:ppo`), loads `Config` via `utils.config.load_config(env_id, variant_id)`, seeds via `utils.random.set_random_seed()`, builds agent via `agents.build_agent()`, and calls `agent.learn()`.
 - **Config override**: `--max-env-steps` injects into `config.max_env_steps` after sweep merges.
+- **Resume training**: `--resume <run-id>` resumes from checkpoint. If run not found locally, automatically downloads from W&B (requires `WANDB_ENTITY` and `WANDB_PROJECT` env vars). Supports `@last` for most recent run and `--epoch` to select checkpoint (`@best`, `@last`, or epoch number).
 - **W&B Sweeps**: Auto-detected via `WANDB_SWEEP_ID` or `--wandb_sweep` flag. Merges `wandb.config` into main `Config` before training. Supports schedules specified as dicts (e.g., `{start: 0.001, end: 0.0}`).
 - **Debugger detection**: When a debugger is attached, `train.py` forces `n_envs=1`, `vectorization_mode='sync'`, and adjusts `batch_size` to remain compatible.
 
@@ -113,6 +120,7 @@ python scripts/brax_eval_policy.py
 - **max_env_steps**: Specifies total environment steps (frames) for training, NOT vectorized steps. Example: `max_env_steps=1M` with `n_envs=8` trains for 125k vec_steps. Must be divisible by `n_envs`. Use `config.max_vec_steps` computed property for vec_steps equivalent.
 - **Schedules**: Specified as dicts with `start` and `end` keys (e.g., `policy_lr: {start: 0.001, end: 0.0}`). Control interpolation with `from`, `to`, and `schedule` keys (default schedule is `linear`). Values `<1` for `from`/`to` are fractions of `max_env_steps`, values `>1` are absolute env steps. Internally converted to vec_steps for scheduling.
 - **Fractional batch size**: When `batch_size` is in (0, 1], it's treated as a fraction of rollout size (`n_envs * n_steps`). Resolved to `floor(rollout_size * fraction)`, minimum 1, and must evenly divide rollout size.
+- **Fractional eval warmup**: When `eval_warmup_epochs` is in (0, 1), it's treated as a fraction of total training progress. Resolved to `floor(total_epochs * fraction)` where `total_epochs = max_env_steps / (n_envs * n_steps)`. Requires `max_env_steps` to be set.
 - **Algo-specific subclasses**: `PPOConfig` enforces `clip_range > 0`; `REINFORCEConfig` validates `policy_targets` in {'returns', 'advantages'}.
 
 ### Environment Construction (`utils/environment.py`, `gym_wrappers/*`)
@@ -179,6 +187,7 @@ python scripts/brax_eval_policy.py
 - **Structure**: `Run` creates `runs/<id>/`, ensures `checkpoints/`, manages `@last` symlink.
 - **Artifacts**: Each run contains `config.json`, `checkpoints/*.ckpt` (with videos inside), `logs/`, `metrics.csv`, `run.log`.
 - **Best/last symlinks**: `best.ckpt` and `last.ckpt` auto-updated by `ModelCheckpointCallback`.
+- **W&B artifact download**: `utils.wandb_artifacts.download_run_artifact()` downloads and extracts run archives from W&B. Automatically invoked during resume if run not found locally.
 
 ### Metrics & Logging (`utils/metrics_*.py`, `loggers/*`, `config/metrics.yaml`)
 - **Recorder**: `MetricsRecorder` buffers per-batch metrics, flushed once per epoch.

@@ -3,7 +3,7 @@ import numpy as np
 from gymnasium import spaces
 from typing import Optional, Sequence
 
-from gym_wrappers.ocatari_helpers import center_x, center_y, normalize_velocity
+from gym_wrappers.ocatari_helpers import center_x, center_y, normalize_linear, normalize_position, normalize_velocity, index_objects_by_category
 
 # Screen dimensions for Atari Pong (for normalizing positions)
 SCREEN_W: float = 160.0
@@ -29,42 +29,7 @@ PADDLE_STILL_EPS: float = 1e-3
 # Max X/Y pixels per frame that ball can move (for normalizing velocity)
 BALL_D_SCALE: float = 12.0
 
-# ---- helpers from your snippet ----
-def _index_objects_by_category(objects):
-    objects_map = {}
-    for object in objects:
-        # Skip HUD objects
-        if getattr(object, "hud", False): continue
-
-        # Skip NoObject placeholders (OCAtari returns these for undetected object slots)
-        if object.category == "NoObject": continue
-
-        # Assert no duplicate real game objects (Player, Enemy, Ball should be unique)
-        assert object.category not in objects_map, (
-            f"Duplicate game object detected: {object.category} already exists in map. "
-            f"This indicates OCAtari returned multiple objects with the same category."
-        )
-
-        # Add object to map
-        objects_map[object.category] = object
-
-    return objects_map
-
-def _normalize_paddle_center_y(center_y_val: float, paddle_h: float,
-                               min_y: float, max_y: float, margin_y: float) -> float:
-    """Normalize paddle center-Y to [-1, 1] over Pong's playable range.
-
-    Uses playable center range: [min_y + h/2 - margin, max_y - h/2 + margin].
-    A small margin (in pixels) provides tolerance at borders.
-    """
-    lo = min_y + 0.5 * paddle_h - margin_y
-    hi = max_y - 0.5 * paddle_h + margin_y
-    denom = hi - lo
-    assert denom > 0.0, (
-        f"Invalid paddle center range: [{lo}, {hi}] for h={paddle_h}, min_y={min_y}, max_y={max_y}"
-    )
-    zero_one = (center_y_val - lo) / denom
-    return 2.0 * zero_one - 1.0
+# (removed _normalize_paddle_center_y; now using normalize_position from ocatari_helpers)
 
 
 def _obs_from_objects(
@@ -95,14 +60,14 @@ def _obs_from_objects(
     """
 
     # Index objects by category for easy lookup
-    obj_map = _index_objects_by_category(objects)
+    obj_map = index_objects_by_category(objects)
 
     # Retrieve player state and normalize
     player_obj = obj_map["Player"]
     player_h = float(player_obj.h)
     player_center_y_val = center_y(player_obj)
     player_dy = player_obj.dy
-    player_y_n = _normalize_paddle_center_y(player_center_y_val, player_h, min_y, max_y, margin_y)
+    player_y_n = normalize_position(player_center_y_val, min_y, max_y, player_h, margin_y)
     player_dy_n = normalize_velocity(player_dy, PADDLE_DY_SCALE)
 
     # Retrieve enemy state and normalize
@@ -111,7 +76,7 @@ def _obs_from_objects(
     if enemy_obj is not None:
         enemy_h = float(enemy_obj.h)
         enemy_center_y_val = center_y(enemy_obj)
-        enemy_y_n = _normalize_paddle_center_y(enemy_center_y_val, enemy_h, min_y, max_y, margin_y)
+        enemy_y_n = normalize_position(enemy_center_y_val, min_y, max_y, enemy_h, margin_y)
     else:
         enemy_y_n = 0.0
     enemy_dy_n = normalize_velocity(enemy_dy, PADDLE_DY_SCALE)
@@ -128,26 +93,11 @@ def _obs_from_objects(
     if ball_visible:
         # X normalization across the full screen width, adjusted for ball width
         w = float(getattr(ball_obj, "w", 0.0))
-        x_lo = 0.0 + 0.5 * w - margin_y
-        x_hi = SCREEN_W - 0.5 * w + margin_y
-        x_denom = x_hi - x_lo
-        assert x_denom > 0.0, (
-            f"Invalid ball center X range: [{x_lo}, {x_hi}] for w={w}, SCREEN_W={SCREEN_W}"
-        )
-        bx01 = (ball_center_x_val - x_lo) / x_denom
+        ball_x_n = normalize_position(ball_center_x_val, 0.0, SCREEN_W, w, margin_y)
 
         # Y normalization within playable field, adjusted for ball height
         h = float(getattr(ball_obj, "h", 0.0))
-        y_lo = min_y + 0.5 * h - margin_y
-        y_hi = max_y - 0.5 * h + margin_y
-        y_denom = y_hi - y_lo
-        assert y_denom > 0.0, (
-            f"Invalid ball center Y range: [{y_lo}, {y_hi}] for h={h}, min_y={min_y}, max_y={max_y}"
-        )
-        by01 = (ball_center_y_val - y_lo) / y_denom
-
-        ball_x_n = 2.0 * bx01 - 1.0
-        ball_y_n = 2.0 * by01 - 1.0
+        ball_y_n = normalize_position(ball_center_y_val, min_y, max_y, h, margin_y)
     else:
         # Use last-seen normalized positions if provided; fallback to 0.0
         ball_x_n = float(last_ball_x_n) if last_ball_x_n is not None else 0.0
@@ -170,13 +120,16 @@ def _obs_from_objects(
             else:
                 w = 2.0
                 h = 2.0
+            # Compute range using same logic as normalize_position
             x_lo = 0.0 + 0.5 * w - margin_y
             x_hi = SCREEN_W - 0.5 * w + margin_y
-            x_denom = x_hi - x_lo
             y_lo = min_y + 0.5 * h - margin_y
             y_hi = max_y - 0.5 * h + margin_y
+            x_denom = x_hi - x_lo
             y_denom = y_hi - y_lo
-            assert x_denom > 0.0 and y_denom > 0.0
+            assert x_denom > 0.0 and y_denom > 0.0, (
+                f"Invalid ball velocity denominator: x_denom={x_denom}, y_denom={y_denom}"
+            )
             ball_dx_n = 2.0 * float(ball_dx) / float(x_denom)
             ball_dy_n = 2.0 * float(ball_dy) / float(y_denom)
     else:
@@ -296,7 +249,7 @@ class PongV5_FeatureExtractor(gym.ObservationWrapper):
             return fallback
 
         try:
-            obj_map = _index_objects_by_category(objects)
+            obj_map = index_objects_by_category(objects)
         except Exception:
             return fallback
 

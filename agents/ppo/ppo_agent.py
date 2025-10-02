@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 
 from utils.policy_factory import build_policy_from_env_and_config
-from utils.torch import assert_detached, batch_normalize
+from utils.torch import assert_detached, batch_normalize, compute_kl_diagnostics
 
 from ..base_agent import BaseAgent
 from .ppo_alerts import PPOAlerts
@@ -105,8 +105,7 @@ class PPOAgent(BaseAgent):
             # Measure how many log probs moved beyond the trusted region (average of how many samples are outside the allowed range)
             clip_fraction = ((ratio < 1.0 - self.clip_range) | (ratio > 1.0 + self.clip_range)).float().mean()
 
-            kl_div = (old_logprobs - new_logprobs).mean()
-            approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
+            kl_div, approx_kl = compute_kl_diagnostics(old_logprobs, new_logprobs)
             # TODO: should I make metric explain that explained_var is for value head?
             explained_var = 1 - torch.var(returns - values_pred) / torch.var(returns)
         

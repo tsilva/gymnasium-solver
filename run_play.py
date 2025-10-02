@@ -20,10 +20,24 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
     action_space = env.single_action_space
     n_actions = action_space.n
 
+    # Try to import pygame for non-blocking keyboard input in GUI mode
+    pygame_available = False
+    if mode == "user" and not step_by_step:
+        try:
+            import pygame
+            pygame_available = True
+        except ImportError:
+            pass
+
     if mode == "user":
-        print(f"\nAction controls: Press 0-{n_actions-1} to select action, Enter to execute.")
         if step_by_step:
+            print(f"\nAction controls: Press 0-{n_actions-1} to select action, Enter to execute.")
             print("Step-by-step mode enabled. Press Enter to step, 'q' then Enter to quit.")
+        elif pygame_available:
+            print(f"\nAction controls: Press 0-{n_actions-1} keys to select action.")
+            print("Press Q to quit.")
+        else:
+            print(f"\nAction controls: Press 0-{n_actions-1} to select action, Enter to execute.")
     else:
         print(f"\nRandom action mode enabled. Sampling from {n_actions} actions.")
         if step_by_step:
@@ -36,6 +50,7 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
     obs = env.reset()
     episode_reward = 0.0
     episode_length = 0
+    action = 0  # Default action
 
     while reported_episodes < target_episodes:
         # Choose action based on mode
@@ -59,8 +74,26 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
                 except (ValueError, AssertionError) as e:
                     print(f"Invalid action: {e}. Using action 0.")
                     action = 0
+            elif pygame_available:
+                # Non-blocking pygame event handling
+                import pygame
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        return
+                    elif event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_q:
+                            return
+                        # Check for number keys (both main keyboard and numpad)
+                        elif pygame.K_0 <= event.key <= pygame.K_9:
+                            key_action = event.key - pygame.K_0
+                            if 0 <= key_action < n_actions:
+                                action = key_action
+                        elif pygame.K_KP0 <= event.key <= pygame.K_KP9:
+                            key_action = event.key - pygame.K_KP0
+                            if 0 <= key_action < n_actions:
+                                action = key_action
             else:
-                # Non-step-by-step user mode: read single character
+                # Fallback: blocking terminal input
                 try:
                     user_input = input()
                 except EOFError:

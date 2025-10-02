@@ -3,7 +3,7 @@ import numpy as np
 from gymnasium import spaces
 from typing import Iterable, Optional, Tuple
 
-from gym_wrappers.ocatari_helpers import center, normalize_velocity
+from gym_wrappers.ocatari_helpers import center, normalize_linear, normalize_position, normalize_velocity, index_objects_by_category
 
 SCREEN_W: float = 160.0
 SCREEN_H: float = 210.0
@@ -19,26 +19,18 @@ MAX_BLOCKS: int = 108
 
 
 def _categorise_objects(objects: Iterable):
-    player = None
-    ball = None
+    obj_map = index_objects_by_category(objects, assert_unique=False)
+
+    # Collect all blocks separately since we need multiples
     blocks = []
     for obj in objects:
-        if not obj or getattr(obj, "hud", False):
+        if getattr(obj, "hud", False):
             continue
         category = getattr(obj, "category", None)
-        if category == "Player" and player is None:
-            player = obj
-        elif category == "Ball" and ball is None:
-            ball = obj
-        elif category == "Block":
+        if category == "Block":
             blocks.append(obj)
-    return player, ball, blocks
 
-
-def _normalize_linear(value: float, lo: float, hi: float) -> float:
-    assert hi > lo, f"Invalid range [{lo}, {hi}]"
-    zero_one = (value - lo) / (hi - lo)
-    return 2.0 * zero_one - 1.0
+    return obj_map.get("Player"), obj_map.get("Ball"), blocks
 
 
 def _obs_from_objects(
@@ -59,12 +51,8 @@ def _obs_from_objects(
         paddle_w = 16.0
         paddle_dx = 0.0
 
-    paddle_x_n = _normalize_linear(
-        paddle_cx,
-        PLAYFIELD_X_MIN + 0.5 * paddle_w - PADDLE_MARGIN_X,
-        PLAYFIELD_X_MAX - 0.5 * paddle_w + PADDLE_MARGIN_X,
-    )
-    paddle_y_n = _normalize_linear(paddle_cy, PLAYFIELD_Y_MIN, PLAYFIELD_Y_MAX)
+    paddle_x_n = normalize_position(paddle_cx, PLAYFIELD_X_MIN, PLAYFIELD_X_MAX, paddle_w, PADDLE_MARGIN_X)
+    paddle_y_n = normalize_linear(paddle_cy, PLAYFIELD_Y_MIN, PLAYFIELD_Y_MAX)
     paddle_dx_n = normalize_velocity(paddle_dx, PADDLE_DX_SCALE)
 
     ball_visible = bool(ball)
@@ -72,16 +60,8 @@ def _obs_from_objects(
         ball_cx, ball_cy = center(ball)
         ball_dx_px = float(getattr(ball, "dx", 0.0))
         ball_dy_px = float(getattr(ball, "dy", 0.0))
-        ball_x_n = _normalize_linear(
-            ball_cx,
-            PLAYFIELD_X_MIN + BALL_MARGIN,
-            PLAYFIELD_X_MAX - BALL_MARGIN,
-        )
-        ball_y_n = _normalize_linear(
-            ball_cy,
-            PLAYFIELD_Y_MIN + BALL_MARGIN,
-            PLAYFIELD_Y_MAX - BALL_MARGIN,
-        )
+        ball_x_n = normalize_position(ball_cx, PLAYFIELD_X_MIN, PLAYFIELD_X_MAX, 0.0, -BALL_MARGIN)
+        ball_y_n = normalize_position(ball_cy, PLAYFIELD_Y_MIN, PLAYFIELD_Y_MAX, 0.0, -BALL_MARGIN)
     else:
         ball_cx = ball_cy = None
         ball_dx_px = ball_dy_px = 0.0

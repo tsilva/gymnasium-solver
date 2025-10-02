@@ -96,6 +96,23 @@ def batch_normalize(x: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
     return (x - x.mean()) / (x.std() + eps)
 
 
+def compute_kl_diagnostics(old_logprobs: torch.Tensor, new_logprobs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Compute KL divergence diagnostics between old and new policy distributions.
+
+    Args:
+        old_logprobs: Log probabilities from the rollout policy
+        new_logprobs: Log probabilities from the current policy
+
+    Returns:
+        kl_div: KL divergence (old_logprobs - new_logprobs).mean()
+        approx_kl: Approximate KL divergence using ratio expansion
+    """
+    ratio = torch.exp(new_logprobs - old_logprobs)
+    kl_div = (old_logprobs - new_logprobs).mean()
+    approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
+    return kl_div, approx_kl
+
+
 def compute_param_group_grad_norm(params):
     """Compute L2 grad norm over params; ignore None grads (0.0 if none)."""
     total_sq = 0.0

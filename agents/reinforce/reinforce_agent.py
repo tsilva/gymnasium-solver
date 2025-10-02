@@ -1,7 +1,7 @@
 import torch
 
 from utils.policy_factory import build_policy_from_env_and_config
-from utils.torch import assert_detached, batch_normalize
+from utils.torch import assert_detached, batch_normalize, compute_kl_diagnostics
 
 from ..base_agent import BaseAgent
 
@@ -68,9 +68,7 @@ class REINFORCEAgent(BaseAgent):
         # KL diagnostics between rollout policy (old) and current policy (new)
         # Matches PPO-style on-action KL estimates
         with torch.no_grad():
-            ratio = torch.exp(logprobs - old_logprobs)
-            kl_div = (old_logprobs - logprobs).mean()
-            approx_kl = ((ratio - 1) - torch.log(ratio)).mean()
+            kl_div, approx_kl = compute_kl_diagnostics(old_logprobs, logprobs)
         
         # The final loss is the sum of the policy loss and the entropy loss;
         # the higher the entropy coefficient the more priority we give to exploration

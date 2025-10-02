@@ -92,6 +92,7 @@ class VecObsBarPrinter(VectorWrapper):
         self._action_discrete_n: Optional[int] = None
         self._action_labels: Optional[Dict[int, str]] = None
         self._last_actions: Optional[np.ndarray] = None
+        self._action_probs: Optional[np.ndarray] = None
         # Cached time limit (max episode steps), if available via env info
         self._time_limit: Optional[int] = None
 
@@ -113,6 +114,11 @@ class VecObsBarPrinter(VectorWrapper):
 
         # Try reading spec to pre-populate labels/ranges
         self._init_from_spec()
+
+    # ---- Public methods ----
+    def set_action_probs(self, action_probs: np.ndarray) -> None:
+        """Set action probabilities for visualization."""
+        self._action_probs = action_probs
 
     # ---- VectorEnv overrides ----
     def reset(self, **kwargs):
@@ -405,22 +411,37 @@ class VecObsBarPrinter(VectorWrapper):
             r_bar, _r_ratio, (r_lo_eff, r_hi_eff) = self._format_bar_scalar(reward_val, r_lo, r_hi, width=self._bar_width)
             self._print_bar_line("reward", f"{reward_val:+.4f}", r_bar, r_lo_eff, r_hi_eff, label_w, value_w)
 
-        # Action bar (discrete only): scale 0..N-1 with last action value
+        # Action bars: show probabilities/values for each action
         action_idx = self._extract_action_index()
         act_n = (
             int(self.action_space.n) if isinstance(self.action_space, spaces.Discrete)
             else self._action_discrete_n if isinstance(self._action_discrete_n, int) and self._action_discrete_n > 0
             else None
         )
-        if (action_idx is not None) and (act_n is not None) and act_n > 0:
-            a_lo, a_hi = 0, act_n - 1
-            a_bar, _a_ratio, (a_lo_eff, a_hi_eff) = self._format_bar_scalar(float(action_idx), float(a_lo), float(a_hi), width=self._bar_width)
-            action_label = self._action_labels.get(action_idx) if self._action_labels else None
-            val_str = f"{action_idx} {action_label}" if action_label else f"{action_idx}"
-            self._print_bar_line("action", val_str, a_bar, a_lo_eff, a_hi_eff, label_w, value_w)
+
+        # Display multiple action bars if we have action probabilities
+        if act_n is not None and act_n > 0:
+            if self._action_probs is not None and len(self._action_probs) > self._env_index:
+                # Show one bar per action with probability
+                probs = self._action_probs[self._env_index]
+                for a_idx in range(min(act_n, len(probs))):
+                    prob = float(probs[a_idx])
+                    a_bar, _a_ratio, (a_lo_eff, a_hi_eff) = self._format_bar_scalar(prob, 0.0, 1.0, width=self._bar_width)
+                    action_label = self._action_labels.get(a_idx) if self._action_labels else None
+                    label = f"a[{a_idx}]" + (f" {action_label}" if action_label else "")
+                    val_str = f"{prob:.4f}"
+                    self._print_bar_line(label, val_str, a_bar, a_lo_eff, a_hi_eff, label_w, value_w)
+            elif action_idx is not None:
+                # Fallback: show single bar with action index (old behavior)
+                a_lo, a_hi = 0, act_n - 1
+                a_bar, _a_ratio, (a_lo_eff, a_hi_eff) = self._format_bar_scalar(float(action_idx), float(a_lo), float(a_hi), width=self._bar_width)
+                action_label = self._action_labels.get(action_idx) if self._action_labels else None
+                val_str = f"{action_idx} {action_label}" if action_label else f"{action_idx}"
+                self._print_bar_line("action", val_str, a_bar, a_lo_eff, a_hi_eff, label_w, value_w)
 
         for i in range(dim):
-            name = labels[i] if i < len(labels) else f"obs[{i}]"
+            label_suffix = labels[i] if i < len(labels) else None
+            name = f"o[{i}]" + (f" {label_suffix}" if label_suffix else "")
             val = float(obs_arr[i])
             lo, hi = ranges[i] if i < len(ranges) else (None, None)
             bar, _ratio, (lo_eff, hi_eff) = self._format_bar(val, lo, hi, i)

@@ -274,9 +274,10 @@ class Config:
     # (algo defaults in subclass)
     policy_targets: Optional["Config.PolicyTargetsType"] = None  # type: ignore[assignment]
 
-    # How many epochs to wait before starting to evaluate 
+    # How many epochs to wait before starting to evaluate
     # (eval_freq_epochs doesn't apply until these many epochs have passed)
-    eval_warmup_epochs: int = 0
+    # When set to a float in (0, 1), it is interpreted as a fraction of total training progress
+    eval_warmup_epochs: Union[int, float] = 0
 
     # How many episodes to evaluate the policy for each evaluation
     # (stats will be averaged over all episodes; the more episodes, the more reliable the stats)
@@ -418,6 +419,7 @@ class Config:
         self._resolve_n_envs()
         self._resolve_numeric_strings()
         self._resolve_batch_size()
+        self._resolve_eval_warmup_epochs()
         self._resolve_schedules()
         self._resolve_schedule_defaults()
         self.validate()
@@ -446,6 +448,23 @@ class Config:
         rollout_size = self.n_envs * self.n_steps
         new_batch_size = max(1, int(rollout_size * batch_size))
         self.batch_size = new_batch_size
+
+    def _resolve_eval_warmup_epochs(self) -> None:
+        """Resolve fractional eval_warmup_epochs to absolute epochs."""
+        warmup = self.eval_warmup_epochs
+        # Only resolve if warmup is in (0, 1) - fractional range
+        if warmup <= 0 or warmup >= 1:
+            return
+
+        # Fractional warmup requires max_env_steps to be set
+        assert self.max_env_steps is not None, \
+            "Fractional eval_warmup_epochs requires max_env_steps to be set"
+
+        # Calculate total epochs: max_env_steps / (n_envs * n_steps)
+        total_epochs = self.max_env_steps / (self.n_envs * self.n_steps)
+
+        # Convert fraction to absolute epochs
+        self.eval_warmup_epochs = int(total_epochs * warmup)
 
     def _resolve_schedules(self) -> None:
         # Schedulable parameters that support dict syntax

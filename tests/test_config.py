@@ -223,3 +223,52 @@ def test_config_build_from_dict_filters_unknown_fields():
 
     assert cfg.env_id == "CartPole-v1"
     assert cfg.algo_id == "ppo"
+
+
+@pytest.mark.unit
+def test_config_fractional_eval_warmup_epochs():
+    """Test that fractional eval_warmup_epochs is resolved correctly"""
+    cfg = Config.build_from_dict({
+        "algo_id": "ppo",
+        "env_id": "CartPole-v1",
+        "n_steps": 128,
+        "n_envs": 4,
+        "batch_size": 64,
+        "max_env_steps": 10000,
+        "eval_warmup_epochs": 0.3,  # 30% of training
+    })
+
+    # total_epochs = 10000 / (4 * 128) = 19.53... epochs
+    # warmup = int(19.53 * 0.3) = int(5.859) = 5
+    assert cfg.eval_warmup_epochs == 5
+
+
+@pytest.mark.unit
+def test_config_fractional_eval_warmup_epochs_without_max_env_steps():
+    """Test that fractional eval_warmup_epochs without max_env_steps raises error"""
+    with pytest.raises(AssertionError, match="max_env_steps"):
+        Config.build_from_dict({
+            "algo_id": "ppo",
+            "env_id": "CartPole-v1",
+            "n_steps": 128,
+            "n_envs": 4,
+            "batch_size": 64,
+            "eval_warmup_epochs": 0.3,  # Fractional without max_env_steps
+        })
+
+
+@pytest.mark.unit
+def test_config_absolute_eval_warmup_epochs():
+    """Test that absolute (>=1) eval_warmup_epochs is not modified"""
+    cfg = Config.build_from_dict({
+        "algo_id": "ppo",
+        "env_id": "CartPole-v1",
+        "n_steps": 128,
+        "n_envs": 4,
+        "batch_size": 64,
+        "max_env_steps": 10000,
+        "eval_warmup_epochs": 10,  # Absolute value
+    })
+
+    # Should remain unchanged
+    assert cfg.eval_warmup_epochs == 10

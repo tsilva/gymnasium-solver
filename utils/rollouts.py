@@ -802,6 +802,16 @@ class RolloutCollector():
             # Perform policy step to determine actions, log probabilities, and value estimates
             actions_t, logps_t, values_t = policy_act(self.policy_model, obs_t, deterministic=deterministic)
 
+            # Extract action probabilities for visualization (if wrapper supports it)
+            try:
+                dist, _ = self.policy_model(obs_t)
+                if hasattr(dist, 'probs'):
+                    action_probs_np = dist.probs.detach().cpu().numpy()
+                    if hasattr(self.env, 'set_action_probs'):
+                        self.env.set_action_probs(action_probs_np)
+            except Exception:
+                pass
+
             # Perform environment step
             actions_np = actions_t.detach().cpu().numpy()
             next_obs, rewards, terminated, truncated, infos = self.env.step(actions_np)

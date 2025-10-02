@@ -210,6 +210,13 @@ def _launch_training_resume(args) -> None:
             raise FileNotFoundError("No @last run found. Train a model first.")
         run_id = LAST_RUN_DIR.resolve().name
 
+    # Check if run exists locally, if not try to download from W&B
+    run_dir = Run._resolve_run_dir(run_id)
+    if not run_dir.exists():
+        print(f"Run {run_id} not found locally. Attempting to download from W&B...")
+        from utils.wandb_artifacts import download_run_artifact
+        download_run_artifact(run_id)
+
     # Load run
     print(f"Resuming run: {run_id}")
     run = Run.load(run_id)

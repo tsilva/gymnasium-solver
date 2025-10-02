@@ -189,6 +189,24 @@ class BaseModel(nn.Module):
         all_params = list(self.parameters())
         return {"opt/grads/norm/all": compute_param_group_grad_norm(all_params)}
 
+    def compute_component_grad_norms(self, components: Dict[str, list]) -> Dict[str, float]:
+        """Compute gradient norms for base + named components.
+
+        Args:
+            components: Dict mapping component names to parameter lists
+
+        Returns:
+            Dict of "opt/grads/norm/{name}" -> norm value
+        """
+        grad_norms = {
+            "opt/grads/norm/all": compute_param_group_grad_norm(list(self.parameters()))
+        }
+
+        for name, params in components.items():
+            grad_norms[f"opt/grads/norm/{name}"] = compute_param_group_grad_norm(params)
+
+        return grad_norms
+
 
 class MLPPolicy(BaseModel):
     def __init__(
@@ -238,17 +256,10 @@ class MLPPolicy(BaseModel):
 
     def compute_grad_norms(self) -> Dict[str, float]:
         """Compute gradient norms for MLP policy components."""
-        
-        grad_norms = super().compute_grad_norms()
-
-        backbone_params = list(self.backbone.parameters())
-        policy_head_params = list(self.policy_head.parameters())
-        
-        return {
-            **grad_norms,
-            "opt/grads/norm/backbone": compute_param_group_grad_norm(backbone_params),
-            "opt/grads/norm/policy_head": compute_param_group_grad_norm(policy_head_params),
-        }
+        return self.compute_component_grad_norms({
+            "backbone": list(self.backbone.parameters()),
+            "policy_head": list(self.policy_head.parameters()),
+        })
 
 class MLPActorCritic(BaseModel):
     def __init__(
@@ -314,19 +325,11 @@ class MLPActorCritic(BaseModel):
     # TODO: generalize to get_metrics
     def compute_grad_norms(self) -> Dict[str, float]:
         """Compute gradient norms for MLP actor-critic components."""
-
-        grad_norms = super().compute_grad_norms()
-
-        backbone_params = list(self.backbone.parameters())
-        policy_head_params = list(self.policy_head.parameters())
-        value_head_params = list(self.value_head.parameters())
-
-        return {
-            **grad_norms,
-            "opt/grads/norm/backbone": compute_param_group_grad_norm(backbone_params),
-            "opt/grads/norm/policy_head": compute_param_group_grad_norm(policy_head_params),
-            "opt/grads/norm/value_head": compute_param_group_grad_norm(value_head_params),
-        }
+        return self.compute_component_grad_norms({
+            "backbone": list(self.backbone.parameters()),
+            "policy_head": list(self.policy_head.parameters()),
+            "value_head": list(self.value_head.parameters()),
+        })
 
 
 class CNNActorCritic(BaseModel):
@@ -435,17 +438,9 @@ class CNNActorCritic(BaseModel):
 
     def compute_grad_norms(self) -> Dict[str, float]:
         """Compute gradient norms for CNN actor-critic components."""
-        grad_norms = super().compute_grad_norms()
-
-        cnn_params = list(self.cnn.parameters())
-        mlp_params = list(self.mlp.parameters()) if hasattr(self.mlp, 'parameters') else []
-        policy_head_params = list(self.policy_head.parameters())
-        value_head_params = list(self.value_head.parameters())
-
-        return {
-            **grad_norms,
-            "opt/grads/norm/cnn": compute_param_group_grad_norm(cnn_params),
-            "opt/grads/norm/mlp": compute_param_group_grad_norm(mlp_params),
-            "opt/grads/norm/policy_head": compute_param_group_grad_norm(policy_head_params),
-            "opt/grads/norm/value_head": compute_param_group_grad_norm(value_head_params),
-        }
+        return self.compute_component_grad_norms({
+            "cnn": list(self.cnn.parameters()),
+            "mlp": list(self.mlp.parameters()) if hasattr(self.mlp, 'parameters') else [],
+            "policy_head": list(self.policy_head.parameters()),
+            "value_head": list(self.value_head.parameters()),
+        })

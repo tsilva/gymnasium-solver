@@ -1,7 +1,8 @@
 import gymnasium as gym
+from gym_wrappers.reward_shaper_base import RewardShaperBase
 
 
-class VizDoom_RewardShaper(gym.Wrapper):
+class VizDoom_RewardShaper(RewardShaperBase):
     """
     Lightweight reward shaping for VizDoom scenarios to reduce idling and promote engagement.
 
@@ -59,7 +60,7 @@ class VizDoom_RewardShaper(gym.Wrapper):
                     shaping -= self.attack_penalty
 
         info = dict(info)
-        info["shaping_reward"] = info.get("shaping_reward", 0.0) + shaping
+        self._add_shaping_info(info, shaping, accumulate=True)
 
         return obs, reward + shaping, terminated, truncated, info
 

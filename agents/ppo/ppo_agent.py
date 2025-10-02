@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 
 from utils.policy_factory import build_policy_from_env_and_config
-from utils.torch import assert_detached
+from utils.torch import assert_detached, batch_normalize
 
 from ..base_agent import BaseAgent
 from .ppo_alerts import PPOAlerts
@@ -36,9 +36,8 @@ class PPOAgent(BaseAgent):
 
         # TODO: perform these ops before calling losses_for_batch?
         # Batch-normalize advantage if requested
-        normalize_advantages = self.config.normalize_advantages == "batch"
-        if normalize_advantages:
-            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+        if self.config.normalize_advantages == "batch":
+            advantages = batch_normalize(advantages)
 
         # Infer policy_distribution and value_predictions from the actor critic model
         policy_dist, values_pred = self.policy_model(observations)

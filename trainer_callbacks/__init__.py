@@ -6,11 +6,12 @@ from .early_stopping import EarlyStoppingCallback
 from .hyperparameter_scheduler import HyperparameterSchedulerCallback
 from .model_checkpoint import ModelCheckpointCallback
 from .monitor_metrics import MonitorMetricsCallback
+from .upload_run import UploadRunCallback
 from .wandb_video_logger import WandbVideoLoggerCallback
 from .warmup_eval import WarmupEvalCallback
 
 __all__ = [
-    "ModelCheckpointCallback", 
+    "ModelCheckpointCallback",
     "WandbVideoLoggerCallback",
     "EarlyStoppingCallback",
     "DispatchMetricsCallback",
@@ -18,4 +19,5 @@ __all__ = [
     "MonitorMetricsCallback",
     "ConsoleSummaryCallback",
     "HyperparameterSchedulerCallback",
+    "UploadRunCallback",
 ]

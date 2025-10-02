@@ -12,6 +12,94 @@ from utils.rollouts import RolloutCollector
 from utils.run import Run
 
 
+def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: bool = False):
+    """Play episodes with random actions or user input."""
+    import numpy as np
+
+    # Get action space info
+    action_space = env.single_action_space
+    n_actions = action_space.n
+
+    if mode == "user":
+        print(f"\nAction controls: Press 0-{n_actions-1} to select action, Enter to execute.")
+        if step_by_step:
+            print("Step-by-step mode enabled. Press Enter to step, 'q' then Enter to quit.")
+    else:
+        print(f"\nRandom action mode enabled. Sampling from {n_actions} actions.")
+        if step_by_step:
+            print("Step-by-step mode enabled. Press Enter to step, 'q' then Enter to quit.")
+
+    reported_episodes = 0
+    episode_rewards = []
+    episode_lengths = []
+
+    obs = env.reset()
+    episode_reward = 0.0
+    episode_length = 0
+
+    while reported_episodes < target_episodes:
+        # Choose action based on mode
+        if mode == "random":
+            action = action_space.sample()
+            if step_by_step:
+                print(f"Random action: {action}")
+        else:  # user mode
+            if step_by_step:
+                try:
+                    user_input = input(f"[step {episode_length}] Action (0-{n_actions-1}): ")
+                except EOFError:
+                    user_input = ""
+
+                if user_input.strip().lower() in {"q", "quit", "exit"}:
+                    break
+
+                try:
+                    action = int(user_input.strip())
+                    assert 0 <= action < n_actions, f"Action must be 0-{n_actions-1}"
+                except (ValueError, AssertionError) as e:
+                    print(f"Invalid action: {e}. Using action 0.")
+                    action = 0
+            else:
+                # Non-step-by-step user mode: read single character
+                try:
+                    user_input = input()
+                except EOFError:
+                    user_input = ""
+
+                if user_input.strip().lower() in {"q", "quit", "exit"}:
+                    break
+
+                try:
+                    action = int(user_input.strip()[0]) if user_input.strip() else 0
+                    action = max(0, min(action, n_actions - 1))
+                except (ValueError, IndexError):
+                    action = 0
+
+        # Execute action
+        obs, reward, terminated, truncated, info = env.step(np.array([action]))
+        episode_reward += reward[0]
+        episode_length += 1
+
+        # Check if episode finished
+        done = terminated[0] or truncated[0]
+        if done:
+            episode_rewards.append(episode_reward)
+            episode_lengths.append(episode_length)
+            reported_episodes += 1
+
+            mean_reward = np.mean(episode_rewards)
+            mean_length = np.mean(episode_lengths)
+            print(
+                f"[episodes {reported_episodes}/{target_episodes}] last_rew={episode_reward:.2f} last_len={episode_length} "
+                f"mean_rew={mean_reward:.2f} mean_len={int(mean_length)}"
+            )
+
+            # Reset for next episode
+            obs = env.reset()
+            episode_reward = 0.0
+            episode_length = 0
+
+
 def main():
     # Parse command line arguments
     p = argparse.ArgumentParser(description="Play a trained agent using RolloutCollector (human render)")
@@ -25,6 +113,12 @@ def main():
         action="store_true",
         help="Pause for input each env step for visual debugging",
     )
+    p.add_argument(
+        "--mode",
+        choices=["trained", "random", "user"],
+        default="trained",
+        help="Action mode: 'trained' (use trained policy), 'random' (sample from action space), 'user' (keyboard input)",
+    )
     args = p.parse_args()
     target_episodes = max(1, int(args.episodes))
 
@@ -32,13 +126,16 @@ def main():
     is_wsl = ("microsoft" in platform.release().lower()) or ("WSL_INTEROP" in os.environ)
     if is_wsl: os.environ.setdefault("SDL_RENDER_DRIVER", "software")
 
-    # Load run
+    # Load run and config
     run = Run.load(args.run_id)
-    assert run.best_checkpoint_dir is not None, "run has no best checkpoint"
+    config = run.load_config()
+
+    # For trained mode, require checkpoint
+    if args.mode == "trained":
+        assert run.best_checkpoint_dir is not None, "run has no best checkpoint"
 
     # Build a single-env environment with human rendering
     # Force vectorization_mode='sync' to ensure render() is supported (ALE native vectorization doesn't support it)
-    config = run.load_config()
     env = build_env_from_config(
         config,
         n_envs=1,
@@ -50,7 +147,14 @@ def main():
     from gym_wrappers.vec_obs_printer import VecObsBarPrinter
     env = VecObsBarPrinter(env, bar_width=40, env_index=0, enable=True, target_episodes=target_episodes)
 
-    # Load configuration
+    # Handle different modes
+    if args.mode in ["random", "user"]:
+        # Manual control modes don't need policy
+        play_episodes_manual(env, target_episodes, args.mode, args.step_by_step)
+        print("Done.")
+        return
+
+    # Trained mode: load policy
     # TODO: we should be loading the agent and having it run the episode
     policy_model, _ = load_policy_model_from_checkpoint(run.best_checkpoint_path, env, config)
 

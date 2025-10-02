@@ -1,8 +1,9 @@
 import gymnasium as gym
 import numpy as np
+from gym_wrappers.reward_shaper_base import RewardShaperBase
 
 
-class CartPoleV1_RewardShaper(gym.Wrapper):
+class CartPoleV1_RewardShaper(RewardShaperBase):
     """
     Reward shaping for CartPole-v1 focusing on keeping:
     - the cart near the center (x ≈ 0)
@@ -69,9 +70,7 @@ class CartPoleV1_RewardShaper(gym.Wrapper):
             shaping = curr_phi - self._prev_phi
 
         # Expose shaping components for debugging/analysis
-        info["shaping_reward"] = shaping
-        info["potential_prev"] = self._prev_phi
-        info["potential_curr"] = curr_phi
+        self._add_shaping_info(info, shaping, potential_prev=self._prev_phi, potential_curr=curr_phi)
 
         self._prev_phi = curr_phi
 

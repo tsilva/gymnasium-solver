@@ -1,7 +1,7 @@
 import torch
 
 from utils.policy_factory import build_policy_from_env_and_config
-from utils.torch import assert_detached
+from utils.torch import assert_detached, batch_normalize
 
 from ..base_agent import BaseAgent
 
@@ -25,14 +25,12 @@ class REINFORCEAgent(BaseAgent):
         assert_detached(observations, actions, returns, advantages)
         
         # Normalize returns if requested
-        if self.config.normalize_returns == "batch": 
-            # TODO: use util
-            returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+        if self.config.normalize_returns == "batch":
+            returns = batch_normalize(returns)
 
         # Normalize advantages if requested
-        if self.config.normalize_advantages == "batch": 
-            # TODO: use util
-            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+        if self.config.normalize_advantages == "batch":
+            advantages = batch_normalize(advantages)
 
         # Pick the configured policy targets
         if self.config.policy_targets == "returns": 

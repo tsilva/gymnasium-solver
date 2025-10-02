@@ -1,8 +1,9 @@
 import gymnasium as gym
 import numpy as np
+from gym_wrappers.reward_shaper_base import RewardShaperBase
 
 
-class PongV5_RewardShaper(gym.Wrapper):
+class PongV5_RewardShaper(RewardShaperBase):
     """
     Reward shaping wrapper for Pong-v5 to encourage paddle-ball interactions.
     
@@ -175,12 +176,14 @@ class PongV5_RewardShaper(gym.Wrapper):
                 info['ball_direction_changed'] = True
             
             shaping_reward = collision_reward + proximity_reward + direction_change_reward
-            
+
             # Add debug info
-            info['shaping_reward'] = shaping_reward
-            info['collision_reward'] = collision_reward
-            info['proximity_reward'] = proximity_reward
-            info['direction_change_reward'] = direction_change_reward
+            self._add_shaping_info(
+                info, shaping_reward,
+                collision_reward=collision_reward,
+                proximity_reward=proximity_reward,
+                direction_change_reward=direction_change_reward
+            )
         
         # Update previous state
         self.prev_ball_dx = ball_dx

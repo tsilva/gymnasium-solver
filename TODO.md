@@ -10,58 +10,33 @@
 - BUG: why no action historgram for cartpole?
 - BUG: training epoch is still running after validation early stop
 
-- TEST: do highlighted rows also show alerts correctly?
-- BUG: inspect not working because it cant retrieve action labels
+- add support for resuming run from wandb
+- make sure all smoke tests are passing
 - TEST: are sweeps still working?
 - TODO: learn how to read gradient graphs
 - FEAT: Create MCP server that provides useful tools for claude code to be able to run training sessions and inspect training runs. This tool should have tools like the ability to list available environments and configs, list runs, start a run, etc. Ask agent to figure out exactly which tools would be optimal for it to be easily launch, stop and inspect training runs then add them.
-- FEAT: zip and upload runs to wandb
-- FEAT: add support for run_play to run with random actions or user actions (map actions to number keys)
 - FEAT: add support for running sweep from existing run (using previous resume support)
 - FEAT: allow downloading old runs from wandb when not available locally
 - FEAT: add support to only start eval when ep_rew_mean crosses eval threshold (or at fraction of)
-- REFACTOR: simplify run_inspect.py code
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 
 ## REFACTOR
 
+Tier 1: Highest ROI (Quick Wins)
 
-  Key Findings
+4. Object center extraction - Duplicated OCAtari helper functions in BreakoutV5/PongV5 (~30 lines)
+5. Velocity normalization - Identical tanh normalization in 2 feature extractors (~12 lines)
 
-  12 deduplication opportunities identified, ranked by ROI:
+Tier 2: High ROI (Moderate Effort)
 
-  Tier 1: Highest ROI (Quick Wins)
+6. Agent model building - Identical build_models() in PPO/REINFORCE (~10 lines)
+7. KL divergence calculation - Same KL diagnostics in both agents (~8 lines)
+8. Linear position normalization - Repeated linear mapping to [-1,1] range (~20 lines)
+9. Object categorization - Similar OCAtari object grouping patterns (~15 lines)
 
-  1. Batch normalization logic - Identical normalization code across PPO/REINFORCE agents (~12 lines)
-  2. Gradient norm computation - Repeated pattern in MLPPolicy, MLPActorCritic, CNNActorCritic (~40
-  lines)
-  3. Reward shaper info dicts - Similar debug info tracking across 4 reward shapers (~8-12 lines)
-  4. Object center extraction - Duplicated OCAtari helper functions in BreakoutV5/PongV5 (~30 lines)
-  5. Velocity normalization - Identical tanh normalization in 2 feature extractors (~12 lines)
+Tier 3: Medium ROI (Higher Effort)
 
-  Tier 2: High ROI (Moderate Effort)
-
-  6. Agent model building - Identical build_models() in PPO/REINFORCE (~10 lines)
-  7. KL divergence calculation - Same KL diagnostics in both agents (~8 lines)
-  8. Linear position normalization - Repeated linear mapping to [-1,1] range (~20 lines)
-  9. Object categorization - Similar OCAtari object grouping patterns (~15 lines)
-
-  Tier 3: Medium ROI (Higher Effort)
-
-  10-12. Activation hooks, environment building, early stop handling (~75 lines)
-
-  Recommended Action Plan
-
-  Quick wins (Opportunities #1, #4, #5): ~54 lines saved, ~2 hours effort, very low risk
-  - Extract OCAtari utilities to gym_wrappers/ocatari_utils.py
-  - Consolidate normalization functions in rollout utils
-  - Creates reusable utilities for future development
-
-  The codebase is generally well-structured with minimal duplication. All proposed refactorings align
-  with the fail-fast philosophy—no defensive programming, clear consolidations that reduce maintenance
-   burden.
-
-  Full details saved to .claude/agents/code-deduper.md.
+10-12. Activation hooks, environment building, early stop handling (~75 lines)
 
 1. utils/rollouts.py (1,067 lines)
 

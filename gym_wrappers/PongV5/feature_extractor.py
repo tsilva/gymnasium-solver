@@ -3,6 +3,8 @@ import numpy as np
 from gymnasium import spaces
 from typing import Optional, Sequence
 
+from gym_wrappers.ocatari_helpers import center_x, center_y, normalize_velocity
+
 # Screen dimensions for Atari Pong (for normalizing positions)
 SCREEN_W: float = 160.0
 SCREEN_H: float = 210.0
@@ -48,41 +50,7 @@ def _index_objects_by_category(objects):
 
     return objects_map
 
-def _normalize_velocity(value: float, scale: float) -> float:
-    """Map symmetric value in R to [-1, 1] using tanh with scale.
-
-    0 maps to 0.0, extremes saturate to -1/1.
-    """
-    return float(np.tanh(float(value) / float(scale)))
-
-def _center_y(obj) -> float:
-    """Return robust center-Y for an OCAtari object.
-
-    Prefer explicit center if present; otherwise derive from top-left y and height.
-    """
-    if obj is None:
-        return 0.0
-    # OCAtari objects often provide `center` (x, y); fall back to y + h/2.
-    if hasattr(obj, "center") and obj.center is not None:
-        return float(obj.center[1])
-    h = float(getattr(obj, "h", 0.0))
-    y = float(getattr(obj, "y", 0.0))
-    return y + 0.5 * h
-
-def _center_x(obj) -> float:
-    """Return robust center-X for an OCAtari object.
-
-    Prefer explicit center if present; otherwise derive from left x and width.
-    """
-    if obj is None:
-        return 0.0
-    if hasattr(obj, "center") and obj.center is not None:
-        return float(obj.center[0])
-    w = float(getattr(obj, "w", 0.0)) # TODO: don't think this is needed
-    x = float(getattr(obj, "x", 0.0))
-    return x + 0.5 * w
-
-def _normalize_paddle_center_y(center_y: float, paddle_h: float,
+def _normalize_paddle_center_y(center_y_val: float, paddle_h: float,
                                min_y: float, max_y: float, margin_y: float) -> float:
     """Normalize paddle center-Y to [-1, 1] over Pong's playable range.
 
@@ -95,7 +63,7 @@ def _normalize_paddle_center_y(center_y: float, paddle_h: float,
     assert denom > 0.0, (
         f"Invalid paddle center range: [{lo}, {hi}] for h={paddle_h}, min_y={min_y}, max_y={max_y}"
     )
-    zero_one = (center_y - lo) / denom
+    zero_one = (center_y_val - lo) / denom
     return 2.0 * zero_one - 1.0
 
 
@@ -132,26 +100,26 @@ def _obs_from_objects(
     # Retrieve player state and normalize
     player_obj = obj_map["Player"]
     player_h = float(player_obj.h)
-    player_center_y = _center_y(player_obj)
+    player_center_y_val = center_y(player_obj)
     player_dy = player_obj.dy
-    player_y_n = _normalize_paddle_center_y(player_center_y, player_h, min_y, max_y, margin_y)
-    player_dy_n = _normalize_velocity(player_dy, PADDLE_DY_SCALE)
+    player_y_n = _normalize_paddle_center_y(player_center_y_val, player_h, min_y, max_y, margin_y)
+    player_dy_n = normalize_velocity(player_dy, PADDLE_DY_SCALE)
 
     # Retrieve enemy state and normalize
     enemy_obj = obj_map.get("Enemy", None)
     enemy_dy = enemy_obj.dy if enemy_obj else 0
     if enemy_obj is not None:
         enemy_h = float(enemy_obj.h)
-        enemy_center_y = _center_y(enemy_obj)
-        enemy_y_n = _normalize_paddle_center_y(enemy_center_y, enemy_h, min_y, max_y, margin_y)
+        enemy_center_y_val = center_y(enemy_obj)
+        enemy_y_n = _normalize_paddle_center_y(enemy_center_y_val, enemy_h, min_y, max_y, margin_y)
     else:
         enemy_y_n = 0.0
-    enemy_dy_n = _normalize_velocity(enemy_dy, PADDLE_DY_SCALE)
+    enemy_dy_n = normalize_velocity(enemy_dy, PADDLE_DY_SCALE)
 
     # Retrieve ball state and normalize
     ball_obj = obj_map.get("Ball", None)
-    ball_center_x = _center_x(ball_obj) if ball_obj else 0.0
-    ball_center_y = _center_y(ball_obj) if ball_obj else 0.0
+    ball_center_x_val = center_x(ball_obj) if ball_obj else 0.0
+    ball_center_y_val = center_y(ball_obj) if ball_obj else 0.0
     ball_dx = ball_obj.dx if ball_obj else 0
     ball_dy = ball_obj.dy if ball_obj else 0
     ball_visible = (ball_obj is not None) and bool(getattr(ball_obj, "visible", True))
@@ -166,7 +134,7 @@ def _obs_from_objects(
         assert x_denom > 0.0, (
             f"Invalid ball center X range: [{x_lo}, {x_hi}] for w={w}, SCREEN_W={SCREEN_W}"
         )
-        bx01 = (ball_center_x - x_lo) / x_denom
+        bx01 = (ball_center_x_val - x_lo) / x_denom
 
         # Y normalization within playable field, adjusted for ball height
         h = float(getattr(ball_obj, "h", 0.0))
@@ -176,7 +144,7 @@ def _obs_from_objects(
         assert y_denom > 0.0, (
             f"Invalid ball center Y range: [{y_lo}, {y_hi}] for h={h}, min_y={min_y}, max_y={max_y}"
         )
-        by01 = (ball_center_y - y_lo) / y_denom
+        by01 = (ball_center_y_val - y_lo) / y_denom
 
         ball_x_n = 2.0 * bx01 - 1.0
         ball_y_n = 2.0 * by01 - 1.0

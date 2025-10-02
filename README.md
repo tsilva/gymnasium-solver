@@ -1,68 +1,112 @@
-## gymnasium-solver 🤖🏋️
+# gymnasium-solver
 
-Fast, practical reinforcement learning on Gymnasium. Train PPO/REINFORCE agents with config-first workflows, vectorized environments, videos, a Gradio run inspector, and one-command publishing to the Hugging Face Hub.
+Fast, config-first reinforcement learning framework built on PyTorch Lightning and Gymnasium. Train PPO and REINFORCE agents with vectorized environments, video capture, and seamless W&B/Hugging Face Hub integration.
 
-### ⚠️ Warning
-This project is currently for self-education purposes only. I'm doing a lot of vibe coding: I quickly vibe-code features, then review the code and chisel out the AI slop. At any point the codebase may be ugly and buggy. Please don't assume it's a "real" project until I make the first release. From that point on, I'll start working with branches and a more stable workflow.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 
-### ✨ Highlights
-- **Algorithms** 🧠: PPO, REINFORCE
-- **Config-first** ⚙️: concise YAML configs with inheritance and dict-based schedules (e.g., `{start: 0.001, end: 0.0}`)
-- **Vectorized envs** ⚡: Dummy/Subproc, frame stacking, obs/reward normalization
-- **Atari-ready** 🕹️: ALE with `obs_type` rgb/ram/objects (via [Gymnasium](https://gymnasium.farama.org) and [OCAtari](https://github.com/Kautenja/oc-atari))
-- **Retro-ready** 🎮: Classic console games via [stable-retro](https://github.com/Farama-Foundation/stable-retro) (e.g., `Retro/SuperMarioBros-Nes`)
-- **Wrappers registry** 🧰: plug-in env wrappers by name
-- **Great UX** ✨: curated `runs/` folders, auto `@last` link, video capture
-- **Inspector UI** 🔎: step-by-step episode browser (Gradio)
-- **Hub publishing** 📤: push run artifacts and preview video to [Hugging Face Hub](https://huggingface.co)
+## Warning
 
-### 📦 Install
-- Using uv (recommended):
+**This is a self-education project undergoing rapid development ("vibe coding").** Expect instability and breaking changes until the first official release. The codebase may be ugly or buggy at any point. Do not use in production.
+
+## Features
+
+- **Algorithms**: PPO, REINFORCE with policy-only or actor-critic architectures
+- **Config-first**: YAML configs with inheritance, variants, and dict-based schedules (`{start: 0.001, end: 0.0}`)
+- **Vectorized environments**: Sync/async modes, frame stacking, observation/reward normalization
+- **Atari support**: ALE with `obs_type` rgb/ram/objects via [Gymnasium](https://gymnasium.farama.org) and [OCAtari](https://github.com/Kautenja/oc-atari)
+- **Retro support**: Classic console games via [stable-retro](https://github.com/Farama-Foundation/stable-retro)
+- **VizDoom support**: First-person shooter environments
+- **Wrapper registry**: Plug-in environment wrappers by name
+- **Run management**: Clean `runs/` structure with `@last` symlink, automatic best/last checkpoints
+- **Video capture**: Automatic episode recording during evaluation
+- **Inspector UI**: Gradio-based step-by-step episode browser with frame visualization
+- **W&B integration**: Automatic dashboard creation, metrics tracking, video uploads
+- **Hugging Face Hub**: One-command publishing of trained models
+- **Hyperparameter schedules**: Linear interpolation for learning rates, clip ranges, entropy coefficients
+- **CLI overrides**: Override config values without editing YAML files
+
+## Installation
+
+### Using uv (recommended)
+
 ```bash
 pipx install uv  # or: pip install uv
 uv sync
 ```
-- Or with pip:
+
+### Using pip
+
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -U pip
 pip install -e .
 ```
 
-### 🚀 Quickstart
-- **Train** 🏃 (pass config either positionally or via `--config_id`; defaults to `Bandit-v0:ppo` when omitted):
+## Quick Start
+
+### Training
+
+Train an agent using config specs in `<env>:<variant>` format:
+
 ```bash
-# Positional config (shorthand)
+# Train PPO on CartPole
 python train.py CartPole-v1:ppo -q
+
+# Train REINFORCE
 python train.py CartPole-v1:reinforce -q
 
-# Or with explicit flag
+# Use explicit flag
 python train.py --config_id "CartPole-v1:ppo" -q
-python train.py --config_id "CartPole-v1:reinforce" -q
 
-# Uses train.py default (Bandit-v0:ppo) when --config_id is omitted
+# Defaults to Bandit-v0:ppo when no config specified
 python train.py -q
 
-# Override max timesteps without editing YAML
-python train.py CartPole-v1:ppo --max-steps 5000
+# Override max timesteps from CLI
+python train.py CartPole-v1:ppo --max-timesteps 5000
+
+# List available environments
+python train.py --list-envs
+python train.py --list-envs CartPole
 ```
 
-- Debugging: when a debugger is attached (e.g., VS Code, PyCharm), `train.py` forces `n_envs=1` and `vectorization_mode='sync'` for reliable breakpoints, and adjusts `batch_size` to remain compatible with the new rollout size.
-- **Play a trained policy** 🎮 (auto-loads best/last checkpoint from a run):
+**Debugger support**: When a debugger is attached, `train.py` automatically forces `n_envs=1` and `vectorization_mode='sync'` for reliable breakpoints, adjusting `batch_size` to remain compatible.
+
+### Evaluation
+
 ```bash
-python play.py --run-id @last --episodes 5
-```
-- **Inspect a run (UI)** 🔍:
-```bash
-python inspector.py --run-id @last --port 7860 --host 127.0.0.1
+# Play trained policy (auto-loads best/last checkpoint)
+python run_play.py --run-id @last --episodes 5
+
+# Launch Gradio inspector UI
+python run_inspect.py --run-id @last --port 7860
 ```
 
-### ⚙️ Configs (YAML)
-Configs live in `config/environments/*.yaml`. New style puts base fields at the top and per-algorithm variants under their own key. Schedules are specified as dicts with `start` and `end` keys, and you can optionally provide `from`, `to`, and `schedule` keys to control the interpolation window (values `<1` for `from`/`to` are treated as a fraction of `max_timesteps`, values `>1` as explicit vec steps; default schedule is `linear`). The loader selects an algo-specific config subclass based on `algo_id` (e.g., `PPOConfig`, `REINFORCEConfig`).
+### Publishing
+
+Publish trained models to Hugging Face Hub:
+
+```bash
+# Publish latest run
+python run_publish.py
+
+# Publish specific run
+python run_publish.py --run-id <ID>
+
+# Publish to custom repo
+python run_publish.py --repo user/repo --private
+```
+
+Requires `HF_TOKEN` environment variable or `huggingface-cli login`.
+
+## Configuration
+
+### YAML Configs
+
+Configs live in `config/environments/*.yaml`. Each file defines base settings and per-algorithm variants:
 
 ```yaml
-# New per-file style (with YAML anchors)
-# Tip: omit project_id to default to the filename (e.g., CartPole-v1)
+# Base settings with YAML anchors
 _base: &base
   env_id: CartPole-v1
   eval_episodes: 10
@@ -74,167 +118,243 @@ ppo:
   max_timesteps: 1e5
   n_steps: 32
   batch_size: 256
-  policy_lr: {start: 0.001, end: 0.0}   # linear schedule from 0.001 → 0
+  policy_lr: {start: 0.001, end: 0.0}   # Linear schedule from 0.001 to 0
   clip_range: {start: 0.2, end: 0.0}
   env_wrappers:
     - { id: CartPoleV1_RewardShaper, angle_reward_scale: 1.0 }
 ```
 
-- Each config also embeds an environment `spec` block describing action/observation spaces, rewards, and metadata. Variants can override `spec` when wrappers change the effective interface (e.g., Pong objects remaps the action set).
+**Config selection**:
+- **CLI**: `python train.py <env>:<variant>` (e.g., `CartPole-v1:ppo`)
+- **Python**: `load_config("CartPole-v1", "ppo")`
 
-Selection:
-- Programmatic (Python): `load_config("CartPole-v1", "ppo")`; pass the environment id and variant explicitly because the compact `"CartPole-v1_ppo"` form is no longer supported.
-- CLI (train.py): pass config as positional `CartPole-v1:ppo` or flag `--config_id "CartPole-v1:ppo"` (colon, not underscore). The CLI enforces providing a variant.
-Callers must always supply a variant; the loader no longer falls back to the first block in the YAML file.
-The loader supports base fields either at the document root or under `_base` with `<<: *base` merges in each variant. It remains compatible with the legacy multi-block format for a transitional period. When `project_id` is omitted in environment YAMLs, it is inferred from the file name.
+When `project_id` is omitted in YAML, it defaults to the filename stem.
 
-Key fields: `env_id`, `algo_id`, `n_envs`, `n_steps`, `batch_size`, `max_timesteps`, `policy` (`mlp|cnn`), `hidden_dims`, `obs_type` (`rgb|ram|objects` for ALE), `optimizer` (`adamw` default; supports `adam|adamw|sgd`).
+### Key Configuration Fields
 
-Batch size can be either an absolute integer or a fraction in (0, 1]. If fractional, it is resolved as `batch_size = floor(n_envs * n_steps * fraction)`, with a minimum of 1.
+- **Environment**: `env_id`, `n_envs`, `vectorization_mode`, `env_wrappers`
+- **Algorithm**: `algo_id` (ppo, reinforce), `policy` (mlp, cnn), `hidden_dims`
+- **Training**: `max_timesteps`, `n_steps`, `batch_size`, `n_epochs`
+- **Optimization**: `policy_lr`, `optimizer` (adam, adamw, sgd)
+- **PPO-specific**: `clip_range`, `vf_coef`, `ent_coef`, `gae_lambda`
+- **Atari**: `obs_type` (rgb, ram, objects)
+- **Normalization**: `normalize_obs` (false, true/rolling, static), `normalize_reward`
 
-- Advantage normalization: set `normalize_advantages` to `rollout` (normalize once per rollout, SB3-style), `batch` (normalize per mini-batch), or `off`.
- - Env normalization: set `normalize_obs` to `true` or `'rolling'` to enable SB3 `VecNormalize` for observations, or `'static'` to use bounds-based normalization (observations only). Enable reward normalization with `normalize_reward: true` (SB3). Defaults are off.
+### Schedules
 
-REINFORCE options: set `returns_type` to control Monte Carlo returns used for scaling log-probs: `mc:rtg` (reward-to-go; default) or `mc:episode` (classic vanilla: make return constant across each episode segment).
+Hyperparameters support dict-based linear schedules:
 
-VizDoom support: set `env_id` to `VizDoom-DeadlyCorridor-v0`. Requires `pip install vizdoom` and access to `deadly_corridor.cfg`/`deadly_corridor.wad` (auto-discovered from the installed package, or set `VIZDOOM_SCENARIOS_DIR` or `env_kwargs.config_path`).
+```yaml
+policy_lr: {start: 0.001, end: 0.0}
+clip_range: {start: 0.2, end: 0.05}
+```
 
-PPO+Replay (experimental): enable light off-policy mixing à la ACER/P3O.
-- `replay_ratio`: extra off-policy minibatches per on-policy minibatch (e.g., 2–8). Default `0.0` (off).
-- `replay_buffer_size`: capacity in transitions (flattened). Default `0` (disabled).
-- `replay_is_clip`: cap for importance weights when sampling from replay (default `10.0`).
-Keeps the usual PPO GAE/entropy settings; off-policy updates use clipped IS weights and the standard clipped PPO objective.
+Control interpolation with `from`, `to`, and `schedule` keys. Values `<1` are fractions of `max_timesteps`, values `>1` are absolute steps.
 
-### 🧰 Environment wrappers
-Register-by-name wrappers via `EnvWrapperRegistry` (see `gym_wrappers/__init__.py`). Available IDs:
-- `PixelObservationWrapper`
-- `DiscreteEncoder` (encoding: 'array' | 'binary' | 'onehot')
-- `DiscreteActionSpaceRemapperWrapper` (map smaller Discrete to original actions via `mapping: [..]`)
-- `PongV5_FeatureExtractor`, `PongV5_RewardShaper`
-- `MountainCarV0_RewardShaper`, `CartPoleV1_RewardShaper`, `VizDoom_RewardShaper`
+### Fractional Batch Size
 
-Use in YAML:
+Batch size can be a fraction in (0, 1]:
+
+```yaml
+batch_size: 0.5  # 50% of rollout size (n_envs * n_steps)
+```
+
+Resolved as `floor(rollout_size * fraction)`, minimum 1, must evenly divide rollout size.
+
+### Algorithm-Specific Options
+
+**REINFORCE**:
+- `policy_targets`: `returns` or `advantages`
+- `returns_type`: `mc:rtg` (reward-to-go) or `mc:episode` (constant across episode)
+
+**PPO + Replay (experimental)**:
+- `replay_ratio`: off-policy minibatches per on-policy minibatch (0-8)
+- `replay_buffer_size`: capacity in transitions
+- `replay_is_clip`: importance sampling weight cap (default 10.0)
+
+## Environment Wrappers
+
+Register wrappers by name via `EnvWrapperRegistry` (see `gym_wrappers/__init__.py`):
+
+- `PixelObservationWrapper`: Extract pixel observations
+- `DiscreteEncoder`: Encode discrete observations (array, binary, onehot)
+- `DiscreteActionSpaceRemapperWrapper`: Remap action space
+- `PongV5_FeatureExtractor`, `PongV5_RewardShaper`: Pong-specific
+- `MountainCarV0_RewardShaper`: Mountain Car reward shaping
+- `CartPoleV1_RewardShaper`: CartPole reward shaping
+- `VizDoom_RewardShaper`: VizDoom reward shaping
+
+**Usage in YAML**:
+
 ```yaml
 env_wrappers:
   - { id: PixelObservationWrapper, pixels_only: true }
+  - { id: CartPoleV1_RewardShaper, angle_reward_scale: 1.0 }
 ```
 
-### 🎥 Runs, checkpoints, and videos
-- 📁 Each training creates `runs/<id>/` with `config.json`, `checkpoints/*.ckpt` (videos stored inside), and `logs/`
-- 🔗 `runs/@last` symlink points to the most recent run
-- 🏷️ Best/last checkpoints: `best.ckpt`, `last.ckpt` (auto-detected by `play.py` and the inspector)
-- 📈 Metrics: prints and logs `train/*` and `eval/*` including `roll/ep_rew/mean` and running best as `roll/ep_rew/best` (highlighted in blue; rules configurable in `config/metrics.yaml`). Metrics that fall outside configured bounds (`min`/`max` in `config/metrics.yaml`) are highlighted in yellow and emit a console warning. The console table also shows an inline ASCII sparkline (e.g., `█▇▇▆▅▄▃▂▁`) per numeric metric to visualize recent trends.
+## Runs and Outputs
 
-### 📤 Publish to Hugging Face Hub
-Authenticate once (`huggingface-cli login`) or set `HF_TOKEN`, then:
+### Directory Structure
+
+Each training run creates `runs/<id>/` containing:
+
+- `config.json`: Full configuration snapshot
+- `checkpoints/*.ckpt`: Model checkpoints with embedded videos
+- `best.ckpt`, `last.ckpt`: Symlinks to best/last checkpoints
+- `metrics.csv`: Training metrics log
+- `logs/`: Session logs
+- `videos/`: Episode recordings
+- `report.md`: End-of-training summary
+
+The `runs/@last` symlink always points to the most recent run.
+
+### Metrics and Logging
+
+Metrics are printed to console and logged to W&B/CSV:
+
+- **Training**: `train/roll/ep_rew/mean`, `train/roll/ep_len/mean`, `train/loss/*`
+- **Evaluation**: `val/roll/ep_rew/mean`, `val/roll/ep_rew/best`
+- **Optimization**: `train/opt/grads/norm/*`, `train/policy_lr`
+
+The console logger displays:
+- Precision/highlight rules from `config/metrics.yaml`
+- Yellow highlighting for metrics outside configured bounds
+- Inline ASCII sparklines showing recent trends (e.g., `█▇▇▆▅▄▃▂▁`)
+
+### Video Capture
+
+Videos are automatically recorded during evaluation epochs and uploaded to W&B. Episodes are stored in `runs/<id>/checkpoints/epoch=XX.mp4`.
+
+## W&B Integration
+
+### Automatic Dashboard Creation
+
+Training automatically creates/updates a W&B workspace at the beginning of each run, selecting the current run across panels and printing the URL.
+
+### Manual Dashboard Management
+
 ```bash
-python publish.py                 # publish latest run
-python publish.py --run-id <ID>   # publish a specific run
-python publish.py --repo user/repo --private
-```
-Uploads run artifacts under `artifacts/` and attaches a preview video when found.
+# Create/update dashboard (idempotent by default)
+python scripts/setup_wandb_dashboard.py --entity <entity> --project <project>
 
-### 🗂️ Project layout
-```
-agents/            # PPO, REINFORCE
-loggers/           # custom Lightning/CSV/console loggers
-utils/             # config, env, models, rollouts, helpers
-gym_wrappers/      # registry + wrappers (feature extractors, reward shaping, pixels)
-trainer_callbacks/ # logging, early stopping, checkpointing, hyperparam sync, videos
-config/            # environment YAML configs
-runs/              # training outputs (checkpoints, videos, logs, config)
+# Force overwrite existing workspace
+python scripts/setup_wandb_dashboard.py --overwrite
+
+# Select latest run in dashboard panels
+python scripts/setup_wandb_dashboard.py --select-latest
 ```
 
-### 🌀 W&B Sweeps
-- Train under a sweep: set your sweep `program` to call `python train.py --config_id "<env>:<variant>"` (e.g., `CartPole-v1:ppo`).
-- The script auto-detects W&B Agent via `WANDB_SWEEP_ID` and merges `wandb.config` into the main config before training. You can also force this behavior with `--wandb_sweep`.
-- Parameter names map 1:1 to config fields (e.g., `n_envs`, `n_steps`, `batch_size`, `policy_lr`, `clip_range`, `gamma`, `gae_lambda`, `ent_coef`, `vf_coef`, `max_timesteps`, etc.). Dict-based schedules like `{start: 0.001, end: 0.0}` are supported for sweep values.
-- Fractional `batch_size` in (0, 1] is resolved as a fraction of `n_envs * n_steps` after overrides are applied.
+Requires W&B login (`wandb login`) or `WANDB_API_KEY` environment variable.
 
-Example sweep specs:
-- Grid: `config/sweeps/cartpole_ppo_grid.yaml`
-- Bayesian: `config/sweeps/cartpole_ppo_bayes.yaml`
+### W&B Sweeps
 
-Usage:
+Hyperparameter sweeps are supported via W&B Agent:
+
 ```bash
+# Launch a sweep
 wandb sweep config/sweeps/cartpole_ppo_grid.yaml
 wandb agent <entity>/<project>/<sweep_id>
 ```
 
-### 📊 W&B Workspace
-Training auto-creates/updates a project workspace at the beginning of the run, default-selects the current run across panels, and prints the URL (uses the active run's entity/project; workspace name: "<project> View"). This makes the dashboard ready while training is in progress.
+The script auto-detects W&B Agent via `WANDB_SWEEP_ID` and merges `wandb.config` into the main config before training.
 
-Create or preview a default W&B dashboard manually (idempotent):
+**Parameter mapping**: Config fields map 1:1 to sweep parameters (e.g., `n_envs`, `n_steps`, `batch_size`, `policy_lr`, `clip_range`, `gamma`, `gae_lambda`). Dict-based schedules like `{start: 0.001, end: 0.0}` are supported.
+
+**Example sweep specs**:
+- Grid search: `config/sweeps/cartpole_ppo_grid.yaml`
+- Bayesian optimization: `config/sweeps/cartpole_ppo_bayes.yaml`
+
+## Environment Variables
+
+### Logging Control
+
 ```bash
-# Ensure dependencies
-uv sync  # or: pip install -e . && pip install wandb-workspaces
-
-# Push a workspace (reads WANDB_ENTITY/WANDB_PROJECT by default).
-# Safe by default: will not overwrite an existing workspace unless --overwrite is passed.
-python scripts/setup_wandb_dashboard.py --entity <team-or-user> --project <project-name>
-
-# Default-select the most recent run across panels
-python scripts/setup_wandb_dashboard.py --entity <team-or-user> --project <project-name> --select-latest
-
-# Dry-run to preview JSON without pushing
-python scripts/setup_wandb_dashboard.py --dry-run
-```
-Requires a logged-in W&B session (`wandb login`) or `WANDB_API_KEY` set.
-
-- Notes:
-  - The script won’t overwrite an existing workspace by default; it prints that it already exists. Use `--overwrite` to update the existing layout.
-  - Use `--key-panels-per-section N` to control how many “Key Metrics” panels appear per section.
-  - Default workspace name is "<project> View". Override with `--name`.
-  - The “roll/actions/mean” chart auto-sets its y‑axis from the environment spec’s action space: for discrete spaces, `[0, N-1]`; for continuous, the provided `[min, max]`/`bounds` when available. Falls back to auto‑scaling if the spec isn’t found.
-
-### 🔇 Silencing logs
-To suppress creation of session log files and banner/config dumps to `logs/` (useful for ad‑hoc play sessions), set:
-```
+# Suppress session log files and banner/config dumps
 export VIBES_DISABLE_SESSION_LOGS=1
-```
-To silence verbose checkpoint load prints, set:
-```
-export VIBES_QUIET=1   # or: VIBES_DISABLE_CHECKPOINT_LOGS=1
+
+# Silence verbose checkpoint load prints
+export VIBES_QUIET=1  # Alias: VIBES_DISABLE_CHECKPOINT_LOGS=1
 ```
 
-### 🧪 Tests
+## Testing
+
+Run the test suite:
+
 ```bash
+# All tests
 pytest -q
+
+# Specific test file
+pytest tests/test_ppo.py -v
+
+# Exclude slow tests
+pytest -m "not slow" -q
 ```
 
-### 🧑‍💻 Developer tasks
-- `!TASK: audit_bugs` - Find and document functional defects with precise remediation plans
-- `!TASK: audit_static_analysis` - Identify latent defects using lightweight static checks
-- `!TASK: cleanup_dead_code` - Find and remove unused modules, functions, and branches
-- `!TASK: cleanup_dry_file` - Reduce duplication within a single module by extracting shared behavior
-- `!TASK: audit_dryness` - Identify copy-paste and near-duplicate logic across the codebase
-- `!TASK: audit_encapsulation` - Find places where shared behavior can be encapsulated
-- `!TASK: audit_concerns` - Find separation of concerns issues across layers or modules
-- `!TASK: audit_config_consistency` - Validate inconsistencies across configuration files and registries
-- `!TASK: audit_dependency_health` - Assess and document the state of runtime and development dependencies
-- `!TASK: tune_hyperparams` - Iteratively adjust hyperparameters for fastest convergence
+## Development Tools
 
-#### 🧪 Smoke tests
-- Train all configs briefly (prints PASS/FAIL with ✅/❌ and a summary):
-```
-python scripts/smoke_train_envs.py                 # default 100 steps/config
-python scripts/smoke_train_envs.py --timesteps 50  # adjust steps
-python scripts/smoke_train_envs.py --filter CartPole --limit 3
-```
-  - Uses small rollouts and disables video/W&B networking for speed.
-  - Results section shows one bullet per config, e.g. `- ✅ CartPole-v1:ppo` or `- ❌ VizDoom-... — ImportError: ...`.
+### Smoke Tests
 
-- Random-action step smoke (no training):
-```
-python scripts/smoke_test_envs.py                  # default 200 steps/config
-python scripts/smoke_test_envs.py --filter CartPole --limit 3
-```
-- `!TASK: update_docs_architecture` - Ensure Architecture Guide stays accurate and useful
-- `!TASK: update_docs_coding_from_diff` - Infer coding preferences from uncommitted changes
-- `!TASK: update_docs_readme` - Keep README concise, accurate, and aligned with current features
-- `!TASK: audit_tests` - Exercise all test suites and document failures or flakiness
-- `!TASK: test_upgrade` - Strengthen test suite by adding tests for high-risk modules
-- `!TASK: cleanup_imports` - Streamline Python imports to reflect actual usage and follow conventions
+Test all configurations briefly:
 
-### 📄 License
-MIT
+```bash
+# Train all configs (default 100 steps each)
+python scripts/smoke_all_configs.py
+
+# Adjust timesteps
+python scripts/smoke_all_configs.py --timesteps 50
+
+# Filter environments
+python scripts/smoke_all_configs.py --filter CartPole --limit 3
+```
+
+Prints PASS/FAIL with visual indicators and a summary. Uses small rollouts and disables video/W&B for speed.
+
+### Benchmarking
+
+```bash
+# Benchmark vectorized environment FPS
+python scripts/benchmark_vecenv_fps.py
+
+# Benchmark rollout collectors
+python scripts/benchmark_collectors.py
+
+# Benchmark dataloaders
+python scripts/benchmark_dataloaders.py
+```
+
+### Brax/JAX (Optional)
+
+```bash
+# Train Brax policy (requires jax[cuda12] or jax[cpu])
+python scripts/brax_train_policy.py
+
+# Evaluate Brax policy with Gymnasium wrapper
+python scripts/brax_eval_policy.py
+```
+
+## Project Structure
+
+```
+agents/              # PPO, REINFORCE, base agent
+loggers/             # Custom Lightning/CSV/console loggers
+utils/               # Config, environment, models, rollouts, helpers
+gym_wrappers/        # Wrapper registry + domain-specific wrappers
+trainer_callbacks/   # Metrics, checkpointing, early stopping, videos
+gym_envs/            # Custom environments (e.g., multi-armed bandits)
+config/              # Environment YAML configs and metrics rules
+runs/                # Training outputs (checkpoints, videos, logs)
+scripts/             # Smoke tests, benchmarks, utilities
+tests/               # Test suite
+VIBES/               # Architecture guide, coding principles, task playbooks
+```
+
+## Documentation
+
+- **[CLAUDE.md](CLAUDE.md)**: Comprehensive guide for working with the codebase
+- **[VIBES/ARCHITECTURE_GUIDE.md](VIBES/ARCHITECTURE_GUIDE.md)**: Detailed architecture documentation
+- **[VIBES/CODING_PRINCIPLES.md](VIBES/CODING_PRINCIPLES.md)**: Coding style and principles
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file for details.

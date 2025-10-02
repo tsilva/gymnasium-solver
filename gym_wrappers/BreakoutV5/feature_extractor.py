@@ -3,6 +3,8 @@ import numpy as np
 from gymnasium import spaces
 from typing import Iterable, Optional, Tuple
 
+from gym_wrappers.ocatari_helpers import center, normalize_velocity
+
 SCREEN_W: float = 160.0
 SCREEN_H: float = 210.0
 PLAYFIELD_X_MIN: float = 0.0
@@ -14,18 +16,6 @@ BALL_MARGIN: float = 1.0
 PADDLE_DX_SCALE: float = 6.0
 BALL_D_SCALE: float = 10.0
 MAX_BLOCKS: int = 108
-
-
-def _center(obj) -> Tuple[float, float]:
-    if obj is None:
-        return 0.0, 0.0
-    if hasattr(obj, "center") and obj.center is not None:
-        return float(obj.center[0]), float(obj.center[1])
-    x = float(getattr(obj, "x", 0.0))
-    y = float(getattr(obj, "y", 0.0))
-    w = float(getattr(obj, "w", 0.0))
-    h = float(getattr(obj, "h", 0.0))
-    return x + 0.5 * w, y + 0.5 * h
 
 
 def _categorise_objects(objects: Iterable):
@@ -51,12 +41,6 @@ def _normalize_linear(value: float, lo: float, hi: float) -> float:
     return 2.0 * zero_one - 1.0
 
 
-def _normalize_velocity(value: float, scale: float) -> float:
-    if scale <= 0:
-        return 0.0
-    return float(np.tanh(float(value) / float(scale)))
-
-
 def _obs_from_objects(
     objects,
     last_ball_x_n: Optional[float] = None,
@@ -67,7 +51,7 @@ def _obs_from_objects(
     player, ball, blocks = _categorise_objects(objects)
 
     if player is not None:
-        paddle_cx, paddle_cy = _center(player)
+        paddle_cx, paddle_cy = center(player)
         paddle_w = float(getattr(player, "w", 16.0))
         paddle_dx = float(getattr(player, "dx", 0.0))
     else:
@@ -81,11 +65,11 @@ def _obs_from_objects(
         PLAYFIELD_X_MAX - 0.5 * paddle_w + PADDLE_MARGIN_X,
     )
     paddle_y_n = _normalize_linear(paddle_cy, PLAYFIELD_Y_MIN, PLAYFIELD_Y_MAX)
-    paddle_dx_n = _normalize_velocity(paddle_dx, PADDLE_DX_SCALE)
+    paddle_dx_n = normalize_velocity(paddle_dx, PADDLE_DX_SCALE)
 
     ball_visible = bool(ball)
     if ball_visible:
-        ball_cx, ball_cy = _center(ball)
+        ball_cx, ball_cy = center(ball)
         ball_dx_px = float(getattr(ball, "dx", 0.0))
         ball_dy_px = float(getattr(ball, "dy", 0.0))
         ball_x_n = _normalize_linear(
@@ -108,8 +92,8 @@ def _obs_from_objects(
         ball_dx_n = float(ball_x_n) - float(last_ball_x_n)
         ball_dy_n = float(ball_y_n) - float(last_ball_y_n)
     elif ball_visible:
-        ball_dx_n = _normalize_velocity(ball_dx_px, BALL_D_SCALE)
-        ball_dy_n = _normalize_velocity(ball_dy_px, BALL_D_SCALE)
+        ball_dx_n = normalize_velocity(ball_dx_px, BALL_D_SCALE)
+        ball_dy_n = normalize_velocity(ball_dy_px, BALL_D_SCALE)
     else:
         ball_dx_n = float(last_ball_dx_n) if last_ball_dx_n is not None else 0.0
         ball_dy_n = float(last_ball_dy_n) if last_ball_dy_n is not None else 0.0

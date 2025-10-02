@@ -1,8 +1,9 @@
 import gymnasium as gym
 import numpy as np
+from gym_wrappers.reward_shaper_base import RewardShaperBase
 
 
-class MountainCarV0_RewardShaper(gym.Wrapper):
+class MountainCarV0_RewardShaper(RewardShaperBase):
     """Potential-based dense rewards for MountainCar-v0 (position, velocity, height)."""
     
     def __init__(self, env, position_reward_scale=100.0, velocity_reward_scale=10.0, height_reward_scale=50.0):
@@ -81,12 +82,14 @@ class MountainCarV0_RewardShaper(gym.Wrapper):
             height_shaping = self.height_reward_scale * (curr_height_potential - prev_height_potential)
             
             shaping_reward = position_shaping + velocity_shaping + height_shaping
-            
+
             # Add debug info
-            info['shaping_reward'] = shaping_reward
-            info['position_shaping'] = position_shaping
-            info['velocity_shaping'] = velocity_shaping
-            info['height_shaping'] = height_shaping
+            self._add_shaping_info(
+                info, shaping_reward,
+                position_shaping=position_shaping,
+                velocity_shaping=velocity_shaping,
+                height_shaping=height_shaping
+            )
         
         # Update previous state
         self.prev_position = position

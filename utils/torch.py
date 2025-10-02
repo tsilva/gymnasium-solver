@@ -91,6 +91,11 @@ def assert_detached(*tensors: torch.Tensor) -> bool:
     return True
 
 
+def batch_normalize(x: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
+    """Normalize tensor to zero mean and unit variance."""
+    return (x - x.mean()) / (x.std() + eps)
+
+
 def compute_param_group_grad_norm(params):
     """Compute L2 grad norm over params; ignore None grads (0.0 if none)."""
     total_sq = 0.0

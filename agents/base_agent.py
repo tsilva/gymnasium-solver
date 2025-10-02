@@ -443,6 +443,7 @@ class BaseAgent(pl.LightningModule):
             HyperparameterSchedulerCallback,
             ModelCheckpointCallback,
             MonitorMetricsCallback,
+            UploadRunCallback,
             WandbVideoLoggerCallback,
             WarmupEvalCallback,
         )
@@ -586,6 +587,10 @@ class BaseAgent(pl.LightningModule):
 
         # Also print a terminal summary and alerts recap at the end of training
         callbacks.append(ConsoleSummaryCallback())
+
+        # Optionally upload run folder to W&B after training completes
+        if getattr(self.config, 'enable_wandb', True):
+            callbacks.append(UploadRunCallback(run_dir=self.run.run_dir))
 
         return callbacks
 

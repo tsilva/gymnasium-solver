@@ -90,6 +90,9 @@ def _ensure_wandb_run_initialized(config) -> None:
     - Otherwise, initialize a run with the project's name and full config.
     """
 
+    # If W&B is disabled, do nothing
+    if not getattr(config, 'enable_wandb', True): return
+
     # If a run is already active (e.g., sweep agent), do nothing
     if wandb.run is not None: return
 
@@ -233,7 +236,8 @@ def launch_training_from_args(args) -> None:
     _ensure_wandb_run_initialized(config)
 
     # Create/update the W&B workspace immediately so the dashboard is ready during training
-    create_or_update_workspace_for_current_run(overwrite=True, select_current_run_only=True) # TODO: review this function
+    if getattr(config, 'enable_wandb', True):
+        create_or_update_workspace_for_current_run(overwrite=True, select_current_run_only=True) # TODO: review this function
 
     # Set global RNG seed for reproducibility
     set_random_seed(config.seed)

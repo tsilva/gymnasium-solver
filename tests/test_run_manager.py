@@ -12,20 +12,26 @@ class DummyRun:
 
 @pytest.mark.unit
 def test_run_manager_creates_dirs_and_symlink(tmp_path: Path, monkeypatch):
-    # Simulate a wandb run and initialize via Run API
-    run = DummyRun("abc123")
-    run_obj = Run.from_wandb_run(wandb_run=run, runs_root=tmp_path / "runs")
-    run_dir = run_obj.get_run_dir()
+    from utils.config import Config
+
+    # Simulate a run and initialize via Run API
+    monkeypatch.chdir(tmp_path)
+
+    config = Config(
+        env_id="CartPole-v1",
+        algo_id="ppo",
+        seed=42,
+    )
+
+    run_obj = Run.create(run_id="abc123", config=config)
+    run_dir = Path(run_obj.run_dir)
+
     assert run_dir.exists()
-    assert (run_dir / "checkpoints").exists()
-    # 'videos' directory is created lazily by video components; not at run setup
-    assert not (run_dir / "videos").exists()
-    # configs subdir is optional in new layout
+    assert run_obj.config_path.exists()
+    # Checkpoints directory is not created until checkpoints are saved
+    assert not run_obj.checkpoints_dir.exists()
+    # Videos are stored directly in checkpoint directories, no separate videos/ folder
 
-    latest = Path(tmp_path / "runs" / "@last")
+    latest = Path("runs/@last")
     assert latest.is_symlink()
-    assert latest.readlink() == Path("abc123")
-
-    # Save a config file
-    cfg_path = run_obj.save_config({"a": 1}, filename="cfg.json")
-    assert cfg_path.exists()
+    assert latest.resolve() == run_dir.resolve()

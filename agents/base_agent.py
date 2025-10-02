@@ -223,11 +223,22 @@ class BaseAgent(pl.LightningModule):
         if self._early_stop_epoch:
             return None
 
+        # Enable activation tracking for this forward pass
+        self.policy_model._track_activations = True
+
         # Calculate batch losses
         result = self.losses_for_batch(batch, batch_idx)
-        
+
+        # Compute and log activation statistics
+        activation_metrics = self.policy_model.compute_activation_stats()
+        if activation_metrics:
+            self.metrics_recorder.record("train", activation_metrics)
+
+        # Disable activation tracking
+        self.policy_model._track_activations = False
+
         # TODO: are we sure this stops training on this rollout? remember how we are training multiple epochs on the same rollout
-        # In case an early stop was triggered (eg: KL divergence exceeded 
+        # In case an early stop was triggered (eg: KL divergence exceeded
         # target, then don't train any more on this rollout, collect a new one)
         early_stop_epoch = result["early_stop_epoch"]
         if early_stop_epoch:
@@ -264,18 +275,12 @@ class BaseAgent(pl.LightningModule):
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
     # TODO: there are train/fps drops caused by running the collector N times (its not only the video recording); cause currently unknown
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
-        # Run evaluation with optional recording
-        val_env = self.get_env("val")
-        video_path = self.run.video_path_for_epoch(self.current_epoch)
-        # TODO: just collect frames and then let checkpointer pick them up
-        # this way we can render videos for all checkpoints
-        with val_env.recorder(video_path, record_video=False):
-            # Evaluate using the validation rollout collector to avoid redundant helpers
-            val_collector = self.get_rollout_collector("val")
-            val_metrics = val_collector.evaluate_episodes(
-                n_episodes=self.config.eval_episodes,
-                deterministic=self.config.eval_deterministic,
-            )
+        # Run evaluation without recording (videos logged from checkpoints by WandbVideoLoggerCallback)
+        val_collector = self.get_rollout_collector("val")
+        val_metrics = val_collector.evaluate_episodes(
+            n_episodes=self.config.eval_episodes,
+            deterministic=self.config.eval_deterministic,
+        )
         
         # Log eval metrics
         epoch_fps_values = self.timings.throughput_since("on_validation_epoch_start", values_now=val_metrics)
@@ -317,12 +322,15 @@ class BaseAgent(pl.LightningModule):
     def learn(self):
         assert self.run is None, "learn() should only be called once at the start of training"
 
+        from datetime import datetime
         from utils.logging import stream_output_to_log
 
         # Initialize run directory management and convenience Run accessor
         # Initialize run directory (creates runs/<id>/, checkpoints/, and @last symlink)
+        # Generate local run ID when W&B is disabled
+        run_id = wandb.run.id if wandb.run is not None else f"local-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
         self.run = Run.create(
-            run_id=wandb.run.id,
+            run_id=run_id,
             config=self.config
         )
         
@@ -393,16 +401,17 @@ class BaseAgent(pl.LightningModule):
     
     def _build_trainer_loggers__print(self):
         from loggers.metrics_table_logger import MetricsTableLogger
-        print_logger = MetricsTableLogger(metrics_monitor=self.metrics_monitor)
+        print_logger = MetricsTableLogger(metrics_monitor=self.metrics_monitor, run=self.run)
         return print_logger
         
     def _build_trainer_loggers(self):
         # Initialize list of loggers
         loggers = []
 
-        # Prepare a wandb logger
-        wandb_logger = self._build_trainer_loggers__wandb()
-        loggers.append(wandb_logger)
+        # Prepare a wandb logger (only if enabled)
+        if getattr(self.config, 'enable_wandb', True):
+            wandb_logger = self._build_trainer_loggers__wandb()
+            loggers.append(wandb_logger)
 
         # Prepare a CSV Lightning logger writing to runs/<id>/metrics.csv
         csv_logger = self._build_trainer_loggers__csv()
@@ -523,19 +532,8 @@ class BaseAgent(pl.LightningModule):
                 )
             )
 
-        # Checkpointing: save best/last models and metrics
-        callbacks.append(ModelCheckpointCallback( # TODO: pass run
-            run=self.run,
-            metric="val/roll/ep_rew/mean",
-            mode="max"
-        ))
-
-        # Video logger watches a run-specific media directory lazily (do not create it up-front)
-        video_dir = self.run.ensure_video_dir()
-        callbacks.append(WandbVideoLoggerCallback(
-            media_root=video_dir,
-            namespace_depth=1,
-        ))
+        # Early stopping callbacks: must run BEFORE ModelCheckpointCallback
+        # so that trainer.should_stop is set when checkpoint logic runs
 
         # If defined in config, early stop after reaching a certain number of environment steps
         if self.config.max_env_steps: callbacks.append(
@@ -561,6 +559,21 @@ class BaseAgent(pl.LightningModule):
             else:
                 reward_threshold = val_env.get_return_threshold()
             callbacks.append(EarlyStoppingCallback("val/roll/ep_rew/mean", reward_threshold))
+
+        # Checkpointing: save best/last models and metrics
+        # Must run AFTER early stopping callbacks to detect trainer.should_stop
+        callbacks.append(ModelCheckpointCallback( # TODO: pass run
+            run=self.run,
+            metric="val/roll/ep_rew/mean",
+            mode="max"
+        ))
+
+        # Video logger watches checkpoints directory recursively for videos (only if W&B is enabled)
+        if getattr(self.config, 'enable_wandb', True):
+            callbacks.append(WandbVideoLoggerCallback(
+                media_root=self.run.checkpoints_dir,
+                namespace_depth=1,
+            ))
 
         # Also print a terminal summary and alerts recap at the end of training
         callbacks.append(ConsoleSummaryCallback())

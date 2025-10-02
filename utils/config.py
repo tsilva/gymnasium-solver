@@ -1,5 +1,6 @@
 """Configuration loading for environment YAML and legacy hyperparams."""
 
+import os
 from dataclasses import MISSING, asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -95,7 +96,8 @@ class Config:
     seed: int = 42
 
     # How many parallel environments are used to collect rollouts
-    n_envs: int = 1
+    # Can be an int or "auto" (which resolves to cpu_count())
+    n_envs: Union[int, str] = "auto"
 
     # TODO: pass in env_kwargs instead
     # Overrides the environment reward threshold for early stopping
@@ -304,6 +306,9 @@ class Config:
     # Whether to prompt the user before training starts
     quiet: bool = False
 
+    # Whether to enable Weights & Biases logging
+    enable_wandb: bool = True
+
     @property
     def max_vec_steps(self) -> Optional[int]:
         """Computed property: max_env_steps converted to vectorized steps."""
@@ -361,7 +366,8 @@ class Config:
                 # Create the variant config
                 variant_id = str(k)
                 variant_cfg = dict(base_config)
-                variant_cfg.update(v)
+                # Filter out fields not in Config dataclass, but keep algo_id (needed by build_from_dict)
+                variant_cfg.update({k: v for k, v in v.items() if k in config_field_names or k == "algo_id"})
 
                 # Construct default project_id from env_id + obs_type at variant level
                 # (each variant may have different env_id/obs_type)
@@ -409,6 +415,7 @@ class Config:
 
     def __post_init__(self):
         self._resolve_defaults()
+        self._resolve_n_envs()
         self._resolve_numeric_strings()
         self._resolve_batch_size()
         self._resolve_schedules()
@@ -421,6 +428,11 @@ class Config:
             if value is not None: continue
             if f.default is not MISSING: setattr(self, f.name, f.default)
             elif f.default_factory is not MISSING: setattr(self, f.name, f.default_factory())
+
+    def _resolve_n_envs(self) -> None:
+        """Resolve n_envs "auto" to cpu_count()."""
+        if self.n_envs == "auto":
+            self.n_envs = os.cpu_count() or 1
 
     def _resolve_numeric_strings(self) -> None:
         for key, value in list(asdict(self).items()):
@@ -526,6 +538,7 @@ class Config:
     # TODO: figure out a way to softcode this
     def validate(self):
         self._validate_positive("seed", allow_none=False)
+        self._validate_positive("n_envs", allow_none=False)
         self._validate_positive("policy_lr")
         self._validate_positive("target_kl")
         self._validate_non_negative("ent_coef")

@@ -1,25 +1,16 @@
 import torch
 
-from utils.policy_factory import build_policy
+from utils.policy_factory import build_policy_from_env_and_config
 from utils.torch import assert_detached
 
 from ..base_agent import BaseAgent
 
 
 class REINFORCEAgent(BaseAgent):
-    
+
     def build_models(self):
-        input_shape = self.train_env.observation_space.shape
-        output_shape = self.train_env.action_space.shape
-        if not output_shape: output_shape = (self.train_env.action_space.n,)
-        self.policy_model = build_policy(
-            self.config.policy,
-            input_shape=input_shape,
-            hidden_dims=self.config.hidden_dims,
-            output_shape=output_shape,
-            activation=self.config.activation,
-            **self.config.policy_kwargs,
-        )
+        train_env = self.get_env("train")
+        self.policy_model = build_policy_from_env_and_config(train_env, self.config)
 
     # TODO: only does something with normalization off, but even that way it doesnt converge
     def losses_for_batch(self, batch, batch_idx):
@@ -89,7 +80,7 @@ class REINFORCEAgent(BaseAgent):
         loss = policy_loss + (ent_coef * entropy_loss)
         
         # Log the metrics for monitoring training progress
-        self.metrics_recorder.record_train({
+        self.metrics_recorder.record("train", {
             'opt/loss/total' : loss.detach(),
             'opt/loss/policy': policy_loss.detach(),
             'opt/loss/entropy': entropy_loss.detach(),
@@ -99,4 +90,9 @@ class REINFORCEAgent(BaseAgent):
             'policy_targets_mean': policy_targets.mean().detach(),
             'policy_targets_std': policy_targets.std().detach()
         })
-        return loss
+
+        # Return result for training step
+        return dict(
+            loss=loss,
+            early_stop_epoch=False,
+        )

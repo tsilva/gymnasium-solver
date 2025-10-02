@@ -63,6 +63,7 @@ class MetricsTableLogger(LightningLoggerBase):
         self,
         *,
         metrics_monitor: MetricsMonitor,
+        run: Any = None,
         min_table_width: int = 90,
         min_value_column_width: int = 15,
         chart_column_width: int | None = None,
@@ -81,6 +82,7 @@ class MetricsTableLogger(LightningLoggerBase):
 
         # -- Dependencies --
         self.metrics_monitor = metrics_monitor
+        self.run = run
 
         # -- Output environment --
         self.stream = sys.stdout
@@ -219,6 +221,55 @@ class MetricsTableLogger(LightningLoggerBase):
         values = self._history.get(full_key)
         if not values or len(values) < 2 or width <= 0: return ""
         return _sparkline(values, width)
+
+    def _hyperlink(self, text: str, url: str) -> str:
+        """Create a terminal hyperlink using OSC 8 ANSI escape sequence."""
+        if not self.colors_enabled:
+            return text
+        return f"\x1b]8;;{url}\x1b\\{text}\x1b]8;;\x1b\\"
+
+    def _format_header_line(self, metrics: Dict[str, Any]) -> Optional[str]:
+        """Format a header line showing run ID, FPS, and time elapsed."""
+        if not self.run:
+            return None
+
+        # Extract header metrics
+        roll_fps = metrics.get("train/roll/fps")
+        sys_fps = metrics.get("train/sys/timing/fps")
+        time_elapsed = metrics.get("train/sys/timing/time_elapsed")
+
+        # Format run ID with hyperlink to wandb if available
+        run_id = self.run.id
+        try:
+            import wandb
+            if wandb.run is not None and wandb.run.url:
+                run_id_display = self._hyperlink(run_id, wandb.run.url)
+            else:
+                run_id_display = run_id
+        except Exception:
+            run_id_display = run_id
+
+        # Build header parts
+        parts = [f"Run: {run_id_display}"]
+
+        if roll_fps is not None:
+            roll_fps_str = number_to_string(roll_fps, precision=0, humanize=True)
+            parts.append(f"roll/fps: {roll_fps_str}")
+
+        if sys_fps is not None:
+            sys_fps_str = number_to_string(sys_fps, precision=0, humanize=True)
+            parts.append(f"sys/fps: {sys_fps_str}")
+
+        if time_elapsed is not None:
+            # Format time elapsed as HH:MM:SS
+            elapsed_seconds = int(time_elapsed)
+            hours = elapsed_seconds // 3600
+            minutes = (elapsed_seconds % 3600) // 60
+            seconds = elapsed_seconds % 60
+            time_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            parts.append(f"elapsed: {time_str}")
+
+        return " | ".join(parts)
 
     def _update_history(self, data: Dict[str, Any]) -> None:
         for k, v in data.items():
@@ -359,8 +410,15 @@ class MetricsTableLogger(LightningLoggerBase):
         prepared: _PreparedSections,
         dimensions: _TableDimensions,
         active_alerts: Dict[str, Iterable[object]],
+        header_line: Optional[str] = None,
     ) -> List[str]:
         lines: List[str] = [""]
+
+        # Add header line if provided
+        if header_line:
+            lines.append(header_line)
+            lines.append("")
+
         key_width = dimensions.key_width
         value_width = dimensions.val_width
         alert_width = dimensions.alert_width
@@ -447,16 +505,28 @@ class MetricsTableLogger(LightningLoggerBase):
         active_alerts = self.metrics_monitor.get_active_alerts()
         self._metrics_with_triggered_alerts.update(active_alerts.keys())
 
-        # Filter metrics to show those marked with show_in_table=true OR
-        # any metric that has triggered an alert during this training session
-        filtered_metrics = {
-            k: v for k, v in metrics.items()
-            if metrics_config.show_in_table(k) or k in self._metrics_with_triggered_alerts
+        # Format header line before filtering (needs access to header metrics)
+        header_line = self._format_header_line(metrics)
+
+        # Define header metrics that should not appear in the table body
+        header_metrics = {
+            "train/roll/fps",
+            "train/sys/timing/fps",
+            "train/sys/timing/time_elapsed",
         }
 
-        # If no metrics pass the filter, show all metrics as fallback
+        # Filter metrics to show those marked with show_in_table=true OR
+        # any metric that has triggered an alert during this training session,
+        # but exclude header metrics from the table body
+        filtered_metrics = {
+            k: v for k, v in metrics.items()
+            if (metrics_config.show_in_table(k) or k in self._metrics_with_triggered_alerts)
+            and k not in header_metrics
+        }
+
+        # If no metrics pass the filter, show all metrics as fallback (excluding header metrics)
         if not filtered_metrics:
-            filtered_metrics = metrics
+            filtered_metrics = {k: v for k, v in metrics.items() if k not in header_metrics}
 
         # Group metrics by namespace (eg: train and val namespaces)
         grouped_metrics = group_dict_by_key_namespace(filtered_metrics)
@@ -478,7 +548,7 @@ class MetricsTableLogger(LightningLoggerBase):
         # active_alerts already retrieved earlier in this method
         prepared = self._prepare_sections(grouped_metrics, sorted_grouped_metrics, active_alerts, deltas_map)
         dims = self._compute_dimensions(prepared)
-        lines = self._compose_lines(grouped_metrics, prepared, dims, active_alerts)
+        lines = self._compose_lines(grouped_metrics, prepared, dims, active_alerts, header_line=header_line)
 
         self._render_lines(lines)
         self._prev = dict(metrics)

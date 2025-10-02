@@ -472,7 +472,10 @@ class VecObsBarPrinter(VectorWrapper):
             a_lo, a_hi = 0, act_n - 1
             a_bar, _a_ratio, (_a_lo, _a_hi) = self._format_bar_scalar(float(action_idx), float(a_lo), float(a_hi), width=self._bar_width)
             label_fmt = "action"[:label_w].ljust(label_w)
-            val_fmt = f"{action_idx}".rjust(value_w)
+            # Include action label from spec when available
+            action_label = self._action_labels.get(action_idx) if self._action_labels else None
+            val_fmt = f"{action_idx} {action_label}" if action_label else f"{action_idx}"
+            val_fmt = val_fmt.rjust(value_w)
             a_rng_fmt = f"[{a_lo}, {a_hi}]"
             print(f"{label_fmt}  {val_fmt}  {a_bar}  {a_rng_fmt}")
 

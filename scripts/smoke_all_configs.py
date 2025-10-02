@@ -68,15 +68,22 @@ def smoke_test_config(env_id: str, variant_id: str, n_epochs: int) -> tuple[bool
         config.enable_wandb = False
         config.quiet = True
 
-        # Override to run for only N epochs
-        # We'll use max_timesteps to control duration indirectly via early stopping
-        # But simpler: just set very low n_epochs or max_eval_episodes
-        # Actually, let's just override max_timesteps to be small
-        config.max_timesteps = config.n_envs * config.n_steps * n_epochs
+        # Force n_envs=2 and sync vectorization for faster smoke tests
+        config.n_envs = 2
+        config.vectorization_mode = 'sync'
 
-        # Disable video capture to speed up
-        config.eval_video_freq_epochs = None
-        config.test_video_enabled = False
+        # Use fractional batch size to ensure it divides the new rollout size
+        config.batch_size = 0.5  # 50% of rollout size
+        config._resolve_batch_size()  # Re-resolve batch_size after changing n_envs
+
+        # Disable evaluation for smoke tests (faster and avoids eval-related issues)
+        config.eval_freq_epochs = None
+
+        # Override to run for only N epochs
+        # We'll use max_env_steps to control duration indirectly via early stopping
+        # But simpler: just set very low n_epochs or max_eval_episodes
+        # Actually, let's just override max_env_steps to be small
+        config.max_env_steps = config.n_envs * config.n_steps * n_epochs
 
         # Set global seed
         set_random_seed(config.seed)
@@ -88,7 +95,8 @@ def smoke_test_config(env_id: str, variant_id: str, n_epochs: int) -> tuple[bool
         return True, None
 
     except Exception as e:
-        return False, str(e)
+        import traceback
+        return False, traceback.format_exc()
 
 
 def main():

@@ -43,7 +43,7 @@ _env: &env
   env_id: Retro/SuperMarioBros-Nes
   env_kwargs:
     state: "Level1-1"
-  policy: 'cnn'
+  policy: 'cnn_actorcritic'
   policy_kwargs:
     channels: [32, 64, 64]
     kernel_sizes: [8, 4, 3]

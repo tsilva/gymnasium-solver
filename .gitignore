@@ -210,7 +210,7 @@ wandb/
 tmp/
 
 SCRATCH.md
-videos/
+# videos/ - removed; videos now stored in checkpoints/
 checkpoints/
 lightning_logs/
 logs/
@@ -218,3 +218,5 @@ runs/
 stable-baselines3/
 roms/
 stable-retro/
+
+_vizdoom.ini

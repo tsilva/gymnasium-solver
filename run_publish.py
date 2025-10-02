@@ -46,11 +46,10 @@ def resolve_run_dir(run_id: Optional[str]) -> Path:
             raise FileNotFoundError("No runs found in runs/")
 
         def has_artifacts(p: Path) -> Tuple[int, bool]:
-            """Score by mtime and presence of interesting files (videos or checkpoints)."""
+            """Score by mtime and presence of interesting files (checkpoints)."""
             mtime = int(p.stat().st_mtime)
-            vids = any(p.glob("videos/**/*.mp4"))
-            ckpts = any(p.glob("checkpoints/*.ckpt"))
-            return (mtime, vids or ckpts)
+            ckpts = any(p.glob("checkpoints/*.ckpt")) or any(p.glob("checkpoints/**/*.ckpt"))
+            return (mtime, ckpts)
 
         # Choose best candidate: prefer one with artifacts; tie-breaker by mtime
         best = None
@@ -98,11 +97,11 @@ def _detect_config_id_from_run(run_dir: Path, cfg: dict) -> Optional[str]:
 
 
 def _find_videos_for_run(run_dir: Path) -> List[Path]:
-    """Find run videos under runs/<id>/videos or mirrored W&B paths."""
+    """Find run videos under runs/<id>/checkpoints or mirrored W&B paths."""
     videos: List[Path] = []
-    local_videos_root = run_dir / "videos"
-    if local_videos_root.exists():
-        videos = sorted(local_videos_root.rglob("*.mp4"))
+    local_checkpoints_root = run_dir / "checkpoints"
+    if local_checkpoints_root.exists():
+        videos = sorted(local_checkpoints_root.rglob("*.mp4"))
         if videos:
             return videos
 
@@ -111,17 +110,17 @@ def _find_videos_for_run(run_dir: Path) -> List[Path]:
     wandb_root = repo_root / "wandb"
     if wandb_root.exists():
         run_id = run_dir.name
-        pattern = f"run-*/files/runs/{run_id}/videos"
+        pattern = f"run-*/files/runs/{run_id}/checkpoints"
         for path in sorted(wandb_root.glob(pattern)):
             if path.is_dir():
                 vids = sorted(Path(path).rglob("*.mp4"))
                 videos.extend(vids)
         # Also check wandb/@last link if present (fallback to legacy)
-        latest = wandb_root / "@last" / "files" / "runs" / run_id / "videos"
+        latest = wandb_root / "@last" / "files" / "runs" / run_id / "checkpoints"
         if latest.exists():
             videos.extend(sorted(latest.rglob("*.mp4")))
         else:
-            legacy = wandb_root / "latest-run" / "files" / "runs" / run_id / "videos"
+            legacy = wandb_root / "latest-run" / "files" / "runs" / run_id / "checkpoints"
             if legacy.exists():
                 videos.extend(sorted(legacy.rglob("*.mp4")))
     # Return unique, ordered
@@ -139,20 +138,19 @@ def _find_videos_for_run(run_dir: Path) -> List[Path]:
 
 
 def _find_best_video_for_run(run_dir: Path) -> Optional[Path]:
-    """Locate the canonical best evaluation video for the run (new or legacy paths)."""
-    # Prefer the canonical new location under the run directory first
-    canonical_new = run_dir / "videos" / "val" / "best.mp4"
-    if canonical_new.exists():
-        return canonical_new.resolve()
+    """Locate the canonical best evaluation video for the run."""
+    # Videos are now stored in checkpoints directories
+    # Look for best checkpoint video first (inside @best symlink)
+    best_checkpoint = run_dir / "checkpoints" / "@best"
+    if best_checkpoint.exists():
+        for candidate in ["best.mp4", "final.mp4", "best_checkpoint.mp4"]:
+            video_path = best_checkpoint / candidate
+            if video_path.exists():
+                return video_path.resolve()
 
-    # Fallback to legacy canonical location
-    canonical_legacy = run_dir / "videos" / "val" / "episodes" / "best_checkpoint.mp4"
-    if canonical_legacy.exists():
-        return canonical_legacy.resolve()
-
-    # Otherwise scan known locations and pick the first matching filename
+    # Fallback: scan all checkpoints and pick the first matching filename
     for v in _find_videos_for_run(run_dir):
-        if v.name in {"best.mp4", "best_checkpoint.mp4"}:
+        if v.name in {"best.mp4", "final.mp4", "best_checkpoint.mp4"}:
             try:
                 return v.resolve()
             except OSError:
@@ -380,7 +378,7 @@ def build_model_card(meta: dict, run_dir: Path) -> str:
     lines.append("- Checkpoints: `artifacts/checkpoints/*.ckpt`")
     lines.append("- Logs: `artifacts/logs/*.log`")
     if meta.get("best_video"):
-        lines.append("- Video: `artifacts/videos/**/best.mp4` (also previewed below)")
+        lines.append("- Video: `artifacts/checkpoints/**/best.mp4` (also previewed below)")
     lines.append("")
     if meta.get("best_video"):
         lines.append("## Preview")
@@ -447,14 +445,8 @@ def publish_run(
         repo_type="model",
         allow_patterns=[
             "configs/**",
-            "checkpoints/**",
+            "checkpoints/**",  # includes videos stored inside checkpoint directories
             "logs/**",
-            # Only include the best evaluation video
-            "videos/**/best.mp4",
-            "videos/best.mp4",
-            # Keep legacy name support for existing runs
-            "videos/**/best_checkpoint.mp4",
-            "videos/best_checkpoint.mp4",
             "hyperparam_control/**",
             "*.md",
         ],
@@ -493,7 +485,7 @@ def publish_run(
         if not rel_ok:
             upload_file(
                 path_or_fileobj=str(vpath),
-                path_in_repo=f"artifacts/videos/_external/{vpath.name}",
+                path_in_repo=f"artifacts/checkpoints/_external/{vpath.name}",
                 repo_id=final_repo_id,
                 repo_type="model",
             )

@@ -51,14 +51,9 @@ def _env_spec_to_mapping(spec: Any) -> Dict[str, Any]:
 # TODO: extract to reusable location
 def deep_merge(a: dict, b: dict) -> dict:
     """Return a recursive merge of ``b`` into ``a`` without mutating inputs."""
-
     result = a.copy()
     for key, value in b.items():
-        if (
-            key in result
-            and isinstance(result[key], dict)
-            and isinstance(value, dict)
-        ):
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
             result[key] = deep_merge(result[key], value)
         else:
             result[key] = value
@@ -77,8 +72,9 @@ class GymEnvInfoCollector:
         current = self._env
         while isinstance(current, gym.Env):
             wrappers.append(current)
-            if not hasattr(current, "env"): break
-            current = getattr(current, "env")
+            if not hasattr(current, "env"):
+                break
+            current = current.env
         return tuple(wrappers)
 
     @cache
@@ -89,8 +85,8 @@ class GymEnvInfoCollector:
 
     def _get_from_wrappers(self, attr: str) -> Any:
         for wrapper in self._get_wrappers():
-            if not hasattr(wrapper, attr): continue
-            return getattr(wrapper, attr)
+            if hasattr(wrapper, attr):
+                return getattr(wrapper, attr)
 
     @cache
     def spec_mapping(self) -> Dict[str, Any]:
@@ -113,17 +109,18 @@ class GymEnvInfoCollector:
     @cache
     def metadata(self) -> Dict[str, Any]:
         meta: Dict[str, Any] = {}
-        wrappers = self._get_wrappers()
-        for wrapper in reversed(wrappers):
+        for wrapper in reversed(self._get_wrappers()):
             wrapper_metadata = getattr(wrapper, "metadata", None)
-            if isinstance(wrapper_metadata, dict): meta.update(wrapper_metadata)
+            if isinstance(wrapper_metadata, dict):
+                meta.update(wrapper_metadata)
         return meta
 
     @cache
     def get_render_fps(self) -> Any:
         default_fps = 30
         metadata = self.metadata()
-        if not "render_fps" in metadata: return default_fps
+        if "render_fps" not in metadata:
+            return default_fps
         render_fps = metadata["render_fps"]
         assert isinstance(render_fps, int), "render_fps must be an int"
         return render_fps
@@ -148,46 +145,35 @@ class EnvInfoWrapper(gym.ObservationWrapper):
         # TODO: pass this to spec instead of storing property
         self._obs_type = kwargs.get('obs_type', None)
 
-        override_spec = kwargs.get('spec', None)
-        merged_spec = deep_merge(collected, override_spec if override_spec is not None else {})
+        override_spec = kwargs.get('spec', {})
+        merged_spec = deep_merge(collected, override_spec)
 
         self._spec = EnvSpec.from_mapping(merged_spec)
     
     def is_rgb_env(self):
-        obs_type = self.get_obs_type()
-        return obs_type == 'rgb'
+        return self.get_obs_type() == 'rgb'
 
     def is_ram_env(self):
-        obs_type = self.get_obs_type()
-        return obs_type == 'ram'
-    
-    # TODO: proxy unknown methods to spec
-    def get_id(self):
-        return self._spec.get_id()
+        return self.get_obs_type() == 'ram'
 
     def get_obs_type(self):
         return self._obs_type
 
-    def get_render_mode(self):
-        return self._spec.get_render_mode()
-        
-    def get_return_threshold(self):
-        return self._spec.get_return_threshold()
+    def get_spec(self):
+        return self._spec
 
-    def get_reward_range(self):
-        return self._spec.get_reward_range()
-    
-    def get_return_range(self):
-        return self._spec.get_return_range()
-
-    def get_max_episode_steps(self):
-        return self._spec.get_max_episode_steps()
-
-    def get_render_fps(self):
-        return self._spec.get_render_fps()
-
-    def get_action_labels(self):
-        return self._spec.get_action_labels()
+    def __getattr__(self, name):
+        # Delegate unknown get_* methods to spec
+        if name.startswith('get_'):
+            # Try the method first, then fall back to the attribute
+            try:
+                return getattr(self._spec, name)
+            except AttributeError:
+                # Try accessing as attribute (e.g., get_id -> self._spec.id)
+                attr_name = name[4:]  # remove 'get_' prefix
+                if hasattr(self._spec, attr_name):
+                    return lambda: getattr(self._spec, attr_name)
+        raise AttributeError(f"'{type(self).__name__}' has no attribute '{name}'")
 
     # NOTE: required by ObservationWrapper
     def observation(self, observation): 

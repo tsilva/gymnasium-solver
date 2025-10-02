@@ -25,7 +25,6 @@ from utils.io import read_json
 
 RUNS_DIR = Path("runs")
 LAST_RUN_DIR = RUNS_DIR / Path("@last")
-VIDEOS_DIR = Path("videos")
 CHECKPOINTS_DIR = Path("checkpoints")
 LAST_CHECKPOINT_DIR = Path("@last")
 BEST_CHECKPOINT_DIR = Path("@best")
@@ -153,13 +152,6 @@ class Run:
         return self.run_dir / CHECKPOINTS_DIR
 
     @property
-    def video_dir(self) -> Path:
-        return self.run_dir / VIDEOS_DIR
-
-    def ensure_video_dir(self) -> Path:
-        return self._ensure_path(self.video_dir)
-
-    @property
     def last_checkpoint_dir(self) -> Path:
         return self.checkpoints_dir / LAST_CHECKPOINT_DIR
 
@@ -182,28 +174,21 @@ class Run:
     def _file_prefix_for_epoch(self, epoch: int) -> str:
         return f"epoch={epoch:02d}"
 
-    def video_path_for_epoch(self, epoch: int) -> Path:
-        file_prefix = self._file_prefix_for_epoch(epoch)
-        return self.video_dir / f"{file_prefix}.mp4"
-
     def checkpoint_dir_for_epoch(self, epoch: int) -> Path:
         file_prefix = self._file_prefix_for_epoch(epoch)
         return self.checkpoints_dir / file_prefix
+
+    def video_path_for_epoch(self, epoch: int) -> Path:
+        file_prefix = self._file_prefix_for_epoch(epoch)
+        return self.checkpoint_dir_for_epoch(epoch) / f"{file_prefix}.mp4"
 
     def list_checkpoints(self) -> List[str]:
         return [p.name for p in self.checkpoints_dir.iterdir() if p.is_dir()]
 
     def save_checkpoint(self, epoch: int, source_dir: Path, is_best=False) -> None:
         # Move provided data to target checkpoint dir
-        # (run manager doesn't need to know what this data is)
         checkpoint_dir = self.checkpoint_dir_for_epoch(epoch)
         shutil.move(source_dir, checkpoint_dir)
-
-        # TODO: SOC violation; run needs to be aware that videos exist
-        # TODO: it would be optimal if we only actually rendered videos from the best evals
-        # Copy epoch files from video folder to checkpoint dir
-        video_path = self.video_path_for_epoch(epoch)
-        if os.path.exists(video_path): shutil.copy(video_path, checkpoint_dir)
 
         # Symlink as last checkpoint
         _symlink_to_dir(self.last_checkpoint_dir, checkpoint_dir)

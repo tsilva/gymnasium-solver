@@ -205,14 +205,26 @@ def build_env(
             elif _is_bandit_env: env = _build_env_mab(env_id, obs_type, render_mode, **env_kwargs)
             else: env = _build_env_gym(env_id, obs_type, render_mode, **env_kwargs)
 
-            # Apply preprocessing wrappers (grayscale, resize, frame_stack) for ALE RGB in standard vectorization
-            # to match ALE native vectorization preprocessing
+            # Apply preprocessing wrappers (grayscale, resize, frame_stack)
+            # For ALE RGB in standard vectorization, match ALE native vectorization preprocessing
+            # For other envs, apply if configured
             if _is_ale_rgb_rgb_env:
                 from gymnasium.wrappers import GrayscaleObservation, ResizeObservation, FrameStackObservation
                 # Always use 4-frame stack to match ALE native vectorization (ignores config.frame_stack)
                 env = GrayscaleObservation(env, keep_dim=False)
                 env = ResizeObservation(env, shape=(84, 84))
                 env = FrameStackObservation(env, stack_size=4)
+            else:
+                # Apply preprocessing for non-ALE envs based on config
+                from gymnasium.wrappers import GrayscaleObservation, ResizeObservation, FrameStackObservation
+                if grayscale_obs:
+                    env = GrayscaleObservation(env, keep_dim=False)
+                if resize_obs:
+                    # resize_obs can be True (default to 84x84) or a tuple
+                    resize_shape = (84, 84) if resize_obs is True else resize_obs
+                    env = ResizeObservation(env, shape=resize_shape)
+                if frame_stack and frame_stack > 1:
+                    env = FrameStackObservation(env, stack_size=frame_stack)
 
             # Apply configured env wrappers
             for wrapper in env_wrappers:

@@ -122,6 +122,68 @@ def build_cnn(
 class BaseModel(nn.Module):
     """Base module with gradient-norm reporting (single 'all' group by default)."""
 
+    def __init__(self):
+        super().__init__()
+        self._activation_stats = {}
+        self._track_activations = False
+
+    def _make_activation_hook(self, name: str):
+        """Create a forward hook to capture activation statistics."""
+        def hook(module, input, output):
+            if not self._track_activations:
+                return
+
+            with torch.no_grad():
+                # Handle both tensor and tuple outputs
+                if isinstance(output, tuple):
+                    output = output[0]
+
+                # Flatten to compute statistics across all dimensions except batch
+                flat = output.flatten(start_dim=1)
+
+                # Compute dead neuron percentage (activations near zero)
+                dead_threshold = 1e-6
+                dead_mask = flat.abs() < dead_threshold
+                dead_pct = dead_mask.float().mean(dim=0)  # Per-neuron across batch
+
+                self._activation_stats[name] = {
+                    'mean': flat.mean().item(),
+                    'std': flat.std().item(),
+                    'dead_pct': dead_pct.mean().item(),  # Average across neurons
+                    'dead_max': dead_pct.max().item(),   # Max dead percentage
+                }
+
+        return hook
+
+    def register_activation_hooks(self, module_dict: Dict[str, nn.Module]):
+        """Register activation hooks on specified modules.
+
+        Args:
+            module_dict: Dict mapping names to modules to track
+        """
+        for name, module in module_dict.items():
+            module.register_forward_hook(self._make_activation_hook(name))
+
+    def compute_activation_stats(self) -> Dict[str, float]:
+        """Compute activation statistics from stored activations.
+
+        Returns dict of metric_name -> value for logging.
+        """
+        if not self._activation_stats:
+            return {}
+
+        metrics = {}
+        for name, stats in self._activation_stats.items():
+            metrics[f'opt/activations/{name}/mean'] = stats['mean']
+            metrics[f'opt/activations/{name}/std'] = stats['std']
+            metrics[f'opt/activations/{name}/dead_pct'] = stats['dead_pct']
+            metrics[f'opt/activations/{name}/dead_max'] = stats['dead_max']
+
+        # Clear stats after reading
+        self._activation_stats.clear()
+
+        return metrics
+
     def compute_grad_norms(self) -> Dict[str, float]:
         """Compute gradient norms for named parameter groups (default: 'all')."""
         all_params = list(self.parameters())
@@ -161,6 +223,13 @@ class MLPPolicy(BaseModel):
         # Reusable initialization
         init_model_weights(self, default_activation=activation, policy_heads=[self.policy_head])
 
+        # Register activation hooks on backbone layers
+        hooks_to_register = {}
+        for i, layer in enumerate(self.backbone):
+            if isinstance(layer, (nn.Linear, nn.Embedding)):
+                hooks_to_register[f'backbone.{i}'] = layer
+        self.register_activation_hooks(hooks_to_register)
+
     def forward(self, obs: torch.Tensor):
         x = self.backbone(obs)
         logits = self.policy_head(x)
@@ -183,11 +252,11 @@ class MLPPolicy(BaseModel):
 
 class MLPActorCritic(BaseModel):
     def __init__(
-        self, 
+        self,
         *,
-        input_shape: Union[tuple[int, ...], int], 
-        hidden_dims: tuple[int, ...], 
-        output_shape: tuple[int, ...], 
+        input_shape: Union[tuple[int, ...], int],
+        hidden_dims: tuple[int, ...],
+        output_shape: tuple[int, ...],
         activation: str
     ):
         super().__init__()
@@ -214,6 +283,13 @@ class MLPActorCritic(BaseModel):
             policy_heads=[self.policy_head],
             value_heads=[self.value_head],
         )
+
+        # Register activation hooks on backbone layers
+        hooks_to_register = {}
+        for i, layer in enumerate(self.backbone):
+            if isinstance(layer, (nn.Linear, nn.Embedding)):
+                hooks_to_register[f'backbone.{i}'] = layer
+        self.register_activation_hooks(hooks_to_register)
 
     def forward(self, obs: torch.Tensor):
         # Forward observation through backbone
@@ -314,6 +390,17 @@ class CNNActorCritic(BaseModel):
             policy_heads=[self.policy_head],
             value_heads=[self.value_head],
         )
+
+        # Register activation hooks on CNN and MLP layers
+        hooks_to_register = {}
+        for i, layer in enumerate(self.cnn):
+            if isinstance(layer, nn.Conv2d):
+                hooks_to_register[f'cnn.{i}'] = layer
+        if hasattr(self.mlp, '__iter__'):
+            for i, layer in enumerate(self.mlp):
+                if isinstance(layer, nn.Linear):
+                    hooks_to_register[f'mlp.{i}'] = layer
+        self.register_activation_hooks(hooks_to_register)
 
     def forward(self, obs: torch.Tensor):
         """Forward pass through CNN, MLP, and heads.

@@ -42,16 +42,16 @@ class ModelCheckpointCallback(pl.Callback):
         metric_value = metrics[self.metric]
         is_best = (metric_value > self.best_value) if (self.mode == "max") else (metric_value < self.best_value)
 
-        # If this is not the best epoch so far, return (do nothing)
-        if not is_best: return
+        # Save checkpoint if best OR if training is stopping (early stop, max steps, etc.)
+        should_save = is_best or trainer.should_stop
 
-        # Record video for this best checkpoint (before saving so video can be copied into checkpoint dir)
+        # If neither condition is met, return (do nothing)
+        if not should_save: return
+
+        # Save checkpoint with video recorded into checkpoint dir
         epoch = pl_module.current_epoch
-        self._record_video_for_checkpoint(pl_module, epoch)
-
-        # Save checkpoint (best epoch so far)
-        self.best_value = metric_value
-        self._save_checkpoint(pl_module, epoch, metrics, is_best=True)
+        if is_best: self.best_value = metric_value
+        self._save_checkpoint(pl_module, epoch, metrics, is_best=is_best)
 
     def _save_checkpoint(
         self,
@@ -72,16 +72,16 @@ class ModelCheckpointCallback(pl.Callback):
             # Serialize metrics with configured precision and key priority
             json_metrics = prepare_metrics_for_json(metrics)
             write_json(tmp_dir / "metrics.json", json_metrics)
+
+            # Record video directly into checkpoint temp dir (for best checkpoints only)
+            if is_best:
+                video_path = tmp_dir / "best.mp4"
+                val_env = agent.get_env("val")
+                with val_env.recorder(str(video_path), record_video=True):
+                    val_collector = agent.get_rollout_collector("val")
+                    val_collector.evaluate_episodes(
+                        n_episodes=1,
+                        deterministic=agent.config.eval_deterministic,
+                    )
+
             self.run.save_checkpoint(epoch, tmp_dir, is_best=is_best)
-
-    def _record_video_for_checkpoint(self, agent: pl.LightningModule, epoch: int) -> None:
-        """Record a video episode for the best checkpoint."""
-        video_path = self.run.video_path_for_epoch(epoch)
-        val_env = agent.get_env("val")
-
-        with val_env.recorder(str(video_path), record_video=True):
-            val_collector = agent.get_rollout_collector("val")
-            val_collector.evaluate_episodes(
-                n_episodes=1,
-                deterministic=agent.config.eval_deterministic,
-            )

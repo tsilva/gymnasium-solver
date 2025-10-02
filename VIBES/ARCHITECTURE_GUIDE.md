@@ -32,7 +32,7 @@ Algo-specific config subclasses:
 
 ### Environments (`utils/environment.py`, `gym_wrappers/*`)
 - `build_env_from_config(config, **overrides)` expands a `Config` into the kwargs accepted by `build_env(...)` so call-sites can tweak seeds/rendering without duplicating plumbing.
-- `build_env(env_id, n_envs, seed, subproc, obs_type, frame_stack, norm_obs, env_wrappers, env_kwargs, render_mode, record_video, record_video_kwargs)` builds a vectorized env:
+- `build_env(env_id, n_envs, seed, vectorization_mode, obs_type, frame_stack, norm_obs, env_wrappers, env_kwargs, render_mode, record_video, record_video_kwargs)` builds a vectorized env:
   - ALE via `ale_py` with optional `obs_type in {'rgb','ram','objects'}` (objects uses OCAtari).
   - Optional base-env preprocessing (Gymnasium wrappers): `GrayScaleObservation` when `grayscale_obs` is set, and `ResizeObservation` when `resize_obs` is provided. `resize_obs` accepts `(width, height)`; `True` is treated as `(84, 84)` for convenience.
   - VizDoom via `gym_wrappers.vizdoom.VizDoomEnv` when `env_id` matches `VizDoom-*`.
@@ -128,6 +128,6 @@ gym_wrappers/     # registry + wrappers (feature extractors, reward shaping, pix
 trainer_callbacks/# metrics dispatch, warmup gating, checkpointing, early stopping, videos
 gym_envs/         # custom environment implementations (e.g., MultiArmedBandit)
 config/           # environment YAML configs
-runs/             # run outputs: config.json, checkpoints/, videos/, metrics.csv, run.log
+runs/             # run outputs: config.json, checkpoints/ (videos inside), metrics.csv, run.log
 VIBES/            # agent helper docs (Architecture Guide, task playbooks)
 ```

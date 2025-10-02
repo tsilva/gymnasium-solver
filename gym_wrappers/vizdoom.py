@@ -107,6 +107,10 @@ class VizDoomEnv(gym.Env):
 
         self._last_obs: Optional[np.ndarray] = None
 
+    @property
+    def render_mode(self) -> Optional[str]:
+        return self._render_mode
+
     def _resolve_config_path(self, config_path: Optional[str], scenario: Optional[str]) -> Optional[Path]:
         if config_path:
             candidate = Path(config_path)

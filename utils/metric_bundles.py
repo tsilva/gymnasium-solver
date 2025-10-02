@@ -150,8 +150,13 @@ class CoreMetricAlerts(MetricMonitorBundle):
                 tip="Verify rollouts are collected each epoch and dataloaders consume new batches.",
             )
 
-    # TODO: tag for removal
     def _monitor_config_bounds(self, history: dict):
+        """Check hard bounds (mathematical/physical limits) defined in metrics.yaml.
+
+        These bounds represent impossible values that should never occur under correct
+        implementation (e.g., negative probabilities, fractions > 1.0). Violations
+        indicate bugs in the code, not just suboptimal training.
+        """
         alerts: List[MetricAlert] = []
         for metric in history.keys():
             bounds = metrics_config.bounds_for_metric(metric)
@@ -178,8 +183,8 @@ class CoreMetricAlerts(MetricMonitorBundle):
                     MetricAlert(
                         _id=f"{metric}/below_min",
                         metric=metric,
-                        message=f"{window_label} {avg_with_latest} < configured min {min_fmt}",
-                        tip="Reduce aggressiveness (e.g., learning rate, clipping) or review reward scaling.",
+                        message=f"{window_label} {avg_with_latest} < hard minimum {min_fmt}",
+                        tip="CRITICAL: This violates a mathematical invariant. Check implementation for bugs.",
                     )
                 )
 
@@ -189,8 +194,8 @@ class CoreMetricAlerts(MetricMonitorBundle):
                     MetricAlert(
                         _id=f"{metric}/above_max",
                         metric=metric,
-                        message=f"{window_label} {avg_with_latest} > configured max {max_fmt}",
-                        tip="Adjust hyperparameters or enable stronger regularization to pull the metric back in range.",
+                        message=f"{window_label} {avg_with_latest} > hard maximum {max_fmt}",
+                        tip="CRITICAL: This violates a mathematical invariant. Check implementation for bugs.",
                     )
                 )
 

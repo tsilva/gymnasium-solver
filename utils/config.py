@@ -279,10 +279,12 @@ class Config:
     eval_deterministic: bool = False
 
     # Whether to stop training when the training reward threshold is reached
-    early_stop_on_train_threshold: bool = False
+    # When set to a float, that value overrides the env spec's reward threshold
+    early_stop_on_train_threshold: Union[bool, float] = False
 
     # Whether to stop training when the evaluation reward threshold is reached
-    early_stop_on_eval_threshold: bool = True
+    # When set to a float, that value overrides the env spec's reward threshold
+    early_stop_on_eval_threshold: Union[bool, float] = True
 
     # The accelerator to use for training (eg: simple environments are faster on CPU, image environments are faster on GPU)
     accelerator: "Config.AcceleratorType" = AcceleratorType.cpu  # type: ignore[assignment]

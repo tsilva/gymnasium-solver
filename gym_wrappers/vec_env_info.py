@@ -57,11 +57,12 @@ class VecEnvInfoWrapper(VectorWrapper):
         is_ale_native = False
         check_env = self.env
         while check_env is not None:
-            if getattr(check_env, "_ale_native_vec", False):
+            # Use __dict__ to avoid triggering __getattr__ on wrappers
+            if check_env.__dict__.get("_ale_native_vec", False):
                 is_ale_native = True
                 env = check_env  # Use this env for fallback
                 break
-            check_env = getattr(check_env, "env", None)
+            check_env = getattr(check_env, "env", None) if hasattr(check_env, "env") else None
 
         # ALE native vectorization fallback: provide default implementations
         if is_ale_native:
@@ -104,10 +105,14 @@ class VecEnvInfoWrapper(VectorWrapper):
         elif method == "get_render_mode":
             return getattr(env, "render_mode", None)
         elif method == "recorder":
-            # ALE native vectorization doesn't support video recording
-            # Return a no-op context manager
+            # For ALE native vectorization, try to find the recorder method on the env chain
+            # If ALEVecVideoRecorder is present, it will provide the recorder method
+            # Otherwise, fall back to no-op context manager
+            if hasattr(env, "recorder"):
+                # Return the bound method so it can be called with args/kwargs
+                return getattr(env, "recorder")(*args, **kwargs)
             from contextlib import nullcontext
-            return nullcontext()
+            return nullcontext(*args, **kwargs)
         else:
             raise AttributeError(f"No fallback implementation for method '{method}'")
 

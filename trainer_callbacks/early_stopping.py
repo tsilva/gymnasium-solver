@@ -7,8 +7,6 @@ thresholds upstream.
 
 from __future__ import annotations
 
-from typing import Optional
-
 import pytorch_lightning as pl
 
 from utils.formatting import format_metric_value

@@ -182,6 +182,8 @@ objects_ppo:
 objects_deterministic_ppo:
   <<: [*obj_ppo, *env_deterministic]
   description: "PPO with object-based observations - deterministic version (no sticky actions)"
+  early_stop_on_train_threshold: 20.0  # Override env spec threshold (18) with custom value
+  eval_freq_epochs: None # Disable evaluation during training
 
 # RGB observations with PPO - uses ALE native vectorization
 # ALE native vec automatically applies: 4-frame stacking, grayscale, 84x84 resize

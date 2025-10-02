@@ -11,7 +11,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional, Tuple
 
 
 def _soft_import_brax():
@@ -68,12 +68,12 @@ def main() -> None:
         # Load Flax params msgpack and construct networks/inference
         try:
             from flax import serialization as flax_serial
-        except Exception as e:
+        except Exception:
             print("Flax not installed; cannot load params msgpack. Install flax.", file=sys.stderr)
             raise
         try:
             from brax.training.agents.ppo import networks as ppo_networks
-        except Exception as e:
+        except Exception:
             print("Missing Brax PPO networks; upgrade brax.", file=sys.stderr)
             raise
         if not os.path.isfile(args.params):
@@ -123,7 +123,6 @@ def main() -> None:
 
     # Roll out episodes and report returns
     import jax
-    import jax.numpy as jnp
 
     rng = jax.random.PRNGKey(0)
     total_rewards = []

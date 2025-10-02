@@ -158,14 +158,6 @@ class MetricsTableLogger(LightningLoggerBase):
         # Track across calls
         self.previous_metrics = dict(merged)
 
-    # TODO: remove?
-    def finalize(self, status: str) -> None:  # pragma: no cover - best-effort noop
-        return None
-
-    # TODO: remove?
-    def after_save_checkpoint(self, checkpoint_callback: Any) -> None:  # pragma: no cover - unused
-        return None
-
     def _calc_deltas(self, metrics: Dict[str, Any]) -> Dict[str, Tuple[str, Optional[str]]]:
         """Compute deltas and validate delta rules in a single pass.
 

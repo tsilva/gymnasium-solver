@@ -334,7 +334,7 @@ class MCPDebugServer:
         try:
             if seed is not None and hasattr(env, "seed"):
                 env.seed(seed)
-            obs = env.reset()
+            env.reset()
             action_seq = list(actions) if actions is not None else self._default_action_sequence(env, n_steps)
             snapshots = []
             oc_env = _find_env_with_attr(env, "objects")
@@ -359,7 +359,6 @@ class MCPDebugServer:
                 if include_features:
                     snapshot["features"] = _to_list(next_obs)
                 snapshots.append(snapshot)
-                obs = next_obs
             unique_categories = sorted({obj["category"] for snap in snapshots for obj in snap["objects"]})
             return {
                 "env_id": env_id,

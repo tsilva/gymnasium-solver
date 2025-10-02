@@ -87,7 +87,6 @@ def main() -> int:
         for k, v in list(data.items()):
             if isinstance(v, dict):
                 process_mapping(v)
-        new_text_stream = []
         from io import StringIO
         s = StringIO()
         yaml.dump(data, s)

@@ -85,8 +85,15 @@ class AtariVecEnvAdapter(VecEnv):
         return 60
 
     @contextmanager
-    def recorder(self, *_args, **_kwargs):  # signature compatible with callers
-        # No-op video recorder for compatibility with validation/test code paths
+    def recorder(self, video_path: str, record_video: bool = True):
+        """
+        Context manager for video recording.
+
+        Since AtariVecEnvAdapter doesn't support rendering, this returns a no-op
+        context manager. Actual video recording for ALE native vectorization is
+        handled by ALEVecVideoRecorder wrapper at the vector env level.
+        """
+        # No-op: video recording must be handled at wrapper level
         yield self
 
     # ---- SB3 VecEnv interface ----

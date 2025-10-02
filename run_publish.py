@@ -421,12 +421,9 @@ def publish_run(
     token = os.environ.get("HF_TOKEN") or HfFolder.get_token()
     if not token:
         raise RuntimeError("No Hugging Face token found. Run `huggingface-cli login` or set HF_TOKEN.")
-    HfApi = hub.HfApi
     create_repo = hub.create_repo
     upload_file = hub.upload_file
     upload_folder = hub.upload_folder
-
-    api = HfApi()
 
     # Determine repo_id
     final_repo_id = infer_repo_name(meta, run_dir, repo_id)

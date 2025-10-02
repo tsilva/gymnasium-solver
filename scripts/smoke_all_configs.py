@@ -17,7 +17,6 @@ from typing import Optional
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import wandb
 from stable_baselines3.common.utils import set_random_seed
 
 from agents import build_agent
@@ -62,8 +61,6 @@ def smoke_test_config(env_id: str, variant_id: str, n_epochs: int) -> tuple[bool
     Returns:
         (success, error_message) tuple. success=True if training completes without exception.
     """
-    config_spec = f"{env_id}:{variant_id}"
-
     try:
         # Load config
         config = load_config(env_id, variant_id)

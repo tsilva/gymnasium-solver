@@ -167,7 +167,6 @@ def main() -> None:
 
     # Simple training loop (behavioral cloning)
     num_samples = observations.shape[0]
-    indices = torch.arange(num_samples)
     batch_size = max(1, min(args.batch_size, num_samples))
 
     print(

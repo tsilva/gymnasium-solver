@@ -3,18 +3,17 @@
 # NEXT
 
 - REFACTOR: ensure agents are themselves responsible for saving all of their artifacts to the run, in the same fashion it should also be possible to load back an agent by pointing to a run dir. NOTE: when saving/loading we need to make sure that we can get the agent back to the exact training state it was in when it was saved.
+- REFACTOR: we currently have vectorization_mode = "auto" / "sync" / "async". We should add a fourth option "native" that uses the native vectorization if the env is atari and rgb. This makes things clearer and more consistent. However do take into account that when passing the flag to gym.make_env you still have to convert it to None. Also assert that user cant request native when not atari+rgb.
+- REFACTOR: drop all SB3 integration, use alternatives provided by gymnasium or use our own instead
 
-- FEAT: Add support for specifying reward threshold in config. The way this works is that you can instead of passing a True/false to eraly stop on trian or early stop on eval, you can pass a float instead and that will be treated as the reward threshold instead of the bool. One example of where to use this is ALE/Pong-v5_objects_deterministic_ppo, when the expected reward can be really high and we want to define that in the experiment config (overrides env spec).
+- TODO: dont use eval recording freq, instead make the checkpointer render when required
 
 - BUG: wandb project ids are innacurate
 
 - THINK: think about how we define training 
 
 - FEAT: add support for cosine scheduler
-- FEAT: add video recording support for native ale vec env
-- FEAT: when subproc = "auto" chose depending on situation (eg: n_envs + atari)
 - inspect mc_returns and gae for unifinished episodes
-- TODO: dont use eval recording freq, instead make the checkpointer render when required
 - TEST: do highlighted rows also show alerts correctly?
 - CHECK: ensure model runs validation in eval mode (rollout collector)
 - BUG: inspect not working because it cant retrieve action labels

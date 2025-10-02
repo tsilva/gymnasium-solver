@@ -2,7 +2,6 @@
 import argparse
 import itertools
 import math
-import os
 import time
 from dataclasses import dataclass
 

@@ -1,5 +1,3 @@
-from gymnasium import logger as gym_logger
-
 from gym_wrappers.env_wrapper_registry import EnvWrapperRegistry
 
 
@@ -149,11 +147,7 @@ def build_env(
     if _use_ale_native_vectorization:
         from gymnasium import make_vec
         from gymnasium.wrappers.vector import RecordEpisodeStatistics as VectorRecordEpisodeStatistics
-
-        # Video recording not supported with ALE native vectorization
-        if _use_ale_native_vectorization and record_video:
-            record_video = False
-            gym_logger.warn("Video recording not supported with ALE native vectorization; disabling video recording")
+        from gym_wrappers.ale_vec_video_recorder import ALEVecVideoRecorder
 
         # ALE native vectorization doesn't support per-env wrappers, so we create
         # the vectorized env first and then apply vector-level wrappers
@@ -190,6 +184,10 @@ def build_env(
 
         # Apply vector-level RecordEpisodeStatistics to track episode metrics
         env = VectorRecordEpisodeStatistics(env)
+
+        # Apply video recording wrapper if requested
+        if record_video:
+            env = ALEVecVideoRecorder(env, **record_video_kwargs)
 
         # Store metadata as attributes on the vectorized env
         # (ALE native doesn't support per-env wrappers, so we store at vec level)

@@ -85,7 +85,6 @@ _global:
 cnt/total_episodes:
   precision: 0
   description: "Cumulative number of episodes completed across all training"
-  delta_rule: ">="  # Should always increase
   min: 0
 
 cnt/total_env_steps:
@@ -102,11 +101,12 @@ progress:
   highlight: true
   description: "Normalized training progress based on total vectorized steps (0.0 start → 1.0 at max_timesteps)"
   precision: 2
+  min: 0.0  # Progress starts at 0
+  max: 1.0  # Progress completes at 1
 
 roll/env_steps:
   description: "Individual environment steps in the current rollout buffer (n_envs × n_steps)"
   precision: 0
-  delta_rule: ">="  # Should always increase
   min: 0
 
 # Vectorized-step counters (one per vec_env.step() call across all parallel environments)
@@ -120,14 +120,12 @@ cnt/total_vec_steps:
 roll/vec_steps:
   description: "Number of vec_env.step() calls in the current rollout (typically equals n_steps)"
   precision: 0
-  delta_rule: ">="
   min: 0
 
 # Additional counters
 cnt/total_rollouts:
   description: "Cumulative number of completed rollouts (batches) collected"
   precision: 0
-  delta_rule: ">="
   min: 0
 
 roll/episodes:
@@ -171,14 +169,12 @@ cnt/epoch:
   show_in_table: true
   description: "Current training epoch number"
   precision: 0
-  delta_rule: ">="  # Should always increase
   min: 0
 
 # Time metrics
 sys/timing/time_elapsed:
   description: "Total elapsed training time in seconds"
   precision: 2
-  delta_rule: ">="  # Time should always increase
   min: 0.0
 
 sys/timing/fps:
@@ -205,6 +201,7 @@ opt/loss/policy:
 opt/loss/value:
   description: "Value function loss measuring prediction accuracy of state values"
   precision: 4
+  min: 0.0  # MSE loss cannot be negative
 
 opt/loss/total:
   highlight: true
@@ -225,8 +222,7 @@ opt/ppo/approx_kl:
   show_in_table: true
   description: "Approximate KL divergence between old and new policy distributions"
   precision: 4
-  min: 0.0
-  max: 0.1
+  min: 0.0  # KL divergence cannot be negative
 
 opt/ppo/kl:
   description: "KL divergence between old and new policy log probabilities"
@@ -238,15 +234,16 @@ opt/ppo/clip_fraction:
   show_in_table: true
   description: "Fraction of probability ratios that were clipped in PPO objective"
   precision: 3
-  min: 0.0
-  max: 1.0
+  min: 0.0  # Fraction cannot be negative
+  max: 1.0  # Fraction cannot exceed 1
 
 opt/value/explained_var:
   show_in_table: true
   description: "How well the value function predicts returns (1.0 = perfect, 0.0 = no better than mean, <0.0 = worse than mean)"
   precision: 3
-  min: -1.0
-  max: 1.0
+  # Explained variance can theoretically be any value: large negative (terrible predictions),
+  # 0.0 (no better than mean), 1.0 (perfect), or >1.0 (overfitting/leakage).
+  # No hard bounds enforced here.
 
 opt/policy/entropy:
   description: "Policy entropy measuring exploration vs exploitation trade-off"

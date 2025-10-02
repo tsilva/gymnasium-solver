@@ -3,10 +3,16 @@
 # NEXT
 
 - TASK: run stable-retro compile.sh
+- BUG: Pong:rgb is not showing table
+- TODO: trace hyperparam tuning process and adjust
+- FEAT: make table log workspace url and not run url
 - TEST: logged to correct projects
 - TEST: tune with agent
 - TEST: are sweeps still working?
+- BUG: metrics summary is not aligned nor sorted
+- TODO: find better names for metrics (namespaced but short names)
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
+- TODO: add env normalization support, make sure normalization is saved
 
 ## Pong-v5
 
@@ -36,6 +42,8 @@
 
 ## WISHLIST
 
+- FEAT: batch norm support
+- FEAT: layer norm support
 - FEAT: autotune n_envs (check tune_nenvs.md)
 - FEAT: add observation/action noise support
 - FEAT: add LLM review support to inspector.py

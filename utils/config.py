@@ -165,23 +165,82 @@ class Config:
     # Can be a float or a schedule dict: {start: float, end: float, from: float, to: float, schedule: str}
     vf_coef: Optional[Union[float, Dict[str, Any]]] = None
 
-    # Internal schedule attributes (auto-populated from dict syntax)
-    vf_coef_schedule: Optional[str] = None
-    vf_coef_schedule_start_value: Optional[float] = None
-    vf_coef_schedule_end_value: Optional[float] = None
-    vf_coef_schedule_start: Optional[float] = None
-    vf_coef_schedule_end: Optional[float] = None
 
     # The clip range for the policy (algo defaults in subclasses)
     # Can be a float or a schedule dict: {start: float, end: float, from: float, to: float, schedule: str}
     clip_range: Optional[Union[float, Dict[str, Any]]] = None
 
-    # Internal schedule attributes (auto-populated from dict syntax)
-    clip_range_schedule: Optional[str] = None
-    clip_range_schedule_start_value: Optional[float] = None
-    clip_range_schedule_end_value: Optional[float] = None
-    clip_range_schedule_start: Optional[float] = None
-    clip_range_schedule_end: Optional[float] = None
+    def _set_schedule_attrs(self, param: str, schedule_type: str, start_value: float,
+                           end_value: float, from_pos: float, to_pos: float) -> None:
+        """Set all schedule-related attributes for a parameter."""
+        setattr(self, param, start_value)
+        setattr(self, f"{param}_schedule", schedule_type)
+        setattr(self, f"{param}_schedule_start_value", start_value)
+        setattr(self, f"{param}_schedule_end_value", end_value)
+        setattr(self, f"{param}_schedule_start", from_pos)
+        setattr(self, f"{param}_schedule_end", to_pos)
+
+    def _default_schedule_attr(self, attr: str, default: Any) -> None:
+        """Set a schedule attribute to default if it's None."""
+        if getattr(self, attr, None) is None:
+            setattr(self, attr, default)
+
+    def _validate_positive(self, attr: str, allow_none: bool = True) -> None:
+        """Validate that an attribute is positive."""
+        value = getattr(self, attr, None)
+        if value is None and allow_none:
+            return
+        if value is None or not (value > 0):
+            raise ValueError(f"{attr} must be a positive {'float/int' if allow_none else 'number'} when set.")
+
+    def _validate_non_negative(self, attr: str, allow_none: bool = True) -> None:
+        """Validate that an attribute is non-negative."""
+        value = getattr(self, attr, None)
+        if value is None and allow_none:
+            return
+        if value is None or not (value >= 0):
+            raise ValueError(f"{attr} must be a non-negative number when set.")
+
+    def _validate_range(self, attr: str, min_val: float, max_val: float,
+                       inclusive_min: bool = True, inclusive_max: bool = True) -> None:
+        """Validate that an attribute is in a specific range."""
+        value = getattr(self, attr, None)
+        if value is None:
+            return
+        min_ok = (value >= min_val) if inclusive_min else (value > min_val)
+        max_ok = (value <= max_val) if inclusive_max else (value < max_val)
+        if not (min_ok and max_ok):
+            min_bracket = "[" if inclusive_min else "("
+            max_bracket = "]" if inclusive_max else ")"
+            raise ValueError(f"{attr} must be in {min_bracket}{min_val}, {max_val}{max_bracket} when set.")
+
+    def _validate_schedules(self) -> None:
+        """Validate all hyperparameter schedule configurations."""
+        schedule_suffix = "_schedule"
+        for key in list(vars(self).keys()):
+            if not key.endswith(schedule_suffix):
+                continue
+            schedule = getattr(self, key)
+            if not schedule:
+                continue
+
+            param = key[: -len(schedule_suffix)]
+            start_value = getattr(self, f"{param}_schedule_start_value", None)
+            end_value = getattr(self, f"{param}_schedule_end_value", None)
+            assert start_value is not None and end_value is not None, \
+                f"{param}_schedule requires start and end values to be defined."
+
+            start_pos = getattr(self, f"{param}_schedule_start", None) or 0.0
+            end_pos = getattr(self, f"{param}_schedule_end", None)
+            if end_pos is None:
+                assert self.max_timesteps is not None, \
+                    f"{param}_schedule requires a max_timesteps or an explicit schedule_end value."
+                end_pos = 1.0
+
+            assert start_pos >= 0 and end_pos >= 0, f"{param}_schedule start/end must be non-negative."
+            assert end_pos >= start_pos, f"{param}_schedule end must be >= start."
+            assert not (self.max_timesteps is None and (start_pos <= 1.0 or end_pos <= 1.0)), \
+                f"{param}_schedule uses fractional start/end positions but config.max_timesteps is not set."
 
     # How to calculate rollout returns (algo defaults in subclasses)
     returns_type: Optional["Config.ReturnsType"] = None  # type: ignore[assignment]
@@ -365,15 +424,7 @@ class Config:
 
                 assert start_value is not None, f"{key} schedule dict must have 'start' key"
 
-                # Set the base parameter to the start value
-                setattr(self, key, start_value)
-
-                # Set the schedule attributes
-                setattr(self, f"{key}_schedule", schedule_type)
-                setattr(self, f"{key}_schedule_start_value", start_value)
-                setattr(self, f"{key}_schedule_end_value", end_value)
-                setattr(self, f"{key}_schedule_start", from_pos)
-                setattr(self, f"{key}_schedule_end", to_pos)
+                self._set_schedule_attrs(key, schedule_type, start_value, end_value, from_pos, to_pos)
 
     def _resolve_schedule_defaults(self) -> None:
         schedule_suffix = "_schedule"
@@ -387,23 +438,12 @@ class Config:
             param = key[: -len(schedule_suffix)]
 
             # Start/end values default to the current parameter value and zero respectively
-            start_value_attr = f"{param}_schedule_start_value"
-            end_value_attr = f"{param}_schedule_end_value"
-            if getattr(self, start_value_attr, None) is None:
-                setattr(self, start_value_attr, getattr(self, param))
-
-            if getattr(self, end_value_attr, None) is None:
-                setattr(self, end_value_attr, 0.0)
+            self._default_schedule_attr(f"{param}_schedule_start_value", getattr(self, param))
+            self._default_schedule_attr(f"{param}_schedule_end_value", 0.0)
 
             # Default start/end positions use fractions of training progress
-            start_pos_attr = f"{param}_schedule_start"
-            end_pos_attr = f"{param}_schedule_end"
-
-            if getattr(self, start_pos_attr, None) is None:
-                setattr(self, start_pos_attr, 0.0)
-
-            if getattr(self, end_pos_attr, None) is None:
-                setattr(self, end_pos_attr, 1.0)
+            self._default_schedule_attr(f"{param}_schedule_start", 0.0)
+            self._default_schedule_attr(f"{param}_schedule_end", 1.0)
 
     def get_env_args(self) -> Dict[str, Any]:
         return dict(
@@ -445,41 +485,25 @@ class Config:
     
     # TODO: figure out a way to softcode this
     def validate(self):
-        if not (self.seed > 0):
-            raise ValueError("seed must be a positive integer.")
-        if self.policy_lr is not None and not (self.policy_lr > 0):
-            raise ValueError("policy_lr must be a positive float when set.")
-        target_kl = getattr(self, "target_kl", None)
-        if target_kl is not None and not (target_kl > 0):
-            raise ValueError("target_kl must be a positive float when set.")
-        if self.ent_coef is not None and not (self.ent_coef >= 0):
-            raise ValueError("ent_coef must be a non-negative float when set.")
-        if self.n_epochs is not None and not (self.n_epochs > 0):
-            raise ValueError("n_epochs must be a positive integer when set.")
-        if self.n_steps is not None and not (self.n_steps > 0):
-            raise ValueError("n_steps must be a positive integer when set.")
-        if self.batch_size is not None and not (self.batch_size > 0):
-            raise ValueError("batch_size must be a positive integer when set.")
-        if self.max_timesteps is not None and not (self.max_timesteps > 0):
-            raise ValueError("max_timesteps must be a positive number when set.")
-        if self.gamma is not None and not (0 <= self.gamma <= 1):
-            raise ValueError("gamma must be in [0, 1] when set.")
-        if self.gae_lambda is not None and not (0 <= self.gae_lambda <= 1):
-            raise ValueError("gae_lambda must be in [0, 1] when set.")
-        if self.clip_range is not None and not (0 < self.clip_range < 1):
-            raise ValueError("clip_range must be in (0, 1) when set.")
-        if self.eval_freq_epochs is not None and not (self.eval_freq_epochs > 0):
-            raise ValueError("eval_freq_epochs must be a positive integer when set.")
-        if not (self.eval_warmup_epochs >= 0):
-            raise ValueError("eval_warmup_epochs must be a non-negative integer.")
-        if self.eval_episodes is not None and not (self.eval_episodes > 0):
-            raise ValueError("eval_episodes must be a positive integer when set.")
-        if self.reward_threshold is not None and not (self.reward_threshold > 0):
-            raise ValueError("reward_threshold must be a positive float when set.")
-        #if not (self.early_stop_on_train_threshold or self.early_stop_on_eval_threshold):
-        #    raise ValueError("At least one of early_stop_on_train_threshold or early_stop_on_eval_threshold must be True.")
+        self._validate_positive("seed", allow_none=False)
+        self._validate_positive("policy_lr")
+        self._validate_positive("target_kl")
+        self._validate_non_negative("ent_coef")
+        self._validate_positive("n_epochs")
+        self._validate_positive("n_steps")
+        self._validate_positive("batch_size")
+        self._validate_positive("max_timesteps")
+        self._validate_range("gamma", 0, 1)
+        self._validate_range("gae_lambda", 0, 1)
+        self._validate_range("clip_range", 0, 1, inclusive_min=False, inclusive_max=False)
+        self._validate_positive("eval_freq_epochs")
+        self._validate_non_negative("eval_warmup_epochs", allow_none=False)
+        self._validate_positive("eval_episodes")
+        self._validate_positive("reward_threshold")
+
         if self.devices is not None and not (isinstance(self.devices, int) or self.devices == "auto"):
             raise ValueError("devices may be an int, 'auto', or None.")
+
         if self.n_envs is not None and self.n_steps is not None and self.batch_size is not None:
             rollout_size = self.n_envs * self.n_steps
             if not (self.batch_size <= rollout_size):
@@ -492,57 +516,19 @@ class Config:
                     "batch_size must divide (n_envs * n_steps) exactly to yield uniform minibatches: "
                     f"rollout_size={rollout_size}, batch_size={self.batch_size}."
                 )
+
         if self.policy_targets is not None and self.policy_targets not in {Config.PolicyTargetsType.returns, Config.PolicyTargetsType.advantages}:  # type: ignore[operator]
             raise ValueError("policy_targets must be 'returns' or 'advantages'.")
         if self.normalize_advantages is not None and self.normalize_advantages not in {Config.AdvantageNormType.rollout, Config.AdvantageNormType.batch, Config.AdvantageNormType.off}:  # type: ignore[operator]
             raise ValueError("normalize_advantages must be 'rollout', 'batch', or 'off'.")
+
         # PPO replay-specific checks (only if fields exist)
-        rr = getattr(self, "replay_ratio", 0.0)
-        if rr is not None and rr < 0:
-            raise ValueError("replay_ratio must be >= 0.")
-        rbs = getattr(self, "replay_buffer_size", 0)
-        if rbs is not None and rbs < 0:
-            raise ValueError("replay_buffer_size must be >= 0.")
-        ric = getattr(self, "replay_is_clip", 10.0)
-        if ric is not None and ric <= 0:
-            raise ValueError("replay_is_clip must be > 0.")
+        self._validate_non_negative("replay_ratio")
+        self._validate_non_negative("replay_buffer_size")
+        self._validate_positive("replay_is_clip")
 
         # Validate hyperparameter schedules
-        schedule_suffix = "_schedule"
-        for key in list(vars(self).keys()):
-            if not key.endswith(schedule_suffix):
-                continue
-            schedule = getattr(self, key)
-            if not schedule:
-                continue
-
-            param = key[: -len(schedule_suffix)]
-            start_value = getattr(self, f"{param}_schedule_start_value", None)
-            end_value = getattr(self, f"{param}_schedule_end_value", None)
-            if start_value is None or end_value is None:
-                raise ValueError(f"{param}_schedule requires start and end values to be defined.")
-
-            start_pos = getattr(self, f"{param}_schedule_start", None)
-            end_pos = getattr(self, f"{param}_schedule_end", None)
-
-            if start_pos is None:
-                start_pos = 0.0
-            if end_pos is None:
-                if self.max_timesteps is None:
-                    raise ValueError(
-                        f"{param}_schedule requires a max_timesteps or an explicit schedule_end value."
-                    )
-                end_pos = 1.0
-
-            if start_pos < 0 or end_pos < 0:
-                raise ValueError(f"{param}_schedule start/end must be non-negative.")
-            if end_pos < start_pos:
-                raise ValueError(f"{param}_schedule end must be >= start.")
-
-            if self.max_timesteps is None and (start_pos <= 1.0 or end_pos <= 1.0):
-                raise ValueError(
-                    f"{param}_schedule uses fractional start/end positions but config.max_timesteps is not set."
-                )
+        self._validate_schedules()
 
 # TODO: these config extensions should somehow be provided by the agent itself
 @dataclass

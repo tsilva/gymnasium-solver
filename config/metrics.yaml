@@ -73,6 +73,7 @@ _global:
       - "sys/timing/eta_s"
 
       # === Hyperparameters ===
+      - "hp/n_epochs"
       - "hp/policy_lr"
       - "hp/clip_range"
       - "hp/ent_coef"
@@ -80,24 +81,11 @@ _global:
 
   step_key: "train/cnt/total_vec_steps"
 
-clip_range:
-  description: "PPO clip range for policy updates (ratio clamp around 1.0)"
-  precision: 4
-  min: 0.0
-  max: 1.0
-      
 # Episode and timestep counts (integers)
 cnt/total_episodes:
   precision: 0
   description: "Cumulative number of episodes completed across all training"
   delta_rule: ">="  # Should always increase
-  min: 0
-
-# For CSV base fields, keep bare precision settings for compatibility
-total_timesteps:
-  highlight: true
-  description: "Cumulative number of environment steps taken across all training"
-  precision: 0
   min: 0
 
 cnt/total_env_steps:
@@ -178,50 +166,10 @@ roll/ep_rew/best:
   description: "Running best of ep_rew/mean across epochs"
   precision: 2
 
-roll/ep_rew/min:
-  description: "Minimum episode reward observed in recent episodes window"
-  precision: 2
-
-roll/ep_rew/max:
-  description: "Maximum episode reward observed in recent episodes window"
-  precision: 2
-
-roll/ep_len/min: 
-  precision: 0
-  description: "Minimum episode length observed in recent episodes window"
-  min: 0
-
-roll/ep_len/max: 
-  description: "Maximum episode length observed in recent episodes window"
-  precision: 0
-  min: 0
-
-roll/ep_rew/std:
-  description: "Standard deviation of episode rewards in recent episodes window"
-  precision: 2
-
-roll/ep_len/std:
-  description: "Standard deviation of episode lengths in recent episodes window"
-  precision: 2
-  min: 0.0
-
 # Training metrics
-# For CSV base fields, keep bare precision settings for compatibility
-epoch:
-  description: "Current training epoch number"
-  precision: 0
-  delta_rule: ">="  # Should always increase
-  min: 0
-
 cnt/epoch:
   show_in_table: true
   description: "Current training epoch number"
-  precision: 0
-  delta_rule: ">="  # Should always increase
-  min: 0
-
-n_updates:
-  description: "Total number of parameter updates (gradient steps) performed"
   precision: 0
   delta_rule: ">="  # Should always increase
   min: 0
@@ -246,11 +194,6 @@ sys/timing/eta_s:
 
 sys/timing/fps_instant:
   description: "Instant training throughput in frames per second measured within the current epoch"
-  precision: 0
-  min: 0.0
-
-epoch_fps:
-  description: "Throughput (steps/s) computed over the last validation epoch"
   precision: 0
   min: 0.0
 
@@ -342,31 +285,13 @@ opt/grads/norm/mlp:
   precision: 4
   min: 0.0
 
-# Algorithm-specific metrics
+# REINFORCE-specific metrics
 policy_targets_mean:
   description: "Mean of policy targets (returns or advantages) used in REINFORCE loss"
   precision: 4
 
 policy_targets_std:
   description: "Standard deviation of policy targets (returns or advantages) used in REINFORCE loss"
-  precision: 4
-  min: 0.0
-
-advantage_mean:
-  description: "Mean advantage estimate across batch (should be near zero when normalized)"
-  precision: 4
-
-advantage_std:
-  description: "Standard deviation of advantage estimates across batch"
-  precision: 4
-  min: 0.0
-
-value_mean:
-  description: "Mean value function estimate across states in batch"
-  precision: 4
-
-value_std:
-  description: "Standard deviation of value function estimates across states in batch"
   precision: 4
   min: 0.0
 
@@ -440,6 +365,11 @@ opt/ppo/kl_stop_triggered:
   max: 1
 
 # Hyperparameter mirrors logged under hp/*
+hp/n_epochs:
+  description: "Number of optimization epochs per rollout"
+  precision: 0
+  min: 1
+
 hp/policy_lr:
   description: "Policy learning rate at start (static reference)"
   precision: 6

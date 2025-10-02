@@ -329,6 +329,10 @@ def run_episode(
     obs_type_cfg = str(getattr(config, "obs_type", "")).lower()
     # Derive a fixed stacking hint once
     n_stack_hint = int(getattr(config, "frame_stack", None) or 0)
+    # ALE native vectorization always applies 4-frame stacking regardless of config
+    vectorization_mode = str(getattr(config, "vectorization_mode", "")).lower()
+    if vectorization_mode == "native" and config.env_id.startswith("ALE/"):
+        n_stack_hint = 4
     has_stack_hint = bool(n_stack_hint is not None and int(n_stack_hint) > 1)
 
     try:

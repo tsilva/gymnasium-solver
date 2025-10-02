@@ -2,6 +2,9 @@
 
 # NEXT
 
+- TODO: highlight row
+- TODO: assert config frame stack and others match when vectorization_mode = alevecenv (change from native)
+- THINK: is there ever a good reason to have more n_envs than cores?
 - BUG: action labels not appearing in run inspect
 - BUG: frame stack option not appearing in run_inspect
 - BUG: vecobs not showing action labels for pong rgb
@@ -36,6 +39,7 @@
 - Ensure eval uses domain randomization as well
 - FEAT: add LunarLander-v3 randomization wrapper
 - FEAT: reward shape lunarlander to train faster by penalizing long episodes
+
 
 ## Taxi-v3
 

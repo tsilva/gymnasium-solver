@@ -4,27 +4,11 @@
 
 - TEST: logged to correct projects
 - TEST: are sweeps still working?
-- TODO: learn how to read gradient graphs
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
-
-## REFACTOR
-
-1. utils/rollouts.py (1,067 lines)
-
-Why: Massively complex single file with multiple concerns
-- RolloutCollector class alone is 683 lines
-- Mixes multiple classes: RolloutTrajectory, RollingWindow, RunningStats, RolloutBuffer, RolloutCollector
-- Complex return/advantage computation logic intertwined with rollout collection
-- Episode tracking, metrics aggregation, evaluation logic all in one class
-
-Opportunities:
-- Split into separate files: rollout_buffer.py, rollout_collector.py, rollout_stats.py, returns_advantages.py
-- Extract episode processing logic from RolloutCollector
-- Separate metrics computation from collection logic
-- Move utility functions (lines 12-175) to dedicated module
 
 ## Pong-v5
 
+- TODO: learn how to read gradient graphs
 - https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/
 - Check best performance on deterministic env, if it reaches 20-21 then the feature extractor is probably ok (note: raise threshold for this env?)
 - Try tanh and check if performance improves
@@ -34,7 +18,6 @@ Opportunities:
 - Frame stacking should work to turn POMDP into MDP
 - TODO: add support for resuming with policy from previous run
 - add env normalization support (use that instead of normalization from feature extractor)
-- previous actions
 - Search for where to check for SOTA scores on each env (ask gpt to research)
 
 ## LunarLander-v3
@@ -45,10 +28,13 @@ Opportunities:
 - FEAT: add LunarLander-v3 randomization wrapper
 - FEAT: reward shape lunarlander to train faster by penalizing long episodes
 
+## Taxi-v3
+
+- TASK: solve Taxi-v3 with PPO, training stalls for unknown reasons
+
 ## WISHLIST
 
 - FEAT: autotune n_envs (check tune_nenvs.md)
-- TASK: solve Taxi-v3 with PPO, training stalls for unknown reasons
 - FEAT: add observation/action noise support
 - FEAT: add LLM review support to inspector.py
 - FEAT: add support for continuous environments (eg: LunarLanderContinuous-v2)

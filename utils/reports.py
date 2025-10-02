@@ -72,16 +72,21 @@ def sparkline(values: Iterable[float], width: int) -> str:
 
 def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48, per_metric_cap: int = 2000):
     """Print a compact ASCII sparkline summary of numeric metrics."""
+    from utils.dict_utils import group_by_namespace, order_namespaces, sort_subkeys_by_priority
+    from utils.metrics_config import metrics_config
 
-    # Prefer train/* then eval/* then others for readability
-    keys = sorted(history.keys(), key=lambda k: (0 if k.startswith("train/") else 1 if k.startswith("val/") else 2, k))
-    shown = 0
-    printed_header = False
-    for k in keys:
-        pts = history.get(k) or []
+    # Build metric key priority map for sorting
+    key_priority = tuple(metrics_config.key_priority())
+    key_priority_map: Dict[str, int] = {
+        f"{ns}/{sub}": idx
+        for idx, sub in enumerate(key_priority)
+        for ns in ("train", "val", "test")
+    }
 
-        # Show metrics even with a single point (e.g., val/* at end-of-run)
-        if len(pts) < 1: 
+    # Compute stats for all metrics
+    metric_stats: Dict[str, Dict[str, Any]] = {}
+    for k, pts in history.items():
+        if len(pts) < 1:
             continue
 
         # Collapse duplicate steps (keep last)
@@ -89,12 +94,13 @@ def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48
         for s, v in pts:
             by_step[int(s)] = float(v)
 
-        # If there are no points, skip
-        if not by_step: continue
+        if not by_step:
+            continue
 
         # Sort the points by step
         steps_sorted = sorted(by_step)
         values = [by_step[s] for s in steps_sorted]
+
         # Build a chart and render it in a fixed-width column so that
         # subsequent stats align across metrics. For short histories
         # (e.g., val/* with one point), right-align the chart to leave
@@ -117,25 +123,69 @@ def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48
 
         # Get the last value
         vlast = values[-1]
-        if not printed_header:
-            # Use shared header/footer formatting for consistency
-            print("\n" + format_section_header("Metric History".upper(), width=width))
-            printed_header = True
-        
-        # Pipe-separated stats for easier parsing/reading
-        print(
-            f"{k:>26}: {chart} | min={vmin:.4g} | max={vmax:.4g} | mean={vmean:.4g} | std={vstd:.4g} | last={vlast:.4g}"
-        )
-        shown += 1
 
-        # If we've shown the maximum number of metrics, break
-        if shown >= max_metrics: break
+        metric_stats[k] = {
+            "chart": chart,
+            "min": vmin,
+            "max": vmax,
+            "mean": vmean,
+            "std": vstd,
+            "last": vlast,
+        }
 
-    # If we've printed the header, print a message if there are no numeric metrics to summarize
-    if printed_header:
-        if shown == 0:
-            print("(no numeric metrics to summarize)")
-        print(format_section_footer(width=width))
+    if not metric_stats:
+        return
+
+    # Group by namespace
+    grouped = group_by_namespace(metric_stats)
+
+    # Order namespaces (prefer train, val, test)
+    namespace_order = order_namespaces(grouped, ("train", "val", "test"))
+
+    # Sort subkeys within each namespace
+    grouped = sort_subkeys_by_priority(grouped, namespace_order, key_priority_map)
+
+    # Calculate column widths
+    max_key_len = max((len(k.split("/", 1)[1]) for k in metric_stats.keys()), default=0)
+    stat_cols = ["min", "max", "mean", "std", "last"]
+    stat_widths = {col: max(len(col), 8) for col in stat_cols}
+
+    # Compute width for each stat column based on actual values
+    for stats in metric_stats.values():
+        for col in stat_cols:
+            val_str = f"{stats[col]:.4g}"
+            stat_widths[col] = max(stat_widths[col], len(val_str))
+
+    # Print header
+    print("\n" + format_section_header("Metric History".upper(), width=width))
+
+    shown = 0
+    for ns in namespace_order:
+        if shown >= max_metrics:
+            break
+
+        submetrics = grouped.get(ns, {})
+        if not submetrics:
+            continue
+
+        # Print namespace header
+        print(f"\n{ns}/")
+
+        for subkey, stats in submetrics.items():
+            if shown >= max_metrics:
+                break
+
+            chart = stats["chart"]
+
+            # Format stats with consistent widths
+            stat_parts = [f"{col}={stats[col]:>{stat_widths[col]}.4g}" for col in stat_cols]
+            stats_line = " | ".join(stat_parts)
+
+            # Print row with proper alignment
+            print(f"  {subkey:<{max_key_len}}: {chart} | {stats_line}")
+            shown += 1
+
+    print(format_section_footer(width=width))
 
 def print_terminal_ascii_alerts(
     freq_alerts: List[Dict[str, Any]],

@@ -2,14 +2,15 @@
 
 # NEXT
 
+- BUG: action labels not appearing in run inspect
+- BUG: frame stack option not appearing in run_inspect
+- BUG: vecobs not showing action labels for pong rgb
+- FEAT: speed up eval as much as possible (async mode with few changes)
 - TASK: run stable-retro compile.sh
-- BUG: Pong:rgb is not showing table
 - TODO: trace hyperparam tuning process and adjust
-- FEAT: make table log workspace url and not run url
 - TEST: logged to correct projects
 - TEST: tune with agent
 - TEST: are sweeps still working?
-- BUG: metrics summary is not aligned nor sorted
 - TODO: find better names for metrics (namespaced but short names)
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 - TODO: add env normalization support, make sure normalization is saved

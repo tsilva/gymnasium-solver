@@ -377,11 +377,9 @@ class Config:
                     obs_type = variant_cfg.get("obs_type", "rgb")
                     # Handle both string and enum cases
                     obs_type_str = obs_type.value if hasattr(obs_type, 'value') else str(obs_type)
-                    # Only append obs_type if it's not the default "rgb"
-                    if env_id and obs_type_str != "rgb":
+                    # Always append obs_type to env_id for project_id
+                    if env_id:
                         variant_cfg["project_id"] = f"{env_id}_{obs_type_str}"
-                    elif env_id:
-                        variant_cfg["project_id"] = env_id
                     else:
                         variant_cfg["project_id"] = path.stem
 

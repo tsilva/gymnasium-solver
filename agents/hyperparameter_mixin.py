@@ -80,7 +80,7 @@ class HyperparameterMixin:
                 self.ent_coef = value
             elif key == "n_epochs":
                 self._change_n_epochs(value)
-        print(f"Hyperparameters changed from run: {changes_map}")
+        #print(f"Hyperparameters changed from run: {changes_map}")
 
     def _log_hyperparameters(self: "BaseAgent") -> None:
         """Log current hyperparameter values."""

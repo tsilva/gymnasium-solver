@@ -207,12 +207,29 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         train_metrics = train_collector.get_metrics()
         self.timings.start("on_train_epoch_start", values=train_metrics)
 
-        # Read latest hyperparameters from run 
+        # Read latest hyperparameters from run
         # (may have been changed by user during training)
         self._read_hyperparameters_from_run()
 
         # Log hyperparameters that are tunable in real-time
         self._log_hyperparameters()
+
+        # Check if collecting another rollout would exceed max_env_steps budget
+        # If so, stop training before the rollout (prevents overshooting the budget)
+        if self.config.max_env_steps is not None:
+            current_env_steps = train_metrics.get("cnt/total_env_steps", 0)
+            next_rollout_steps = self.config.n_envs * self.config.n_steps
+            would_exceed = (current_env_steps + next_rollout_steps) > self.config.max_env_steps
+
+            if would_exceed:
+                from utils.formatting import format_metric_value
+                current_s = format_metric_value("train/cnt/total_env_steps", current_env_steps)
+                limit_s = format_metric_value("train/cnt/total_env_steps", self.config.max_env_steps)
+                reason = f"'train/cnt/total_env_steps': {current_s} + {next_rollout_steps} would exceed {limit_s}."
+                print(f"Early stopping! {reason}")
+                self.set_early_stop_reason(reason)
+                self.trainer.should_stop = True
+                return
 
         # Collect fresh trajectories at the start of each training epoch
         # Avoid double-collect on the first epoch: train_dataloader() already

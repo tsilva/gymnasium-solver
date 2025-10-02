@@ -79,7 +79,7 @@ class MetricsTableLogger(LightningLoggerBase):
         # Output environment
         self.stream = sys.stdout
         self.colors_enabled: bool = sys.stdout.isatty()
-        self.use_ansi_inplace: bool = False
+        self.use_ansi_inplace: bool = True
         self.indent: int = 4
 
         # Table layout
@@ -271,12 +271,17 @@ class MetricsTableLogger(LightningLoggerBase):
         if not self.run:
             return None
 
-        # Format run ID with hyperlink to wandb if available
+        # Format run ID with hyperlink to wandb workspace if available
         run_id = self.run.id
         try:
             import wandb
-            if wandb.run is not None and wandb.run.url:
-                run_id = self._hyperlink(run_id, wandb.run.url)
+            if wandb.run is not None:
+                # Use workspace URL: https://wandb.ai/{entity}/{project}/workspace
+                entity = wandb.run.entity
+                project = wandb.run.project
+                if entity and project:
+                    workspace_url = f"https://wandb.ai/{entity}/{project}/workspace"
+                    run_id = self._hyperlink(run_id, workspace_url)
         except Exception:
             pass
 

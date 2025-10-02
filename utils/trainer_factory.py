@@ -19,6 +19,10 @@ def build_trainer(
     limit_val_batches = 0 if eval_freq_epochs is None else 1.0
     check_val_every_n_epoch = eval_freq_epochs if eval_freq_epochs is not None else 1
 
+    # Calculate log_every_n_steps based on batches per epoch
+    batches_per_epoch = (config.n_envs * config.n_steps) // config.batch_size
+    log_every_n_steps = max(1, batches_per_epoch // 10)  # Log ~10 times per epoch
+
     return pl.Trainer(
         logger=logger,
         max_epochs=config.max_epochs if config.max_epochs is not None else -1,
@@ -31,5 +35,6 @@ def build_trainer(
         check_val_every_n_epoch=check_val_every_n_epoch,
         limit_val_batches=limit_val_batches,
         num_sanity_val_steps=0,
+        log_every_n_steps=log_every_n_steps,
         callbacks=callbacks,
     )

@@ -17,7 +17,7 @@ _global:
       - "cnt/epoch"
       - "cnt/total_episodes"
       - "cnt/total_vec_steps"
-      - "cnt/total_timesteps"
+      - "cnt/total_env_steps"
       
       # === Rollout (training samples from the environment) ===
       - "roll/ep_rew/mean"

@@ -103,11 +103,8 @@ class CallbackBuilder:
         """Build early stopping callbacks."""
         callbacks = []
 
-        # If defined in config, early stop after reaching a certain number of environment steps
-        if self.config.max_env_steps:
-            callbacks.append(
-                EarlyStoppingCallback("train/cnt/total_env_steps", self.config.max_env_steps)
-            )
+        # Note: max_env_steps early stopping is handled in BaseAgent.on_train_epoch_start()
+        # to prevent overshooting the budget by checking before collecting the next rollout
 
         # If defined in config, early stop when mean training reward reaches a threshold
         # Config value can be True (use env spec threshold) or a float (override threshold)

@@ -1,7 +1,9 @@
 """Randomness and reproducibility helpers."""
 
 from typing import Optional
+import random
 
+import numpy as np
 import torch
 
 # Process-wide torch generator for reproducible shuffles
@@ -23,3 +25,17 @@ def get_global_torch_generator(seed: Optional[int] = None) -> torch.Generator:
 					g.manual_seed(int(seed))
 			_global_torch_generator = g
 	return _global_torch_generator
+
+def set_random_seed(seed: int) -> None:
+	"""Seed all random number generators for reproducibility.
+
+	Seeds:
+	- Python's random module
+	- NumPy's random generator
+	- PyTorch's RNGs (CPU and CUDA)
+	"""
+	random.seed(seed)
+	np.random.seed(seed)
+	torch.manual_seed(seed)
+	if torch.cuda.is_available():
+		torch.cuda.manual_seed_all(seed)

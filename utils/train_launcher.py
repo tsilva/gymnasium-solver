@@ -197,10 +197,9 @@ def launch_training_from_args(args) -> None:
     function handles config resolution, seeding, agent setup, and
     post-training reporting.
     """
-    from stable_baselines3.common.utils import set_random_seed
-
     from utils.config import load_config
     from utils.formatting import format_duration
+    from utils.random import set_random_seed
     from utils.wandb_workspace import create_or_update_workspace_for_current_run
 
     # Resolve configuration spec from positional, then flag, then default

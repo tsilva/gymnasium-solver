@@ -49,7 +49,7 @@ _ppo: &ppo
   <<: *env
   algo_id: ppo
   n_epochs: 4
-  policy_lr: lin_4e-2
+  policy_lr: {start: 4e-2, end: 0.0}
   clip_range: 0.2
   normalize_advantages: "rollout"
 

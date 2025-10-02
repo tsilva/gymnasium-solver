@@ -7,7 +7,7 @@ This project is currently for self-education purposes only. I'm doing a lot of v
 
 ### ✨ Highlights
 - **Algorithms** 🧠: PPO, REINFORCE
-- **Config-first** ⚙️: concise YAML configs with inheritance and linear schedules (e.g., `lin_0.001`)
+- **Config-first** ⚙️: concise YAML configs with inheritance and dict-based schedules (e.g., `{start: 0.001, end: 0.0}`)
 - **Vectorized envs** ⚡: Dummy/Subproc, frame stacking, obs/reward normalization
 - **Atari-ready** 🕹️: ALE with `obs_type` rgb/ram/objects (via [Gymnasium](https://gymnasium.farama.org) and [OCAtari](https://github.com/Kautenja/oc-atari))
 - **Retro-ready** 🎮: Classic console games via [stable-retro](https://github.com/Farama-Foundation/stable-retro) (e.g., `Retro/SuperMarioBros-Nes`)
@@ -58,7 +58,7 @@ python inspector.py --run-id @last --port 7860 --host 127.0.0.1
 ```
 
 ### ⚙️ Configs (YAML)
-Configs live in `config/environments/*.yaml`. New style puts base fields at the top and per-algorithm variants under their own key. Linear schedules like `lin_0.001` are parsed automatically, and you can optionally provide `*_schedule_start_value` / `*_schedule_end_value` plus `*_schedule_start` / `*_schedule_end` to control the interpolation window (values `<1` are treated as a fraction of `max_timesteps`, values `>1` as explicit vec steps). The loader selects an algo-specific config subclass based on `algo_id` (e.g., `PPOConfig`, `REINFORCEConfig`).
+Configs live in `config/environments/*.yaml`. New style puts base fields at the top and per-algorithm variants under their own key. Schedules are specified as dicts with `start` and `end` keys, and you can optionally provide `from`, `to`, and `schedule` keys to control the interpolation window (values `<1` for `from`/`to` are treated as a fraction of `max_timesteps`, values `>1` as explicit vec steps; default schedule is `linear`). The loader selects an algo-specific config subclass based on `algo_id` (e.g., `PPOConfig`, `REINFORCEConfig`).
 
 ```yaml
 # New per-file style (with YAML anchors)
@@ -74,8 +74,8 @@ ppo:
   max_timesteps: 1e5
   n_steps: 32
   batch_size: 256
-  policy_lr: lin_0.001   # linear schedule from 0.001 → 0
-  clip_range:   lin_0.2
+  policy_lr: {start: 0.001, end: 0.0}   # linear schedule from 0.001 → 0
+  clip_range: {start: 0.2, end: 0.0}
   env_wrappers:
     - { id: CartPoleV1_RewardShaper, angle_reward_scale: 1.0 }
 ```
@@ -148,7 +148,7 @@ runs/              # training outputs (checkpoints, videos, logs, config)
 ### 🌀 W&B Sweeps
 - Train under a sweep: set your sweep `program` to call `python train.py --config_id "<env>:<variant>"` (e.g., `CartPole-v1:ppo`).
 - The script auto-detects W&B Agent via `WANDB_SWEEP_ID` and merges `wandb.config` into the main config before training. You can also force this behavior with `--wandb_sweep`.
-- Parameter names map 1:1 to config fields (e.g., `n_envs`, `n_steps`, `batch_size`, `policy_lr`, `clip_range`, `gamma`, `gae_lambda`, `ent_coef`, `vf_coef`, `max_timesteps`, etc.). Linear schedules like `lin_0.001` are supported for sweep values.
+- Parameter names map 1:1 to config fields (e.g., `n_envs`, `n_steps`, `batch_size`, `policy_lr`, `clip_range`, `gamma`, `gae_lambda`, `ent_coef`, `vf_coef`, `max_timesteps`, etc.). Dict-based schedules like `{start: 0.001, end: 0.0}` are supported for sweep values.
 - Fractional `batch_size` in (0, 1] is resolved as a fraction of `n_envs * n_steps` after overrides are applied.
 
 Example sweep specs:

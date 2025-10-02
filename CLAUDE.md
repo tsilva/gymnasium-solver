@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-gymnasium-solver is a fast, config-first reinforcement learning framework built on PyTorch Lightning, Gymnasium, and Stable-Baselines3. It trains PPO and REINFORCE agents with vectorized environments, video capture, and seamless W&B/Hugging Face Hub integration.
+gymnasium-solver is a fast, config-first reinforcement learning framework built on PyTorch Lightning and Gymnasium. It trains PPO and REINFORCE agents with vectorized environments, video capture, and seamless W&B/Hugging Face Hub integration.
 
 **Important**: This is a self-education project undergoing rapid development ("vibe coding"). Expect instability and breaking changes until the first official release.
 
@@ -100,9 +100,9 @@ python scripts/brax_eval_policy.py
 ## Architecture Overview
 
 ### Entry Point & Training Flow
-- **`train.py`**: Accepts `<env>:<variant>` config specs (e.g., `CartPole-v1:ppo`), loads `Config` via `utils.config.load_config(env_id, variant_id)`, seeds via SB3, builds agent via `agents.build_agent()`, and calls `agent.learn()`.
+- **`train.py`**: Accepts `<env>:<variant>` config specs (e.g., `CartPole-v1:ppo`), loads `Config` via `utils.config.load_config(env_id, variant_id)`, seeds via `utils.random.set_random_seed()`, builds agent via `agents.build_agent()`, and calls `agent.learn()`.
 - **Config override**: `--max-env-steps` injects into `config.max_env_steps` after sweep merges.
-- **W&B Sweeps**: Auto-detected via `WANDB_SWEEP_ID` or `--wandb_sweep` flag. Merges `wandb.config` into main `Config` before training. Supports linear schedules like `lin_0.001`.
+- **W&B Sweeps**: Auto-detected via `WANDB_SWEEP_ID` or `--wandb_sweep` flag. Merges `wandb.config` into main `Config` before training. Supports schedules specified as dicts (e.g., `{start: 0.001, end: 0.0}`).
 - **Debugger detection**: When a debugger is attached, `train.py` forces `n_envs=1`, `subproc=False`, and adjusts `batch_size` to remain compatible.
 
 ### Configuration System (`utils/config.py`)
@@ -110,7 +110,7 @@ python scripts/brax_eval_policy.py
 - **Config files**: YAML files in `config/environments/*.yaml` with base fields at top (or under `_base` with YAML anchors) and per-algorithm variants nested below (e.g., `ppo:`, `reinforce:`).
 - **Loading**: `load_config(env_id, variant_id)` requires both parameters. Callers must always provide a variant. The CLI enforces `env:variant` format.
 - **max_env_steps**: Specifies total environment steps (frames) for training, NOT vectorized steps. Example: `max_env_steps=1M` with `n_envs=8` trains for 125k vec_steps. Must be divisible by `n_envs`. Use `config.max_vec_steps` computed property for vec_steps equivalent.
-- **Schedules**: Strings like `lin_0.001` are parsed into `*_schedule='linear'` plus numeric base. Control interpolation with `*_schedule_start_value`, `*_schedule_end_value`, `*_schedule_start`, and `*_schedule_end` (values `<1` are fractions of `max_env_steps`, values `>1` are absolute env steps). Internally converted to vec_steps for scheduling.
+- **Schedules**: Specified as dicts with `start` and `end` keys (e.g., `policy_lr: {start: 0.001, end: 0.0}`). Control interpolation with `from`, `to`, and `schedule` keys (default schedule is `linear`). Values `<1` for `from`/`to` are fractions of `max_env_steps`, values `>1` are absolute env steps. Internally converted to vec_steps for scheduling.
 - **Fractional batch size**: When `batch_size` is in (0, 1], it's treated as a fraction of rollout size (`n_envs * n_steps`). Resolved to `floor(rollout_size * fraction)`, minimum 1, and must evenly divide rollout size.
 - **Algo-specific subclasses**: `PPOConfig` enforces `clip_range > 0`; `REINFORCEConfig` validates `policy_targets` in {'returns', 'advantages'}.
 
@@ -124,8 +124,8 @@ python scripts/brax_eval_policy.py
   - **Standard Gymnasium**: Everything else
 - **Preprocessing**: Optional `GrayScaleObservation` (when `grayscale_obs` set), `ResizeObservation` (when `resize_obs` provided; `True` defaults to `(84, 84)`).
 - **Normalization**:
-  - **Observations**: `normalize_obs` accepts `false` (default), `true`/`'rolling'` (SB3 `VecNormalize`), or `'static'` (bounds-based).
-  - **Rewards**: `normalize_reward: true` enables SB3 reward normalization (ignored when obs uses `'static'`).
+  - **Observations**: `normalize_obs` accepts `false` (default), `true`/`'rolling'` (Gymnasium `NormalizeObservation`), or `'static'` (bounds-based custom wrapper).
+  - **Rewards**: `normalize_reward: true` enables Gymnasium reward normalization (ignored when obs uses `'static'`).
 - **Wrappers**: Registry system in `gym_wrappers/__init__.py`. YAML configs specify wrappers as `{ id: WrapperName, ...kwargs }`.
 - **Wrapper classes**: Each base env wrapped with `EnvInfoWrapper`; vec env wrapped with `VecEnvInfoWrapper` exposing helpers like `.recorder()`, `get_return_threshold()`, `get_max_episode_steps()`, and `.is_rgb_env()`.
 
@@ -228,7 +228,7 @@ python scripts/brax_eval_policy.py
 2. Define base fields at top or under `_base` with YAML anchors.
 3. Add per-algorithm variants as nested keys (e.g., `ppo:`, `reinforce:`).
 4. Embed `spec` block describing action/observation spaces, rewards, metadata.
-5. Use linear schedules like `lin_0.001` for hyperparameters.
+5. Use dict-based schedules like `{start: 0.001, end: 0.0}` for hyperparameters.
 
 ### Metrics & Logging
 1. Adjust `config/metrics.yaml` for precision/highlight rules.

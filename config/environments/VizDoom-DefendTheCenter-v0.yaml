@@ -61,8 +61,8 @@ _ppo: &ppo
   <<: *env
   algo_id: ppo
   ent_coef: 0.01
-  clip_range: lin_0.2
-  policy_lr: lin_0.0003
+  clip_range: {start: 0.2, end: 0.0}
+  policy_lr: {start: 0.0003, end: 0.0}
   gamma: 0.99
   gae_lambda: 0.95
 

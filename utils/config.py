@@ -454,6 +454,13 @@ class Config:
 
                 assert start_value is not None, f"{key} schedule dict must have 'start' key"
 
+                # Convert string values to floats (YAML may parse scientific notation as strings)
+                start_value = float(start_value)
+                end_value = float(end_value)
+                from_pos = float(from_pos)
+                to_pos = float(to_pos)
+                warmup = float(warmup)
+
                 self._set_schedule_attrs(key, schedule_type, start_value, end_value, from_pos, to_pos)
                 # Set warmup if specified
                 if warmup > 0.0:

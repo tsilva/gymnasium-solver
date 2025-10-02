@@ -17,11 +17,10 @@ from typing import Optional
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from stable_baselines3.common.utils import set_random_seed
-
 from agents import build_agent
 from utils.config import Config, load_config
 from utils.io import read_yaml
+from utils.random import set_random_seed
 
 
 def discover_all_configs() -> list[tuple[str, str]]:

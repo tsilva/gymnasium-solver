@@ -80,6 +80,7 @@ def _add_run_to_registry(run_id: str, config: Config) -> None:
     entry = {
         "run_id": run_id,
         "timestamp": datetime.now().isoformat(),
+        "config_id": f"{config.env_id}:{config.algo_id}",
         "env_id": config.env_id,
         "algo": config.algo_id,
         "project_id": config.project_id,

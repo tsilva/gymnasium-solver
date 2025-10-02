@@ -45,13 +45,13 @@ class ModelCheckpointCallback(pl.Callback):
         # If this is not the best epoch so far, return (do nothing)
         if not is_best: return
 
-        # Save checkpoint (best epoch so far)
+        # Record video for this best checkpoint (before saving so video can be copied into checkpoint dir)
         epoch = pl_module.current_epoch
+        self._record_video_for_checkpoint(pl_module, epoch)
+
+        # Save checkpoint (best epoch so far)
         self.best_value = metric_value
         self._save_checkpoint(pl_module, epoch, metrics, is_best=True)
-
-        # Record video for this best checkpoint
-        self._record_video_for_checkpoint(pl_module, epoch)
 
     def _save_checkpoint(
         self,

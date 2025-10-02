@@ -10,7 +10,6 @@ dependencies = [
     "minari[hdf5]",
     "torch",
     "numpy",
-    "stable-baselines3>=2.0.0",
     "wandb",
     "wandb-workspaces",
     # Pin OCAtari to avoid broken sdists (e.g., 1.1.5 missing requirements.txt)

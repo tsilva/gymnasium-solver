@@ -110,7 +110,7 @@ def build_env(
 ):
     import gymnasium as gym
     from gymnasium.wrappers import RecordEpisodeStatistics
-    #from gymnasium.wrappers.vector import NormalizeObservation, NormalizeReward
+    from gymnasium.wrappers.vector import NormalizeObservation, NormalizeReward
 
     from gym_wrappers.env_info import EnvInfoWrapper
     from gym_wrappers.env_video_recorder import EnvVideoRecorder

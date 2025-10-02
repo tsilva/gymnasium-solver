@@ -1,19 +1,19 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple
 
 import numpy as np
 from gymnasium import spaces
-from stable_baselines3.common.vec_env.base_vec_env import VecEnv, VecEnvStepReturn
+from gymnasium.vector import VectorEnv
 
 
-class AtariVecEnvAdapter(VecEnv):
+class AtariVecEnvAdapter(VectorEnv):
     """
-    Thin adapter exposing ale-py's AtariVectorEnv with a Stable-Baselines3 VecEnv API.
+    Thin adapter exposing ale-py's AtariVectorEnv with a Gymnasium VectorEnv API.
 
     Responsibilities:
-    - Present SB3-style `reset()` -> obs and `step()` -> (obs, rewards, dones, infos)
+    - Present Gymnasium-style `reset()` -> obs and `step()` -> (obs, rewards, dones, infos)
     - Auto-reset finished sub-envs and emit Gym/Monitor-like episode infos
     - Optionally enforce a time-limit with TimeLimit.truncated + terminal_observation
     - Provide a no-op `recorder(...)` context manager for compatibility
@@ -96,14 +96,14 @@ class AtariVecEnvAdapter(VecEnv):
         # No-op: video recording must be handled at wrapper level
         yield self
 
-    # ---- SB3 VecEnv interface ----
+    # ---- Gymnasium VectorEnv interface ----
     def seed(self, seed: Optional[int] = None) -> List[Optional[int]]:  # noqa: D401
         """Seed is a no-op; prefer seeding via ale-py initialization if supported."""
-        # Gymnasium VecEnv interface returns a list per sub-env
+        # Gymnasium VectorEnv interface returns a list per sub-env
         return [seed for _ in range(self.num_envs)]
 
     def reset(self) -> np.ndarray:
-        # Reset all sub-envs and drop info to match SB3 semantics
+        # Reset all sub-envs and drop info for compatibility
         obs, _info = self._ale.reset()
         # Ensure batch-first shape (N, ...)
         assert isinstance(obs, np.ndarray), "ALE reset must return a numpy array"
@@ -117,7 +117,7 @@ class AtariVecEnvAdapter(VecEnv):
         # Cache actions to be applied in step_wait
         self._pending_actions = np.asarray(actions)
 
-    def step_wait(self) -> VecEnvStepReturn:
+    def step_wait(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, List[dict]]:
         assert self._pending_actions is not None, "step_async must be called before step_wait"
         actions = self._pending_actions
         self._pending_actions = None
@@ -200,7 +200,7 @@ class AtariVecEnvAdapter(VecEnv):
         return obs_next, rewards, dones, info_list
 
     # Convenience path used by some callers/wrappers
-    def step(self, actions: np.ndarray) -> VecEnvStepReturn:  # type: ignore[override]
+    def step(self, actions: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, List[dict]]:  # type: ignore[override]
         self.step_async(actions)
         return self.step_wait()
 
@@ -210,21 +210,21 @@ class AtariVecEnvAdapter(VecEnv):
         except Exception:
             pass
 
-    # -------- Minimal SB3 VecEnv extension points used by wrappers --------
+    # -------- Extension points used by wrappers --------
     def env_method(self, method_name: str, *args, indices: Optional[List[int]] = None, **kwargs) -> List[Any]:  # noqa: D401
-        """Mimic SB3's env_method by calling methods on this adapter.
+        """Call methods on this adapter.
 
         VecEnvInfoWrapper and VecVideoRecorder use `env_method(..., indices=[0])` to
         fetch helper methods from the first underlying env. Since ale-py's vector env
         does not expose per-env Python objects, we surface the helpers on the adapter
-        itself and return a single-element list with the result, matching SB3's shape.
+        itself and return a single-element list with the result.
         """
         target = getattr(self, method_name, None)
         if not callable(target):
             raise AttributeError(f"Method '{method_name}' not found on ALE adapter")
         return [target(*args, **kwargs)]
 
-    # SB3 abstract helpers ---------------------------------------------------
+    # Abstract helper methods ---------------------------------------------------
     def get_attr(self, attr_name: str, indices: Optional[List[int]] = None) -> List[Any]:  # noqa: D401
         """Return attribute values for each selected sub-env (adapter-wide)."""
         value = getattr(self, attr_name, None)
@@ -236,7 +236,7 @@ class AtariVecEnvAdapter(VecEnv):
         setattr(self, attr_name, value)
 
     def env_is_wrapped(self, wrapper_class, indices: Optional[List[int]] = None) -> List[bool]:  # noqa: D401
-        """Report wrapper presence (adapter is not wrapped by SB3 VecEnv wrappers)."""
+        """Report wrapper presence (adapter is not wrapped by vectorized wrappers)."""
         n = len(indices) if indices is not None else self.num_envs
         return [False for _ in range(n)]
 

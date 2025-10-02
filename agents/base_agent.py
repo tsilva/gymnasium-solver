@@ -86,10 +86,10 @@ class BaseAgent(pl.LightningModule):
         # Build the rollout collectors (requires models and environments)
         for stage in STAGES: self.build_rollout_collector(stage)
 
-    @must_implement
     def build_models(self):
-        # Subclasses must implement this to create their own models (eg: policy, value)
-        pass
+        from utils.policy_factory import build_policy_from_env_and_config
+        train_env = self.get_env("train")
+        self.policy_model = build_policy_from_env_and_config(train_env, self.config)
 
     @must_implement
     def losses_for_batch(self, batch, batch_idx):

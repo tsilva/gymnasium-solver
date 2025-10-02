@@ -95,7 +95,8 @@ class VecEnvInfoWrapper(VectorWrapper):
         ale_env = self._find_ale_native_env()
         if ale_env is not None:
             fallbacks = self._ale_fallbacks(ale_env)
-            assert method in fallbacks, f"No fallback implementation for method '{method}'"
+            if method not in fallbacks:
+                raise AttributeError(f"No fallback implementation for method '{method}'")
             return fallbacks[method](*args, **kwargs)
 
         # Try general fallbacks for common getter methods
@@ -104,10 +105,11 @@ class VecEnvInfoWrapper(VectorWrapper):
             return general_fallbacks[method](*args, **kwargs)
 
         # Direct call fallback
-        assert hasattr(env, method), (
-            f"Method '{method}' not found in vectorized environment. "
-            f"This may happen with ALE native vectorization which doesn't support per-env wrappers."
-        )
+        if not hasattr(env, method):
+            raise AttributeError(
+                f"Method '{method}' not found in vectorized environment. "
+                f"This may happen with ALE native vectorization which doesn't support per-env wrappers."
+            )
         return getattr(env, method)(*args, **kwargs)
 
     def __getattr__(self, name: str) -> Any:

@@ -1,7 +1,6 @@
 import torch
 import torch.nn.functional as F
 
-from utils.policy_factory import build_policy_from_env_and_config
 from utils.torch import assert_detached, batch_normalize, compute_kl_diagnostics
 
 from ..base_agent import BaseAgent
@@ -15,10 +14,6 @@ class PPOAgent(BaseAgent):
 
         # Register PPO-specific metric monitors
         self.metrics_monitor.register_bundle(PPOAlerts(self))
-
-    def build_models(self):
-        train_env = self.get_env("train")
-        self.policy_model = build_policy_from_env_and_config(train_env, self.config)
 
     def losses_for_batch(self, batch, batch_idx):
         # Retrieve immutable PPO parameters

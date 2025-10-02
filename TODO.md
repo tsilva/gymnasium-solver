@@ -12,14 +12,6 @@
 
 ## REFACTOR
 
-Tier 2: High ROI (Moderate Effort)
-
-6. Agent model building - Identical build_models() in PPO/REINFORCE (~10 lines)
-
-Tier 3: Medium ROI (Higher Effort)
-
-10-12. Activation hooks, environment building, early stop handling (~75 lines)
-
 1. utils/rollouts.py (1,067 lines)
 
 Why: Massively complex single file with multiple concerns
@@ -35,6 +27,7 @@ Opportunities:
 - Move utility functions (lines 12-175) to dedicated module
 
 ---
+
 2. agents/base_agent.py (690 lines)
 
 Why: God class with too many responsibilities
@@ -50,8 +43,7 @@ Opportunities:
 - Extract hyperparameter management to separate mixin/class
 
 ---
-3. utils/config.py (649 lines)
----
+
 4. utils/train_launcher.py (369 lines)
 
 Why: Multiple unrelated concerns in one module
@@ -63,22 +55,6 @@ Opportunities:
 - Extract summary building to utils/training_summary.py
 - Move environment listing to utils/environment_registry.py
 - Keep only core launch logic in train_launcher.py
-
----
-🟡 MEDIUM PRIORITY
-
-5. utils/environment.py (298 lines)
-
-Why: Long function with duplication between vectorization paths
-- build_env function is 201 lines (lines 91-291)
-- Two major conditional branches: ALE native (lines 147-198) vs standard (lines 199-264)
-- Duplication in wrapper application, seeding, video recording setup
-- Multiple _build_env_* builders with similar structure (lines 16-87)
-
-Opportunities:
-- Extract vectorization paths into separate builder functions
-- Create env builder registry/strategy pattern for different env types
-- Unify common setup logic (seeding, wrappers, video recording)
 
 ## Pong-v5
 

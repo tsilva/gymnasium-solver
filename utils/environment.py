@@ -18,75 +18,38 @@ def _build_env_alepy(env_id, obs_type, render_mode, **env_kwargs):
     import gymnasium as gym
     gym.register_envs(ale_py)
 
-    # In case the observation type is objects, use OCAtari
-    # to extract object-based observations from game RAM
-    if obs_type == "objects": return _build_env_alepy__objects(env_id, obs_type, render_mode, **env_kwargs)
-    elif obs_type == "ram": return _build_env_alepy__ram(env_id, obs_type, render_mode, **env_kwargs)
-    elif obs_type == "rgb": return _build_env_alepy__rgb(env_id, obs_type, render_mode, **env_kwargs)
-    else: raise ValueError(f"Unsupported obs_type for ALE: {obs_type}")
-        
-def _build_env_alepy__objects(env_id, obs_type, render_mode, **env_kwargs):
-    from ocatari.core import OCAtari
-    env = OCAtari(env_id, mode="ram", hud=False, render_mode=render_mode, **env_kwargs)
-    return env
+    if obs_type == "objects":
+        from ocatari.core import OCAtari
+        return OCAtari(env_id, mode="ram", hud=False, render_mode=render_mode, **env_kwargs)
 
-def _build_env_alepy__ram(env_id, obs_type, render_mode, **env_kwargs):
-    import gymnasium as gym
-    env = gym.make(env_id, obs_type=obs_type, render_mode=render_mode, **env_kwargs)
-    return env
-
-def _build_env_alepy__rgb(env_id, obs_type, render_mode, **env_kwargs):
-    import gymnasium as gym
-    env = gym.make(env_id, obs_type=obs_type, render_mode=render_mode, **env_kwargs)
-    return env
+    assert obs_type in ("ram", "rgb"), f"Unsupported obs_type for ALE: {obs_type}"
+    return gym.make(env_id, obs_type=obs_type, render_mode=render_mode, **env_kwargs)
 
 def _build_env_vizdoom(env_id, obs_type, render_mode, **env_kwargs):
     import re
-
     from gym_wrappers.vizdoom import VizDoomEnv
+
     scenario = env_id.replace("VizDoom-", "").replace("-v0", "").replace("-v1", "").replace("-", "_")
-    scenario = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', scenario)
-    scenario = scenario.lower()
-    env = VizDoomEnv(scenario=scenario, render_mode=render_mode, **env_kwargs)
-    return env
+    scenario = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', scenario).lower()
+    return VizDoomEnv(scenario=scenario, render_mode=render_mode, **env_kwargs)
 
 def _build_env_stable_retro(env_id, obs_type, render_mode, **env_kwargs):
     import retro  # type: ignore
-    
+
     game = env_id.replace("Retro/", "")
-
-    # Extract Retro-specific kwargs while keeping user overrides
-    make_kwargs = dict(env_kwargs) if isinstance(env_kwargs, dict) else {}
-
-    # Prefer a discrete action space so our categorical policies output
-    # integer actions compatible with Retro's internal encoding.
-    # Users can override via env_kwargs if they need MultiDiscrete/MultiBinary.
-    make_kwargs.setdefault("use_restricted_actions", getattr(retro, "Actions").DISCRETE)
-
-    # Support 'state' override via env_kwargs; None → retro's default state
+    make_kwargs = dict(env_kwargs)
+    make_kwargs.setdefault("use_restricted_actions", retro.Actions.DISCRETE)
     state = make_kwargs.pop("state", None)
 
-    # stable-retro supports Gymnasium-style render_mode
-    env = retro.make(
-        game=game, 
-        state=state, 
-        render_mode=render_mode, 
-        **make_kwargs
-    )
-
-    return env
+    return retro.make(game=game, state=state, render_mode=render_mode, **make_kwargs)
 
 def _build_env_mab(env_id, obs_type, render_mode, **env_kwargs):
     from gym_envs.mab_env import MultiArmedBanditEnv
-    env = MultiArmedBanditEnv(**env_kwargs)
-    return env
+    return MultiArmedBanditEnv(**env_kwargs)
 
 def _build_env_gym(env_id, obs_type, render_mode, **env_kwargs):
     import gymnasium as gym
-    env = gym.make(env_id, render_mode=render_mode, **env_kwargs)
-    return env  
-
-# TODO: CLEAN this up
+    return gym.make(env_id, render_mode=render_mode, **env_kwargs)
 
 def build_env(
     env_id,
@@ -117,187 +80,113 @@ def build_env(
     from gym_wrappers.vec_env_info import VecEnvInfoWrapper
     from gym_wrappers.vec_normalize_static import VecNormalizeStatic
     from gym_wrappers.vec_video_recorder import VecVideoRecorder
-        
-    # If recording video was requested, assert valid render mode and async vectorization disabled
-    if record_video and render_mode != "rgb_array": raise ValueError("Video recording requires render_mode='rgb_array'")
-    if record_video and vectorization_mode == "async": raise ValueError("Async vector environments do not support video recording yet")
 
-    # Determine the environment type
+    assert not (record_video and render_mode != "rgb_array"), "Video recording requires render_mode='rgb_array'"
+    assert not (record_video and vectorization_mode == "async"), "Async vectorization does not support video recording"
+
     _is_alepy_env = is_alepy_env_id(env_id)
     _is_vizdoom_env = is_vizdoom_env_id(env_id)
     _is_stable_retro_env = is_stable_retro_env_id(env_id)
     _is_bandit_env = is_mab_env_id(env_id)
 
-    # In case this is an alepy env, ensure alepy is 
-    # registered as a gymnasium env provider
     if _is_alepy_env:
         import ale_py
         gym.register_envs(ale_py)
 
-    # ALE native vectorization for RGB environments (10x faster than standard vectorization)
-    # When vectorization_mode="auto" or "native" and env is ALE RGB, use ALE native vectorization
-    # (includes grayscale, resize, frame_stack=4 by default)
-    # Only supported for rgb obs_type; other obs_types (ram, objects) use standard vectorization
-    # Disable native vectorization if vectorization_mode='sync' or 'async' is explicitly requested
-    _is_ale_rgb_rgb_env = _is_alepy_env and obs_type == "rgb"
-    _use_ale_native_vectorization = _is_ale_rgb_rgb_env and vectorization_mode in ("auto", "native")
-
-    # TODO: break if/else into separate functions
-    # Create the vectorized environment
+    _is_ale_rgb_env = _is_alepy_env and obs_type == "rgb"
+    _use_ale_native_vectorization = _is_ale_rgb_env and vectorization_mode in ("auto", "native")
     if _use_ale_native_vectorization:
         from gymnasium import make_vec
         from gymnasium.wrappers.vector import RecordEpisodeStatistics as VectorRecordEpisodeStatistics
         from gym_wrappers.ale_vec_video_recorder import ALEVecVideoRecorder
 
-        # ALE native vectorization doesn't support per-env wrappers, so we create
-        # the vectorized env first and then apply vector-level wrappers
-        # TODO: step into to confirm AleVecEnv is being used
-        env = make_vec(
-            env_id,
-            num_envs=n_envs,
-            vectorization_mode=None,  # Auto-select: uses ALE native for Atari RGB
-            **env_kwargs
-        )
+        env = make_vec(env_id, num_envs=n_envs, vectorization_mode=None, **env_kwargs)
+        if seed is not None:
+            env.reset(seed=seed)
 
-        # Apply seed to envs
-        if seed is not None: env.reset(seed=seed)
-
-        # Assert that ALE native vectorization applies expected preprocessing:
-        # - Frame stacking (4 frames)
-        # - Grayscale conversion
-        # - 84x84 resizing
-        # Expected shape: (4, 84, 84) for grayscale frame-stacked observations
         obs_space = env.single_observation_space
-        assert hasattr(obs_space, 'shape'), "ALE native vec env must expose observation space with shape"
+        assert hasattr(obs_space, 'shape'), "ALE native vec env must have observation space shape"
         assert obs_space.shape == (4, 84, 84), (
-            f"ALE native vectorization expected to produce (4, 84, 84) observations "
-            f"(4 grayscale frames, 84x84), but got {obs_space.shape}. "
-            f"This indicates ALE native preprocessing may have changed. "
-            f"Config specified frame_stack={frame_stack}, grayscale_obs={grayscale_obs}, "
-            f"resize_obs={resize_obs}, but these are ignored when using ALE native vectorization."
+            f"ALE native vectorization expected (4, 84, 84) but got {obs_space.shape}. "
+            f"Config: frame_stack={frame_stack}, grayscale_obs={grayscale_obs}, resize_obs={resize_obs}"
         )
 
-        # Set attributes before wrapping (some wrappers don't allow setting attributes)
-        # TODO: not sure why this is needed
-        setattr(env, "render_mode", render_mode)
-        setattr(env, "env_id", env_id)
-
-        # Apply vector-level RecordEpisodeStatistics to track episode metrics
+        env.render_mode = render_mode
+        env.env_id = env_id
         env = VectorRecordEpisodeStatistics(env)
 
-        # Apply video recording wrapper if requested
         if record_video:
             env = ALEVecVideoRecorder(env, **record_video_kwargs)
 
-        # Store metadata as attributes on the vectorized env
-        # (ALE native doesn't support per-env wrappers, so we store at vec level)
-        # TODO: not sure this is required
-        setattr(env, "_ale_native_vec", True)
-        setattr(env, "_spec", spec)
-        setattr(env, "_project_id", project_id)
-        setattr(env, "_obs_type", obs_type)
+        env._ale_native_vec = True
+        env._spec = spec
+        env._project_id = project_id
+        env._obs_type = obs_type
     else:
         def env_fn():
-            # Build the environment using the appropriate factory
-            if _is_alepy_env: env = _build_env_alepy(env_id, obs_type, render_mode, **env_kwargs)
-            elif _is_vizdoom_env: env = _build_env_vizdoom(env_id, obs_type, render_mode, **env_kwargs)
-            elif _is_stable_retro_env: env = _build_env_stable_retro(env_id, obs_type, render_mode, **env_kwargs)
-            elif _is_bandit_env: env = _build_env_mab(env_id, obs_type, render_mode, **env_kwargs)
-            else: env = _build_env_gym(env_id, obs_type, render_mode, **env_kwargs)
+            if _is_alepy_env:
+                env = _build_env_alepy(env_id, obs_type, render_mode, **env_kwargs)
+            elif _is_vizdoom_env:
+                env = _build_env_vizdoom(env_id, obs_type, render_mode, **env_kwargs)
+            elif _is_stable_retro_env:
+                env = _build_env_stable_retro(env_id, obs_type, render_mode, **env_kwargs)
+            elif _is_bandit_env:
+                env = _build_env_mab(env_id, obs_type, render_mode, **env_kwargs)
+            else:
+                env = _build_env_gym(env_id, obs_type, render_mode, **env_kwargs)
 
-            # Apply preprocessing wrappers (grayscale, resize, frame_stack)
-            # For ALE RGB in standard vectorization, match ALE native vectorization preprocessing
-            # For other envs, apply if configured
-            if _is_ale_rgb_rgb_env:
-                from gymnasium.wrappers import GrayscaleObservation, ResizeObservation, FrameStackObservation
-                # Always use 4-frame stack to match ALE native vectorization (ignores config.frame_stack)
+            from gymnasium.wrappers import GrayscaleObservation, ResizeObservation, FrameStackObservation
+
+            if _is_ale_rgb_env:
                 env = GrayscaleObservation(env, keep_dim=False)
                 env = ResizeObservation(env, shape=(84, 84))
                 env = FrameStackObservation(env, stack_size=4)
             else:
-                # Apply preprocessing for non-ALE envs based on config
-                from gymnasium.wrappers import GrayscaleObservation, ResizeObservation, FrameStackObservation
                 if grayscale_obs:
                     env = GrayscaleObservation(env, keep_dim=False)
                 if resize_obs:
-                    # resize_obs can be True (default to 84x84) or a tuple
                     resize_shape = (84, 84) if resize_obs is True else resize_obs
                     env = ResizeObservation(env, shape=resize_shape)
                 if frame_stack and frame_stack > 1:
                     env = FrameStackObservation(env, stack_size=frame_stack)
 
-            # Apply configured env wrappers
             for wrapper in env_wrappers:
-                env = EnvWrapperRegistry.apply(env, wrapper) # type: ignore
+                env = EnvWrapperRegistry.apply(env, wrapper)
 
-            # TODO: modify existing timelimit if available
-            # Truncate episode lengths if requested
-            #if max_episode_steps is not None:
-            #    from gymnasium.wrappers import TimeLimit
-            #    env = TimeLimit(env, max_episode_steps=max_episode_steps)
-
-            # Record episode statistics (needed for rollout collector to track episode metrics)
             env = RecordEpisodeStatistics(env)
-
-            # Attach metadata wrapper with context (obs_type and project_id)
             env = EnvInfoWrapper(env, obs_type=obs_type, project_id=project_id, spec=spec)
 
-            # Enable video recording if requested
-            if record_video: env = EnvVideoRecorder(env, **record_video_kwargs)
+            if record_video:
+                env = EnvVideoRecorder(env, **record_video_kwargs)
 
-            # Return the environment
             return env
 
-        # Standard vectorization for non-ALE envs or non-RGB obs types
         from gymnasium.vector import AsyncVectorEnv, SyncVectorEnv
 
-        # Resolve vectorization_mode to vec env class
-        # "auto" defaults to sync for standard vectorization
         use_async = vectorization_mode == "async"
         vec_env_cls = AsyncVectorEnv if use_async else SyncVectorEnv
-        vector_kwargs = {"context": "spawn"} if use_async else {} # TODO: not sure if spawn is required
-        env_fns = [env_fn for _ in range(n_envs)]
+        vector_kwargs = {"context": "spawn"} if use_async else {}
 
-        # TODO; this is overkill
-        # Apply seed offset per env if seed is provided
         if seed is not None:
-            for i, fn in enumerate(env_fns):
-                original_fn = fn
-                def make_env_with_seed(seed_val=seed + i, orig_fn=original_fn):
-                    e = orig_fn()
-                    e.reset(seed=seed_val)
-                    return e
-                env_fns[i] = make_env_with_seed
+            env_fns = [lambda i=i: (e := env_fn(), e.reset(seed=seed + i), e)[2] for i in range(n_envs)]
+        else:
+            env_fns = [env_fn for _ in range(n_envs)]
 
         env = vec_env_cls(env_fns, **vector_kwargs)
-
-        # Set attributes after vectorization (for standard path only; ALE native sets before wrapping)
-        setattr(env, "render_mode", render_mode)
-        setattr(env, "env_id", env_id)
+        env.render_mode = render_mode
+        env.env_id = env_id
     
-    # Observation/Reward normalization (Gymnasium wrappers or custom static wrapper)
-    # Accepts:
-    # - normalize_obs: False (default), True (rolling), 'rolling' (rolling), 'static' (bounds-based)
-    # - normalize_reward: False (default) or True (rolling)
     if isinstance(normalize_obs, str) and normalize_obs.lower() == "static":
-        # Static normalization of observations; reward normalization is not supported in this mode
         env = VecNormalizeStatic(env)
     else:
-        # Rolling (running mean/std) normalization via Gymnasium wrappers
-        use_norm_obs = bool(normalize_obs)  # True if normalize_obs is True/'rolling'
-        if isinstance(normalize_obs, str):
-            use_norm_obs = normalize_obs.lower() == "rolling"
-        if use_norm_obs:
+        if normalize_obs and (not isinstance(normalize_obs, str) or normalize_obs.lower() == "rolling"):
             env = NormalizeObservation(env)
         if normalize_reward:
             env = NormalizeReward(env)
 
-    # Enable video recording if requested (proxies
-    # to the underlying env video recorder)
-    if record_video: env = VecVideoRecorder(env)
+    if record_video:
+        env = VecVideoRecorder(env)
 
-    # Wrap with vec env info wrapper that proxies to 
-    # the underlying env info wrapper (first env metadata)
     env = VecEnvInfoWrapper(env)
 
     return env

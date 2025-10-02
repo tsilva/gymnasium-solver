@@ -100,7 +100,7 @@ _obj_wrappers: &obj_wrappers
 
 _obj_ppo: &obj_ppo
   <<: [*obj_env, *obj_wrappers, *ppo]
-  max_timesteps: 1.2e6
+  max_env_steps: 1.2e6
   n_epochs: 20
   policy_lr: 1e-2
   clip_range: 0.15

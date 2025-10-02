@@ -447,28 +447,45 @@ class BaseAgent(pl.LightningModule):
 
         # Auto-wire hyperparameter schedulers: scan config for any *_schedule fields
         schedule_suffix = "_schedule"
-        max_timesteps = self.config.max_timesteps
+        max_env_steps = self.config.max_env_steps
+        n_envs = self.config.n_envs
 
         def _schedule_pos_to_vec_steps(raw: Optional[float], *, param: str, default_to_max: bool) -> float:
+            """Convert schedule position (fraction or env_steps) to vec_steps.
+
+            Args:
+                raw: Schedule position as fraction (0-1) or absolute env_steps (>1)
+                param: Parameter name for error messages
+                default_to_max: If True and raw is None, default to max_env_steps
+
+            Returns:
+                Position in vec_steps
+            """
             if raw is None:
                 if default_to_max:
-                    if max_timesteps is None:
+                    if max_env_steps is None:
                         raise ValueError(
-                            f"{param}_schedule requires config.max_timesteps or an explicit {param}_schedule_end."
+                            f"{param}_schedule requires config.max_env_steps or an explicit {param}_schedule_end."
                         )
-                    return float(max_timesteps)
+                    # max_env_steps is in env_steps, convert to vec_steps
+                    return float(max_env_steps) / n_envs
                 return 0.0
 
             value = float(raw)
             if value < 0.0:
                 raise ValueError(f"{param}_schedule start/end must be non-negative.")
+
+            # Fractional position: interpret as fraction of max_env_steps
             if value <= 1.0:
-                if max_timesteps is None:
+                if max_env_steps is None:
                     raise ValueError(
-                        f"{param}_schedule uses fractional start/end but config.max_timesteps is not set."
+                        f"{param}_schedule uses fractional start/end but config.max_env_steps is not set."
                     )
-                return value * float(max_timesteps)
-            return value
+                env_steps = value * float(max_env_steps)
+                return env_steps / n_envs
+
+            # Absolute position: interpret as env_steps, convert to vec_steps
+            return value / n_envs
 
         def _set_policy_lr(module: "BaseAgent", lr: float) -> None:
             module._change_optimizers_lr(lr)
@@ -517,9 +534,9 @@ class BaseAgent(pl.LightningModule):
             namespace_depth=1,
         ))
 
-        # If defined in config, early stop after reaching a certain number of vectorized steps
-        if self.config.max_timesteps: callbacks.append(
-            EarlyStoppingCallback("train/cnt/total_vec_steps", self.config.max_timesteps)
+        # If defined in config, early stop after reaching a certain number of environment steps
+        if self.config.max_env_steps: callbacks.append(
+            EarlyStoppingCallback("train/cnt/total_env_steps", self.config.max_env_steps)
         )
 
         # If defined in config, early stop when mean training reward reaches a threshold
@@ -580,12 +597,12 @@ class BaseAgent(pl.LightningModule):
             optimizer.step()
 
     def _calc_training_progress(self):
-        max_timesteps = self.config.max_timesteps
-        if max_timesteps is None: return 0.0
+        max_env_steps = self.config.max_env_steps
+        if max_env_steps is None: return 0.0
         train_collector = self.get_rollout_collector("train")
-        # Use vectorized steps to match the configured step key and early stopping
-        total_vec_steps = train_collector.total_vec_steps
-        training_progress = max(0.0, min(total_vec_steps / max_timesteps, 1.0))
+        # max_env_steps is env_steps, so use total_timesteps for progress calculation
+        total_timesteps = train_collector.total_timesteps
+        training_progress = max(0.0, min(total_timesteps / max_env_steps, 1.0))
         return training_progress
 
     # TODO: is there an util for this?

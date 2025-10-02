@@ -40,7 +40,7 @@ spec:
 _env: &env
   env_id: CartPole-v1
   seed: 42
-  max_timesteps: 3e5
+  max_env_steps: 3e5
   normalize_obs: false
   n_envs: 8
   n_steps: 1024
@@ -55,7 +55,7 @@ _env: &env
 _ppo: &ppo
   <<: *env
   algo_id: ppo
-  max_timesteps: 50000
+  max_env_steps: 50000
   n_steps: 32
   batch_size: 0.25
   n_epochs: 20

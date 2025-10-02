@@ -11,7 +11,7 @@ def test_config_parse_schedules_with_dict_syntax():
         "n_steps": 32,
         "n_envs": 4,
         "batch_size": 16,
-        "max_timesteps": 1000,
+        "max_env_steps": 1000,
         "policy_lr": {"start": 3e-4, "end": 0.0},
         "hidden_dims": [64, 64],
     })
@@ -24,18 +24,19 @@ def test_config_parse_schedules_with_dict_syntax():
 
 
 @pytest.mark.unit
-def test_config_schedule_fraction_without_max_timesteps_errors():
-    with pytest.raises(ValueError):
+def test_config_schedule_fraction_without_max_env_steps_errors():
+    """Test that fractional schedule positions without max_env_steps raises error"""
+    with pytest.raises(AssertionError, match="max_env_steps"):
         Config.build_from_dict(
             {
                 "algo_id": "ppo",
                 "env_id": "CartPole-v1",
                 "n_steps": 32,
+                "n_envs": 4,
                 "batch_size": 32,
-                "policy_lr": 3e-4,
-                "policy_lr_schedule": "linear",
-                "policy_lr_schedule_start": 0.0,
-                "policy_lr_schedule_end": 0.5,
+                # Use dict syntax which triggers schedule parsing
+                "policy_lr": {"start": 3e-4, "end": 1e-4, "from": 0.0, "to": 0.5},
+                # max_env_steps is intentionally missing to trigger error
             }
         )
 
@@ -68,6 +69,17 @@ def test_config_validate_errors():
             "gamma": 1.5
         })
 
+    # max_env_steps not divisible by n_envs
+    with pytest.raises(ValueError, match="must be divisible by n_envs"):
+        Config.build_from_dict({
+            "env_id": "CartPole-v1",
+            "algo_id": "ppo",
+            "n_steps": 32,
+            "n_envs": 8,
+            "batch_size": 32,
+            "max_env_steps": 1001,  # 1001 % 8 = 1, not divisible
+        })
+
 
 @pytest.mark.unit
 def test_config_schedule_dict_syntax():
@@ -78,7 +90,7 @@ def test_config_schedule_dict_syntax():
         "n_steps": 128,
         "n_envs": 4,
         "batch_size": 64,
-        "max_timesteps": 10000,
+        "max_env_steps": 10000,
         "ent_coef": {"start": 0.02, "end": 0.001},
         "policy_lr": {"start": 0.003, "end": 0.0001, "from": 0.0, "to": 0.8},
         "clip_range": {"start": 0.2, "end": 0.05, "schedule": "linear"},
@@ -116,7 +128,7 @@ def test_config_schedule_dict_minimal_syntax():
         "n_steps": 128,
         "n_envs": 4,
         "batch_size": 64,
-        "max_timesteps": 10000,
+        "max_env_steps": 10000,
         "ent_coef": {"start": 0.01, "end": 0.0},
     })
 
@@ -126,3 +138,29 @@ def test_config_schedule_dict_minimal_syntax():
     assert cfg.ent_coef_schedule_end_value == pytest.approx(0.0)
     assert cfg.ent_coef_schedule_start == pytest.approx(0.0)
     assert cfg.ent_coef_schedule_end == pytest.approx(1.0)
+
+
+@pytest.mark.unit
+def test_config_max_vec_steps_property():
+    """Test that max_vec_steps computed property correctly converts env_steps to vec_steps"""
+    cfg = Config.build_from_dict({
+        "algo_id": "ppo",
+        "env_id": "CartPole-v1",
+        "n_steps": 128,
+        "n_envs": 8,
+        "batch_size": 64,
+        "max_env_steps": 1000000,  # 1M env steps
+    })
+
+    # 1M env steps / 8 envs = 125k vec steps
+    assert cfg.max_vec_steps == 125000
+
+    # Test with None
+    cfg_no_max = Config.build_from_dict({
+        "algo_id": "ppo",
+        "env_id": "CartPole-v1",
+        "n_steps": 128,
+        "n_envs": 8,
+        "batch_size": 64,
+    })
+    assert cfg_no_max.max_vec_steps is None

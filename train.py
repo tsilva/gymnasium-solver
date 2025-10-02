@@ -24,10 +24,10 @@ def main():
         help="Enable W&B sweep mode: initialize wandb early and merge wandb.config into the main Config before training."
     )
     parser.add_argument(
-        "--max-timesteps",
-        dest="max_timesteps",
+        "--max-env-steps",
+        dest="max_env_steps",
         default=None,
-        help="Override config max_timesteps (total training steps). Accepts integers or scientific notation.",
+        help="Override config max_env_steps (total environment steps/frames). Accepts integers or scientific notation.",
     )
     parser.add_argument(
         "--list-envs",

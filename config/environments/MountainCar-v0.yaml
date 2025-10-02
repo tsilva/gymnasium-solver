@@ -80,7 +80,7 @@ reinforce:
 # PPO with reward shaping - uses shaped rewards to guide learning up the mountain
 ppo_rewardshaped:
   <<: [*env_rewardshaped, *ppo]
-  max_timesteps: 1e6
+  max_env_steps: 1e6
   n_steps: 128
   batch_size: 128
   gamma: 0.999
@@ -92,7 +92,7 @@ ppo_rewardshaped:
 # REINFORCE with reward shaping - uses shaped rewards with policy gradient
 reinforce_rewardshaped:
   <<: [*env_rewardshaped, *reinforce]
-  max_timesteps: 1e6
+  max_env_steps: 1e6
   normalize_obs: true
   batch_size: 128
   gamma: 0.999

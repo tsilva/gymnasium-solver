@@ -101,7 +101,7 @@ python scripts/brax_eval_policy.py
 
 ### Entry Point & Training Flow
 - **`train.py`**: Accepts `<env>:<variant>` config specs (e.g., `CartPole-v1:ppo`), loads `Config` via `utils.config.load_config(env_id, variant_id)`, seeds via SB3, builds agent via `agents.build_agent()`, and calls `agent.learn()`.
-- **Config override**: `--max-timesteps` injects into `config.max_timesteps` after sweep merges.
+- **Config override**: `--max-env-steps` injects into `config.max_env_steps` after sweep merges.
 - **W&B Sweeps**: Auto-detected via `WANDB_SWEEP_ID` or `--wandb_sweep` flag. Merges `wandb.config` into main `Config` before training. Supports linear schedules like `lin_0.001`.
 - **Debugger detection**: When a debugger is attached, `train.py` forces `n_envs=1`, `subproc=False`, and adjusts `batch_size` to remain compatible.
 
@@ -109,7 +109,8 @@ python scripts/brax_eval_policy.py
 - **Structure**: `Config` dataclass aggregates env, algo, rollout, model, optimization, eval, logging, and runtime settings.
 - **Config files**: YAML files in `config/environments/*.yaml` with base fields at top (or under `_base` with YAML anchors) and per-algorithm variants nested below (e.g., `ppo:`, `reinforce:`).
 - **Loading**: `load_config(env_id, variant_id)` requires both parameters. Callers must always provide a variant. The CLI enforces `env:variant` format.
-- **Schedules**: Strings like `lin_0.001` are parsed into `*_schedule='linear'` plus numeric base. Control interpolation with `*_schedule_start_value`, `*_schedule_end_value`, `*_schedule_start`, and `*_schedule_end` (values `<1` are fractions of `max_timesteps`, values `>1` are absolute vec steps).
+- **max_env_steps**: Specifies total environment steps (frames) for training, NOT vectorized steps. Example: `max_env_steps=1M` with `n_envs=8` trains for 125k vec_steps. Must be divisible by `n_envs`. Use `config.max_vec_steps` computed property for vec_steps equivalent.
+- **Schedules**: Strings like `lin_0.001` are parsed into `*_schedule='linear'` plus numeric base. Control interpolation with `*_schedule_start_value`, `*_schedule_end_value`, `*_schedule_start`, and `*_schedule_end` (values `<1` are fractions of `max_env_steps`, values `>1` are absolute env steps). Internally converted to vec_steps for scheduling.
 - **Fractional batch size**: When `batch_size` is in (0, 1], it's treated as a fraction of rollout size (`n_envs * n_steps`). Resolved to `floor(rollout_size * fraction)`, minimum 1, and must evenly divide rollout size.
 - **Algo-specific subclasses**: `PPOConfig` enforces `clip_range > 0`; `REINFORCEConfig` validates `policy_targets` in {'returns', 'advantages'}.
 

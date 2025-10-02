@@ -96,10 +96,10 @@ cnt/total_env_steps:
   precision: 0
   min: 0
 
-# Training progress (only logged when max_timesteps is defined)
+# Training progress (only logged when max_env_steps is defined)
 progress:
   highlight: true
-  description: "Normalized training progress based on total vectorized steps (0.0 start → 1.0 at max_timesteps)"
+  description: "Normalized training progress based on total environment steps (0.0 start → 1.0 at max_env_steps)"
   precision: 2
   min: 0.0  # Progress starts at 0
   max: 1.0  # Progress completes at 1

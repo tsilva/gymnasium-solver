@@ -51,7 +51,7 @@ _env: &env
     - { id: VizDoom_RewardShaper, noop_penalty: 0.01, move_reward: 0.004, turn_reward: 0.004 }
   eval_freq_epochs: 10
   eval_episodes: 1
-  max_timesteps: 5e6
+  max_env_steps: 5e6
   n_envs: 16
   n_steps: 256
   batch_size: 512

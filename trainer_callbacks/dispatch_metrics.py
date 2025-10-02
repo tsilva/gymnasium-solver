@@ -55,10 +55,10 @@ class DispatchMetricsCallback(pl.Callback):
             "sys/timing/fps_instant": fps_instant,
         }
 
-        # Add training progress metric when a max timestep budget is defined.
-        # Progress is computed from vectorized steps to align with the step key
-        # and early stopping logic (0.0 at start → 1.0 at/after max_timesteps).
-        if stage == "train" and getattr(pl_module.config, "max_timesteps", None) is not None:
+        # Add training progress metric when a max env steps budget is defined.
+        # Progress is computed from env steps to align with the step key
+        # and early stopping logic (0.0 at start → 1.0 at/after max_env_steps).
+        if stage == "train" and getattr(pl_module.config, "max_env_steps", None) is not None:
             try:
                 progress = float(pl_module._calc_training_progress())
             except Exception:
@@ -66,9 +66,9 @@ class DispatchMetricsCallback(pl.Callback):
             if progress is not None:
                 loggable_metrics["progress"] = progress
 
-        # Derive ETA (seconds remaining) from vec-step FPS and max_timesteps if available
-        if fps_total > 0.0 and pl_module.config.max_timesteps is not None:
-            loggable_metrics["sys/timing/eta_s"] = float(pl_module.config.max_timesteps / float(fps_total))
+        # Derive ETA (seconds remaining) from vec-step FPS and max_env_steps if available
+        if fps_total > 0.0 and pl_module.config.max_env_steps is not None:
+            loggable_metrics["sys/timing/eta_s"] = float(pl_module.config.max_env_steps / float(fps_total))
 
         # Prefix metrics with train/
         prefixed_metrics = {f"{stage}/{k}": v for k, v in loggable_metrics.items()}

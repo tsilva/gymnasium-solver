@@ -82,8 +82,11 @@ class Config:
     # Max epochs to train for (optional)
     max_epochs: Optional[int] = None
 
-    # Max timesteps to train for (optional)
-    max_timesteps: Optional[int] = None
+    # Max environment steps (frames) to train for (optional)
+    # This is the total number of environment interactions, NOT vectorized steps.
+    # For example, with n_envs=8 and max_env_steps=1M, training will run for 125k vec_steps.
+    # Schedule parameters and early stopping are tied to this value.
+    max_env_steps: Optional[int] = None
 
     # Max steps each episode can have (truncate episode lengths)
     max_episode_steps: Optional[int] = None
@@ -218,7 +221,12 @@ class Config:
             raise ValueError(f"{attr} must be in {min_bracket}{min_val}, {max_val}{max_bracket} when set.")
 
     def _validate_schedules(self) -> None:
-        """Validate all hyperparameter schedule configurations."""
+        """Validate all hyperparameter schedule configurations.
+
+        Schedule start/end positions can be:
+        - Fractional values in [0, 1]: interpreted as fraction of max_env_steps
+        - Values > 1: interpreted as absolute env_steps
+        """
         schedule_suffix = "_schedule"
         for key in list(vars(self).keys()):
             if not key.endswith(schedule_suffix):
@@ -236,14 +244,14 @@ class Config:
             start_pos = getattr(self, f"{param}_schedule_start", None) or 0.0
             end_pos = getattr(self, f"{param}_schedule_end", None)
             if end_pos is None:
-                assert self.max_timesteps is not None, \
-                    f"{param}_schedule requires a max_timesteps or an explicit schedule_end value."
+                assert self.max_env_steps is not None, \
+                    f"{param}_schedule requires max_env_steps or an explicit schedule_end value."
                 end_pos = 1.0
 
             assert start_pos >= 0 and end_pos >= 0, f"{param}_schedule start/end must be non-negative."
             assert end_pos >= start_pos, f"{param}_schedule end must be >= start."
-            assert not (self.max_timesteps is None and (start_pos <= 1.0 or end_pos <= 1.0)), \
-                f"{param}_schedule uses fractional start/end positions but config.max_timesteps is not set."
+            assert not (self.max_env_steps is None and (start_pos <= 1.0 or end_pos <= 1.0)), \
+                f"{param}_schedule uses fractional start/end positions but config.max_env_steps is not set."
 
     # How to calculate rollout returns (algo defaults in subclasses)
     returns_type: Optional["Config.ReturnsType"] = None  # type: ignore[assignment]
@@ -295,6 +303,13 @@ class Config:
 
     # Whether to prompt the user before training starts
     quiet: bool = False
+
+    @property
+    def max_vec_steps(self) -> Optional[int]:
+        """Computed property: max_env_steps converted to vectorized steps."""
+        if self.max_env_steps is None:
+            return None
+        return self.max_env_steps // self.n_envs
 
     @classmethod
     def build_from_dict(cls, config_dict: Dict[str, Any]) -> 'Config':
@@ -497,7 +512,7 @@ class Config:
         self._validate_positive("n_epochs")
         self._validate_positive("n_steps")
         self._validate_positive("batch_size")
-        self._validate_positive("max_timesteps")
+        self._validate_positive("max_env_steps")
         self._validate_range("gamma", 0, 1)
         self._validate_range("gae_lambda", 0, 1)
         self._validate_range("clip_range", 0, 1, inclusive_min=False, inclusive_max=False)
@@ -505,6 +520,14 @@ class Config:
         self._validate_non_negative("eval_warmup_epochs", allow_none=False)
         self._validate_positive("eval_episodes")
         self._validate_positive("reward_threshold")
+
+        # Validate max_env_steps is divisible by n_envs for clean conversion
+        if self.max_env_steps is not None and self.max_env_steps % self.n_envs != 0:
+            raise ValueError(
+                f"max_env_steps ({self.max_env_steps}) must be divisible by n_envs ({self.n_envs}) "
+                f"for clean conversion to vec_steps. Adjust to {(self.max_env_steps // self.n_envs + 1) * self.n_envs} "
+                f"or {(self.max_env_steps // self.n_envs) * self.n_envs}."
+            )
 
         if self.devices is not None and not (isinstance(self.devices, int) or self.devices == "auto"):
             raise ValueError("devices may be an int, 'auto', or None.")

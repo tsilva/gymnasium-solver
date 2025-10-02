@@ -50,6 +50,9 @@ class ModelCheckpointCallback(pl.Callback):
         self.best_value = metric_value
         self._save_checkpoint(pl_module, epoch, metrics, is_best=True)
 
+        # Record video for this best checkpoint
+        self._record_video_for_checkpoint(pl_module, epoch)
+
     def _save_checkpoint(
         self,
         agent: pl.LightningModule,
@@ -70,3 +73,15 @@ class ModelCheckpointCallback(pl.Callback):
             json_metrics = prepare_metrics_for_json(metrics)
             write_json(tmp_dir / "metrics.json", json_metrics)
             self.run.save_checkpoint(epoch, tmp_dir, is_best=is_best)
+
+    def _record_video_for_checkpoint(self, agent: pl.LightningModule, epoch: int) -> None:
+        """Record a video episode for the best checkpoint."""
+        video_path = self.run.video_path_for_epoch(epoch)
+        val_env = agent.get_env("val")
+
+        with val_env.recorder(str(video_path), record_video=True):
+            val_collector = agent.get_rollout_collector("val")
+            val_collector.evaluate_episodes(
+                n_episodes=1,
+                deterministic=agent.config.eval_deterministic,
+            )

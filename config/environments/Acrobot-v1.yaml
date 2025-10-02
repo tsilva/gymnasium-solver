@@ -40,7 +40,7 @@ spec:
 
 _env: &env
   env_id: Acrobot-v1
-  max_timesteps: 1e6
+  max_env_steps: 1e6
   eval_freq_epochs: 10
   eval_episodes: 10
   batch_size: 64

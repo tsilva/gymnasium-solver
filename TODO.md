@@ -2,22 +2,12 @@
 
 # NEXT
 
+- FEAT: add support for other types of schedulers, namely cosine, pleateau, onecycle, etc.
 - REFACTOR: ensure agents are themselves responsible for saving all of their artifacts to the run, in the same fashion it should also be possible to load back an agent by pointing to a run dir. NOTE: when saving/loading we need to make sure that we can get the agent back to the exact training state it was in when it was saved.
-- REFACTOR: drop all SB3 integration, use alternatives provided by gymnasium or use our own instead
-
-- REFACTOR: we currently have eval recording disabled for the following reason. We only require a video when a "best" checkpoint is saved. So the way we have things we are currently wasting a lot of time in validaiton recording videos that we aren't going to need. Think deeply on how we could structure things such that we only record videos along with saved checkpoints (but based on the rolllout that resulted in that checkpioint). Don'y make any changes without showing me the plan first.
-
-- TODO: dont use eval recording freq, instead make the checkpointer render when required
-
 - BUG: wandb project ids are innacurate
-
-- THINK: think about how we define training 
-
-- FEAT: add support for cosine scheduler, lightning schedulers
+- THINK: am I manually implementing schedulers without needing to? does lighting already implement them for me? should I use those instead? just think and let me know
 - inspect mc_returns and gae for unifinished episodes
 - TEST: do highlighted rows also show alerts correctly?
-
-
 - BUG: inspect not working because it cant retrieve action labels
 - BUG: investigate mc_return in pong, seems busted
 - FEAT: add ability to tell LLM to inspect last N runs by providing a run registry json that has timestamps and other metadata, always sort by timestamp descending, ensure lock on write
@@ -26,7 +16,6 @@
 - FEAT: track dead relus
 - TEST: empirically verify that initial policy distribution is uniform (check if action mean starts at middle of action space and std is 0)
 - BUG: training epoch is still running after validation early stop
-- BUG: wandb run is being logged even when training is not started, bold terminal
 - TEST: are sweeps still working?
 - FEAT: track output distribution
 - REFACTOR: dont let callbacks inject variables int o
@@ -46,7 +35,6 @@
 - Check if we can get to 20-21 with RGB observations
 - Frame stacking should work to turn POMDP into MDP
 - TODO: add support for resuming with policy from previous run
-- try debug server
 - BUG: fix duplicate object error in feature extractor (run step by step in human mode and compare conflicted object data, against frame, create script for this)
 - add env normalization support (use that instead of normalization from feature extractor)
 - previous actions
@@ -71,7 +59,6 @@
 - FEAT: add support for run_play to run with random actions and/or user actions
 - FEAT: add observation/action noise support
 - FEAT: dispatch maintenance tasks with codex on cloud (night shift)
-- FEAT: improve scheduling support (more generic, ability to define start/end and annealing schedule; NOTE: reset optimizer on learning rate changes?)
 - FEAT: autotune n_envs (check tune_nenvs.md)
 - FEAT: add LLM review support to inspector.py
 - FEAT: add support for continuous environments (eg: LunarLanderContinuous-v2)

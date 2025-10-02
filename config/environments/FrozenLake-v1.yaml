@@ -60,7 +60,7 @@ _ppo: &ppo
 _reinforce: &reinforce
   <<: *env
   algo_id: reinforce
-  max_timesteps: 2e5
+  max_env_steps: 2e5
   batch_size: 64
   policy_lr: 0.005
 

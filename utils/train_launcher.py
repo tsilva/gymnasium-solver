@@ -164,7 +164,7 @@ def _present_prefit_summary(config) -> None:
         "n_steps": _format_summary_value(getattr(config, "n_steps", None)),
         "n_epochs": _format_summary_value(getattr(config, "n_epochs", None)),
         "batch_size": _format_summary_value(getattr(config, "batch_size", None)),
-        "max_timesteps": _format_summary_value(getattr(config, "max_timesteps", None)),
+        "max_env_steps": _format_summary_value(getattr(config, "max_env_steps", None)),
         "policy_lr": _format_summary_value(getattr(config, "policy_lr", None)),
         "gamma": _format_summary_value(getattr(config, "gamma", None)),
         "gae_lambda": _format_summary_value(getattr(config, "gae_lambda", None)),
@@ -226,9 +226,9 @@ def launch_training_from_args(args) -> None:
     # in-process execution (easier to debug)
     config = _maybe_merge_debugger_config(config)
 
-    # Override max timesteps if provided through CLI
-    cli_max_timesteps = int(args.max_timesteps) if args.max_timesteps else None
-    if cli_max_timesteps is not None: config.max_timesteps = cli_max_timesteps
+    # Override max env steps if provided through CLI
+    cli_max_env_steps = int(args.max_env_steps) if args.max_env_steps else None
+    if cli_max_env_steps is not None: config.max_env_steps = cli_max_env_steps
 
     # Ensure a W&B run exists (sweep-or-regular) before building the agent
     _ensure_wandb_run_initialized(config)

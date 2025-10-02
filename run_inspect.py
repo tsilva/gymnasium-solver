@@ -106,7 +106,7 @@ def run_episode(
     config = run.load_config()
 
     #labels, _, default_label = run.list_checkpoints(), {}, "@best"
-    checkpoint_path = run.checkpoints_dir / checkpoint_label
+    checkpoint_dir = run.checkpoints_dir / checkpoint_label
 
     from utils.environment import build_env_from_config
 
@@ -117,7 +117,9 @@ def run_episode(
         vectorization_mode='sync',
     )
 
-    policy_model, ckpt_data = load_policy_model_from_checkpoint(checkpoint_path / "policy.ckpt", env, config) # TODO: SOC violation; this is a Run SOC
+    # Get checkpoint path with backward compatibility for old policy.ckpt format
+    checkpoint_path = run._get_checkpoint_path(checkpoint_dir)
+    policy_model, ckpt_data = load_policy_model_from_checkpoint(checkpoint_path, env, config)
 
     # Load action labels from vec env wrapper if available
     act_labels_raw = env.get_action_labels()

@@ -31,7 +31,7 @@ BEST_CHECKPOINT_DIR = Path("@best")
 CONFIG_FILENAME = Path("config.json")
 RUN_LOG_FILENAME = Path("run.log")
 METRICS_CSV_FILENAME = Path("metrics.csv")
-POLICY_CHECKPOINT_FILENAME = Path("policy.ckpt")
+POLICY_CHECKPOINT_FILENAME = Path("model.pt")
 REGISTRY_FILENAME = RUNS_DIR / Path("runs.json")
 
 # TODO: move this to a more appropriate util location
@@ -161,11 +161,26 @@ class Run:
 
     @property
     def best_checkpoint_path(self) -> Path:
-        return self.best_checkpoint_dir / POLICY_CHECKPOINT_FILENAME
+        return self._get_checkpoint_path(self.best_checkpoint_dir)
 
     @property
     def last_checkpoint_path(self) -> Path:
-        return self.last_checkpoint_dir / POLICY_CHECKPOINT_FILENAME
+        return self._get_checkpoint_path(self.last_checkpoint_dir)
+
+    def _get_checkpoint_path(self, checkpoint_dir: Path) -> Path:
+        """Get the policy checkpoint path, trying both new and old formats."""
+        # Try new format first (model.pt)
+        new_path = checkpoint_dir / POLICY_CHECKPOINT_FILENAME
+        if new_path.exists():
+            return new_path
+
+        # Fall back to old format (policy.ckpt) for backward compatibility
+        old_path = checkpoint_dir / "policy.ckpt"
+        if old_path.exists():
+            return old_path
+
+        # If neither exists, return the new format path (will fail later with clear error)
+        return new_path
 
     def load_config(self):
         data: Dict = read_json(self.config_path)

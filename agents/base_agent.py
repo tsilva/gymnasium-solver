@@ -6,9 +6,9 @@ import pytorch_lightning as pl
 import torch.nn as nn
 
 import wandb
+from agents.hyperparameter_mixin import HyperparameterMixin
 from utils.config import Config
 from utils.decorators import must_implement
-from utils.formatting import sanitize_name
 from utils.io import write_json
 from utils.metric_bundles import CoreMetricAlerts
 from utils.metrics_monitor import MetricsMonitor
@@ -19,7 +19,7 @@ from utils.timings_tracker import TimingsTracker
 
 STAGES = ["train", "val", "test"]
 
-class BaseAgent(pl.LightningModule):
+class BaseAgent(HyperparameterMixin, pl.LightningModule):
     
     run: Run
     config: Config
@@ -345,10 +345,12 @@ class BaseAgent(pl.LightningModule):
 
     def _learn(self):
         # Build trainer loggers
-        loggers = self._build_trainer_loggers()
+        from utils.trainer_loggers import TrainerLoggersBuilder
+        loggers = TrainerLoggersBuilder(self).build()
 
         # Build trainer callbacks
-        callbacks = self._build_trainer_callbacks()
+        from utils.callback_builder import CallbackBuilder
+        callbacks = CallbackBuilder(self).build()
 
         # Build the trainer
         from utils.trainer_factory import build_trainer
@@ -369,233 +371,6 @@ class BaseAgent(pl.LightningModule):
         # Train the agent
         trainer.fit(self)
     
-    # -------------------------
-    # Pre-prompt guidance helpers
-    # -------------------------
-  
-    def _build_trainer_loggers__wandb(self):
-        from dataclasses import asdict
-
-        from pytorch_lightning.loggers import WandbLogger
-
-        import wandb
-
-        # Create the wandb logger, attach to the existing run if present
-        project_name = self.config.project_id if self.config.project_id else sanitize_name(self.config.env_id)
-        experiment_name = f"{self.config.algo_id}-{self.config.seed}"
-        wandb_logger = WandbLogger(
-            project=project_name,
-            name=experiment_name,
-            log_model=True,
-            config=asdict(self.config),
-        ) if wandb.run is None else WandbLogger(log_model=True)
-
-        # Define the common step metric
-        from utils.metrics_config import metrics_config
-        wandb_run = wandb_logger.experiment
-        wandb_run.define_metric("*", step_metric=metrics_config.total_timesteps_key())
-
-        # Change the run name to {algo_id}-{run_id}
-        wandb_run.name = f"{self.config.algo_id}-{wandb_run.id}"
-
-        # TODO: review if log_freq makes sense, perhaps tie to eval_freq?
-        # Log model gradients to wandb
-        wandb_logger.watch(self.policy_model, log="gradients", log_freq=100)
-        
-        return wandb_logger
-
-    def _build_trainer_loggers__csv(self):
-        from loggers.metrics_csv_lightning_logger import MetricsCSVLightningLogger
-        # TODO: queue_size?
-        csv_path = self.run.ensure_metrics_path() # TODO: pass run inside logger?
-        csv_logger = MetricsCSVLightningLogger(csv_path=str(csv_path))
-        return csv_logger
-    
-    def _build_trainer_loggers__print(self):
-        from loggers.metrics_table_logger import MetricsTableLogger
-        print_logger = MetricsTableLogger(metrics_monitor=self.metrics_monitor, run=self.run)
-        return print_logger
-        
-    def _build_trainer_loggers(self):
-        # Initialize list of loggers
-        loggers = []
-
-        # Prepare a wandb logger (only if enabled)
-        if getattr(self.config, 'enable_wandb', True):
-            wandb_logger = self._build_trainer_loggers__wandb()
-            loggers.append(wandb_logger)
-
-        # Prepare a CSV Lightning logger writing to runs/<id>/metrics.csv
-        csv_logger = self._build_trainer_loggers__csv()
-        loggers.append(csv_logger)
-
-        # Prepare a terminal print logger that formats metrics from the unified logging stream
-        print_logger = self._build_trainer_loggers__print()
-        loggers.append(print_logger)
-
-        # Return the loggers
-        return loggers
-
-    def _build_trainer_callbacks(self):
-        """Assemble trainer callbacks, with an optional end-of-training report."""
-        # Lazy imports to avoid heavy deps at module import time
-        from trainer_callbacks import (
-            ConsoleSummaryCallback,  # TODO; call this something else
-            DispatchMetricsCallback,
-            EarlyStoppingCallback,
-            HyperparameterSchedulerCallback,
-            ModelCheckpointCallback,
-            MonitorMetricsCallback,
-            UploadRunCallback,
-            WandbVideoLoggerCallback,
-            WarmupEvalCallback,
-        )
-
-        # Initialize callbacks list
-        callbacks = []
-        
-        # In case eval warmup is active, add a callback to enable validation only after warmup
-        if self.config.eval_warmup_epochs > 0: 
-            callbacks.append(WarmupEvalCallback(
-                warmup_epochs=self.config.eval_warmup_epochs, 
-                eval_freq_epochs=self.config.eval_freq_epochs
-            ))
-
-        # Monitor metrics: add alerts if any are triggered
-        # (must be before DispatchMetricsCallback because alerts are reported as metrics)
-        callbacks.append(MonitorMetricsCallback())
-
-        # Metrics dispatcher: aggregates epoch metrics and logs to Lightning
-        callbacks.append(DispatchMetricsCallback())
-
-        # Auto-wire hyperparameter schedulers: scan config for any *_schedule fields
-        schedule_suffix = "_schedule"
-        max_env_steps = self.config.max_env_steps
-        n_envs = self.config.n_envs
-
-        def _schedule_pos_to_vec_steps(raw: Optional[float], *, param: str, default_to_max: bool) -> float:
-            """Convert schedule position (fraction or env_steps) to vec_steps.
-
-            Args:
-                raw: Schedule position as fraction (0-1) or absolute env_steps (>1)
-                param: Parameter name for error messages
-                default_to_max: If True and raw is None, default to max_env_steps
-
-            Returns:
-                Position in vec_steps
-            """
-            if raw is None:
-                if default_to_max:
-                    if max_env_steps is None:
-                        raise ValueError(
-                            f"{param}_schedule requires config.max_env_steps or an explicit {param}_schedule_end."
-                        )
-                    # max_env_steps is in env_steps, convert to vec_steps
-                    return float(max_env_steps) / n_envs
-                return 0.0
-
-            value = float(raw)
-            if value < 0.0:
-                raise ValueError(f"{param}_schedule start/end must be non-negative.")
-
-            # Fractional position: interpret as fraction of max_env_steps
-            if value <= 1.0:
-                if max_env_steps is None:
-                    raise ValueError(
-                        f"{param}_schedule uses fractional start/end but config.max_env_steps is not set."
-                    )
-                env_steps = value * float(max_env_steps)
-                return env_steps / n_envs
-
-            # Absolute position: interpret as env_steps, convert to vec_steps
-            return value / n_envs
-
-        def _set_policy_lr(module: "BaseAgent", lr: float) -> None:
-            module._change_optimizers_lr(lr)
-
-        for key, value in vars(self.config).items():  # TODO: config.get_schedules()?
-            if not key.endswith(schedule_suffix) or not value:
-                continue
-
-            param = key[: -len(schedule_suffix)]
-            assert hasattr(self, param), f"Module {self} has no attribute {param}"
-
-            start_value = getattr(self.config, f"{param}_schedule_start_value", None)
-            end_value = getattr(self.config, f"{param}_schedule_end_value", None)
-            if start_value is None or end_value is None:
-                raise ValueError(f"{param}_schedule requires start/end values in the config.")
-
-            start_pos_raw = getattr(self.config, f"{param}_schedule_start", None)
-            end_pos_raw = getattr(self.config, f"{param}_schedule_end", None)
-
-            start_step = _schedule_pos_to_vec_steps(start_pos_raw, param=param, default_to_max=False)
-            end_step = _schedule_pos_to_vec_steps(end_pos_raw, param=param, default_to_max=True)
-            warmup_fraction = getattr(self.config, f"{param}_schedule_warmup", 0.0)
-
-            callbacks.append(
-                HyperparameterSchedulerCallback(
-                    schedule=value,
-                    parameter=param,
-                    start_value=float(start_value),
-                    end_value=float(end_value),
-                    start_step=float(start_step),
-                    end_step=float(end_step),
-                    warmup_fraction=float(warmup_fraction),
-                    set_value_fn={"policy_lr": _set_policy_lr}.get(param, None),
-                )
-            )
-
-        # Early stopping callbacks: must run BEFORE ModelCheckpointCallback
-        # so that trainer.should_stop is set when checkpoint logic runs
-
-        # If defined in config, early stop after reaching a certain number of environment steps
-        if self.config.max_env_steps: callbacks.append(
-            EarlyStoppingCallback("train/cnt/total_env_steps", self.config.max_env_steps)
-        )
-
-        # If defined in config, early stop when mean training reward reaches a threshold
-        # Config value can be True (use env spec threshold) or a float (override threshold)
-        if self.config.early_stop_on_train_threshold:
-            train_env = self.get_env("train")
-            if isinstance(self.config.early_stop_on_train_threshold, float):
-                reward_threshold = self.config.early_stop_on_train_threshold
-            else:
-                reward_threshold = train_env.get_return_threshold()
-            callbacks.append(EarlyStoppingCallback("train/roll/ep_rew/mean", reward_threshold))
-
-        # If defined in config, early stop when mean validation reward reaches a threshold
-        # Config value can be True (use env spec threshold) or a float (override threshold)
-        if self.config.early_stop_on_eval_threshold:
-            val_env = self.get_env("val")
-            if isinstance(self.config.early_stop_on_eval_threshold, float):
-                reward_threshold = self.config.early_stop_on_eval_threshold
-            else:
-                reward_threshold = val_env.get_return_threshold()
-            callbacks.append(EarlyStoppingCallback("val/roll/ep_rew/mean", reward_threshold))
-
-        # Checkpointing: save best/last models and metrics
-        # Must run AFTER early stopping callbacks to detect trainer.should_stop
-        callbacks.append(ModelCheckpointCallback( # TODO: pass run
-            run=self.run,
-            metric="val/roll/ep_rew/mean",
-            mode="max"
-        ))
-
-        # Video logger watches checkpoints directory recursively for videos (only if W&B is enabled)
-        if getattr(self.config, 'enable_wandb', True):
-            callbacks.append(WandbVideoLoggerCallback(
-                media_root=self.run.checkpoints_dir,
-                namespace_depth=1,
-            ))
-
-        # Also print a terminal summary and alerts recap at the end of training
-        callbacks.append(ConsoleSummaryCallback())
-
-        # Optionally upload run folder to W&B after training completes
-        if getattr(self.config, 'enable_wandb', True):
-            callbacks.append(UploadRunCallback(run_dir=self.run.run_dir))
-
-        return callbacks
 
     def _backpropagate_and_step(self, losses):
         # TODO: create method that encapsulates this logic
@@ -639,17 +414,6 @@ class BaseAgent(pl.LightningModule):
         training_progress = max(0.0, min(total_timesteps / max_env_steps, 1.0))
         return training_progress
 
-    # TODO: is there an util for this?
-    def _change_optimizers_lr(self, lr):
-        # Keep attribute in sync for logging/inspection
-        self.policy_lr = lr
-        optimizers = self.optimizers()
-        if not isinstance(optimizers, (list, tuple)): optimizers = [optimizers]
-        for opt in optimizers:
-            for pg in opt.param_groups:
-                pg["lr"] = lr
-
-    # TODO: review this method
     def configure_optimizers(self):
         from utils.optimizer_factory import build_optimizer
         return build_optimizer(
@@ -657,54 +421,6 @@ class BaseAgent(pl.LightningModule):
             optimizer=self.config.optimizer,
             lr=self.policy_lr, # TODO: is this taking annealing into account?
         )
-    
-    def _read_hyperparameters_from_run(self):
-        from dataclasses import asdict
-        loaded_config = asdict(self.run.load_config())
-        current_config = asdict(self.config)
-
-        # Identify parameters with active schedules (to skip reloading them)
-        scheduled_params = set()
-        for key in current_config.keys():
-            if key.endswith("_schedule") and current_config.get(key):
-                param = key[: -len("_schedule")]
-                scheduled_params.add(param)
-
-        changes_map = {}
-        for key, value in loaded_config.items():
-            if type(value) in [list, tuple, dict, None]: continue
-            # Skip parameters with active schedules
-            if key in scheduled_params: continue
-            current_value = current_config.get(key, None)
-            if value != current_value: changes_map[key] = value
-
-        if changes_map: self.on_hyperparams_change(changes_map)
-        
-    def on_hyperparams_change(self, changes_map):
-        for key, value in changes_map.items():
-            if not hasattr(self.config, key): continue
-            setattr(self.config, key, value)
-            if key == "policy_lr": self._change_optimizers_lr(value)
-            elif key == "clip_range": self.clip_range = value
-            elif key == "vf_coef": self.vf_coef = value
-            elif key == "ent_coef": self.ent_coef = value
-            elif key == "n_epochs": self._change_n_epochs(value)
-        print(f"Hyperparameters changed from run: {changes_map}")
-
-    def _change_n_epochs(self, n_epochs):
-        self.n_epochs = n_epochs
-        self._train_dataloader.sampler.num_passes = n_epochs
-
-    def _log_hyperparameters(self):
-        metrics = {
-            "n_epochs": self.n_epochs,
-            "ent_coef": self.ent_coef,
-            "vf_coef": self.vf_coef,
-            "clip_range": self.clip_range,
-            "policy_lr": self.policy_lr,
-        }
-        prefixed = {f"hp/{k}": v for k, v in metrics.items()}
-        self.metrics_recorder.record("train", prefixed)
 
     # -------------------------
     # Public API for callbacks
@@ -713,12 +429,6 @@ class BaseAgent(pl.LightningModule):
     def set_early_stop_reason(self, reason: str) -> None:
         """Set the early stopping reason. Called by EarlyStoppingCallback."""
         self._early_stop_reason = reason
-
-    def set_hyperparameter(self, param: str, value: float) -> None:
-        """Set a hyperparameter value. Called by HyperparameterSchedulerCallback."""
-        setattr(self, param, value)
-        if hasattr(self.config, param):
-            setattr(self.config, param, value)
 
     # -------------------------
     # Checkpoint save/load

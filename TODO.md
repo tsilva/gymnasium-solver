@@ -28,22 +28,6 @@ Opportunities:
 
 ---
 
-2. agents/base_agent.py (690 lines)
-
-Why: God class with too many responsibilities
-- Complex callback building with inline schedule resolution (lines 416-566, 150  lines)
-- Logger building scattered across 3 methods (lines 353-414)
-- Hyperparameter management mixed with training logic (lines 629-676)
-- Environment/rollout collector building could be extracted
-
-Opportunities:
-- Extract CallbackBuilder class for callback construction
-- Extract ScheduleResolver helper for schedule configuration (lines 452-522)
-- Move logger building to utils/trainer_loggers.py
-- Extract hyperparameter management to separate mixin/class
-
----
-
 4. utils/train_launcher.py (369 lines)
 
 Why: Multiple unrelated concerns in one module
@@ -69,14 +53,6 @@ Opportunities:
 - add env normalization support (use that instead of normalization from feature extractor)
 - previous actions
 - Search for where to check for SOTA scores on each env (ask gpt to research)
-
-## CartPole-v1
-
-- FEAT: CartPole-v1, create reward shaper that prioritizes centering the pole
-
-## MountainCar-v0
-
-- FEAT: MountainCar-v0: rewardshaping; statecount bonus
 
 ## LunarLander-v3
 

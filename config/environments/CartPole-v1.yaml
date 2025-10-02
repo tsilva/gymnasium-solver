@@ -71,3 +71,13 @@ _ppo: &ppo
 ppo:
   <<: *ppo
   description: "Standard PPO on state observations - baseline configuration for CartPole"
+
+# PPO with potential-based reward shaping for faster learning
+ppo_rewardshaped:
+  <<: *ppo
+  description: "PPO with potential-based reward shaping (angle + position terms)"
+  env_wrappers:
+    - id: CartPoleV1_RewardShaper
+      angle_reward_scale: 1.0
+      position_reward_scale: 0.25
+      clip_potential: true

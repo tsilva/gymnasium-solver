@@ -113,6 +113,12 @@ def test_ppo_clip_range_schedule_update():
             assert stage == "train"
             return self.collector
 
+        def set_hyperparameter(self, param: str, value: float) -> None:
+            """Set a hyperparameter value. Called by HyperparameterSchedulerCallback."""
+            setattr(self, param, value)
+            if hasattr(self.config, param):
+                setattr(self.config, param, value)
+
     initial = 0.3
     stub = _StubModule(initial)
 

@@ -2,6 +2,7 @@ from .CartPoleV1.reward_shaper import CartPoleV1_RewardShaper
 from .discrete_encoder import DiscreteEncoder
 from .env_wrapper_registry import EnvWrapperRegistry
 from .MountainCarV0.reward_shaper import MountainCarV0_RewardShaper
+from .MountainCarV0.state_count_bonus import MountainCarV0_StateCountBonus
 from .pixel_observation import PixelObservationWrapper as _PixelObservationWrapper
 from .discrete_action_space_remapper import (
     DiscreteActionSpaceRemapperWrapper,
@@ -29,6 +30,7 @@ _wrappers_to_register = [
     PongV5_FeatureExtractor,
     PongV5_RewardShaper,
     MountainCarV0_RewardShaper,
+    MountainCarV0_StateCountBonus,
     CartPoleV1_RewardShaper,
     VizDoom_RewardShaper,
     PixelObservationWrapper,

@@ -100,12 +100,12 @@ total_timesteps:
   precision: 0
   min: 0
 
-cnt/total_timesteps:
+cnt/total_env_steps:
   highlight: true
   show_in_table: true
-  # Note: delta_rule removed because eval/total_timesteps can legitimately decrease
+  # Note: delta_rule removed because eval/total_env_steps can legitimately decrease
   # between evaluation runs when using different eval strategies or env resets
-  description: "Cumulative number of environment steps taken across all training"
+  description: "Cumulative individual environment steps (sum across all parallel environments)"
   precision: 0
   min: 0
 
@@ -115,22 +115,22 @@ progress:
   description: "Normalized training progress based on total vectorized steps (0.0 start → 1.0 at max_timesteps)"
   precision: 2
 
-roll/timesteps:
-  description: "Number of timesteps collected in the current rollout buffer"
+roll/env_steps:
+  description: "Individual environment steps in the current rollout buffer (n_envs × n_steps)"
   precision: 0
   delta_rule: ">="  # Should always increase
   min: 0
 
-# Vectorized-step counters (one per env.step() call across the vector)
+# Vectorized-step counters (one per vec_env.step() call across all parallel environments)
 cnt/total_vec_steps:
   show_in_table: true
   highlight: true
-  description: "Cumulative number of vectorized env.step() calls across training"
+  description: "Cumulative vec_env.step() calls (one call steps all n_envs environments simultaneously)"
   precision: 0
   min: 0
 
 roll/vec_steps:
-  description: "Number of vectorized env.step() calls in the current rollout"
+  description: "Number of vec_env.step() calls in the current rollout (typically equals n_steps)"
   precision: 0
   delta_rule: ">="
   min: 0

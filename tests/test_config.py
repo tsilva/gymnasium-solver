@@ -7,15 +7,15 @@ from utils.config import Config
 
 
 @pytest.mark.unit
-def test_config_parse_schedules_and_legacy_normalize():
-    cfg = Config._load_from_environment_config({
+def test_config_parse_schedules_with_dict_syntax():
+    cfg = Config.build_from_dict({
         "env_id": "CartPole-v1",
         "algo_id": "ppo",
         "n_steps": 32,
+        "n_envs": 4,
         "batch_size": 16,
         "max_timesteps": 1000,
-        "policy_lr": "lin_3e-4",
-        "normalize": True,
+        "policy_lr": {"start": 3e-4, "end": 0.0},
         "hidden_dims": [64, 64],
     })
     assert cfg.policy_lr == pytest.approx(3e-4)
@@ -24,8 +24,6 @@ def test_config_parse_schedules_and_legacy_normalize():
     assert cfg.policy_lr_schedule_end_value == pytest.approx(0.0)
     assert cfg.policy_lr_schedule_start == pytest.approx(0.0)
     assert cfg.policy_lr_schedule_end == pytest.approx(1.0)
-    assert cfg.normalize_obs is True and cfg.normalize_reward is True
-    assert isinstance(cfg.hidden_dims, tuple)
 
 
 @pytest.mark.unit
@@ -45,72 +43,89 @@ def test_config_schedule_fraction_without_max_timesteps_errors():
         )
 
 
-@pytest.mark.unit
-def test_config_environment_format_with_inheritance():
-    # Build an in-memory environment-centric config with inheritance
-    all_configs = {
-        "base": {
-            "env_id": "CartPole-v1",
-            "algo_id": "ppo",
-            "n_steps": 64,
-            "batch_size": 32,
-            "gamma": 0.98,
-        },
-        "child": {
-            "inherits": "base",
-            "n_steps": 128,
-            "clip_range": 0.2,
-        },
-    }
-    cfg = Config._load_from_environment_config(all_configs["child"], all_configs)
-    assert cfg.env_id == "CartPole-v1"
-    assert cfg.algo_id == "ppo"
-    assert cfg.n_steps == 128  # override applied
-    assert cfg.batch_size == 32
-    assert cfg.gamma == pytest.approx(0.98)
-    assert cfg.clip_range == pytest.approx(0.2)
 
 
-@pytest.mark.unit
-def test_config_legacy_format_with_inheritance(tmp_path: Path):
-    # Build legacy hyperparams folder
-    hyper = tmp_path / "hyperparams"
-    hyper.mkdir(parents=True, exist_ok=True)
-    ppo_yaml = hyper / "ppo.yaml"
-    ppo_content = {
-        "base_cartpole": {
-            "env_id": "CartPole-v1",
-            "n_steps": 32,
-            "batch_size": 16,
-            "gamma": 0.99,
-        },
-        "cartpole_large": {
-            "inherit_from": "base_cartpole",
-            "n_steps": 128,
-        },
-    }
-    # JSON is valid YAML; safe_load can parse it
-    ppo_yaml.write_text(json.dumps(ppo_content))
-
-    # When algo_id provided and config_id is present in file
-    cfg = Config._load_from_legacy_config("cartpole_large", "ppo", hyper)
-    assert cfg.env_id == "CartPole-v1"
-    assert cfg.n_steps == 128
-    assert cfg.batch_size == 16
-
-    # When config_id equals env_id, should find matching config once
-    cfg2 = Config._load_from_legacy_config("CartPole-v1", "ppo", hyper)
-    assert cfg2.env_id == "CartPole-v1"
 
 
 @pytest.mark.unit
 def test_config_validate_errors():
     # Invalid learning rate
-    bad = Config(env_id="CartPole-v1", algo_id="ppo", n_steps=32, batch_size=32, policy_lr=0.0)
     with pytest.raises(ValueError):
-        bad.validate()
+        Config.build_from_dict({
+            "env_id": "CartPole-v1",
+            "algo_id": "ppo",
+            "n_steps": 32,
+            "n_envs": 4,
+            "batch_size": 32,
+            "policy_lr": 0.0
+        })
 
     # Invalid gamma
-    bad2 = Config(env_id="CartPole-v1", algo_id="ppo", n_steps=32, batch_size=32, gamma=1.5)
     with pytest.raises(ValueError):
-        bad2.validate()
+        Config.build_from_dict({
+            "env_id": "CartPole-v1",
+            "algo_id": "ppo",
+            "n_steps": 32,
+            "n_envs": 4,
+            "batch_size": 32,
+            "gamma": 1.5
+        })
+
+
+@pytest.mark.unit
+def test_config_schedule_dict_syntax():
+    """Test new dict-based schedule syntax"""
+    cfg = Config.build_from_dict({
+        "algo_id": "ppo",
+        "env_id": "CartPole-v1",
+        "n_steps": 128,
+        "n_envs": 4,
+        "batch_size": 64,
+        "max_timesteps": 10000,
+        "ent_coef": {"start": 0.02, "end": 0.001},
+        "policy_lr": {"start": 0.003, "end": 0.0001, "from": 0.0, "to": 0.8},
+        "clip_range": {"start": 0.2, "end": 0.05, "schedule": "linear"},
+    })
+
+    # Check base values are set to start values
+    assert cfg.ent_coef == pytest.approx(0.02)
+    assert cfg.policy_lr == pytest.approx(0.003)
+    assert cfg.clip_range == pytest.approx(0.2)
+
+    # Check schedule attributes are populated correctly
+    assert cfg.ent_coef_schedule == "linear"
+    assert cfg.ent_coef_schedule_start_value == pytest.approx(0.02)
+    assert cfg.ent_coef_schedule_end_value == pytest.approx(0.001)
+    assert cfg.ent_coef_schedule_start == pytest.approx(0.0)
+    assert cfg.ent_coef_schedule_end == pytest.approx(1.0)
+
+    assert cfg.policy_lr_schedule == "linear"
+    assert cfg.policy_lr_schedule_start_value == pytest.approx(0.003)
+    assert cfg.policy_lr_schedule_end_value == pytest.approx(0.0001)
+    assert cfg.policy_lr_schedule_start == pytest.approx(0.0)
+    assert cfg.policy_lr_schedule_end == pytest.approx(0.8)
+
+    assert cfg.clip_range_schedule == "linear"
+    assert cfg.clip_range_schedule_start_value == pytest.approx(0.2)
+    assert cfg.clip_range_schedule_end_value == pytest.approx(0.05)
+
+
+@pytest.mark.unit
+def test_config_schedule_dict_minimal_syntax():
+    """Test minimal dict schedule with just start and end"""
+    cfg = Config.build_from_dict({
+        "algo_id": "ppo",
+        "env_id": "CartPole-v1",
+        "n_steps": 128,
+        "n_envs": 4,
+        "batch_size": 64,
+        "max_timesteps": 10000,
+        "ent_coef": {"start": 0.01, "end": 0.0},
+    })
+
+    assert cfg.ent_coef == pytest.approx(0.01)
+    assert cfg.ent_coef_schedule == "linear"
+    assert cfg.ent_coef_schedule_start_value == pytest.approx(0.01)
+    assert cfg.ent_coef_schedule_end_value == pytest.approx(0.0)
+    assert cfg.ent_coef_schedule_start == pytest.approx(0.0)
+    assert cfg.ent_coef_schedule_end == pytest.approx(1.0)

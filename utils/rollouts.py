@@ -948,7 +948,7 @@ class RolloutCollector():
         return {
             **base_metrics,
             "cnt/total_episodes": total_episodes_collected,
-            "cnt/total_timesteps": int(total_timesteps),
+            "cnt/total_env_steps": int(total_timesteps),
             "cnt/total_vec_steps": int(total_vec_steps),
             "roll/ep_rew/mean": ep_rew_mean,
             "roll/ep_len/mean": float(ep_len_mean),
@@ -1019,11 +1019,11 @@ class RolloutCollector():
         ret_std = self._ret_stats.std()
 
         return {
-            "cnt/total_timesteps": self.total_steps,
+            "cnt/total_env_steps": self.total_steps,
             "cnt/total_vec_steps": self.total_vec_steps,  # canonical step counter for history
             "cnt/total_episodes": self.total_episodes,
             "cnt/total_rollouts": self.total_rollouts,
-            "roll/timesteps": self.rollout_steps,
+            "roll/env_steps": self.rollout_steps,
             "roll/vec_steps": self.rollout_vec_steps,
             "roll/episodes": self.rollout_episodes,
             "roll/fps": rollout_fps,  # average fps over recent rollouts

@@ -138,6 +138,7 @@ _obj_ppo: &obj_ppo
   n_steps: 256
   batch_size: 2048
   hidden_dims: [256, 256]
+  eval_warmup_epochs: 200
 
 # ==========================
 # RGB observation setup
@@ -159,12 +160,7 @@ _rgb_ppo: &rgb_ppo
     strides: [4, 2, 1]
   max_timesteps: 100_000
   #n_epochs: 20 before
-  ent_coef: 0.02 # fixed 0.01 before
-  ent_coef_schedule: "linear"
-  ent_coef_schedule_start_value: 0.02
-  ent_coef_schedule_end_value: 0.001
-  ent_coef_schedule_start: 0.0
-  ent_coef_schedule_end: 1.0
+  ent_coef: {start: 0.02, end: 0.001}  # linear decay from 0.02 to 0.001 over full training
   policy_lr: 0.0025
   normalize_advantages: "batch"
   clip_range: 0.1
@@ -180,7 +176,6 @@ _rgb_ppo: &rgb_ppo
 # Object-based observations with PPO - uses extracted game objects as features
 objects_ppo:
   <<: *obj_ppo
-  eval_warmup_epochs: 200
   description: "PPO with object-based observations using extracted game objects as features"
 
 # Object-based observations with PPO - deterministic version (no sticky actions)

@@ -2,10 +2,13 @@
 
 # NEXT
 
-- try creating agents with /agent command
+- REFACTOR: ensure agents are themselves responsible for saving all of their artifacts to the run, in the same fashion it should also be possible to load back an agent by pointing to a run dir. NOTE: when saving/loading we need to make sure that we can get the agent back to the exact training state it was in when it was saved.
+
+- FEAT: Add support for specifying reward threshold in config. The way this works is that you can instead of passing a True/false to eraly stop on trian or early stop on eval, you can pass a float instead and that will be treated as the reward threshold instead of the bool. One example of where to use this is ALE/Pong-v5_objects_deterministic_ppo, when the expected reward can be really high and we want to define that in the experiment config (overrides env spec).
+
 - try tanh for objectgs
+- FEAT: add support for cosine scheduler
 - FEAT: add video recording support for native ale vec env
-- FEAT: don't print out all metrics, make some of them optional
 - FEAT: when subproc = "auto" chose depending on situation (eg: n_envs + atari)
 - inspect pomg, see if ep lenght is accurate
 - inspect mc_returns and gae for unifinished episodes
@@ -17,7 +20,6 @@
 - FEAT: use torch lightning schedulers, but key them to RL cycle
 - BUG: wrong project id logged in wandb
 - BUG: investigate mc_return in pong, seems busted
-- FEAT: add support for cosine scheduler
 - FEAT: add support for scheduler min and progress decoupled from timesteps, perhaps by specifying percentage -> value tuples and have the scheduler interpolate between those, allowing dynamic linear schedules that perform differently across the training (eg: higher early, lower late); generalize decay schedule further by specifying decay start
 - FEAT: add ability to tell LLM to inspect last N runs by providing a run registry json that has timestamps and other metadata, always sort by timestamp descending, ensure lock on write
 - BUG: env smoke tests not passing

@@ -78,8 +78,8 @@ def test_evaluate_policy_single_env_exact_counts():
 
     # Expectations
     assert metrics["cnt/total_episodes"] == 3
-    # total_timesteps is the sum of episode lengths for a single env
-    assert metrics["cnt/total_timesteps"] == 2 + 3 + 1
+    # total_env_steps is the sum of episode lengths for a single env
+    assert metrics["cnt/total_env_steps"] == 2 + 3 + 1
     # Means match the episode returns/lengths (reward == length)
     assert math.isclose(metrics["roll/ep_rew/mean"], (2 + 3 + 1) / 3.0)
     assert math.isclose(metrics["roll/ep_len/mean"], (2 + 3 + 1) / 3.0)
@@ -105,8 +105,8 @@ def test_evaluate_policy_balanced_multi_env():
     assert math.isclose(metrics["roll/ep_rew/mean"], 2.0)
     assert math.isclose(metrics["roll/ep_len/mean"], 2.0)
 
-    # With episode length 2 and targets [4,3,3], vector steps = 8 => timesteps = 8 * 3
-    assert metrics["cnt/total_timesteps"] == 8 * 3
+    # With episode length 2 and targets [4,3,3], vector steps = 8 => env_steps = 8 * 3
+    assert metrics["cnt/total_env_steps"] == 8 * 3
 
     # Per-env episode counts follow balancing logic
     assert metrics["per_env/episodes_0"] == 4

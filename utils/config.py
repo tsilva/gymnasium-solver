@@ -140,17 +140,11 @@ class Config:
     policy_kwargs: Optional[Dict[str, Any]] = field(default_factory=lambda: {})
 
     # The learning rate for the policy (algo defaults in subclasses)
-    policy_lr: Optional[float] = None
+    # Can be a float or a schedule dict: {start: float, end: float, from: float, to: float, schedule: str}
+    policy_lr: Optional[Union[float, Dict[str, Any]]] = None
 
     # Optimizer to use for policy updates
     optimizer: "Config.OptimizerType" = OptimizerType.adamw  # type: ignore[assignment]
-
-    # The schedule for the policy learning rate
-    policy_lr_schedule: Optional[str] = None
-    policy_lr_schedule_start_value: Optional[float] = None
-    policy_lr_schedule_end_value: Optional[float] = None
-    policy_lr_schedule_start: Optional[float] = None
-    policy_lr_schedule_end: Optional[float] = None
 
     # The maximum gradient norm for the policy
     max_grad_norm: Optional[float] = None
@@ -164,23 +158,14 @@ class Config:
     gae_lambda: Optional[float] = None
 
     # The entropy coefficient for the policy (algo defaults in subclasses)
-    ent_coef: Optional[float] = None
-
-    # The schedule for the entropy coefficient
-    ent_coef_schedule: Optional[str] = None
-    ent_coef_schedule_start_value: Optional[float] = None
-    ent_coef_schedule_end_value: Optional[float] = None
-    ent_coef_schedule_start: Optional[float] = None
-    ent_coef_schedule_end: Optional[float] = None
-
-    # Legacy aliases kept for backward compatibility with older configs
-    ent_coef_schedule_target_value: Optional[float] = None
-    ent_coef_schedule_target_progress: Optional[float] = None
+    # Can be a float or a schedule dict: {start: float, end: float, from: float, to: float, schedule: str}
+    ent_coef: Optional[Union[float, Dict[str, Any]]] = None
 
     # The value function coefficient for the policy (algo defaults in subclasses)
-    vf_coef: Optional[float] = None
-    
-    # The schedule for the value function coefficient
+    # Can be a float or a schedule dict: {start: float, end: float, from: float, to: float, schedule: str}
+    vf_coef: Optional[Union[float, Dict[str, Any]]] = None
+
+    # Internal schedule attributes (auto-populated from dict syntax)
     vf_coef_schedule: Optional[str] = None
     vf_coef_schedule_start_value: Optional[float] = None
     vf_coef_schedule_end_value: Optional[float] = None
@@ -188,9 +173,10 @@ class Config:
     vf_coef_schedule_end: Optional[float] = None
 
     # The clip range for the policy (algo defaults in subclasses)
-    clip_range: Optional[float] = None
+    # Can be a float or a schedule dict: {start: float, end: float, from: float, to: float, schedule: str}
+    clip_range: Optional[Union[float, Dict[str, Any]]] = None
 
-    # The schedule for the clip range
+    # Internal schedule attributes (auto-populated from dict syntax)
     clip_range_schedule: Optional[str] = None
     clip_range_schedule_start_value: Optional[float] = None
     clip_range_schedule_end_value: Optional[float] = None
@@ -362,16 +348,32 @@ class Config:
         self.batch_size = new_batch_size
 
     def _resolve_schedules(self) -> None:
+        # Schedulable parameters that support dict syntax
+        schedulable_params = {'policy_lr', 'ent_coef', 'vf_coef', 'clip_range'}
+
         # Iterate over attribute names to avoid mutating during iteration
         for key in list(vars(self).keys()):
             value = getattr(self, key)
-            if not isinstance(value, str):
-                continue
 
-            val_lower = value.lower()
-            if val_lower.startswith("lin_"):
-                setattr(self, f"{key}_schedule", "linear")
-                setattr(self, key, float(val_lower.split("lin_")[1]))
+            # Handle dict-based schedule syntax
+            if isinstance(value, dict) and key in schedulable_params:
+                schedule_type = value.get('schedule', 'linear')
+                start_value = value.get('start')
+                end_value = value.get('end', 0.0)
+                from_pos = value.get('from', 0.0)
+                to_pos = value.get('to', 1.0)
+
+                assert start_value is not None, f"{key} schedule dict must have 'start' key"
+
+                # Set the base parameter to the start value
+                setattr(self, key, start_value)
+
+                # Set the schedule attributes
+                setattr(self, f"{key}_schedule", schedule_type)
+                setattr(self, f"{key}_schedule_start_value", start_value)
+                setattr(self, f"{key}_schedule_end_value", end_value)
+                setattr(self, f"{key}_schedule_start", from_pos)
+                setattr(self, f"{key}_schedule_end", to_pos)
 
     def _resolve_schedule_defaults(self) -> None:
         schedule_suffix = "_schedule"
@@ -390,9 +392,8 @@ class Config:
             if getattr(self, start_value_attr, None) is None:
                 setattr(self, start_value_attr, getattr(self, param))
 
-            legacy_target_value = getattr(self, f"{param}_schedule_target_value", None)
             if getattr(self, end_value_attr, None) is None:
-                setattr(self, end_value_attr, legacy_target_value if legacy_target_value is not None else 0.0)
+                setattr(self, end_value_attr, 0.0)
 
             # Default start/end positions use fractions of training progress
             start_pos_attr = f"{param}_schedule_start"
@@ -401,9 +402,8 @@ class Config:
             if getattr(self, start_pos_attr, None) is None:
                 setattr(self, start_pos_attr, 0.0)
 
-            legacy_target_progress = getattr(self, f"{param}_schedule_target_progress", None)
             if getattr(self, end_pos_attr, None) is None:
-                setattr(self, end_pos_attr, legacy_target_progress if legacy_target_progress is not None else 1.0)
+                setattr(self, end_pos_attr, 1.0)
 
     def get_env_args(self) -> Dict[str, Any]:
         return dict(

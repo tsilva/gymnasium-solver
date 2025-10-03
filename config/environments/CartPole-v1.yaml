@@ -43,7 +43,6 @@ _env: &env
   seed: 42
   max_env_steps: 3e5
   normalize_obs: false
-  n_envs: 8
   n_steps: 1024
   policy_lr: 6e-3
   hidden_dims: [64, 64]

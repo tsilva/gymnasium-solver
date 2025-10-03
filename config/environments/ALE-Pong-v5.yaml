@@ -133,7 +133,6 @@ _obj_ppo: &obj_ppo
   ent_coef: 0.005
   policy_lr: 0.002
   clip_range: 0.2
-  n_envs: 32
   n_steps: 256
   batch_size: 2048
   hidden_dims: [256, 256]
@@ -149,7 +148,6 @@ _rgb_env: &rgb_env
 
 _rgb_ppo: &rgb_ppo
   <<: [*rgb_env, *ppo_base]
-  n_envs: 64
   accelerator: "auto"
   policy: "cnn_actorcritic"
   hidden_dims: [512]

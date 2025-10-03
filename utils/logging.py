@@ -407,14 +407,13 @@ def display_config_summary(data_json: dict, *, width: int = 60) -> None:
         title_upper = title.upper()
         return ansi(format_banner(title_upper, width=width, char=banner_char), "bright_magenta", "bold", enable=use_color)
 
-    def _create_kv_line(key: str, value: str):
-        return format_kv_line(key, value, key_width=14, key_color="bright_blue", val_color="bright_white", enable_color=use_color)
-
     output_lines = []
     for title, data in data_json.items():
         output_lines.append("\n" + _create_banner(title))
+        max_key_len = max((len(k) for k in data.keys()), default=0)
         for key, value in data.items():
-            output_lines.append(_create_kv_line(key, value))
+            line = format_kv_line(key, value, key_width=max_key_len, key_color="bright_blue", val_color="bright_white", enable_color=use_color)
+            output_lines.append(line)
         #output_lines.append(ansi(banner_char * width, "bright_magenta", enable=use_color))
     print("\n".join(output_lines))
 # Helper: check if session file logging is disabled via environment variable

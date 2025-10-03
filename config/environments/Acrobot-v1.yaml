@@ -48,7 +48,6 @@ _env: &env
 _ppo: &ppo
   <<: *env
   algo_id: ppo
-  n_envs: 8
   n_epochs: 4
   n_steps: 256
   gae_lambda: 0.94

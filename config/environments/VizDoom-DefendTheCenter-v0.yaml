@@ -54,7 +54,6 @@ _env: &env
   eval_freq_epochs: 10
   eval_episodes: 1
   max_env_steps: 5e6
-  n_envs: 16
   n_steps: 256
   batch_size: 512
   n_epochs: 4

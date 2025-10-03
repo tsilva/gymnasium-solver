@@ -2,23 +2,20 @@
 
 # NEXT
 
-solve warnings
- python train.py ALE/Pong-v5 
-- TODO: align first print
-- TODO: bold in metrics summary
-- TODO: training progress bar in metrics table
-- TODO: highlight row
-- DONE: assert config frame stack and others match when vectorization_mode = atari (changed from native)
-- THINK: is there ever a good reason to have more n_envs than cores?
-- BUG: action labels not appearing in run inspect
+TEST: Pong run_play / run_inspect works
 - BUG: vecobs not showing action labels for pong rgb
+TEST: vizdoom env works (with run_play and run_inspect)
+TEST: super mario env works (with run_play and run_inspect)
+TEST: smoke tests pass
+- BUG: action labels not appearing in run inspect
+
+solve warnings
+- TODO: training progress bar in metrics table
 - FEAT: speed up eval as much as possible (async mode with few changes)
-- TASK: run stable-retro compile.sh
 - TODO: trace hyperparam tuning process and adjust
 - TEST: logged to correct projects
 - TEST: tune with agent
 - TEST: are sweeps still working?
-- TODO: find better names for metrics (namespaced but short names)
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 - TODO: add env normalization support, make sure normalization is saved
 

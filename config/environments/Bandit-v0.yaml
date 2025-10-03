@@ -39,7 +39,6 @@ _env: &env
   max_env_steps: 20_000
   gamma: 1.0
   gae_lambda: 1.0
-  n_envs: 16
   n_steps: 64
   batch_size: 0.25
   eval_warmup_epochs: 5

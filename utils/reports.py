@@ -73,6 +73,7 @@ def sparkline(values: Iterable[float], width: int) -> str:
 def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48, per_metric_cap: int = 2000):
     """Print a compact ASCII sparkline summary of numeric metrics."""
     from utils.dict_utils import group_by_namespace, order_namespaces, sort_subkeys_by_priority
+    from utils.logging import ansi
     from utils.metrics_config import metrics_config
 
     # Build metric key priority map for sorting
@@ -171,7 +172,9 @@ def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48
         # Print namespace header with column labels
         header_parts = [f"{col:>{stat_widths[col]}}" for col in stat_cols]
         header_line = "  ".join(header_parts)
-        print(f"\n{ns}/ {' ' * (max_key_len - len(ns) + 2 + width + 1)} {header_line}")
+        ns_bold = ansi(f"{ns}/", "bold")
+        header_bold = ansi(header_line, "bold")
+        print(f"\n{ns_bold} {' ' * (max_key_len - len(ns) + 2 + width + 1)} {header_bold}")
 
         for subkey, stats in submetrics.items():
             if shown >= max_metrics:

@@ -27,14 +27,14 @@ def find_closest_match(search_term, candidates):
         if search_lower in candidate or candidate in search_lower:
             return candidates[i]
 
-    # Word-based matching (split on hyphens and underscores)
-    search_words = set(search_lower.replace('-', ' ').replace('_', ' ').split())
+    # Word-based matching (split on hyphens, underscores, and slashes)
+    search_words = set(search_lower.replace('-', ' ').replace('_', ' ').replace('/', ' ').split())
 
     best_match = None
     best_score = 0
 
     for i, candidate in enumerate(candidates_lower):
-        candidate_words = set(candidate.replace('-', ' ').replace('_', ' ').split())
+        candidate_words = set(candidate.replace('-', ' ').replace('_', ' ').replace('/', ' ').split())
 
         # Calculate overlap score
         overlap = len(search_words.intersection(candidate_words))

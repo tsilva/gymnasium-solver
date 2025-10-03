@@ -35,7 +35,6 @@ spec: &spec
 _env: &env
   env_id: Taxi-v3
   ent_coef: 0.01
-  n_envs: 16
   eval_freq_epochs: 10
   eval_episodes: 10
   env_wrappers:

@@ -163,7 +163,7 @@ _rgb_ppo: &rgb_ppo
   policy_lr: 0.0025
   normalize_advantages: "batch"
   clip_range: 0.1
-  vectorization_mode: "native"
+  vectorization_mode: "atari"
   n_steps: 128
   batch_size: 0.5
   eval_warmup_epochs: 200
@@ -184,16 +184,16 @@ objects_deterministic_ppo:
   early_stop_on_train_threshold: 20.0  # Override env spec threshold (18) with custom value
   eval_freq_epochs: null # Disable evaluation during training
 
-# RGB observations with PPO - uses ALE native vectorization
-# ALE native vec automatically applies: 4-frame stacking, grayscale, 84x84 resize
+# RGB observations with PPO - uses ALE atari vectorization
+# ALE atari vec automatically applies: 4-frame stacking, grayscale, 84x84 resize
 # Observation shape: (4, 84, 84) - 4 grayscale frames stacked, NOT 3-channel RGB
-# Config frame_stack/grayscale_obs/resize_obs are IGNORED when using ALE native vectorization
+# Config frame_stack/grayscale_obs/resize_obs reflect these Atari defaults
 rgb_ppo:
   <<: *rgb_ppo
-  description: "PPO with 4-frame grayscale stacks (84x84) via ALE native vectorization"
+  description: "PPO with 4-frame grayscale stacks (84x84) via ALE atari vectorization"
 
 # RGB observations with PPO - deterministic version (no sticky actions)
-# Uses ALE native vectorization for 10x faster training
+# Uses ALE atari vectorization for 10x faster training
 rgb_deterministic_ppo:
   <<: [*rgb_ppo, *env_deterministic]
-  description: "PPO with RGB observations - deterministic version with ALE native vectorization"
+  description: "PPO with RGB observations - deterministic version with ALE atari vectorization"

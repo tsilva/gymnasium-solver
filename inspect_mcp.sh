@@ -1,0 +1,1 @@
+npx @modelcontextprotocol/inspector --config ./mcp_server_config.json

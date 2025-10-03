@@ -1,8 +1,8 @@
 """
-Vector-level video recorder for ALE native vectorization.
+Vector-level video recorder for ALE atari vectorization.
 
-Records observations from the first environment (index 0) in an ALE native
-vectorized environment. Since ALE native vectorization returns preprocessed
+Records observations from the first environment (index 0) in an ALE atari
+vectorized environment. Since ALE atari vectorization returns preprocessed
 observations (grayscale, frame-stacked), we capture these directly and
 reconstruct viewable frames for video recording.
 """
@@ -20,9 +20,9 @@ from gymnasium.vector import VectorWrapper
 
 class ALEVecVideoRecorder(VectorWrapper):
     """
-    Records video from the first environment in an ALE native vectorized environment.
+    Records video from the first environment in an ALE atari vectorized environment.
 
-    Since ALE native vectorization preprocesses observations (grayscale, frame-stack),
+    Since ALE atari vectorization preprocesses observations (grayscale, frame-stack),
     this recorder captures observations directly from step() and converts them back
     to RGB format suitable for video recording.
 
@@ -73,7 +73,7 @@ class ALEVecVideoRecorder(VectorWrapper):
         obs_shape = self.single_observation_space.shape
         assert len(obs_shape) == 3, f"Expected (C, H, W) observation shape, got {obs_shape}"
         self.frame_stack, self.frame_height, self.frame_width = obs_shape
-        self.is_grayscale = True  # ALE native vectorization uses grayscale by default
+        self.is_grayscale = True  # ALE atari vectorization uses grayscale by default
 
     def _get_font(self):
         if self._font is None:
@@ -154,7 +154,7 @@ class ALEVecVideoRecorder(VectorWrapper):
         """
         Convert a preprocessed observation to an RGB frame suitable for video.
 
-        ALE native vectorization returns grayscale frame-stacked observations
+        ALE atari vectorization returns grayscale frame-stacked observations
         with shape (frame_stack, H, W). We take the most recent frame and
         convert to RGB by replicating the grayscale channel.
 

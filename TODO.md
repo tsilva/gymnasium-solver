@@ -2,11 +2,15 @@
 
 # NEXT
 
+solve warnings
+ python train.py ALE/Pong-v5 
+- TODO: align first print
+- TODO: bold in metrics summary
+- TODO: training progress bar in metrics table
 - TODO: highlight row
-- TODO: assert config frame stack and others match when vectorization_mode = alevecenv (change from native)
+- DONE: assert config frame stack and others match when vectorization_mode = atari (changed from native)
 - THINK: is there ever a good reason to have more n_envs than cores?
 - BUG: action labels not appearing in run inspect
-- BUG: frame stack option not appearing in run_inspect
 - BUG: vecobs not showing action labels for pong rgb
 - FEAT: speed up eval as much as possible (async mode with few changes)
 - TASK: run stable-retro compile.sh

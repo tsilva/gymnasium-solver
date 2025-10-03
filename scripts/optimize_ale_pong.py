@@ -1,4 +1,4 @@
-"""Optimize ALE/Pong-v5 FPS using native vectorization with systematic parameter search."""
+"""Optimize ALE/Pong-v5 FPS using atari vectorization with systematic parameter search."""
 import argparse
 import itertools
 import math
@@ -30,7 +30,7 @@ class BenchmarkResult:
                 f"warmup={self.warmup_time:.2f}s bench={self.bench_time:.2f}s")
 
 
-def benchmark_ale_native(
+def benchmark_ale_atari(
     env_id: str,
     frames: int,
     n_envs: int,
@@ -38,10 +38,10 @@ def benchmark_ale_native(
     thread_affinity_offset: int = 0,
     warmup_frames: int = 2048,
 ) -> BenchmarkResult:
-    """Benchmark ALE native vectorization with specified parameters."""
+    """Benchmark ALE atari vectorization with specified parameters."""
     kwargs = {
         "num_envs": n_envs,
-        "vectorization_mode": None,  # Use ALE native
+        "vectorization_mode": None,  # Use ALE atari
         "repeat_action_probability": 0.0,
     }
     if batch_size is not None:
@@ -115,7 +115,7 @@ def grid_search(
         unit="config"
     ):
         try:
-            result = benchmark_ale_native(
+            result = benchmark_ale_atari(
                 env_id=env_id,
                 frames=frames,
                 n_envs=n_envs,
@@ -177,7 +177,7 @@ def print_summary(results: list[BenchmarkResult]):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Optimize ALE/Pong-v5 FPS with native vectorization")
+    parser = argparse.ArgumentParser(description="Optimize ALE/Pong-v5 FPS with atari vectorization")
     parser.add_argument("--env-id", default="ALE/Pong-v5")
     parser.add_argument("--frames", type=int, default=100_000, help="Frames per benchmark run")
     parser.add_argument("--warmup-frames", type=int, default=2048, help="Frames for warmup")

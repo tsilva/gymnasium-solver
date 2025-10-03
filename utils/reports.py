@@ -168,8 +168,10 @@ def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48
         if not submetrics:
             continue
 
-        # Print namespace header
-        print(f"\n{ns}/")
+        # Print namespace header with column labels
+        header_parts = [f"{col:>{stat_widths[col]}}" for col in stat_cols]
+        header_line = "  ".join(header_parts)
+        print(f"\n{ns}/ {' ' * (max_key_len - len(ns) + 2 + width + 1)} {header_line}")
 
         for subkey, stats in submetrics.items():
             if shown >= max_metrics:
@@ -177,12 +179,12 @@ def print_terminal_ascii_summary(history, max_metrics: int = 50, width: int = 48
 
             chart = stats["chart"]
 
-            # Format stats with consistent widths
-            stat_parts = [f"{col}={stats[col]:>{stat_widths[col]}.4g}" for col in stat_cols]
-            stats_line = " | ".join(stat_parts)
+            # Format stats with consistent widths (no labels)
+            stat_parts = [f"{stats[col]:>{stat_widths[col]}.4g}" for col in stat_cols]
+            stats_line = "  ".join(stat_parts)
 
             # Print row with proper alignment
-            print(f"  {subkey:<{max_key_len}}: {chart} | {stats_line}")
+            print(f"  {subkey:<{max_key_len}}: {chart}  {stats_line}")
             shown += 1
 
     print(format_section_footer(width=width))

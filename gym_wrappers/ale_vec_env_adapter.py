@@ -90,7 +90,7 @@ class AtariVecEnvAdapter(VectorEnv):
         Context manager for video recording.
 
         Since AtariVecEnvAdapter doesn't support rendering, this returns a no-op
-        context manager. Actual video recording for ALE native vectorization is
+        context manager. Actual video recording for ALE atari vectorization is
         handled by ALEVecVideoRecorder wrapper at the vector env level.
         """
         # No-op: video recording must be handled at wrapper level

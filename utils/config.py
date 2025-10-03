@@ -111,14 +111,18 @@ class Config:
     env_kwargs: dict = field(default_factory=dict)
 
     # Vectorization mode for parallel environments
-    # - "auto": Automatically select based on environment (uses ALE native for Atari RGB, sync otherwise)
-    # - "native": Use native vectorization (only valid for Atari RGB environments)
+    # - "auto": Automatically select based on environment (uses ALE atari for Atari RGB, sync otherwise)
+    # - "atari": Use Atari native vectorization (only valid for Atari RGB environments)
     # - "sync": Synchronous vectorization (SyncVectorEnv)
     # - "async": Asynchronous vectorization with subprocesses (AsyncVectorEnv)
     vectorization_mode: Optional[str] = "auto"
 
     # How many N last observations to stack (N=1 means no stacking, only current observation)
     frame_stack: int = 1
+
+    # Number of frames to skip between actions (ALE environments)
+    # None means unset; will be filled with Atari defaults when vectorization_mode='atari'
+    frameskip: Optional[int] = None
 
     # Whether to normalize observations using running mean and variance
     normalize_obs: bool = False
@@ -127,10 +131,13 @@ class Config:
     normalize_reward: bool = False
 
     # Whether to convert observations to grayscale (if representing images)
-    grayscale_obs: bool = False
+    # None means unset; will be filled with Atari defaults when vectorization_mode='atari'
+    grayscale_obs: Optional[bool] = None
 
     # Whether to resize observations to a fixed size (if representing images)
-    resize_obs: bool = False
+    # None means unset; will be filled with Atari defaults when vectorization_mode='atari'
+    # Can be bool (True defaults to (84, 84)) or tuple
+    resize_obs: Optional[Union[bool, Tuple[int, int]]] = None
 
     # Whether the observations are RGB, RAM, or objects
     obs_type: "Config.ObsType" = ObsType.rgb  # type: ignore[assignment]
@@ -415,6 +422,7 @@ class Config:
     def __post_init__(self):
         self._resolve_defaults()
         self._resolve_n_envs()
+        self._resolve_atari_defaults()
         self._resolve_numeric_strings()
         self._resolve_batch_size()
         self._resolve_eval_warmup_epochs()
@@ -433,6 +441,38 @@ class Config:
         """Resolve n_envs "auto" to cpu_count()."""
         if self.n_envs == "auto":
             self.n_envs = os.cpu_count() or 1
+
+    def _resolve_atari_defaults(self) -> None:
+        """Apply Atari defaults when vectorization_mode='atari' and params are not set.
+
+        ALE native vectorization applies these transformations under the hood:
+        - frameskip: 4
+        - grayscale: True
+        - img_height: 84
+        - img_width: 84
+        - stack_num: 4
+
+        This method syncs config with these defaults so the config reflects actual behavior.
+        """
+        if self.vectorization_mode not in ("atari", "auto"):
+            return
+
+        # Only apply defaults for ALE RGB environments
+        from utils.environment import is_alepy_env_id
+        if not is_alepy_env_id(self.env_id):
+            return
+        if self.obs_type != Config.ObsType.rgb:
+            return
+
+        # Apply Atari defaults if not explicitly set
+        if self.grayscale_obs is None:
+            self.grayscale_obs = True
+        if self.resize_obs is None:
+            self.resize_obs = (84, 84)
+        if self.frame_stack == 1:  # Default value
+            self.frame_stack = 4
+        if self.frameskip is None:
+            self.frameskip = 4
 
     def _resolve_numeric_strings(self) -> None:
         for key, value in list(asdict(self).items()):
@@ -515,6 +555,11 @@ class Config:
             self._default_schedule_attr(f"{param}_schedule_end", 1.0)
 
     def get_env_args(self) -> Dict[str, Any]:
+        # Copy env_kwargs and add frameskip if set
+        env_kwargs = dict(self.env_kwargs)
+        if self.frameskip is not None:
+            env_kwargs['frameskip'] = self.frameskip
+
         return dict(
             env_id=self.env_id,
             project_id=self.project_id,
@@ -533,7 +578,7 @@ class Config:
             vectorization_mode=self.vectorization_mode,
             record_video=False,
             record_video_kwargs={},
-            env_kwargs=self.env_kwargs
+            env_kwargs=env_kwargs
         )
 
     def rollout_collector_hyperparams(self) -> Dict[str, Any]:
@@ -563,6 +608,7 @@ class Config:
         self._validate_positive("n_steps")
         self._validate_positive("batch_size")
         self._validate_positive("max_env_steps")
+        self._validate_positive("frameskip")
         self._validate_range("gamma", 0, 1)
         self._validate_range("gae_lambda", 0, 1)
         self._validate_range("clip_range", 0, 1, inclusive_min=False, inclusive_max=False)
@@ -583,16 +629,16 @@ class Config:
             raise ValueError("devices may be an int, 'auto', or None.")
 
         # Validate vectorization_mode
-        if self.vectorization_mode not in {"auto", "native", "sync", "async", None}:
-            raise ValueError(f"vectorization_mode must be 'auto', 'native', 'sync', 'async', or None, got: {self.vectorization_mode}")
+        if self.vectorization_mode not in {"auto", "atari", "sync", "async", None}:
+            raise ValueError(f"vectorization_mode must be 'auto', 'atari', 'sync', 'async', or None, got: {self.vectorization_mode}")
 
-        # Validate that 'native' is only used for Atari RGB environments
-        if self.vectorization_mode == "native":
+        # Validate that 'atari' is only used for Atari RGB environments
+        if self.vectorization_mode == "atari":
             from utils.environment import is_alepy_env_id
             if not is_alepy_env_id(self.env_id):
-                raise ValueError(f"vectorization_mode='native' is only valid for Atari environments (ALE/*), got env_id: {self.env_id}")
+                raise ValueError(f"vectorization_mode='atari' is only valid for Atari environments (ALE/*), got env_id: {self.env_id}")
             if self.obs_type != Config.ObsType.rgb:
-                raise ValueError(f"vectorization_mode='native' is only valid for RGB observations, got obs_type: {self.obs_type}")
+                raise ValueError(f"vectorization_mode='atari' is only valid for RGB observations, got obs_type: {self.obs_type}")
 
         if self.n_envs is not None and self.n_steps is not None and self.batch_size is not None:
             rollout_size = self.n_envs * self.n_steps

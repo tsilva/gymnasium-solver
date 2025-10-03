@@ -101,8 +101,8 @@ def build_env(
         gym.register_envs(ale_py)
 
     _is_ale_rgb_env = _is_alepy_env and obs_type == "rgb"
-    _use_ale_native_vectorization = _is_ale_rgb_env and vectorization_mode in ("auto", "native")
-    if _use_ale_native_vectorization:
+    _use_ale_atari_vectorization = _is_ale_rgb_env and vectorization_mode in ("auto", "atari")
+    if _use_ale_atari_vectorization:
         from gymnasium import make_vec
         from gymnasium.wrappers.vector import RecordEpisodeStatistics as VectorRecordEpisodeStatistics
         from gym_wrappers.ale_vec_video_recorder import ALEVecVideoRecorder
@@ -125,7 +125,7 @@ def build_env(
         if record_video:
             env = ALEVecVideoRecorder(env, **record_video_kwargs)
 
-        env._ale_native_vec = True
+        env._ale_atari_vec = True
         env._spec = spec
         env._project_id = project_id
         env._obs_type = obs_type

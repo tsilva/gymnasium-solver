@@ -10,11 +10,11 @@ class VecEnvInfoWrapper(VectorWrapper):
     normally. Only *missing* attributes are proxied.
     """
 
-    def _find_ale_native_env(self):
-        """Check if ALE native vectorization is used anywhere in chain."""
+    def _find_ale_atari_env(self):
+        """Check if ALE atari vectorization is used anywhere in chain."""
         env = self.env
         while env is not None:
-            if env.__dict__.get("_ale_native_vec", False):
+            if env.__dict__.get("_ale_atari_vec", False):
                 return env
             env = getattr(env, "env", None)
         return None
@@ -91,8 +91,8 @@ class VecEnvInfoWrapper(VectorWrapper):
                 break
             env = env.env
 
-        # Check for ALE native vectorization
-        ale_env = self._find_ale_native_env()
+        # Check for ALE atari vectorization
+        ale_env = self._find_ale_atari_env()
         if ale_env is not None:
             fallbacks = self._ale_fallbacks(ale_env)
             if method not in fallbacks:
@@ -108,7 +108,7 @@ class VecEnvInfoWrapper(VectorWrapper):
         if not hasattr(env, method):
             raise AttributeError(
                 f"Method '{method}' not found in vectorized environment. "
-                f"This may happen with ALE native vectorization which doesn't support per-env wrappers."
+                f"This may happen with ALE atari vectorization which doesn't support per-env wrappers."
             )
         return getattr(env, method)(*args, **kwargs)
 

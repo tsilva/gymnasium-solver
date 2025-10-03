@@ -50,6 +50,7 @@ def present_prefit_summary(config) -> None:
         "hidden_dims": _format_summary_value(getattr(config, "hidden_dims", None)),
         "activation": _format_summary_value(getattr(config, "activation", None)),
         "optimizer": _format_summary_value(getattr(config, "optimizer", None)),
+        "accelerator": _format_summary_value(getattr(config, "accelerator", None)),
         "seed": _format_summary_value(getattr(config, "seed", None)),
         "n_envs": _format_summary_value(getattr(config, "n_envs", None)),
         "n_steps": _format_summary_value(getattr(config, "n_steps", None)),

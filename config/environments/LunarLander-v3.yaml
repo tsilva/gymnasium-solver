@@ -37,6 +37,7 @@ spec: &spec
 _env: &env
   spec: *spec
   env_id: LunarLander-v3
+  accelerator: cpu
 
 # =====================
 # configs

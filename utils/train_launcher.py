@@ -359,6 +359,10 @@ def launch_training_from_args(args) -> None:
     if os.environ.get("WANDB_MODE") == "disabled":
         config.enable_wandb = False
 
+    # Resolve policy type early (auto-select CNN for image observations)
+    from utils.policy_factory import resolve_policy_type_for_config
+    resolve_policy_type_for_config(config)
+
     present_prefit_summary(config)
 
     # Prompt if user wants to start training

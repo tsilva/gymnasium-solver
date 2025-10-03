@@ -41,6 +41,7 @@ spec: &spec
 _env: &env
   spec: *spec
   env_id: CartPole-v1
+  accelerator: cpu
 
 # Reward-shaped env
 _env_rewardshaped: &env_rewardshaped

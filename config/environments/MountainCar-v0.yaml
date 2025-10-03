@@ -39,6 +39,7 @@ spec: &spec
 _env: &env
   spec: *spec
   env_id: MountainCar-v0
+  accelerator: cpu
 
 # Reward-shaped env
 _env_rewardshaped: &env_rewardshaped

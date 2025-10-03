@@ -112,7 +112,14 @@ def build_env(
         from gymnasium.wrappers.vector import RecordEpisodeStatistics as VectorRecordEpisodeStatistics
         from gym_wrappers.ale_vec_video_recorder import ALEVecVideoRecorder
 
-        env = make_vec(env_id, num_envs=n_envs, vectorization_mode=None, **env_kwargs)
+        # TODO: pass all frame_stack, grayscale_obs, resize_obs, frameskip, etc to make_vec
+        env = make_vec(
+            env_id, 
+            num_envs=n_envs, 
+            vectorization_mode=None, 
+            #**env_kwargs
+        )
+
         if seed is not None:
             env.reset(seed=seed)
 
@@ -136,27 +143,23 @@ def build_env(
         env._obs_type = obs_type
     else:
         def env_fn():
-            if _is_alepy_env:
-                env = _build_env_alepy(env_id, obs_type, render_mode, **env_kwargs)
-            elif _is_vizdoom_env:
-                env = _build_env_vizdoom(env_id, obs_type, render_mode, **env_kwargs)
-            elif _is_stable_retro_env:
-                env = _build_env_stable_retro(env_id, obs_type, render_mode, **env_kwargs)
-            elif _is_bandit_env:
-                env = _build_env_mab(env_id, obs_type, render_mode, **env_kwargs)
-            else:
-                env = _build_env_gym(env_id, obs_type, render_mode, **env_kwargs)
+            if _is_alepy_env: env = _build_env_alepy(env_id, obs_type, render_mode, **env_kwargs)
+            elif _is_vizdoom_env: env = _build_env_vizdoom(env_id, obs_type, render_mode, **env_kwargs)
+            elif _is_stable_retro_env: env = _build_env_stable_retro(env_id, obs_type, render_mode, **env_kwargs)
+            elif _is_bandit_env: env = _build_env_mab(env_id, obs_type, render_mode, **env_kwargs)
+            else: env = _build_env_gym(env_id, obs_type, render_mode, **env_kwargs)
 
             from gymnasium.wrappers import GrayscaleObservation, ResizeObservation, FrameStackObservation, FlattenObservation
 
             # Apply custom wrappers first (before frame stacking) so they operate on raw observations
             for wrapper in env_wrappers:
                 env = EnvWrapperRegistry.apply(env, wrapper)
-
+            # TODO: move this sinsie build_env_alepy?
             if _is_ale_rgb_env:
                 env = GrayscaleObservation(env, keep_dim=False)
                 env = ResizeObservation(env, shape=(84, 84))
                 env = FrameStackObservation(env, stack_size=4)
+            # TODO: move this inside vizdoom / retro?
             else:
                 if grayscale_obs:
                     env = GrayscaleObservation(env, keep_dim=False)
@@ -182,7 +185,7 @@ def build_env(
 
         use_async = vectorization_mode == "async"
         vec_env_cls = AsyncVectorEnv if use_async else SyncVectorEnv
-        vector_kwargs = {"context": "spawn"} if use_async else {}
+        vector_kwargs = {"context": "spawn"} if use_async else {} # TODO: is spawn still valid?
 
         if seed is not None:
             env_fns = [lambda i=i: (e := env_fn(), e.reset(seed=seed + i), e)[2] for i in range(n_envs)]

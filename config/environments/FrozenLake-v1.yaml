@@ -35,6 +35,7 @@ spec: &spec
 _env: &env
   spec: *spec
   env_id: FrozenLake-v1
+  accelerator: cpu
   env_kwargs:
     is_slippery: true
     map_name: "4x4"

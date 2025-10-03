@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 
 from utils.formatting import sanitize_name
 from utils.io import read_yaml, write_json
+from utils.validators import ensure_in_range, ensure_non_negative, ensure_positive
 
 
 @dataclass
@@ -189,35 +190,25 @@ class Config:
         if getattr(self, attr, None) is None:
             setattr(self, attr, default)
 
-    # TODO: extract to utils
     def _validate_positive(self, attr: str, allow_none: bool = True) -> None:
         """Validate that an attribute is positive."""
-        value = getattr(self, attr, None)
-        if value is None and allow_none:
-            return
-        if value is None or not (value > 0):
-            raise ValueError(f"{attr} must be a positive {'float/int' if allow_none else 'number'} when set.")
+        ensure_positive(getattr(self, attr, None), attr, allow_none=allow_none)
 
     def _validate_non_negative(self, attr: str, allow_none: bool = True) -> None:
         """Validate that an attribute is non-negative."""
-        value = getattr(self, attr, None)
-        if value is None and allow_none:
-            return
-        if value is None or not (value >= 0):
-            raise ValueError(f"{attr} must be a non-negative number when set.")
+        ensure_non_negative(getattr(self, attr, None), attr, allow_none=allow_none)
 
     def _validate_range(self, attr: str, min_val: float, max_val: float,
                        inclusive_min: bool = True, inclusive_max: bool = True) -> None:
         """Validate that an attribute is in a specific range."""
-        value = getattr(self, attr, None)
-        if value is None:
-            return
-        min_ok = (value >= min_val) if inclusive_min else (value > min_val)
-        max_ok = (value <= max_val) if inclusive_max else (value < max_val)
-        if not (min_ok and max_ok):
-            min_bracket = "[" if inclusive_min else "("
-            max_bracket = "]" if inclusive_max else ")"
-            raise ValueError(f"{attr} must be in {min_bracket}{min_val}, {max_val}{max_bracket} when set.")
+        ensure_in_range(
+            getattr(self, attr, None),
+            attr,
+            min_val,
+            max_val,
+            inclusive_min=inclusive_min,
+            inclusive_max=inclusive_max,
+        )
 
     def _validate_schedules(self) -> None:
         """Validate all hyperparameter schedule configurations.
@@ -287,7 +278,7 @@ class Config:
     early_stop_on_eval_threshold: Union[bool, float] = True
 
     # The accelerator to use for training (eg: simple environments are faster on CPU, image environments are faster on GPU)
-    accelerator: "Config.AcceleratorType" = AcceleratorType.cpu  # type: ignore[assignment]
+    accelerator: "Config.AcceleratorType" = AcceleratorType.auto  # type: ignore[assignment]
 
     # The number of devices to use for training (eg: GPU, CPU)
     devices: Optional[Union[int, str]] = None

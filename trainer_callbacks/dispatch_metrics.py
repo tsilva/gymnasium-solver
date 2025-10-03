@@ -29,9 +29,10 @@ class DispatchMetricsCallback(pl.Callback):
         rollout_collector = pl_module.get_rollout_collector(stage)
         rollout_metrics = rollout_collector.get_metrics()
 
+        # TODO: review this
         # Skip logging if no episodes have completed yet (prevents -inf for ep_rew_best)
-        if rollout_metrics.get("cnt/total_episodes", 0) == 0:
-            return
+        #if rollout_metrics.get("cnt/total_episodes", 0) == 0:
+        #    return
 
         # Calculate timing metrics
         time_elapsed = pl_module.timings.seconds_since("on_fit_start")

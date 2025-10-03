@@ -524,14 +524,23 @@ def build_ui(default_run_id: str = "@last"):
         with gr.Row():
             with gr.Column(scale=7):
                 frame_image = gr.Image(label=FRAME_LABEL_RAW, height=400, type="numpy", image_mode="RGB")
-                display_mode = gr.Radio(
-                    choices=[DISPLAY_RAW],
-                    value=DISPLAY_RAW,
-                    interactive=True,
-                    type="value",
-                    show_label=False,
-                    container=False,
-                )
+                with gr.Row():
+                    display_mode = gr.Radio(
+                        choices=[DISPLAY_RAW],
+                        value=DISPLAY_RAW,
+                        interactive=True,
+                        type="value",
+                        show_label=False,
+                        container=False,
+                    )
+                    zoom_mode = gr.Radio(
+                        choices=["Fit to container", "Fixed height"],
+                        value="Fixed height",
+                        interactive=True,
+                        type="value",
+                        label="Zoom",
+                        container=False,
+                    )
             with gr.Column(scale=5):
                 current_step_table = gr.Dataframe(
                     headers=["metric", "value"],
@@ -828,6 +837,13 @@ def build_ui(default_run_id: str = "@last"):
             inputs=[display_mode, frames_raw_state, frames_stack_state, steps_state],
             outputs=[frame_image, frame_slider, frames_state, index_state, playing_state, play_pause_btn, current_step_table],
         )
+
+        # Zoom mode handler
+        def _on_zoom_mode(mode: str):
+            height = None if mode == "Fit to container" else 400
+            return gr.update(height=height)
+
+        zoom_mode.change(_on_zoom_mode, inputs=[zoom_mode], outputs=[frame_image])
 
         def _sanitize_filename(s: str) -> str:
             """Sanitize string for use in filenames."""

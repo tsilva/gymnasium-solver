@@ -19,6 +19,38 @@ from .models import (
 )
 
 
+def resolve_policy_type_for_config(config):
+    """Auto-select CNN policy for configs with image observations.
+
+    Updates config.policy in-place if auto-selection occurs.
+    Returns the resolved policy type string.
+    """
+    policy_type = config.policy
+
+    # Check if this is an environment with RGB observations
+    is_atari = config.env_id.startswith("ALE/") or config.env_id.startswith("ALE-")
+    is_retro = config.env_id.startswith("Retro/") or config.env_id.startswith("Retro-")
+    is_vizdoom = config.env_id.startswith("VizDoom")
+    is_rgb_obs = getattr(config, "obs_type", None) == "rgb"
+
+    # Also check if render_mode is rgb_array which typically means image observations
+    render_mode = getattr(config, "render_mode", None)
+    has_rgb_render = render_mode == "rgb_array"
+
+    is_image_config = (is_atari or is_retro or is_vizdoom) and (is_rgb_obs or has_rgb_render)
+
+    if is_image_config:
+        # Auto-upgrade MLP policies to CNN variants for image observations
+        if policy_type == "mlp":
+            policy_type = "cnn"
+            config.policy = policy_type
+        elif policy_type == "mlp_actorcritic":
+            policy_type = "cnn_actorcritic"
+            config.policy = policy_type
+
+    return policy_type
+
+
 def build_policy(
     policy_type: str | type[nn.Module],
     *,

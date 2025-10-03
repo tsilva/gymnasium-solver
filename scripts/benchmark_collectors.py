@@ -40,7 +40,7 @@ if __name__ == "__main__":
         n_envs=cfg.n_envs,
         vectorization_mode=getattr(cfg, "vectorization_mode", "auto"),
         project_id=cfg.project_id,
-        spec=cfg.spec,
+        env_spec=cfg.spec,
         obs_type=cfg.obs_type,
         env_wrappers=cfg.env_wrappers,
         normalize_obs=cfg.normalize_obs,

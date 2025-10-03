@@ -35,7 +35,6 @@ def present_prefit_summary(config) -> None:
         "vectorization_mode": _format_summary_value(config.vectorization_mode),
         "frame_stack": _format_summary_value(getattr(config, "frame_stack", None)),
         "normalize_obs": _format_summary_value(getattr(config, "normalize_obs", None)),
-        "normalize_reward": _format_summary_value(getattr(config, "normalize_reward", None)),
         "grayscale_obs": _format_summary_value(getattr(config, "grayscale_obs", None)),
         "resize_obs": _format_summary_value(getattr(config, "resize_obs", None)),
         "spec/action_space": _format_summary_value(spec.get("action_space")),

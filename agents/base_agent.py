@@ -111,7 +111,7 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
                 "seed": self.config.seed + 1000,
                 "vectorization_mode": "sync",
                 "render_mode": "rgb_array",
-                "record_video": True,
+                "record_video": self.config.obs_type == "rgb", # TODO: softcode
                 "record_video_kwargs": {
                     "video_length": 100,
                 },
@@ -121,7 +121,7 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
                 "seed": self.config.seed + 2000,
                 "vectorization_mode": "sync",
                 "render_mode": "rgb_array",
-                "record_video": True,
+                "record_video": self.config.obs_type == "rgb", # TODO: softcode
                 "record_video_kwargs": {
                     "video_length": None,
                 },
@@ -130,8 +130,8 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
 
         # stable-retro doesn't support multiple emulator instances per process
         # Force async vectorization for val/test stages and disable video recording
-        from utils.environment import is_stable_retro_env_id
-        if is_stable_retro_env_id(self.config.env_id) and stage in ("val", "test"):
+        from utils.environment import _is_stable_retro_env_id
+        if _is_stable_retro_env_id(self.config.env_id) and stage in ("val", "test"):
             kwargs.setdefault("n_envs", 1)
             kwargs["vectorization_mode"] = "async"
             kwargs["record_video"] = False  # async mode doesn't support video recording

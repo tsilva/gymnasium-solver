@@ -93,11 +93,11 @@ def test_gymnasium_integration():
     """Test if our environment.py helper works with stable-retro."""
     print("\nTest 5: Testing gymnasium-solver integration...")
     try:
-        from utils.environment import is_stable_retro_env_id, build_env
+        from utils.environment import _is_stable_retro_env_id, build_env
 
         # Test ID detection
-        assert is_stable_retro_env_id("Retro/SuperMarioBros-Nes")
-        assert not is_stable_retro_env_id("CartPole-v1")
+        assert _is_stable_retro_env_id("Retro/SuperMarioBros-Nes")
+        assert not _is_stable_retro_env_id("CartPole-v1")
         print("✓ Retro env ID detection works")
 
         # Try to build an environment

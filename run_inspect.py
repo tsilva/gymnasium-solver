@@ -148,7 +148,6 @@ def run_episode(
         "env_wrappers": getattr(config, "env_wrappers", None),
         "frame_stack": getattr(config, "frame_stack", None),
         "normalize_obs": getattr(config, "normalize_obs", None),
-        "normalize_reward": getattr(config, "normalize_reward", None),
         "spec_id": env_spec_obj.id,
         "action_labels": action_labels,
     }

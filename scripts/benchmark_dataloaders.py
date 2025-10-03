@@ -67,7 +67,7 @@ def make_rollout_dataset(cfg: BenchmarkConfig):
         n_envs=exp_cfg.n_envs,
         vectorization_mode=exp_cfg.vectorization_mode,
         project_id=exp_cfg.project_id,
-        spec=exp_cfg.spec,
+        env_spec=exp_cfg.spec,
         obs_type=exp_cfg.obs_type,
         env_wrappers=exp_cfg.env_wrappers,
         normalize_obs=exp_cfg.normalize_obs,

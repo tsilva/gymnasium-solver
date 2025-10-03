@@ -105,9 +105,9 @@ class VecEnvInfoWrapper(VectorWrapper):
             return fallbacks[method](*args, **kwargs)
 
         # Try general fallbacks for common getter methods
-        general_fallbacks = self._general_fallbacks(env)
-        if method in general_fallbacks:
-            return general_fallbacks[method](*args, **kwargs)
+        #general_fallbacks = self._general_fallbacks(env)
+        #if method in general_fallbacks:
+       #     return general_fallbacks[method](*args, **kwargs)
 
         # Direct call fallback
         if not hasattr(env, method):

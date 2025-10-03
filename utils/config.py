@@ -13,6 +13,7 @@ from utils.validators import ensure_in_range, ensure_non_negative, ensure_positi
 
 @dataclass
 class Config:
+    # TODO: move all these enums to external file and reuse them across the codebase wherever these strings are used
     class PolicyType(str, Enum):
         mlp = "mlp"
         cnn = "cnn"
@@ -117,10 +118,11 @@ class Config:
     # - "atari": Use Atari native vectorization (only valid for Atari RGB environments)
     # - "sync": Synchronous vectorization (SyncVectorEnv)
     # - "async": Asynchronous vectorization with subprocesses (AsyncVectorEnv)
+    # TODO: use enum instead
     vectorization_mode: Optional[str] = "auto"
 
     # How many N last observations to stack (N=1 means no stacking, only current observation)
-    frame_stack: int = 1
+    frame_stack: int = None
 
     # Number of frames to skip between actions (ALE environments)
     # None means unset; will be filled with Atari defaults when vectorization_mode='atari'
@@ -128,9 +130,6 @@ class Config:
 
     # Whether to normalize observations using running mean and variance
     normalize_obs: bool = False
-
-    # Whether to normalize rewards using running mean and variance
-    normalize_reward: bool = False
 
     # Whether to convert observations to grayscale (if representing images)
     # None means unset; will be filled with Atari defaults when vectorization_mode='atari'
@@ -144,6 +143,7 @@ class Config:
     # The type of observations (vector, RGB, RAM, or objects)
     obs_type: "Config.ObsType" = ObsType.vector  # type: ignore[assignment]
 
+    # TODO: call this policy_type
     # Whether to use an MLP-based policy or actor-critic
     policy: "Config.PolicyType" = PolicyType.mlp  # type: ignore[assignment]
 
@@ -400,8 +400,24 @@ class Config:
         self._resolve_eval_warmup_epochs()
         self._resolve_schedules()
         self._resolve_schedule_defaults()
+        self._resolve_policy()
         self.validate()
         
+    # TODO: cleanup
+    def _resolve_policy(self) -> None:
+        is_mlp_policy = self.policy in [self.PolicyType.mlp, self.PolicyType.mlp_actorcritic]   
+        if is_mlp_policy and self.hidden_dims is None:
+            self.hidden_dims = [256, 256]
+
+        is_cnn_policy = self.policy in [self.PolicyType.cnn, self.PolicyType.cnn_actorcritic]
+        if is_cnn_policy and self.policy_kwargs is None:
+            self.policy_kwargs = {
+                "hidden_dims": [256, 256],
+                "channels": [32, 64, 64],
+                "kernel_sizes": [8, 4, 3],
+                "strides": [4, 2, 1],
+            }
+
     def _resolve_defaults(self) -> None:
         for f in self.__dataclass_fields__.values():
             value = getattr(self, f.name)
@@ -430,8 +446,8 @@ class Config:
             return
 
         # Only apply defaults for ALE RGB environments
-        from utils.environment import is_alepy_env_id
-        if not is_alepy_env_id(self.env_id):
+        from utils.environment import _is_alepy_env_id
+        if not _is_alepy_env_id(self.env_id):
             return
         if self.obs_type != Config.ObsType.rgb:
             return
@@ -543,7 +559,7 @@ class Config:
         return dict(
             env_id=self.env_id,
             project_id=self.project_id,
-            spec=self.spec,
+            env_spec=self.spec,
             n_envs=self.n_envs,
             seed=self.seed,
             max_episode_steps=self.max_episode_steps,
@@ -551,7 +567,6 @@ class Config:
             grayscale_obs=self.grayscale_obs,
             resize_obs=self.resize_obs,
             normalize_obs=self.normalize_obs,
-            normalize_reward=self.normalize_reward,
             frame_stack=self.frame_stack,
             obs_type=self.obs_type,
             render_mode=None,
@@ -616,8 +631,8 @@ class Config:
 
         # Validate that 'atari' is only used for Atari RGB environments
         if self.vectorization_mode == "atari":
-            from utils.environment import is_alepy_env_id
-            if not is_alepy_env_id(self.env_id):
+            from utils.environment import _is_alepy_env_id
+            if not _is_alepy_env_id(self.env_id):
                 raise ValueError(f"vectorization_mode='atari' is only valid for Atari environments (ALE/*), got env_id: {self.env_id}")
             if self.obs_type != Config.ObsType.rgb:
                 raise ValueError(f"vectorization_mode='atari' is only valid for RGB observations, got obs_type: {self.obs_type}")

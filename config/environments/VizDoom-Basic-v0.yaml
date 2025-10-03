@@ -37,7 +37,18 @@ spec: &spec
 _env: &env
   spec: *spec
   env_id: VizDoom-Basic-v0
+  # TODO: defaults are not being applied
+  obs_type: rgb
   render_mode: 'rgb_array'
+  policy_kwargs:
+    channels: [32, 64, 64]
+    kernel_sizes: [8, 4, 3]
+    strides: [4, 2, 1]
+  grayscale_obs: true
+  resize_obs: [84, 84]
+  frame_stack: 4
+  eval_freq_epochs: 1
+  eval_episodes: 1
 
 # =====================
 # configs

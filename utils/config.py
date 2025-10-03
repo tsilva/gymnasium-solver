@@ -148,7 +148,7 @@ class Config:
     policy: "Config.PolicyType" = PolicyType.mlp  # type: ignore[assignment]
 
     # The dimensions of the hidden layers in the MLP
-    hidden_dims: Union[int, Tuple[int, ...]] = (64, 64)
+    hidden_dims: Union[int, Tuple[int, ...]] = None
 
     # The activation function to use in the MLP
     activation: str = "relu"

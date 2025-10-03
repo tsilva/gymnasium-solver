@@ -111,7 +111,7 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
                 "seed": self.config.seed + 1000,
                 "vectorization_mode": "sync",
                 "render_mode": "rgb_array",
-                "record_video": self.config.obs_type == "rgb", # TODO: softcode
+                "record_video": False, #self.config.obs_type == "rgb", # TODO: softcode
                 "record_video_kwargs": {
                     "video_length": 100,
                 },
@@ -121,7 +121,7 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
                 "seed": self.config.seed + 2000,
                 "vectorization_mode": "sync",
                 "render_mode": "rgb_array",
-                "record_video": self.config.obs_type == "rgb", # TODO: softcode
+                "record_video": False, #self.config.obs_type == "rgb", # TODO: softcode
                 "record_video_kwargs": {
                     "video_length": None,
                 },

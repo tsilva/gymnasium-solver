@@ -140,6 +140,16 @@ objects_ppo: &objects_ppo
   policy_lr: 0.002
   n_steps: 256
 
+  # TODO: these are the ones that were in 7e7cc48b776b48b55083127ed951681acb053bd4
+  ent_coef: 0.005
+  policy_lr: 0.002
+  clip_range: 0.2
+  n_envs: 32
+  n_steps: 256
+  batch_size: 2048
+  hidden_dims: [256, 256]
+  eval_warmup_epochs: 200
+
 objects_deterministic_ppo:
   <<: *objects_ppo
   <<: *env_deterministic

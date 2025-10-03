@@ -111,6 +111,7 @@ class RolloutCollector():
 
         # Action histogram (discrete); grows dynamically as needed
         self._action_counts = None
+        self._supports_action_probs = None
 
         self.total_rollouts = 0
         self.total_steps = 0
@@ -437,7 +438,12 @@ class RolloutCollector():
             obs_t = torch.as_tensor(self.obs, device=self.device)
 
             # Perform policy step to determine actions, log probabilities, and value estimates
-            actions_t, logps_t, values_t = policy_act(self.policy_model, obs_t, deterministic=deterministic)
+            actions_t, logps_t, values_t, dist = policy_act(
+                self.policy_model,
+                obs_t,
+                deterministic=deterministic,
+                return_dist=True,
+            )
 
             # Extract action probabilities for visualization (if wrapper supports it)
             # Skip for AsyncVectorEnv since cross-process method calls don't work
@@ -447,14 +453,13 @@ class RolloutCollector():
             except (ImportError, AttributeError):
                 is_async = False
 
-            if not is_async:
+            if not is_async and self._supports_action_probs is not False and hasattr(dist, 'probs'):
                 try:
-                    dist, _ = self.policy_model(obs_t)
-                    if hasattr(dist, 'probs'):
-                        action_probs_np = dist.probs.detach().cpu().numpy()
-                        self.env.set_action_probs(action_probs_np)
+                    action_probs_np = dist.probs.detach().cpu().numpy()
+                    self.env.set_action_probs(action_probs_np)
+                    self._supports_action_probs = True
                 except (AttributeError, Exception):
-                    pass
+                    self._supports_action_probs = False
 
             # Perform environment step
             actions_np = actions_t.detach().cpu().numpy()

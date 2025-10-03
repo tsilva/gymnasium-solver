@@ -497,7 +497,19 @@ def build_ui(default_run_id: str = "@last"):
 
     labels, _, default_label = _checkpoint_choices_for_run(initial_run)
 
-    with gr.Blocks(theme=gr.themes.Base()) as demo:
+    with gr.Blocks(theme=gr.themes.Base(), css="""
+        .fit-container img {
+            max-height: calc(100vh - 400px) !important;
+            height: auto !important;
+            width: 100% !important;
+            object-fit: contain !important;
+        }
+        .fixed-height img {
+            height: 400px !important;
+            width: auto !important;
+            object-fit: contain !important;
+        }
+    """) as demo:
         gr.Markdown("""
         # Run Inspector
         Select a run and checkpoint to visualize an episode: frames, actions, rewards, values.
@@ -523,7 +535,7 @@ def build_ui(default_run_id: str = "@last"):
         # Display the current frame with a per-step stats table on the right
         with gr.Row():
             with gr.Column(scale=7):
-                frame_image = gr.Image(label=FRAME_LABEL_RAW, height=400, type="numpy", image_mode="RGB")
+                frame_image = gr.Image(label=FRAME_LABEL_RAW, height=None, type="numpy", image_mode="RGB", show_download_button=False, elem_classes=["fit-container"])
                 with gr.Row():
                     display_mode = gr.Radio(
                         choices=[DISPLAY_RAW],
@@ -534,8 +546,8 @@ def build_ui(default_run_id: str = "@last"):
                         container=False,
                     )
                     zoom_mode = gr.Radio(
-                        choices=["Fit to container", "Fixed height"],
-                        value="Fixed height",
+                        choices=["Original", "Zoomed"],
+                        value="Original",
                         interactive=True,
                         type="value",
                         label="Zoom",
@@ -839,11 +851,18 @@ def build_ui(default_run_id: str = "@last"):
         )
 
         # Zoom mode handler
-        def _on_zoom_mode(mode: str):
-            height = None if mode == "Fit to container" else 400
-            return gr.update(height=height)
+        def _on_zoom_mode(mode: str, current_frames: List[np.ndarray], idx: int):
+            # Get current image to preserve it during update
+            img = current_frames[int(idx)] if (isinstance(current_frames, list) and 0 <= int(idx) < len(current_frames)) else None
 
-        zoom_mode.change(_on_zoom_mode, inputs=[zoom_mode], outputs=[frame_image])
+            if mode == "Original":
+                # Apply CSS class for responsive scaling (original size)
+                return gr.update(value=img, height=None, elem_classes=["fit-container"])
+            else:
+                # Zoomed mode with CSS class (fixed height scaling)
+                return gr.update(value=img, height=400, elem_classes=["fixed-height"])
+
+        zoom_mode.change(_on_zoom_mode, inputs=[zoom_mode, frames_state, index_state], outputs=[frame_image])
 
         def _sanitize_filename(s: str) -> str:
             """Sanitize string for use in filenames."""

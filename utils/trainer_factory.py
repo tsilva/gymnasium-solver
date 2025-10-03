@@ -37,5 +37,6 @@ def build_trainer(
         num_sanity_val_steps=0,
         log_every_n_steps=log_every_n_steps,
         callbacks=callbacks,
-        precision="16-mixed"
+        # TODO: enable mixed precision training for CUDA
+        #precision="16-mixed"
     )

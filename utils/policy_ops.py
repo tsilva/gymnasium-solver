@@ -15,6 +15,7 @@ def policy_act(
     obs: Tensor,
     *,
     deterministic: bool = False,
+    return_dist: bool = False,
 ) -> Union[Tuple[Tensor, Tensor, Tensor], Tuple[Tensor, Tensor, Tensor, Distribution]]:
     """Compute action, log-prob, and value via forward(); zeros when value head absent."""
 
@@ -26,6 +27,8 @@ def policy_act(
         value_out = torch.zeros(actions.shape[0], dtype=torch.float32, device=actions.device)
     else:
         value_out = value.squeeze(-1)
+    if return_dist:
+        return actions, logprobs, value_out, dist
     return actions, logprobs, value_out
 
 @torch.inference_mode()

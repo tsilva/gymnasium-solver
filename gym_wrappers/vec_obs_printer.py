@@ -404,12 +404,15 @@ class VecObsBarPrinter(VectorWrapper):
             t_bar, _t_ratio, (t_lo_eff, t_hi_eff) = self._format_bar_scalar(steps, 0, total, width=self._bar_width)
             self._print_bar_line("timestep", f"{steps}/{total}", t_bar, t_lo_eff, t_hi_eff, label_w, value_w)
 
+        print("─" * (label_w + value_w + bar_w + 24))
+
         # Reward bar (scaled using spec reward range when available)
         reward_val = self._extract_env_value(rewards)
         if reward_val is not None:
             r_lo, r_hi = self._reward_range
             r_bar, _r_ratio, (r_lo_eff, r_hi_eff) = self._format_bar_scalar(reward_val, r_lo, r_hi, width=self._bar_width)
             self._print_bar_line("reward", f"{reward_val:+.4f}", r_bar, r_lo_eff, r_hi_eff, label_w, value_w)
+            print("─" * (label_w + value_w + bar_w + 24))
 
         # Action bars: show probabilities/values for each action
         action_idx = self._extract_action_index()
@@ -438,6 +441,8 @@ class VecObsBarPrinter(VectorWrapper):
                 action_label = self._action_labels.get(action_idx) if self._action_labels else None
                 val_str = f"{action_idx} {action_label}" if action_label else f"{action_idx}"
                 self._print_bar_line("action", val_str, a_bar, a_lo_eff, a_hi_eff, label_w, value_w)
+
+        print("─" * (label_w + value_w + bar_w + 24))
 
         for i in range(dim):
             label_suffix = labels[i] if i < len(labels) else None

@@ -2,6 +2,9 @@
 
 # NEXT
 
+/Users/tsilva/repos/tsilva/gymnasium-solver/.venv/lib/python3.12/site-packages/pytorch_lightning/trainer/connectors/data_connector.py:425: The 'train_dataloader' does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` to `num_workers=7` in the `DataLoader` to improve performance.
+
+
 TEST: Pong run_play / run_inspect works
 - BUG: vecobs not showing action labels for pong rgb
 TEST: vizdoom env works (with run_play and run_inspect)

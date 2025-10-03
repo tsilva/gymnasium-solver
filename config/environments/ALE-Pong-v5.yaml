@@ -1,8 +1,10 @@
 # ALE/Pong-v5 configurations with explicit base envs and PPO overlays
 
 # =====================
-# Environment Specification
+# environment specs
 # =====================
+
+# Base spec
 spec: &spec
   source: https://ale.farama.org/environments/pong/
   description: Control right paddle; score when ball passes opponent, lose when it passes you.
@@ -54,9 +56,18 @@ spec: &spec
     values: [0, 1, 2, 3]
     default: 0
 
-# =====================
-# Spec Anchors
-# =====================
+# RGB spec
+_spec_rgb: &spec_rgb
+  <<: *spec
+  observation_space:
+    default: rgb
+    variants:
+      rgb:
+        shape: [3, 210, 160]
+        dtype: uint8
+        note: RGB frames from ALE (channel-first format)
+
+# Objects spec
 _spec_objects: &spec_objects
   <<: *spec
   action_space:
@@ -83,28 +94,28 @@ _spec_objects: &spec_objects
           - {name: LastAction.RIGHT, range: [0.0, 1.0]}
           - {name: LastAction.LEFT, range: [0.0, 1.0]}
 
-_spec_rgb: &spec_rgb
-  <<: *spec
-  observation_space:
-    default: rgb
-    variants:
-      rgb:
-        shape: [3, 210, 160]
-        dtype: uint8
-        note: RGB frames from ALE (channel-first format)
-
 # =====================
-# Configuration Anchors
+# env variants
 # =====================
 
-# Shared environment id
+# Base env
 _env: &env
   env_id: ALE/Pong-v5
 
-# ==========================
-# Object observation variants
-# ==========================
-_obj_env: &obj_env
+# Deterministic env
+_env_deterministic: &env_deterministic
+  <<: *env
+  env_kwargs:
+    repeat_action_probability: 0.0
+  
+# RGB env
+_env_rgb: &env_rgb
+  <<: *env
+  spec: *spec_rgb
+  obs_type: "rgb"
+
+# Objects env
+_env_objects: &env_objects
   <<: *env
   spec: *spec_objects
   obs_type: "objects"
@@ -112,9 +123,12 @@ _obj_env: &obj_env
     - { id: PongV5_FeatureExtractor, action_ids: [0, 2, 3] }
     - { id: DiscreteActionSpaceRemapperWrapper, mapping: [0, 2, 3] }
 
-# Object-based observations with PPO - uses extracted game objects as features
+###########################
+# CONFIGS: obs_type = objects
+###########################
+
 objects_ppo: &objects_ppo
-  <<: *obj_env
+  <<: *env_objects
   algo_id: ppo
   description: "PPO with object-based observations using extracted game objects as features"
   n_epochs: 15
@@ -125,29 +139,20 @@ objects_ppo: &objects_ppo
   policy_lr: 0.002
   n_steps: 256
 
-# Object-based observations with PPO - deterministic version (no sticky actions)
 objects_deterministic_ppo:
   <<: *objects_ppo
+  <<: *env_deterministic
   description: "PPO with object-based observations - deterministic version (no sticky actions)"
-  env_kwargs:
-    repeat_action_probability: 0.0
   early_stop_on_train_threshold: 20.0  # Override env spec threshold (18) with custom value
-  eval_freq_epochs: null # Disable evaluation during training
+  eval_warmup_epochs: null
+  eval_freq_epochs: 5 # Disable evaluation during training
 
-# ==========================
-# RGB observation variants
-# ==========================
-_rgb_env: &rgb_env
-  <<: *env
-  spec: *spec_rgb
-  obs_type: "rgb"
+###########################
+# CONFIGS: obs_type = rgb
+###########################
 
-# RGB observations with PPO - uses ALE atari vectorization
-# ALE atari vec automatically applies: 4-frame stacking, grayscale, 84x84 resize
-# Observation shape: (4, 84, 84) - 4 grayscale frames stacked, NOT 3-channel RGB
-# Config frame_stack/grayscale_obs/resize_obs reflect these Atari defaults
 rgb_ppo: &rgb_ppo
-  <<: *rgb_env
+  <<: *env_rgb
   algo_id: ppo
   description: "PPO with 4-frame grayscale stacks (84x84) via ALE atari vectorization"
   max_env_steps: 10_000_000
@@ -160,10 +165,8 @@ rgb_ppo: &rgb_ppo
   eval_freq_epochs: 5
   eval_episodes: 10
 
-# RGB observations with PPO - deterministic version (no sticky actions)
-# Uses ALE atari vectorization for 10x faster training
 rgb_deterministic_ppo:
   <<: *rgb_ppo
+  <<: *env_deterministic
   description: "PPO with RGB observations - deterministic version with ALE atari vectorization"
-  env_kwargs:
-    repeat_action_probability: 0.0
+  eval_freq_epochs: 5 # Disable evaluation during training

@@ -11,18 +11,38 @@ from gymnasium.vector import AsyncVectorEnv, SyncVectorEnv
 
 gym.register_envs(ale_py)
 
-
 def benchmark(env_id: str, frames: int, num_envs: int, mode: str | None) -> float:
     if mode is None:
-        vec_env = gym.make_vec(env_id, num_envs, vectorization_mode=None,
-                               use_fire_reset=True, reward_clipping=True, repeat_action_probability=0.25)
+        vec_env = gym.make_vec(
+            env_id, 
+            num_envs, 
+            vectorization_mode=None,
+            use_fire_reset=True, 
+            reward_clipping=True,
+            repeat_action_probability=0.25
+        )
     else:
         def make_env():
-            env = gym.make(env_id, frameskip=1, repeat_action_probability=0.25)
-            env = gym.wrappers.AtariPreprocessing(env, noop_max=30, frame_skip=4, screen_size=84,
-                                                   terminal_on_life_loss=False, grayscale_obs=True,
-                                                   grayscale_newaxis=False, scale_obs=False)
-            return gym.wrappers.FrameStackObservation(env, stack_size=4, padding_type="zero")
+            env = gym.make(
+                env_id, 
+                frameskip=1, 
+                repeat_action_probability=0.25
+            )
+            env = gym.wrappers.AtariPreprocessing(
+                env, 
+                noop_max=30, 
+                frame_skip=4, 
+                screen_size=84,
+                terminal_on_life_loss=False, 
+                grayscale_obs=True,
+                grayscale_newaxis=False, 
+                scale_obs=False
+            )
+            return gym.wrappers.FrameStackObservation(
+                env, 
+                stack_size=4, 
+                padding_type="zero"
+            )
         vec_env = (AsyncVectorEnv if mode == "async" else SyncVectorEnv)([make_env for _ in range(num_envs)])
 
     try:

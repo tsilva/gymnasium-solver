@@ -158,13 +158,14 @@ rgb_ppo: &rgb_ppo
   description: "PPO with 4-frame grayscale stacks (84x84) via ALE atari vectorization"
   max_env_steps: 10_000_000
   n_epochs: 15
-  ent_coef: {start: 0.02, end: 0.001}  # linear decay from 0.02 to 0.001 over full training
+  ent_coef: 0.02
   policy_lr: 0.0025
   clip_range: 0.1
-  n_steps: 128
-  eval_warmup_epochs: 200
-  eval_freq_epochs: 5
+  n_steps: 512
+  #eval_warmup_epochs: 200
+  eval_freq_epochs: 2
   eval_episodes: 10
+  batch_size: 0.25
 
 rgb_deterministic_ppo:
   <<: *rgb_ppo

@@ -36,5 +36,6 @@ def build_trainer(
         limit_val_batches=limit_val_batches,
         num_sanity_val_steps=0,
         log_every_n_steps=log_every_n_steps,
-        callbacks=callbacks
+        callbacks=callbacks,
+        precision="16-mixed"
     )

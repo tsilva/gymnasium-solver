@@ -31,22 +31,27 @@ spec: &spec
 
 
 # =====================
-# Configuration Anchors
+# env variants
 # =====================
 
+# Base env
 _env: &env
   spec: *spec
   env_id: VizDoom-DefendTheLine-v0
   render_mode: 'rgb_array'
-  eval_freq_epochs: 1
-  eval_episodes: 1
-  max_env_steps: 3e6
-  n_steps: 128
-  n_epochs: 4
+
+# =====================
+# configs
+# =====================
 
 ppo:
   <<: *env
   algo_id: ppo
   description: "PPO on VizDoom DefendTheLine - standard configuration for line defense task"
+  eval_freq_epochs: 1
+  eval_episodes: 1
+  max_env_steps: 3e6
+  n_steps: 128
+  n_epochs: 4
   clip_range: 0.1
   policy_lr: 2.5e-4

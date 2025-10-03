@@ -125,7 +125,12 @@ def run_episode(
     act_labels_raw = env.get_action_labels()
     action_labels: List[str] | None = None
     if act_labels_raw is not None:
-        action_labels = [str(x) for x in act_labels_raw]
+        if isinstance(act_labels_raw, dict):
+            # Convert dict {0: 'NOOP', 1: 'RIGHT', ...} to list ['NOOP', 'RIGHT', ...]
+            max_idx = max(act_labels_raw.keys()) if act_labels_raw else -1
+            action_labels = [str(act_labels_raw.get(i, i)) for i in range(max_idx + 1)]
+        else:
+            action_labels = [str(x) for x in act_labels_raw]
 
     # Collect environment spec for summary tabs (VecInfoWrapper exposes safe helpers)
     env_spec_obj = env.get_spec()
@@ -518,13 +523,15 @@ def build_ui(default_run_id: str = "@last"):
         # Display the current frame with a per-step stats table on the right
         with gr.Row():
             with gr.Column(scale=7):
-                display_mode = gr.Dropdown(
-                    label="Display",
+                frame_image = gr.Image(label=FRAME_LABEL_RAW, height=400, type="numpy", image_mode="RGB")
+                display_mode = gr.Radio(
                     choices=[DISPLAY_RAW],
                     value=DISPLAY_RAW,
                     interactive=True,
+                    type="value",
+                    show_label=False,
+                    container=False,
                 )
-                frame_image = gr.Image(label=FRAME_LABEL_RAW, height=400, type="numpy", image_mode="RGB")
             with gr.Column(scale=5):
                 current_step_table = gr.Dataframe(
                     headers=["metric", "value"],

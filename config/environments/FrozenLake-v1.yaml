@@ -28,10 +28,12 @@ spec: &spec
     threshold_solved: 0.78
 
 # =====================
-# Configuration Anchors
+# env variants
 # =====================
 
+# Base env
 _env: &env
+  spec: *spec
   env_id: FrozenLake-v1
   env_kwargs:
     is_slippery: true
@@ -39,24 +41,29 @@ _env: &env
   env_wrappers:
     - id: DiscreteEncoder
       encoding: array
+
+# Deterministic env
+_env_deterministic: &env_deterministic
+  <<: *env
+  env_kwargs:
+    is_slippery: false
+    map_name: "4x4"
+
+# =====================
+# configs
+# =====================
+
+ppo: &ppo
+  <<: *env
+  algo_id: ppo
+  description: "PPO on FrozenLake - standard configuration for grid navigation task"
   eval_episodes: 10
   eval_freq_epochs: 10
   n_steps: 512
   hidden_dims: [64]
-
-# PPO on FrozenLake - standard configuration for grid navigation task
-_ppo: &ppo
-  <<: *env
-  algo_id: ppo
-  description: "PPO on FrozenLake - standard configuration for grid navigation task"
   policy_lr: 9e-3
 
-ppo:
-  <<: *ppo
-
-# PPO on FrozenLake deterministic - no slippery ice, easier navigation
 ppo_deterministic:
   <<: *ppo
+  <<: *env_deterministic
   description: "PPO on FrozenLake deterministic - no slippery ice, easier navigation"
-  env_kwargs:
-    is_slippery: false

@@ -100,6 +100,7 @@ _spec_objects: &spec_objects
 
 # Base env
 _env: &env
+  spec: *spec
   env_id: ALE/Pong-v5
 
 # Deterministic env

@@ -30,9 +30,10 @@ spec: &spec
     range: [-100, 2000]
 
 # =====================
-# Configuration Anchors
+# env variants
 # =====================
 
+# Base env
 _env: &env
   spec: *spec
   env_id: VizDoom-DefendTheCenter-v0
@@ -40,16 +41,20 @@ _env: &env
   policy: 'cnn_actorcritic'
   env_wrappers:
     - { id: VizDoom_RewardShaper, noop_penalty: 0.01, move_reward: 0.004, turn_reward: 0.004 }
-  eval_freq_epochs: 10
-  eval_episodes: 1
-  max_env_steps: 5e6
-  n_steps: 256
-  n_epochs: 4
+
+# =====================
+# configs
+# =====================
 
 ppo:
   <<: *env
   algo_id: ppo
   description: "PPO on VizDoom DefendTheCenter - standard configuration for center defense task"
+  eval_freq_epochs: 10
+  eval_episodes: 1
+  max_env_steps: 5e6
+  n_steps: 256
+  n_epochs: 4
   ent_coef: 0.01
   clip_range: {start: 0.2, end: 0.0}
   policy_lr: {start: 0.0003, end: 0.0}

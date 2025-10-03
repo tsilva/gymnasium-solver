@@ -30,20 +30,25 @@ spec: &spec
     threshold_solved: 200
 
 # =====================
-# Configuration Anchors
+# env variants
 # =====================
 
+# Base env
 _env: &env
+  spec: *spec
   env_id: LunarLander-v3
-  eval_episodes: 10
-  hidden_dims: [128, 128]
 
-# PPO on LunarLander - standard configuration for lunar landing task
+# =====================
+# configs
+# =====================
+
 ppo:
   <<: *env
   algo_id: ppo
   description: "PPO on LunarLander - standard configuration for lunar landing task"
   max_env_steps: 5000004
+  eval_episodes: 10
+  hidden_dims: [128, 128]
   n_steps: 512
   gae_lambda: 0.98
   gamma: 0.999

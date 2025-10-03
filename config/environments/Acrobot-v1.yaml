@@ -35,20 +35,25 @@ spec: &spec
 
 
 # =====================
-# Configuration Anchors
+# env variants
 # =====================
 
+# Base env
 _env: &env
+  spec: *spec
   env_id: Acrobot-v1
-  max_env_steps: 1e6
-  eval_freq_epochs: 10
-  eval_episodes: 10
 
-# Standard PPO on Acrobot - baseline configuration for acrobot swing-up task
+# =====================
+# configs
+# =====================
+
 ppo:
   <<: *env
   algo_id: ppo
   description: "Standard PPO on Acrobot - baseline configuration for acrobot swing-up task"
+  max_env_steps: 1e6
+  eval_freq_epochs: 10
+  eval_episodes: 10
   n_epochs: 4
   n_steps: 256
   gae_lambda: 0.94

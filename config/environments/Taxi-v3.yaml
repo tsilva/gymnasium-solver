@@ -29,24 +29,29 @@ spec: &spec
 
 
 # =====================
-# Configuration Anchors
+# env variants
 # =====================
 
+# Base env
 _env: &env
+  spec: *spec
   env_id: Taxi-v3
-  ent_coef: 0.01
-  eval_freq_epochs: 10
-  eval_episodes: 10
   env_wrappers:
     - id: DiscreteEncoder
       encoding: array
 
-# PPO on Taxi - standard configuration for taxi navigation task
+# =====================
+# configs
+# =====================
+
 ppo:
   <<: *env
   algo_id: ppo
   description: "PPO on Taxi - standard configuration for taxi navigation task"
   max_env_steps: 10e6
+  ent_coef: 0.01
+  eval_freq_epochs: 10
+  eval_episodes: 10
   n_steps: 1024
   n_epochs: 20
   policy_lr: 1e-2

@@ -58,37 +58,49 @@ spec: &spec
 
 
 # =====================
-# Spec Anchors
+# environment specs
 # =====================
+
+# Objects spec
 _spec_objects: &spec_objects
   <<: *spec
 
 # =====================
-# Configuration Anchors
+# env variants
 # =====================
 
+# Base env
 _env: &env
+  spec: *spec
   env_id: ALE/Breakout-v5
 
-_obj_env: &obj_env
+# Objects env
+_env_objects: &env_objects
   <<: *env
   spec: *spec_objects
   obs_type: "objects"
+  env_wrappers:
+    - { id: BreakoutV5_FeatureExtractor }
+
+# Deterministic env
+_env_deterministic: &env_deterministic
+  <<: *env
+  env_kwargs:
+    repeat_action_probability: 0.0
+
+# =====================
+# configs
+# =====================
+
+objects_ppo: &objects_ppo
+  <<: *env_objects
+  algo_id: ppo
+  description: "PPO using OCAtari object features for Breakout"
+  max_env_steps: 1.2e6
   eval_warmup_epochs: 125
   eval_freq_epochs: 10
   eval_episodes: 15
   n_steps: 256
-  env_wrappers:
-    - { id: BreakoutV5_FeatureExtractor }
-
-# =====================
-# Public variants
-# =====================
-objects_ppo: &objects_ppo
-  <<: *obj_env
-  algo_id: ppo
-  description: "PPO using OCAtari object features for Breakout"
-  max_env_steps: 1.2e6
   n_epochs: 20
   policy_lr: 1e-2
   clip_range: 0.15
@@ -96,6 +108,5 @@ objects_ppo: &objects_ppo
 
 objects_deterministic_ppo:
   <<: *objects_ppo
+  <<: *env_deterministic
   description: "PPO object features without sticky actions"
-  env_kwargs:
-    repeat_action_probability: 0.0

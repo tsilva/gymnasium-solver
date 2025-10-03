@@ -246,6 +246,7 @@ opt/value/explained_var:
   # No hard bounds enforced here.
 
 opt/policy/entropy:
+  show_in_table: true
   description: "Policy entropy measuring exploration vs exploitation trade-off"
   precision: 4
   min: 0.0

@@ -2,18 +2,17 @@
 
 # NEXT
 
-- TODO: not sure sys fps is accruate
-- TODO: add max episode steps support (cartpole, atari, vizdoom, nes)
-- BUG: I think last eval is running after upload...
-- TODO: ensure pong eval is using native, otherwise it may mismatch
-- TODO: ensure frameskip for vizdoom and nes
+- BUG: rgb env not working
+
+- FEAT: add max episode steps support (cartpole, atari, vizdoom, nes)
+- TEST: is last eval in uploaded zip file
+- TEST: ensure evaluation is ran exactly same way as train (eg: alevecenv)
+- TEST: ensure frameskip+max is being applied to vizdoom and retro
 - TODO: make key capture not require enter, allow h to show all shortcuts
-TEST: Pong run_play / run_inspect works
 - BUG: vecobs not showing action labels for pong rgb
-TEST: vizdoom env works (with run_play and run_inspect)
-TEST: super mario env works (with run_play and run_inspect)
-TEST: smoke tests pass
-- BUG: action labels not appearing in run inspect
+- TEST: vizdoom env works (with run_play and run_inspect)
+- TEST: super mario env works (with run_play and run_inspect)
+- TEST: smoke tests pass
 - FEAT: speed up eval as much as possible (async mode with few changes)
 - TODO: trace hyperparam tuning process and adjust
 - TEST: logged to correct projects

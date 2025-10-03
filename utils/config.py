@@ -1,5 +1,6 @@
 """Configuration loading for environment YAML and legacy hyperparams."""
 
+import logging
 import os
 from dataclasses import MISSING, asdict, dataclass, field
 from enum import Enum
@@ -9,6 +10,8 @@ from typing import Any, Dict, Optional, Tuple, Union
 from utils.formatting import sanitize_name
 from utils.io import read_yaml, write_json
 from utils.validators import ensure_in_range, ensure_non_negative, ensure_positive
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -189,7 +192,7 @@ class Config:
         """Set a schedule attribute to default if it's None."""
         if getattr(self, attr, None) is None:
             setattr(self, attr, default)
-
+    
     def _validate_positive(self, attr: str, allow_none: bool = True) -> None:
         """Validate that an attribute is positive."""
         ensure_positive(getattr(self, attr, None), attr, allow_none=allow_none)
@@ -614,13 +617,14 @@ class Config:
         self._validate_positive("eval_episodes")
         self._validate_positive("reward_threshold")
 
-        # Validate max_env_steps is divisible by n_envs for clean conversion
+        # Validate and auto-round max_env_steps to be divisible by n_envs for clean conversion
         if self.max_env_steps is not None and self.max_env_steps % self.n_envs != 0:
-            raise ValueError(
-                f"max_env_steps ({self.max_env_steps}) must be divisible by n_envs ({self.n_envs}) "
-                f"for clean conversion to vec_steps. Adjust to {(self.max_env_steps // self.n_envs + 1) * self.n_envs} "
-                f"or {(self.max_env_steps // self.n_envs) * self.n_envs}."
+            rounded = round(self.max_env_steps / self.n_envs) * self.n_envs
+            logger.warning(
+                f"max_env_steps ({self.max_env_steps}) not divisible by n_envs ({self.n_envs}). "
+                f"Auto-rounding to {rounded}."
             )
+            self.max_env_steps = rounded
 
         if self.devices is not None and not (isinstance(self.devices, int) or self.devices == "auto"):
             raise ValueError("devices may be an int, 'auto', or None.")

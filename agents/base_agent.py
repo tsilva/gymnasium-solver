@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
@@ -16,6 +16,9 @@ from utils.metrics_recorder import MetricsRecorder
 from utils.rollouts import RolloutCollector, RolloutTrajectory
 from utils.run import Run
 from utils.timings_tracker import TimingsTracker
+
+if TYPE_CHECKING:
+    from loggers.metrics_table_logger import MetricsTableLogger
 
 STAGES = ["train", "val", "test"]
 
@@ -54,6 +57,7 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         self._fit_elapsed_seconds = 0.0
         self._final_stop_reason = ""
         self._early_stop_reason = ""
+        self._print_metrics_logger: Optional["MetricsTableLogger"] = None
 
         # Initialize schedulable hyperparameters (mutable during training)
         self.policy_lr = config.policy_lr
@@ -169,6 +173,14 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
             }
         )
 
+    def attach_print_metrics_logger(self, logger: "MetricsTableLogger") -> None:
+        self._print_metrics_logger = logger
+
+    def _set_stage_display(self, stage: str) -> None:
+        if self._print_metrics_logger is None:
+            return
+        self._print_metrics_logger.set_stage(stage)
+
     def get_rollout_collector(self, stage: str):
         return self._rollout_collectors[stage]
 
@@ -210,6 +222,7 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         )
         return self._train_dataloader
     def on_train_epoch_start(self):
+        self._set_stage_display("train")
         # Start epoch timer
         train_collector = self.get_rollout_collector("train")
         train_metrics = train_collector.get_metrics()
@@ -295,6 +308,7 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         return build_dummy_loader()
 
     def on_validation_epoch_start(self):
+        self._set_stage_display("val")
         val_collector = self.get_rollout_collector("val")
         val_metrics = val_collector.get_metrics()
         self.timings.start("on_validation_epoch_start", values=val_metrics)
@@ -337,15 +351,16 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         # Record final evaluation video and save associated metrics JSON next to it
         test_env = self.get_env("test")
         video_path = self.run.checkpoints_dir / "final.mp4"
-        with test_env.recorder(str(video_path), record_video=True):
-            test_collector = self.get_rollout_collector("test")
-            final_metrics = test_collector.evaluate_episodes(
-                n_episodes=1,
-                deterministic=self.config.eval_deterministic,
-            )
-            json_path = video_path.with_suffix(".json")
-            from utils.metrics_serialization import prepare_metrics_for_json
-            write_json(json_path, prepare_metrics_for_json(final_metrics))
+        # TODO: restore recording
+        #with test_env.recorder(str(video_path), record_video=True):
+        #    test_collector = self.get_rollout_collector("test")
+        #    final_metrics = test_collector.evaluate_episodes(
+        #        n_episodes=1,
+        #        deterministic=self.config.eval_deterministic,
+        #    )
+        #     json_path = video_path.with_suffix(".json")
+        #    from utils.metrics_serialization import prepare_metrics_for_json
+        #     write_json(json_path, prepare_metrics_for_json(final_metrics))
     
     def learn(self):
         from datetime import datetime
@@ -394,7 +409,7 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
 
         # Train the agent
         trainer.fit(self)
-    
+
 
     def _backpropagate_and_step(self, losses):
         # TODO: create method that encapsulates this logic

@@ -26,7 +26,7 @@ def build_trainer(
     return pl.Trainer(
         logger=logger,
         max_epochs=config.max_epochs if config.max_epochs is not None else -1,
-        enable_progress_bar=False,
+        enable_progress_bar=True,
         enable_checkpointing=False,
         accelerator=config.accelerator,
         devices=config.devices,
@@ -37,6 +37,5 @@ def build_trainer(
         num_sanity_val_steps=0,
         log_every_n_steps=log_every_n_steps,
         callbacks=callbacks,
-        # TODO: enable mixed precision training for CUDA
         #precision="16-mixed"
     )

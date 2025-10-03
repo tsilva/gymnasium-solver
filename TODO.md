@@ -2,8 +2,9 @@
 
 # NEXT
 
+- FEAT: train from previous run, use that to do multiple runs until convergence (new run loads param); should we restore optimizer? confirm new run starts with same performance, check if it evolves better with same or dfiferent optimizer
+- CHECK: should we reset optimizer when we use another learning rate
 - BUG: rgb env not working
-
 - FEAT: add max episode steps support (cartpole, atari, vizdoom, nes)
 - TEST: is last eval in uploaded zip file
 - TEST: ensure evaluation is ran exactly same way as train (eg: alevecenv)

@@ -41,34 +41,30 @@ spec: &spec
 
 _env: &env
   env_id: Retro/SuperMarioBros-Nes
+  render_mode: 'rgb_array'
   env_kwargs:
     state: "Level1-1"
-  policy: 'cnn_actorcritic'
-  policy_kwargs:
-    channels: [32, 64, 64]
-    kernel_sizes: [8, 4, 3]
-    strides: [4, 2, 1]
-  grayscale_obs: true
-  resize_obs: true
-  frame_stack: 4
-  accelerator: 'gpu'
-  devices: 'auto'
   eval_freq_epochs: 5
-  eval_episodes: 3
+  eval_episodes: 1
+  max_episode_steps: 10000
   max_env_steps: 3e6
   n_steps: 256
-  batch_size: 1024
+  # RGB preprocessing for CNN policy
+  policy: cnn_actorcritic
+  grayscale_obs: true
+  resize_obs: [84, 84]
+  frame_stack: 4
+  # Retro library only allows one emulator instance per process
+  n_envs: 2
+  vectorization_mode: async
 
-_ppo: &ppo
+# PPO on SuperMarioBros - standard configuration for Mario platformer game
+ppo:
   <<: *env
   algo_id: ppo
+  description: "PPO on SuperMarioBros - standard configuration for Mario platformer game"
   n_epochs: 3
   clip_range: 0.1
   policy_lr: 1e-4
   eval_freq_epochs: 20
   eval_episodes: 5
-
-# PPO on SuperMarioBros - standard configuration for Mario platformer game
-ppo:
-  <<: *ppo
-  description: "PPO on SuperMarioBros - standard configuration for Mario platformer game"

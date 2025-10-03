@@ -76,6 +76,11 @@ class VecEnvInfoWrapper(VectorWrapper):
         env = self.env
         while env is not None:
             if isinstance(env, AsyncVectorEnv):
+                # recorder() cannot work with AsyncVectorEnv because it requires
+                # wrapping individual envs in worker processes. Return no-op context manager.
+                if method == "recorder":
+                    from contextlib import nullcontext
+                    return nullcontext()
                 results = env.call(method, *args, **kwargs)
                 return results[0] if isinstance(results, tuple) else results
             elif isinstance(env, SyncVectorEnv):

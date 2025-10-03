@@ -46,6 +46,7 @@ class Config:
         advantages = "advantages"
 
     class ObsType(str, Enum):
+        vector = "vector"
         rgb = "rgb"
         ram = "ram"
         objects = "objects"
@@ -56,10 +57,10 @@ class Config:
         sgd = "sgd"
 
     # The id of this configuration (optional; defaults inferred by loaders)
-    project_id: str = ""
+    project_id: str = "" # TODO: make these mandatory
 
     # The id of the environment to train on
-    env_id: str = ""
+    env_id: str = ""  
 
     # Description of this configuration variant
     description: str = ""
@@ -74,7 +75,7 @@ class Config:
     # Size of each batch of data to use for each gradient update
     # (algorithm-specific defaults live in algo config classes)
     # When set to a float in (0, 1], it is interpreted as a fraction of the rollout size
-    batch_size: [Union[int, float]] = 0.25
+    batch_size: [Union[int, float]] = None
 
     # The number of epochs to train on the same rollout data
     # (algorithm-specific defaults live in algo config classes)
@@ -139,8 +140,8 @@ class Config:
     # Can be bool (True defaults to (84, 84)) or tuple
     resize_obs: Optional[Union[bool, Tuple[int, int]]] = None
 
-    # Whether the observations are RGB, RAM, or objects
-    obs_type: "Config.ObsType" = ObsType.rgb  # type: ignore[assignment]
+    # The type of observations (vector, RGB, RAM, or objects)
+    obs_type: "Config.ObsType" = ObsType.vector  # type: ignore[assignment]
 
     # Whether to use an MLP-based policy or actor-critic
     policy: "Config.PolicyType" = PolicyType.mlp  # type: ignore[assignment]
@@ -159,31 +160,19 @@ class Config:
     policy_lr: Optional[Union[float, Dict[str, Any]]] = None
 
     # Optimizer to use for policy updates
-    optimizer: "Config.OptimizerType" = OptimizerType.adamw  # type: ignore[assignment]
+    optimizer: "Config.OptimizerType" = OptimizerType.adam  # type: ignore[assignment]
 
     # The maximum gradient norm for the policy
     max_grad_norm: Optional[float] = None
     
     # The discount factor for the rewards (algo defaults in subclasses)
-    # NOTE: effective horizon is 1 / (1 - gamma), 
+    # NOTE: effective horizon is 1 / (1 - gamma),
     # consider frameskips (eg: in Pong-v4, frameskip=4, so with gamma=0.99, effective horizon is 1 / (1 - 0.99) * 4 = 100 * 4 = 400)
     gamma: Optional[float] = None
-
-    # The lambda parameter for the GAE (algo defaults in subclasses)
-    gae_lambda: Optional[float] = None
 
     # The entropy coefficient for the policy (algo defaults in subclasses)
     # Can be a float or a schedule dict: {start: float, end: float, from: float, to: float, schedule: str}
     ent_coef: Optional[Union[float, Dict[str, Any]]] = None
-
-    # The value function coefficient for the policy (algo defaults in subclasses)
-    # Can be a float or a schedule dict: {start: float, end: float, from: float, to: float, schedule: str}
-    vf_coef: Optional[Union[float, Dict[str, Any]]] = None
-
-
-    # The clip range for the policy (algo defaults in subclasses)
-    # Can be a float or a schedule dict: {start: float, end: float, from: float, to: float, schedule: str}
-    clip_range: Optional[Union[float, Dict[str, Any]]] = None
 
     def _set_schedule_attrs(self, param: str, schedule_type: str, start_value: float,
                            end_value: float, from_pos: float, to_pos: float) -> None:
@@ -200,6 +189,7 @@ class Config:
         if getattr(self, attr, None) is None:
             setattr(self, attr, default)
 
+    # TODO: extract to utils
     def _validate_positive(self, attr: str, allow_none: bool = True) -> None:
         """Validate that an attribute is positive."""
         value = getattr(self, attr, None)
@@ -269,16 +259,7 @@ class Config:
     # (none, baseline, or rollout)
     normalize_returns: Optional["Config.NormalizeReturnsType"] = None
 
-    # How to calculate rollout advantages (eg: GAE, Baseline Subtraction)
-    # (none, gae, or baseline)
-    advantages_type: Optional["Config.AdvantagesType"] = None
-
-    # Whether to normalize the advantages
-    # (none, rollout, or batch)
-    normalize_advantages: Optional["Config.AdvantageNormType"] = None
-
-    # How to calculate the policy targets for the REINFORCE algorithm
-    # (algo defaults in subclass)
+    # How to calculate the policy targets (algo defaults in subclasses)
     policy_targets: Optional["Config.PolicyTargetsType"] = None  # type: ignore[assignment]
 
     # How many epochs to wait before starting to evaluate
@@ -481,6 +462,14 @@ class Config:
             except: pass
 
     def _resolve_batch_size(self) -> None:
+        # Set default batch size based on policy type if not specified
+        if self.batch_size is None:
+            policy_str = self.policy.value if hasattr(self.policy, 'value') else str(self.policy)
+            if 'cnn' in policy_str:
+                self.batch_size = 256
+            else:  # mlp policies
+                self.batch_size = 64
+
         batch_size = self.batch_size
         if batch_size > 1: return
         rollout_size = self.n_envs * self.n_steps
@@ -505,8 +494,8 @@ class Config:
         self.eval_warmup_epochs = int(total_epochs * warmup)
 
     def _resolve_schedules(self) -> None:
-        # Schedulable parameters that support dict syntax
-        schedulable_params = {'policy_lr', 'ent_coef', 'vf_coef', 'clip_range'}
+        # Schedulable parameters that support dict syntax (base params only)
+        schedulable_params = {'policy_lr', 'ent_coef'}
 
         # Iterate over attribute names to avoid mutating during iteration
         for key in list(vars(self).keys()):
@@ -582,14 +571,19 @@ class Config:
         )
 
     def rollout_collector_hyperparams(self) -> Dict[str, Any]:
-        return {
+        result = {
             'gamma': self.gamma,
-            'gae_lambda': self.gae_lambda,
             'normalize_returns': self.normalize_returns == "rollout",
             'returns_type': (self.returns_type.value if hasattr(self.returns_type, 'value') else self.returns_type),
-            'advantages_type': (self.advantages_type.value if hasattr(self.advantages_type, 'value') else self.advantages_type),
-            'normalize_advantages': self.normalize_advantages == "rollout",
         }
+        # Add algo-specific params if present
+        if hasattr(self, 'gae_lambda'):
+            result['gae_lambda'] = self.gae_lambda
+        if hasattr(self, 'advantages_type'):
+            result['advantages_type'] = (self.advantages_type.value if hasattr(self.advantages_type, 'value') else self.advantages_type)
+        if hasattr(self, 'normalize_advantages'):
+            result['normalize_advantages'] = self.normalize_advantages == "rollout"
+        return result
     
     def save_to_json(self, path: str) -> None:
         """Save configuration to a JSON file."""
@@ -602,7 +596,6 @@ class Config:
         self._validate_positive("seed", allow_none=False)
         self._validate_positive("n_envs", allow_none=False)
         self._validate_positive("policy_lr")
-        self._validate_positive("target_kl")
         self._validate_non_negative("ent_coef")
         self._validate_positive("n_epochs")
         self._validate_positive("n_steps")
@@ -610,8 +603,6 @@ class Config:
         self._validate_positive("max_env_steps")
         self._validate_positive("frameskip")
         self._validate_range("gamma", 0, 1)
-        self._validate_range("gae_lambda", 0, 1)
-        self._validate_range("clip_range", 0, 1, inclusive_min=False, inclusive_max=False)
         self._validate_positive("eval_freq_epochs")
         self._validate_non_negative("eval_warmup_epochs", allow_none=False)
         self._validate_positive("eval_episodes")
@@ -655,8 +646,6 @@ class Config:
 
         if self.policy_targets is not None and self.policy_targets not in {Config.PolicyTargetsType.returns, Config.PolicyTargetsType.advantages}:  # type: ignore[operator]
             raise ValueError("policy_targets must be 'returns' or 'advantages'.")
-        if self.normalize_advantages is not None and self.normalize_advantages not in {Config.AdvantageNormType.rollout, Config.AdvantageNormType.batch, Config.AdvantageNormType.off}:  # type: ignore[operator]
-            raise ValueError("normalize_advantages must be 'rollout', 'batch', or 'off'.")
 
         # PPO replay-specific checks (only if fields exist)
         self._validate_non_negative("replay_ratio")
@@ -693,18 +682,58 @@ class PPOConfig(Config):
     policy_lr: float = 3e-4
     gamma: float = 0.99
     gae_lambda: float = 0.95
-    clip_range: float = 0.2
+    clip_range: Union[float, Dict[str, Any]] = 0.2
     target_kl: Optional[float] = None
     ent_coef: float = 0.0
-    vf_coef: float = 0.5
+    vf_coef: Union[float, Dict[str, Any]] = 0.5
     max_grad_norm: float = 0.5
     returns_type: "Config.ReturnsType" = Config.ReturnsType.gae_rtg
     advantages_type: "Config.AdvantagesType" = Config.AdvantagesType.gae
     policy_targets: "Config.PolicyTargetsType" = Config.PolicyTargetsType.advantages  # type: ignore[assignment]
+    normalize_advantages: "Config.AdvantageNormType" = Config.AdvantageNormType.rollout
 
     @property
     def algo_id(self) -> str:
         return "ppo"
+
+    def _resolve_schedules(self) -> None:
+        # PPO adds vf_coef and clip_range to schedulable params
+        super()._resolve_schedules()
+
+        schedulable_params = {'vf_coef', 'clip_range'}
+        for key in list(vars(self).keys()):
+            value = getattr(self, key)
+            if isinstance(value, dict) and key in schedulable_params:
+                schedule_type = value.get('schedule', 'linear')
+                start_value = value.get('start')
+                end_value = value.get('end', 0.0)
+                from_pos = value.get('from', 0.0)
+                to_pos = value.get('to', 1.0)
+                warmup = value.get('warmup', 0.0)
+
+                assert start_value is not None, f"{key} schedule dict must have 'start' key"
+
+                start_value = float(start_value)
+                end_value = float(end_value)
+                from_pos = float(from_pos)
+                to_pos = float(to_pos)
+                warmup = float(warmup)
+
+                self._set_schedule_attrs(key, schedule_type, start_value, end_value, from_pos, to_pos)
+                if warmup > 0.0:
+                    setattr(self, f"{key}_schedule_warmup", warmup)
+
+    def validate(self):
+        super().validate()
+
+        # PPO-specific validations
+        self._validate_positive("target_kl")
+        self._validate_range("gae_lambda", 0, 1)
+        self._validate_range("clip_range", 0, 1, inclusive_min=False, inclusive_max=False)
+        self._validate_non_negative("vf_coef")
+
+        if self.normalize_advantages is not None and self.normalize_advantages not in {Config.AdvantageNormType.rollout, Config.AdvantageNormType.batch, Config.AdvantageNormType.off}:  # type: ignore[operator]
+            raise ValueError("normalize_advantages must be 'rollout', 'batch', or 'off'.")
 
 def load_config(config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> Config:
     """Convenience function to load configuration."""

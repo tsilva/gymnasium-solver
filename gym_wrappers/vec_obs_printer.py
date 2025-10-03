@@ -172,6 +172,7 @@ class VecObsBarPrinter(VectorWrapper):
     def _init_from_spec(self) -> None:
         # VecEnvInfoWrapper provides get_spec(); all envs must have it
         spec = self.env.get_spec()
+        print(f"[VecObsBarPrinter] Initializing from spec: {spec.env_id if hasattr(spec, 'env_id') else 'unknown'}")
 
         # Extract observation components from spec
         if spec.observation_space is None:
@@ -222,6 +223,8 @@ class VecObsBarPrinter(VectorWrapper):
                 self._action_discrete_n = int(spec.action_space.discrete)
 
         action_labels = spec.get_action_labels()
+        print(f"[VecObsBarPrinter] Raw action labels from spec: {action_labels}")
+
         if action_labels:
             parsed: Dict[int, str] = {}
             for k, v in action_labels.items():
@@ -231,9 +234,14 @@ class VecObsBarPrinter(VectorWrapper):
                     try:
                         parsed[int(k)] = str(v)
                     except ValueError:
-                        pass
+                        print(f"[VecObsBarPrinter] Failed to parse action label key: {k!r}")
             if parsed:
                 self._action_labels = parsed
+                print(f"[VecObsBarPrinter] Parsed action labels: {parsed}")
+            else:
+                print(f"[VecObsBarPrinter] No action labels parsed")
+        else:
+            print(f"[VecObsBarPrinter] No action labels in spec")
 
     def _maybe_init_from_obs(self, obs: np.ndarray) -> None:
         if self._initialized:
@@ -253,11 +261,8 @@ class VecObsBarPrinter(VectorWrapper):
             if dim <= 0:
                 self._initialized = True
                 return
-            if len(rest_shape) != 1:
-                # Likely an image or stacked frames; disable output
-                self._enable = False
-                self._initialized = True
-                return
+            # Note: For non-vector observations (images/stacked frames),
+            # we still enable printing but skip observation bars in _print_obs
             # Initialize dynamic range trackers
             self._min_seen = np.full((dim,), np.inf, dtype=np.float64)
             self._max_seen = np.full((dim,), -np.inf, dtype=np.float64)
@@ -332,7 +337,14 @@ class VecObsBarPrinter(VectorWrapper):
                 if arr.ndim == 0:
                     return int(arr.item())
                 elif arr.size > self._env_index:
-                    return int(np.asarray(arr[self._env_index]).flatten()[0])
+                    val = arr[self._env_index]
+                    # Handle both scalar and array values
+                    if isinstance(val, (int, np.integer)):
+                        return int(val)
+                    elif isinstance(val, np.ndarray):
+                        return int(val.flatten()[0])
+                    else:
+                        return int(val)
         except Exception:
             pass
         return None
@@ -346,18 +358,17 @@ class VecObsBarPrinter(VectorWrapper):
     ) -> None:
         if not isinstance(obs_full, np.ndarray) or obs_full.ndim < 2:
             return
-        # Extract single env observation as a flat 1D vector
+        # Extract single env observation
         obs = obs_full[self._env_index]
         if obs is None:
             return
         obs_arr = np.asarray(obs)
-        if obs_arr.ndim != 1:
-            # Non-vector obs (e.g., images) → skip
-            return
 
-        dim = int(obs_arr.shape[0])
-        labels = self._labels_for_dim(dim)
-        ranges = self._ranges_for_dim(dim)
+        # Check if observation is 1D vector (for obs bars later)
+        is_vector_obs = obs_arr.ndim == 1
+        dim = int(obs_arr.shape[0]) if is_vector_obs else 0
+        labels = self._labels_for_dim(dim) if is_vector_obs else []
+        ranges = self._ranges_for_dim(dim) if is_vector_obs else []
 
         # Prepare header and lines
         _term_clear_inplace()
@@ -416,13 +427,16 @@ class VecObsBarPrinter(VectorWrapper):
 
         # Action bars: show probabilities/values for each action
         action_idx = self._extract_action_index()
+
+        # For VectorEnv, use single_action_space
+        action_space = getattr(self, 'single_action_space', self.action_space)
         act_n = (
-            int(self.action_space.n) if isinstance(self.action_space, spaces.Discrete)
+            int(action_space.n) if isinstance(action_space, spaces.Discrete)
             else self._action_discrete_n if isinstance(self._action_discrete_n, int) and self._action_discrete_n > 0
             else None
         )
 
-        # Display multiple action bars if we have action probabilities
+        # Display action info
         if act_n is not None and act_n > 0:
             if self._action_probs is not None and len(self._action_probs) > self._env_index:
                 # Show one bar per action with probability
@@ -435,19 +449,27 @@ class VecObsBarPrinter(VectorWrapper):
                     val_str = f"{prob:.4f}"
                     self._print_bar_line(label, val_str, a_bar, a_lo_eff, a_hi_eff, label_w, value_w)
             elif action_idx is not None:
-                # Fallback: show single bar with action index (old behavior)
+                # Show single bar with action index
                 a_lo, a_hi = 0, act_n - 1
                 a_bar, _a_ratio, (a_lo_eff, a_hi_eff) = self._format_bar_scalar(float(action_idx), float(a_lo), float(a_hi), width=self._bar_width)
                 action_label = self._action_labels.get(action_idx) if self._action_labels else None
                 val_str = f"{action_idx} {action_label}" if action_label else f"{action_idx}"
                 self._print_bar_line("action", val_str, a_bar, a_lo_eff, a_hi_eff, label_w, value_w)
+            else:
+                # Fallback: show action space size when we can't extract the specific action
+                print(f"action: ? (discrete: {act_n})")
 
         print("─" * (label_w + value_w + bar_w + 24))
 
-        for i in range(dim):
-            label_suffix = labels[i] if i < len(labels) else None
-            name = f"o[{i}]" + (f" {label_suffix}" if label_suffix else "")
-            val = float(obs_arr[i])
-            lo, hi = ranges[i] if i < len(ranges) else (None, None)
-            bar, _ratio, (lo_eff, hi_eff) = self._format_bar(val, lo, hi, i)
-            self._print_bar_line(name, f"{val:+.4f}", bar, lo_eff, hi_eff, label_w, value_w)
+        # Only print observation bars for vector observations
+        if is_vector_obs:
+            for i in range(dim):
+                label_suffix = labels[i] if i < len(labels) else None
+                name = f"o[{i}]" + (f" {label_suffix}" if label_suffix else "")
+                val = float(obs_arr[i])
+                lo, hi = ranges[i] if i < len(ranges) else (None, None)
+                bar, _ratio, (lo_eff, hi_eff) = self._format_bar(val, lo, hi, i)
+                self._print_bar_line(name, f"{val:+.4f}", bar, lo_eff, hi_eff, label_w, value_w)
+        else:
+            # For non-vector obs (images), just note the shape
+            print(f"[image observation: shape={obs_arr.shape}]")

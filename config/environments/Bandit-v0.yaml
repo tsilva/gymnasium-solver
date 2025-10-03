@@ -40,29 +40,20 @@ _env: &env
   gamma: 1.0
   gae_lambda: 1.0
   n_steps: 64
-  batch_size: 0.25
   eval_warmup_epochs: 5
   eval_freq_epochs: 1
 
-_ppo: &ppo
-  <<: *env
-  algo_id: ppo
-  n_epochs: 4
-  policy_lr: {start: 4e-2, end: 0.0}
-  clip_range: 0.2
-  normalize_advantages: "rollout"
-
-_reinforce: &reinforce
-  <<: *env
-  algo_id: reinforce
-  policy_lr: {start: 4e-2, end: 0.0}
-
 # PPO on Multi-Armed Bandit - standard configuration for bandit problem
 ppo:
-  <<: *ppo
+  <<: *env
+  algo_id: ppo
   description: "PPO on Multi-Armed Bandit - standard configuration for bandit problem"
+  n_epochs: 4
+  policy_lr: {start: 4e-2, end: 0.0}
 
 # REINFORCE on Multi-Armed Bandit - smoke testing configuration
 reinforce:
-  <<: *reinforce
+  <<: *env
+  algo_id: reinforce
   description: "REINFORCE on Multi-Armed Bandit - smoke testing configuration"
+  policy_lr: {start: 4e-2, end: 0.0}

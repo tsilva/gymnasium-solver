@@ -56,8 +56,17 @@ def build_policy_from_env_and_config(env, config):
     output_shape = act_space.shape
     if not output_shape: output_shape = (act_space.n,)
 
+    # Auto-select CNN policy for multi-dimensional observations (images)
+    policy_type = config.policy
+    is_image_obs = len(input_shape) > 1
+    if is_image_obs:
+        if policy_type == "mlp":
+            policy_type = "cnn"
+        elif policy_type == "mlp_actorcritic":
+            policy_type = "cnn_actorcritic"
+
     return build_policy(
-        config.policy,
+        policy_type,
         input_shape=input_shape,
         output_shape=output_shape,
         hidden_dims=config.hidden_dims,

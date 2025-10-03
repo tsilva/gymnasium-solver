@@ -56,6 +56,10 @@ def build_index_collate_loader_from_collector(
         traj = trajectories_getter() if trajectories_getter is not None else _traj
         return collector.slice_trajectories(traj, idxs)
 
+    # NOTE: num_workers=0 is intentional for this training scheme.
+    # We collect a new rollout synchronously each epoch and keep it in memory.
+    # The DataLoader simply indexes pre-collected tensors; multi-process workers
+    # would add IPC serialization overhead without benefit.
     kwargs = dict(
         dataset=index_ds,
         batch_size=batch_size,

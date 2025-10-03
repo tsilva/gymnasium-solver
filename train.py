@@ -1,7 +1,14 @@
 import argparse
+import warnings
 
 from utils.train_launcher import launch_training_from_args
 from utils.environment_registry import list_available_environments
+
+# Suppress PyTorch Lightning's num_workers warning.
+# num_workers=0 is intentional: we keep rollout tensors in memory and
+# DataLoader only indexes them, so multi-process workers add IPC overhead
+# without benefit.
+warnings.filterwarnings("ignore", message=".*does not have many workers.*")
 
 
 def main():

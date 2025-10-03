@@ -40,43 +40,37 @@ spec: &spec
 _env: &env
   spec: *spec
   env_id: CartPole-v1
-  seed: 42
-  max_env_steps: 3e5
-  normalize_obs: false
-  n_steps: 1024
-  policy_lr: 6e-3
-  hidden_dims: [64, 64]
-  gamma: 0.99
-  ent_coef: 0.0
-  frame_stack: 1
-  eval_freq_epochs: 5
-  eval_episodes: 100
 
-_ppo: &ppo
+ppo: &ppo
   <<: *env
+  description: "Standard PPO on state observations - baseline configuration for CartPole"
   algo_id: ppo
-  max_env_steps: 50000
-  n_steps: 32  # TODO: try 64, should be faster
+  eval_freq_epochs: 10
+  eval_episodes: 100
+  
+ppo_tuned:
+  <<: *ppo
+  description: "PPO on CartPole - tuned configuration"
+  hidden_dims: [64, 64]
   batch_size: 0.25
+  n_steps: 32
+  n_epochs: 20
+  hidden_dims: [64, 64]
+  policy_lr: 1e-3
+  n_steps: 32
   n_epochs: 20
   gae_lambda: 0.8
-  clip_range: 0.2
-  policy_lr: 1e-3
-  normalize_advantages: "rollout"
-  eval_warmup_epochs: 50
-  eval_freq_epochs: 10
+  batch_size: 0.25
 
-# Standard PPO on state observations - baseline configuration
-ppo:
-  <<: *ppo
-  description: "Standard PPO on state observations - baseline configuration for CartPole"
-
-# PPO with potential-based reward shaping for faster learning
-ppo_rewardshaped:
-  <<: *ppo
-  description: "PPO with potential-based reward shaping (angle + position terms)"
+_env_rewardshaped: &env_rewardshaped
+  <<: *env
   env_wrappers:
     - id: CartPoleV1_RewardShaper
       angle_reward_scale: 1.0
       position_reward_scale: 0.25
       clip_potential: true
+
+# PPO with potential-based reward shaping for faster learning
+ppo_rewardshaped:
+  <<: [*ppo, *env_rewardshaped]
+  description: "PPO with potential-based reward shaping (angle + position terms)"

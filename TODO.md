@@ -2,18 +2,18 @@
 
 # NEXT
 
-/Users/tsilva/repos/tsilva/gymnasium-solver/.venv/lib/python3.12/site-packages/pytorch_lightning/trainer/connectors/data_connector.py:425: The 'train_dataloader' does not have many workers which may be a bottleneck. Consider increasing the value of the `num_workers` argument` to `num_workers=7` in the `DataLoader` to improve performance.
-
-
+- TODO: not sure sys fps is accruate
+- TODO: add max episode steps support (cartpole, atari, vizdoom, nes)
+- BUG: I think last eval is running after upload...
+- TODO: ensure pong eval is using native, otherwise it may mismatch
+- TODO: ensure frameskip for vizdoom and nes
+- TODO: make key capture not require enter, allow h to show all shortcuts
 TEST: Pong run_play / run_inspect works
 - BUG: vecobs not showing action labels for pong rgb
 TEST: vizdoom env works (with run_play and run_inspect)
 TEST: super mario env works (with run_play and run_inspect)
 TEST: smoke tests pass
 - BUG: action labels not appearing in run inspect
-
-solve warnings
-- TODO: training progress bar in metrics table
 - FEAT: speed up eval as much as possible (async mode with few changes)
 - TODO: trace hyperparam tuning process and adjust
 - TEST: logged to correct projects
@@ -21,6 +21,8 @@ solve warnings
 - TEST: are sweeps still working?
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 - TODO: add env normalization support, make sure normalization is saved
+- TODO: add fit to container zoom in inspect
+- TODO: add action number/ label before each frame stack image in inspect (allows easily seeing which action was performed when each frame was seen)
 
 ## Pong-v5
 
@@ -53,7 +55,6 @@ solve warnings
 
 - FEAT: batch norm support
 - FEAT: layer norm support
-- FEAT: autotune n_envs (check tune_nenvs.md)
 - FEAT: add observation/action noise support
 - FEAT: add LLM review support to inspector.py
 - FEAT: add support for continuous environments (eg: LunarLanderContinuous-v2)

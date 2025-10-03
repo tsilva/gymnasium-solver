@@ -31,6 +31,7 @@ def present_prefit_summary(config) -> None:
         "env_id": _format_summary_value(config.env_id),
         "obs_type": _format_summary_value(config.obs_type),
         "wrappers": _format_summary_value(config.env_wrappers),
+        "n_envs": _format_summary_value(getattr(config, "n_envs", None)),
         "vectorization_mode": _format_summary_value(config.vectorization_mode),
         "frame_stack": _format_summary_value(getattr(config, "frame_stack", None)),
         "normalize_obs": _format_summary_value(getattr(config, "normalize_obs", None)),
@@ -63,7 +64,10 @@ def present_prefit_summary(config) -> None:
         "clip_range": _format_summary_value(getattr(config, "clip_range", None)),
         "max_grad_norm": _format_summary_value(getattr(config, "max_grad_norm", None)),
         "returns_type": _format_summary_value(getattr(config, "returns_type", None)),
+        "normalize_returns": _format_summary_value(getattr(config, "normalize_returns", None)),
         "advantages_type": _format_summary_value(getattr(config, "advantages_type", None)),
+        "normalize_advantages": _format_summary_value(getattr(config, "normalize_advantages", None)),
+        "target_kl": _format_summary_value(getattr(config, "target_kl", None)),
     }
 
     project_id = getattr(config, "project_id", None) or getattr(config, "env_id", None)

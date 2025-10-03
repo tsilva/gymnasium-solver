@@ -38,29 +38,15 @@ _env: &env
   spec: *spec
   env_id: VizDoom-DeadlyCorridor-v0
   render_mode: 'rgb_array'
-  policy: 'cnn_actorcritic'
-  policy_kwargs:
-    channels: [32, 64, 64]
-    kernel_sizes: [8, 4, 3]
-    strides: [4, 2, 1]
-  grayscale_obs: true
-  resize_obs: true
-  frame_stack: 4
-  accelerator: 'gpu'
-  devices: 'auto'
   eval_freq_epochs: 1
   eval_episodes: 1
   max_env_steps: 1e7
   n_steps: 128
-  batch_size: 256
   n_epochs: 4
 
-_ppo: &ppo
+ppo:
   <<: *env
   algo_id: ppo
+  description: "PPO on VizDoom DeadlyCorridor - standard configuration for corridor navigation task"
   clip_range: 0.1
   policy_lr: 2.5e-4
-
-ppo:
-  <<: *ppo
-  description: "PPO on VizDoom DeadlyCorridor - standard configuration for corridor navigation task"

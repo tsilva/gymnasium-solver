@@ -37,19 +37,14 @@ _env: &env
   env_id: LunarLander-v3
   eval_episodes: 10
   hidden_dims: [128, 128]
-  n_steps: 1024
-  ent_coef: 0.25
 
-_reinforce: &reinforce
-  <<: *env
-  algo_id: reinforce
-
-_ppo: &ppo
+# PPO on LunarLander - standard configuration for lunar landing task
+ppo:
   <<: *env
   algo_id: ppo
+  description: "PPO on LunarLander - standard configuration for lunar landing task"
   max_env_steps: 5000004
   n_steps: 512
-  batch_size: 256
   gae_lambda: 0.98
   gamma: 0.999
   n_epochs: 4
@@ -57,27 +52,3 @@ _ppo: &ppo
   ent_coef: 0.01
   eval_warmup_epochs: 50
   eval_freq_epochs: 10
-  policy_targets: "advantages"
-  normalize_advantages: "batch"
-
-reinforce_baseline:
-  <<: *reinforce
-  returns_type: "mc:episode"
-  advantages_type: "baseline"
-  policy_targets: "advantages"
-  description: "REINFORCE with baseline - uses value function baseline for variance reduction"
-
-reinforce_baseline2:
-  <<: *reinforce
-  returns_type: "mc:rtg"
-  advantages_type: "baseline"
-  policy_targets: "advantages"
-  normalize_advantages: "rollout"
-  ent_coef: 0.01
-  n_epochs: 2
-  description: "REINFORCE with baseline and return-to-go - combines both variance reduction techniques"
-
-# PPO on LunarLander - standard configuration for lunar landing task
-ppo:
-  <<: *ppo
-  description: "PPO on LunarLander - standard configuration for lunar landing task"

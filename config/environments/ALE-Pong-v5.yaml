@@ -101,97 +101,69 @@ _spec_rgb: &spec_rgb
 _env: &env
   env_id: ALE/Pong-v5
 
-# Makes ALE deterministic by disabling sticky actions
-_env_deterministic: &env_deterministic
-  env_kwargs:
-    repeat_action_probability: 0.0
-
-# Shared PPO hyperparameters across all observation types
-_ppo_base: &ppo_base
-  algo_id: ppo
-  gamma: 0.99
-  gae_lambda: 0.95
-  vf_coef: 0.5
-  n_epochs: 15
-  normalize_advantages: "rollout"
-  eval_warmup_epochs: 50
-  eval_freq_epochs: 5
-  eval_episodes: 30
-
 # ==========================
-# Object observation setup
+# Object observation variants
 # ==========================
 _obj_env: &obj_env
   <<: *env
+  spec: *spec_objects
   obs_type: "objects"
   env_wrappers:
     - { id: PongV5_FeatureExtractor, action_ids: [0, 2, 3] }
     - { id: DiscreteActionSpaceRemapperWrapper, mapping: [0, 2, 3] }
 
-_obj_ppo: &obj_ppo
-  <<: [*obj_env, *ppo_base]
+# Object-based observations with PPO - uses extracted game objects as features
+objects_ppo: &objects_ppo
+  <<: *obj_env
+  algo_id: ppo
+  description: "PPO with object-based observations using extracted game objects as features"
+  n_epochs: 15
+  eval_warmup_epochs: 200
+  eval_freq_epochs: 5
+  eval_episodes: 10
   ent_coef: 0.005
   policy_lr: 0.002
-  clip_range: 0.2
   n_steps: 256
-  batch_size: 2048
-  hidden_dims: [256, 256]
-  eval_warmup_epochs: 200
+
+# Object-based observations with PPO - deterministic version (no sticky actions)
+objects_deterministic_ppo:
+  <<: *objects_ppo
+  description: "PPO with object-based observations - deterministic version (no sticky actions)"
+  env_kwargs:
+    repeat_action_probability: 0.0
+  early_stop_on_train_threshold: 20.0  # Override env spec threshold (18) with custom value
+  eval_freq_epochs: null # Disable evaluation during training
 
 # ==========================
-# RGB observation setup
+# RGB observation variants
 # ==========================
 _rgb_env: &rgb_env
   <<: *env
   spec: *spec_rgb
   obs_type: "rgb"
 
-_rgb_ppo: &rgb_ppo
-  <<: [*rgb_env, *ppo_base]
-  accelerator: "auto"
-  policy: "cnn_actorcritic"
-  hidden_dims: [512]
-  policy_kwargs:
-    channels: [32, 64, 64]
-    kernel_sizes: [8, 4, 3]
-    strides: [4, 2, 1]
-  max_env_steps: 10_000_000
-  #n_epochs: 20 before
-  ent_coef: {start: 0.02, end: 0.001}  # linear decay from 0.02 to 0.001 over full training
-  policy_lr: 0.0025
-  normalize_advantages: "batch"
-  clip_range: 0.1
-  vectorization_mode: "atari"
-  n_steps: 128
-  batch_size: 0.5
-  eval_warmup_epochs: 200
-
-# =====================
-# Public variants
-# =====================
-
-# Object-based observations with PPO - uses extracted game objects as features
-objects_ppo:
-  <<: *obj_ppo
-  description: "PPO with object-based observations using extracted game objects as features"
-
-# Object-based observations with PPO - deterministic version (no sticky actions)
-objects_deterministic_ppo:
-  <<: [*obj_ppo, *env_deterministic]
-  description: "PPO with object-based observations - deterministic version (no sticky actions)"
-  early_stop_on_train_threshold: 20.0  # Override env spec threshold (18) with custom value
-  eval_freq_epochs: null # Disable evaluation during training
-
 # RGB observations with PPO - uses ALE atari vectorization
 # ALE atari vec automatically applies: 4-frame stacking, grayscale, 84x84 resize
 # Observation shape: (4, 84, 84) - 4 grayscale frames stacked, NOT 3-channel RGB
 # Config frame_stack/grayscale_obs/resize_obs reflect these Atari defaults
-rgb_ppo:
-  <<: *rgb_ppo
+rgb_ppo: &rgb_ppo
+  <<: *rgb_env
+  algo_id: ppo
   description: "PPO with 4-frame grayscale stacks (84x84) via ALE atari vectorization"
+  max_env_steps: 10_000_000
+  n_epochs: 15
+  ent_coef: {start: 0.02, end: 0.001}  # linear decay from 0.02 to 0.001 over full training
+  policy_lr: 0.0025
+  clip_range: 0.1
+  n_steps: 128
+  eval_warmup_epochs: 200
+  eval_freq_epochs: 5
+  eval_episodes: 10
 
 # RGB observations with PPO - deterministic version (no sticky actions)
 # Uses ALE atari vectorization for 10x faster training
 rgb_deterministic_ppo:
-  <<: [*rgb_ppo, *env_deterministic]
+  <<: *rgb_ppo
   description: "PPO with RGB observations - deterministic version with ALE atari vectorization"
+  env_kwargs:
+    repeat_action_probability: 0.0

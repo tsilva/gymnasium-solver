@@ -128,6 +128,14 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
             },
         }
 
+        # stable-retro doesn't support multiple emulator instances per process
+        # Force async vectorization for val/test stages and disable video recording
+        from utils.environment import is_stable_retro_env_id
+        if is_stable_retro_env_id(self.config.env_id) and stage in ("val", "test"):
+            kwargs.setdefault("n_envs", 1)
+            kwargs["vectorization_mode"] = "async"
+            kwargs["record_video"] = False  # async mode doesn't support video recording
+
         # Build the environment
         self._envs[stage] = build_env_from_config(
             self.config, **{
@@ -287,7 +295,6 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         return build_dummy_loader()
 
     def on_validation_epoch_start(self):
-        print("Running validation...")
         val_collector = self.get_rollout_collector("val")
         val_metrics = val_collector.get_metrics()
         self.timings.start("on_validation_epoch_start", values=val_metrics)

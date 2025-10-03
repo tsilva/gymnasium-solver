@@ -41,21 +41,13 @@ _env: &env
     - id: DiscreteEncoder
       encoding: array
 
-_ppo: &ppo
-  <<: *env
-  algo_id: ppo
-  max_env_steps: 10e6
-  n_steps: 1024
-  batch_size: 4096
-  n_epochs: 20
-  clip_range: 0.2
-  policy_lr: 1e-2
-  hidden_dims: [4, 16]
-  normalize_returns: "rollout"
-  normalize_advantages: "batch"
-  vf_coef: 0.25
-
 # PPO on Taxi - standard configuration for taxi navigation task
 ppo:
-  <<: *ppo
+  <<: *env
+  algo_id: ppo
   description: "PPO on Taxi - standard configuration for taxi navigation task"
+  max_env_steps: 10e6
+  n_steps: 1024
+  n_epochs: 20
+  policy_lr: 1e-2
+  hidden_dims: [4, 16]

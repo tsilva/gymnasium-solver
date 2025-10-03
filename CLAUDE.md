@@ -16,8 +16,8 @@ gymnasium-solver is a fast, config-first reinforcement learning framework built 
 python train.py CartPole-v1:ppo -q
 python train.py CartPole-v1:reinforce -q
 
-# Override max timesteps from CLI
-python train.py CartPole-v1:ppo --max-timesteps 5000
+# Override max env steps from CLI
+python train.py CartPole-v1:ppo --max-env-steps 5000
 
 # Resume training from checkpoint (downloads from W&B if not found locally)
 python train.py --resume @last
@@ -71,17 +71,6 @@ python scripts/setup_wandb_dashboard.py --overwrite
 python scripts/setup_wandb_dashboard.py --select-latest
 ```
 
-### Smoke Tests
-```bash
-# Train all configs briefly (default 100 steps each)
-python scripts/smoke_train_envs.py
-python scripts/smoke_train_envs.py --timesteps 50 --filter CartPole
-
-# Random-action environment smoke tests
-python scripts/smoke_test_envs.py
-python scripts/smoke_test_envs.py --filter Pong --limit 3
-```
-
 ### Benchmarking
 ```bash
 # Benchmark vectorized environment FPS
@@ -102,6 +91,26 @@ python scripts/brax_train_policy.py
 # Evaluate Brax policy with Gymnasium wrapper
 python scripts/brax_eval_policy.py
 ```
+
+## MCP Tools (Programmatic Access)
+
+The codebase provides MCP (Model Context Protocol) tools for programmatic interaction with the training system. These tools are available through the Claude Code MCP server and provide an alternative to CLI commands:
+
+- **`mcp__gymnasium-solver__list_environments`**: List all available environment configurations with optional filtering
+- **`mcp__gymnasium-solver__list_variants`**: List algorithm variants for a specific environment
+- **`mcp__gymnasium-solver__get_config`**: Get full configuration for an environment:variant combination
+- **`mcp__gymnasium-solver__start_training`**: Start training with config overrides and automatic run management
+- **`mcp__gymnasium-solver__list_runs`**: List training runs with filtering by environment, algorithm, or status
+- **`mcp__gymnasium-solver__get_run_info`**: Get detailed information about a specific run (supports `@last`)
+- **`mcp__gymnasium-solver__get_run_metrics`**: Retrieve metrics data from a training run
+- **`mcp__gymnasium-solver__get_run_logs`**: Access log output for debugging
+- **`mcp__gymnasium-solver__get_training_status`**: Check if a training process is still running
+- **`mcp__gymnasium-solver__stop_training`**: Stop a running training process
+- **`mcp__gymnasium-solver__list_checkpoints`**: List available checkpoints for a run
+- **`mcp__gymnasium-solver__compare_runs`**: Compare key metrics across multiple runs
+- **`mcp__gymnasium-solver__get_best_run`**: Find the best performing run for an environment
+
+These tools are particularly useful for automated workflows, hyperparameter tuning agents, and programmatic training management.
 
 ## Architecture Overview
 

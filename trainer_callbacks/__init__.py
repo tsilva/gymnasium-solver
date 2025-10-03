@@ -4,6 +4,7 @@ from .console_summary import ConsoleSummaryCallback
 from .dispatch_metrics import DispatchMetricsCallback
 from .early_stopping import EarlyStoppingCallback
 from .hyperparameter_scheduler import HyperparameterSchedulerCallback
+from .keyboard_shortcuts import KeyboardShortcutCallback
 from .model_checkpoint import ModelCheckpointCallback
 from .monitor_metrics import MonitorMetricsCallback
 from .upload_run import UploadRunCallback
@@ -20,4 +21,5 @@ __all__ = [
     "ConsoleSummaryCallback",
     "HyperparameterSchedulerCallback",
     "UploadRunCallback",
+    "KeyboardShortcutCallback",
 ]

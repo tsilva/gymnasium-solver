@@ -6,6 +6,7 @@ from trainer_callbacks import (
     ConsoleSummaryCallback,
     DispatchMetricsCallback,
     EarlyStoppingCallback,
+    KeyboardShortcutCallback,
     ModelCheckpointCallback,
     MonitorMetricsCallback,
     UploadRunCallback,
@@ -29,6 +30,9 @@ class CallbackBuilder:
     def build(self) -> list:
         """Assemble trainer callbacks."""
         callbacks = []
+
+        # Keyboard shortcuts: enable interactive control during training
+        callbacks.append(KeyboardShortcutCallback())
 
         # In case eval warmup is active, add a callback to enable validation only after warmup
         if self.config.eval_warmup_epochs > 0:

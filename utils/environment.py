@@ -96,6 +96,11 @@ def build_env(
     _is_stable_retro_env = is_stable_retro_env_id(env_id)
     _is_bandit_env = is_mab_env_id(env_id)
 
+    # stable-retro doesn't support multiple emulator instances per process
+    # Force async vectorization (multiprocessing) for Retro envs when n_envs > 1
+    if _is_stable_retro_env and n_envs > 1 and vectorization_mode == "auto":
+        vectorization_mode = "async"
+
     if _is_alepy_env:
         import ale_py
         gym.register_envs(ale_py)
@@ -156,7 +161,7 @@ def build_env(
                 if grayscale_obs:
                     env = GrayscaleObservation(env, keep_dim=False)
                 if resize_obs:
-                    resize_shape = (84, 84) if resize_obs is True else resize_obs
+                    resize_shape = (84, 84) if resize_obs is True else tuple(resize_obs) if isinstance(resize_obs, list) else resize_obs
                     env = ResizeObservation(env, shape=resize_shape)
                 if frame_stack and frame_stack > 1:
                     env = FrameStackObservation(env, stack_size=frame_stack)

@@ -440,14 +440,21 @@ class RolloutCollector():
             actions_t, logps_t, values_t = policy_act(self.policy_model, obs_t, deterministic=deterministic)
 
             # Extract action probabilities for visualization (if wrapper supports it)
+            # Skip for AsyncVectorEnv since cross-process method calls don't work
             try:
-                dist, _ = self.policy_model(obs_t)
-                if hasattr(dist, 'probs'):
-                    action_probs_np = dist.probs.detach().cpu().numpy()
-                    if hasattr(self.env, 'set_action_probs'):
+                from gymnasium.vector import AsyncVectorEnv
+                is_async = isinstance(self.env.unwrapped, AsyncVectorEnv)
+            except (ImportError, AttributeError):
+                is_async = False
+
+            if not is_async:
+                try:
+                    dist, _ = self.policy_model(obs_t)
+                    if hasattr(dist, 'probs'):
+                        action_probs_np = dist.probs.detach().cpu().numpy()
                         self.env.set_action_probs(action_probs_np)
-            except Exception:
-                pass
+                except (AttributeError, Exception):
+                    pass
 
             # Perform environment step
             actions_np = actions_t.detach().cpu().numpy()

@@ -130,9 +130,12 @@ class MetricsTableLogger(LightningLoggerBase):
         # TODO: restore this, some are crashing due to NaN/Inf values, figure out why
         #metrics_config.assert_metrics_within_bounds(metrics) # TODO: move this to the logger?
 
-        # Convert values to basic Python scalars for rendering/validation 
+        # Convert values to basic Python scalars for rendering/validation
         # and discard non-namespace keys (eg: epoch injected by Lightning)
         simple: Dict[str, Any] = {k: _to_python_scalar(v) for k, v in dict(metrics).items() if "/" in k}
+
+        # Detect current stage from newly logged metrics (before sticky merge)
+        current_stage = "VAL" if any(k.startswith("val/") for k in simple.keys()) else "TRAIN"
 
         # Sticky display: merge with previous known metrics so missing keys
         # keep their last values when printing.
@@ -140,7 +143,7 @@ class MetricsTableLogger(LightningLoggerBase):
         merged.update(simple)
 
         # Render the metrics table
-        self._render_table(merged)
+        self._render_table(merged, current_stage=current_stage)
 
         # Track across calls
         self.previous_metrics = dict(merged)
@@ -266,7 +269,7 @@ class MetricsTableLogger(LightningLoggerBase):
 
         return row
 
-    def _format_header_line(self, metrics: Dict[str, Any]) -> Optional[str]:
+    def _format_header_line(self, metrics: Dict[str, Any], current_stage: str) -> Optional[str]:
         """Format a header line showing run ID, FPS, and time elapsed."""
         if not self.run:
             return None
@@ -286,6 +289,9 @@ class MetricsTableLogger(LightningLoggerBase):
             pass
 
         parts = [f"Run: {run_id}"]
+
+        # Add stage indicator from detected stage
+        parts.append(f"Stage: {current_stage}")
 
         if (roll_fps := metrics.get("train/roll/fps")) is not None:
             parts.append(f"roll/fps: {number_to_string(roll_fps, precision=0, humanize=True)}")
@@ -455,7 +461,7 @@ class MetricsTableLogger(LightningLoggerBase):
         lines.append(dimensions.border)
         return lines
 
-    def _render_table(self, metrics: Dict[str, Any]) -> None:
+    def _render_table(self, metrics: Dict[str, Any], current_stage: str) -> None:
         assert metrics, "metrics cannot be empty"
 
         # Add metrics to the logger history (eg: used for sparklines)
@@ -466,7 +472,7 @@ class MetricsTableLogger(LightningLoggerBase):
         self._metrics_with_triggered_alerts.update(active_alerts.keys())
 
         # Format header line before filtering (needs access to header metrics)
-        header_line = self._format_header_line(metrics)
+        header_line = self._format_header_line(metrics, current_stage)
 
         # Define header metrics that should not appear in the table body
         header_metrics = {

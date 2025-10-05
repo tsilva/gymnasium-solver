@@ -643,8 +643,6 @@ class RolloutCollector():
 
 
     def get_metrics(self):
-        ep_rew_mean = float(self.episode_reward_deque.mean()) if self.episode_reward_deque else 0.0
-        ep_len_mean = int(self.episode_length_deque.mean()) if self.episode_length_deque else 0
         rollout_fps = float(self.rollout_fpss.mean()) if self.rollout_fpss else 0.0
 
         # Observation statistics from running aggregates
@@ -678,7 +676,7 @@ class RolloutCollector():
         ret_mean = self._ret_stats.mean()
         ret_std = self._ret_stats.std()
 
-        return {
+        metrics = {
             "cnt/total_env_steps": self.total_steps,
             "cnt/total_vec_steps": self.total_vec_steps,  # canonical step counter for history
             "cnt/total_episodes": self.total_episodes,
@@ -687,11 +685,6 @@ class RolloutCollector():
             "roll/vec_steps": self.rollout_vec_steps,
             "roll/episodes": self.rollout_episodes,
             "roll/fps": rollout_fps,  # average fps over recent rollouts
-            "roll/ep_rew/best": float(self._best_episode_reward),
-            "roll/ep_rew/last": float(self._last_episode_reward),
-            "roll/ep_len/last": int(self._last_episode_length),
-            "roll/ep_rew/mean": ep_rew_mean,
-            "roll/ep_len/mean": ep_len_mean,
             "roll/obs/mean": obs_mean,
             "roll/obs/std": obs_std,
             "roll/reward/mean": reward_mean,
@@ -706,6 +699,16 @@ class RolloutCollector():
             "roll/baseline/mean": baseline_mean,
             "roll/baseline/std": baseline_std
         }
+
+        # Only include episode metrics if at least one episode has completed
+        if self.episode_reward_deque:
+            metrics["roll/ep_rew/mean"] = float(self.episode_reward_deque.mean())
+            metrics["roll/ep_len/mean"] = int(self.episode_length_deque.mean())
+            metrics["roll/ep_rew/best"] = float(self._best_episode_reward)
+            metrics["roll/ep_rew/last"] = float(self._last_episode_reward)
+            metrics["roll/ep_len/last"] = int(self._last_episode_length)
+
+        return metrics
 
     def pop_recent_episodes(self) -> List[Tuple[int, float, int, bool]]:
         """Return and clear episodes finished since the last pop."""

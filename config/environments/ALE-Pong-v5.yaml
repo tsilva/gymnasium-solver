@@ -144,11 +144,14 @@ objects_deterministic_ppo:
   description: "PPO with object-based observations - deterministic version (no sticky actions)"
   early_stop_on_train_threshold: 20.0  # Override env spec threshold (18) with custom value
   #ent_coef: 0.01 # Very small entropy coefficient just to deal with emulator quirks
-  batch_size: 256
+  batch_size: 512 #256
+  clip_range: 0.238 # 0
   n_envs: 32
-  n_steps: 128
-  policy_lr: 5e-3 # tried 3e-2 but approx-kl was too spiky, try increasing slower, and then capping with either clip fraction or kl_target
-  hidden_dims: [32, 32] # tried [16, 16] but it stalled learning too much
+  ent_coef: 0.015
+  n_steps: 256 #128
+  policy_lr: 0.0018 # 5e-3 # tried 3e-2 but approx-kl was too spiky, try increasing slower, and then capping with either clip fraction or kl_target
+  hidden_dims: [64, 64] # tried [16, 16] but it stalled learning too much
+
 
   # Plateau intervention: automatically adjust hyperparameters when training stagnates
   # plateau_interventions:

@@ -401,7 +401,8 @@ def launch_training_from_args(args) -> None:
     _ensure_wandb_run_initialized(config)
 
     # Create/update the W&B workspace immediately so the dashboard is ready during training
-    if getattr(config, 'enable_wandb', True):
+    # Skip workspace creation during sweeps (not needed and may cause issues)
+    if getattr(config, 'enable_wandb', True) and not is_wandb_sweep:
         create_or_update_workspace_for_current_run(overwrite=True, select_current_run_only=True) # TODO: review this function
 
     # Set global RNG seed for reproducibility

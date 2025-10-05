@@ -66,9 +66,12 @@ ppo: &ppo
 ppo_tuned:
   <<: *ppo
   description: "PPO on CartPole - tuned configuration"
-  hidden_dims: [64, 64]
+  n_envs: 18 # auto
+  hidden_dims: [256, 256] # [64, 64]
+  ent_coef: 0
+  clip_range: 0.1
   batch_size: 0.25
-  n_steps: 32
+  n_steps: 2048 #32
   n_epochs: 20
   policy_lr: 1e-3
   gae_lambda: 0.8

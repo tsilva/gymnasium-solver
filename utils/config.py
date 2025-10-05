@@ -292,6 +292,11 @@ class Config:
     # Whether to enable Weights & Biases logging
     enable_wandb: bool = True
 
+    # Plateau intervention configuration (optional)
+    # When a metric plateaus, cycle through parameter adjustments
+    # Example: {"monitor": "train/roll/ep_rew/mean", "patience": 20, "actions": [...]}
+    plateau_interventions: Optional[Dict[str, Any]] = None
+
     @property
     def max_vec_steps(self) -> Optional[int]:
         """Computed property: max_env_steps converted to vectorized steps."""
@@ -683,6 +688,7 @@ class REINFORCEConfig(Config):
     def algo_id(self) -> str:
         return "reinforce"
 
+# TODO: default to 0.01 for atari if none specified
 @dataclass
 class PPOConfig(Config):
     policy: "Config.PolicyType" = Config.PolicyType.mlp_actorcritic  # type: ignore[assignment]

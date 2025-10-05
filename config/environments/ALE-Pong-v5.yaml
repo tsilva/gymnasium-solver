@@ -133,15 +133,44 @@ objects_ppo: &objects_ppo
   <<: *env_objects
   algo_id: ppo
   description: "PPO with object-based observations using extracted game objects as features"
-  eval_warmup_epochs: 200
-  eval_freq_epochs: 5
+  eval_warmup_epochs: 100
+  eval_freq_epochs: 50
   eval_episodes: 10
+  #accelerator: "gpu"
 
 objects_deterministic_ppo:
   <<: *objects_ppo
   <<: *env_deterministic
   description: "PPO with object-based observations - deterministic version (no sticky actions)"
   early_stop_on_train_threshold: 20.0  # Override env spec threshold (18) with custom value
+  #ent_coef: 0.01 # Very small entropy coefficient just to deal with emulator quirks
+  batch_size: 256
+  n_envs: 32
+  n_steps: 128
+  policy_lr: 5e-3 # tried 3e-2 but approx-kl was too spiky, try increasing slower, and then capping with either clip fraction or kl_target
+  hidden_dims: [32, 32] # tried [16, 16] but it stalled learning too much
+
+  # Plateau intervention: automatically adjust hyperparameters when training stagnates
+  # plateau_interventions:
+  #   monitor: "train/roll/ep_rew/mean"
+  #   patience: 5           # Epochs without improvement before intervention
+  #   min_delta: 0.5        # Minimum change to count as improvement
+  #   mode: "max"           # Maximize reward
+  #   cooldown: 3           # Wait N epochs after intervention before trying again
+
+  #   # Cycle through these interventions on repeated plateaus
+  #   actions:
+  #     - param: policy_lr
+  #       operation: multiply
+  #       factor: 0.5
+  #       min: 1.0e-6
+  #       revert_on_worse: true
+
+  #     - param: ent_coef
+  #       operation: multiply
+  #       factor: 2.0
+  #       max: 0.1
+  #       revert_on_worse: true
   
 ###########################
 # CONFIGS: obs_type = rgb

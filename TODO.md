@@ -2,6 +2,7 @@
 
 # NEXT
 
+- parallelize sweeps (docker, spot instances, ray?)
 - FEAT: train from previous run, use that to do multiple runs until convergence (new run loads param); should we restore optimizer? confirm new run starts with same performance, check if it evolves better with same or dfiferent optimizer
 - CHECK: should we reset optimizer when we use another learning rate
 - BUG: rgb env not working

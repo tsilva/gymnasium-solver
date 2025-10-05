@@ -9,6 +9,7 @@ from trainer_callbacks import (
     KeyboardShortcutCallback,
     ModelCheckpointCallback,
     MonitorMetricsCallback,
+    PlateauInterventionCallback,
     UploadRunCallback,
     WandbVideoLoggerCallback,
     WarmupEvalCallback,
@@ -53,6 +54,10 @@ class CallbackBuilder:
         # Auto-wire hyperparameter schedulers: scan config for any *_schedule fields
         scheduler_callbacks = self._build_scheduler_callbacks()
         callbacks.extend(scheduler_callbacks)
+
+        # Plateau intervention: adjust hyperparameters when training stagnates
+        plateau_callbacks = self._build_plateau_intervention_callbacks()
+        callbacks.extend(plateau_callbacks)
 
         # Early stopping callbacks: must run BEFORE ModelCheckpointCallback
         # so that trainer.should_stop is set when checkpoint logic runs
@@ -102,6 +107,33 @@ class CallbackBuilder:
             module=self.agent,
             set_value_fn_map=set_value_fn_map,
         )
+
+    def _build_plateau_intervention_callbacks(self) -> list:
+        """Build plateau intervention callbacks."""
+        if not self.config.plateau_interventions:
+            return []
+
+        plateau_config = self.config.plateau_interventions
+
+        # Build set_value_fn_map for parameter setters
+        def _set_policy_lr(module: "BaseAgent", lr: float) -> None:
+            module._change_optimizers_lr(lr)
+
+        set_value_fn_map = {
+            "policy_lr": _set_policy_lr,
+        }
+
+        return [
+            PlateauInterventionCallback(
+                monitor=plateau_config["monitor"],
+                patience=plateau_config["patience"],
+                actions=plateau_config["actions"],
+                mode=plateau_config.get("mode", "max"),
+                min_delta=plateau_config.get("min_delta", 0.0),
+                cooldown=plateau_config.get("cooldown", 0),
+                set_value_fn_map=set_value_fn_map,
+            )
+        ]
 
     def _build_early_stopping_callbacks(self) -> list:
         """Build early stopping callbacks."""

@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """
-Play Super Mario Bros with random actions biased towards moving right.
+Play any NES ROM with random actions (biased for platformers).
 
 Usage:
-    python play_mario_random.py              # Auto-detect rendering capability
-    python play_mario_random.py --headless   # Force headless mode
-    python play_mario_random.py --render     # Force human rendering
+    python play_mario_random.py --list-roms                    # List available imported ROMs
+    python play_mario_random.py --game SuperMarioBros-Nes      # Play specific game
+    python play_mario_random.py --game Airstriker-Genesis --headless
+    python play_mario_random.py --game SuperMarioBros-Nes --state Level1-1
 """
 import retro
 import numpy as np
 import os
 import platform
-import sys
+import argparse
 
 def is_wsl():
     """Check if running in WSL."""
@@ -21,16 +22,41 @@ def is_headless():
     """Check if running in a headless environment."""
     return not os.environ.get('DISPLAY')
 
+def list_available_roms():
+    """List all available imported ROMs."""
+    print("Available imported ROMs:\n")
+    games = sorted(retro.data.list_games())
+
+    if not games:
+        print("No ROMs imported. Use `python -m retro.import /path/to/roms` to import ROMs.")
+        return
+
+    for game in games:
+        print(f"  - {game}")
+
+    print(f"\nTotal: {len(games)} game(s)")
+    print("\nTo play a game, use: python play_mario_random.py --game <game_name>")
+
 def main():
-    # Parse simple command line args
-    force_headless = '--headless' in sys.argv
-    force_render = '--render' in sys.argv
+    parser = argparse.ArgumentParser(description='Play any NES ROM with random actions')
+    parser.add_argument('--list-roms', action='store_true', help='List all available imported ROMs')
+    parser.add_argument('--game', type=str, default='SuperMarioBros-Nes', help='Game name (e.g., SuperMarioBros-Nes)')
+    parser.add_argument('--state', type=str, default=None, help='Starting state (e.g., Level1-1)')
+    parser.add_argument('--headless', action='store_true', help='Force headless mode (no rendering window)')
+    parser.add_argument('--render', action='store_true', help='Force human rendering mode')
+
+    args = parser.parse_args()
+
+    # Handle --list-roms
+    if args.list_roms:
+        list_available_roms()
+        return
 
     # Determine render mode
-    if force_headless:
+    if args.headless:
         render_mode = 'rgb_array'
         print("Forced headless mode (no rendering window)\n")
-    elif force_render:
+    elif args.render:
         render_mode = 'human'
         print("Forced human rendering mode\n")
     else:
@@ -45,7 +71,15 @@ def main():
             print("Auto-detected display available, using human rendering\n")
 
     # Create environment
-    env = retro.make(game='SuperMarioBros-Nes', state='Level1-1', render_mode=render_mode)
+    env_kwargs = {'game': args.game, 'render_mode': render_mode}
+    if args.state:
+        env_kwargs['state'] = args.state
+    else:
+        # Use default starting state for SuperMarioBros
+        if args.game == 'SuperMarioBros-Nes':
+            env_kwargs['state'] = 'Level1-1'
+
+    env = retro.make(**env_kwargs)
 
     # Action space: MultiBinary(9)
     # Buttons: [B, null, SELECT, START, UP, DOWN, LEFT, RIGHT, A]
@@ -55,9 +89,11 @@ def main():
     A_BUTTON = 8  # Jump
     B_BUTTON = 0  # Run/Fire
 
-    print("Starting Super Mario Bros with right-biased random play...")
+    print(f"Starting {args.game} with right-biased random play...")
+    if args.state:
+        print(f"Starting state: {args.state}")
     print("Press Ctrl+C to stop")
-    print("\nControls are biased:")
+    print("\nControls are biased (optimized for platformers):")
     print("  - RIGHT: 70% chance")
     print("  - JUMP (A): 30% chance")
     print("  - RUN (B): 40% chance")

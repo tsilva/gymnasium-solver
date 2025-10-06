@@ -272,6 +272,10 @@ class Config:
     # (when set, the selected actions will always be the most likely instead of sampling from policy)
     eval_deterministic: bool = False
 
+    # Whether to run evaluation asynchronously (non-blocking)
+    # (when enabled, evaluation runs in background and doesn't block training)
+    eval_async: bool = False
+
     # Whether to stop training when the training reward threshold is reached
     # When set to a float, that value overrides the env spec's reward threshold
     early_stop_on_train_threshold: Union[bool, float] = False

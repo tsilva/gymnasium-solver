@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
+import threading
 
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
@@ -34,6 +35,9 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
     _fit_elapsed_seconds: float
     _final_stop_reason: str
     _train_dataloader: DataLoader
+    _async_eval_thread: Optional[threading.Thread]
+    _async_eval_metrics: Dict[str, Any]
+    _async_eval_lock: threading.Lock
 
     def __init__(self, config):
         super().__init__()
@@ -58,6 +62,11 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         self._final_stop_reason = ""
         self._early_stop_reason = ""
         self._print_metrics_logger: Optional["MetricsTableLogger"] = None
+        self._async_eval_thread = None
+        self._async_eval_metrics = {}
+        self._async_eval_lock = threading.Lock()
+        self._async_eval_pending_epoch = None  # Tracks if we need to eval a newer model
+        self._async_eval_running_epoch = None  # Tracks which epoch is currently being evaluated
 
         # Initialize schedulable hyperparameters (mutable during training)
         self.policy_lr = config.policy_lr
@@ -106,11 +115,18 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         # Ensure _envs is initialized
         self._envs = self._envs if hasattr(self, "_envs") else {}
 
+        # When eval_async is enabled, use much fewer eval envs to reduce CPU contention
+        # Use 1/4 of training envs (min 4, max 8) so eval can lag behind without blocking training
+        if self.config.eval_async and stage == "val" and "n_envs" not in kwargs:
+            eval_n_envs = max(4, min(8, self.config.n_envs // 4))
+            kwargs["n_envs"] = eval_n_envs
+
         default_kwargs = {
             "train": {
                 "seed": self.config.seed,
             },
             # Record truncated video of first env (requires vectorization_mode='sync', render_mode="rgb_array")
+            # When eval_async is enabled, uses fewer envs (set via kwargs above)
             "val": {
                 "seed": self.config.seed + 1000,
                 "vectorization_mode": "sync",
@@ -222,6 +238,12 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         )
         return self._train_dataloader
     def on_train_epoch_start(self):
+        # Clear previous async eval metrics at start of new train epoch
+        # (after early stopping callback has had a chance to check them)
+        if self.config.eval_async:
+            with self._async_eval_lock:
+                self._async_eval_metrics = {}
+
         self._set_stage_display("train")
         # Start epoch timer
         train_collector = self.get_rollout_collector("train")
@@ -313,17 +335,92 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         val_metrics = val_collector.get_metrics()
         self.timings.start("on_validation_epoch_start", values=val_metrics)
 
+        # If async eval is enabled, launch evaluation in background thread
+        if self.config.eval_async:
+            self._launch_async_eval()
+
+    def _launch_async_eval(self, eval_epoch: Optional[int] = None):
+        """Launch async evaluation in background thread.
+
+        If eval is already running, marks current epoch as pending for re-evaluation
+        instead of blocking. When the running eval completes, it will automatically
+        launch evaluation for the pending epoch.
+
+        Args:
+            eval_epoch: Epoch to evaluate. If None, uses current_epoch.
+        """
+        if eval_epoch is None:
+            eval_epoch = int(self.current_epoch)
+
+        # If eval is already running, mark this epoch as pending and return
+        if self._async_eval_thread is not None and self._async_eval_thread.is_alive():
+            with self._async_eval_lock:
+                self._async_eval_pending_epoch = eval_epoch
+            return
+
+        # Mark which epoch we're evaluating
+        with self._async_eval_lock:
+            self._async_eval_running_epoch = eval_epoch
+            self._async_eval_pending_epoch = None
+
+        def _run_eval():
+            # Capture the epoch we're evaluating (thread-safe)
+            with self._async_eval_lock:
+                current_eval_epoch = self._async_eval_running_epoch
+
+            val_collector = self.get_rollout_collector("val")
+            val_metrics = val_collector.evaluate_episodes(
+                n_episodes=self.config.eval_episodes,
+                deterministic=self.config.eval_deterministic,
+            )
+
+            # Compute FPS metrics
+            epoch_fps_values = self.timings.throughput_since("on_validation_epoch_start", values_now=val_metrics)
+            epoch_fps = epoch_fps_values.get("cnt/total_vec_steps", epoch_fps_values.get("roll/vec_steps", 0.0))
+
+            # Store results in shared dict with lock, including which epoch was evaluated
+            with self._async_eval_lock:
+                self._async_eval_metrics = {
+                    **val_metrics,
+                    "cnt/epoch": int(current_eval_epoch),
+                    "eval/model_epoch": int(current_eval_epoch),  # Track which model was evaluated
+                    "epoch_fps": epoch_fps,
+                }
+                self._async_eval_running_epoch = None
+                pending_epoch = self._async_eval_pending_epoch
+                # Clear pending now that we've captured it
+                self._async_eval_pending_epoch = None
+
+            # Trigger early stopping check if trainer is available
+            if hasattr(self, 'trainer') and self.trainer is not None:
+                # Run callbacks on_validation_epoch_end to check early stopping
+                # This is safe because callbacks are designed to be called from any thread
+                for callback in self.trainer.callbacks:
+                    if hasattr(callback, '_maybe_stop'):
+                        callback._maybe_stop(self.trainer, self)
+
+            # If there's a pending epoch, launch eval for it immediately
+            if pending_epoch is not None:
+                self._launch_async_eval(eval_epoch=pending_epoch)
+
+        self._async_eval_thread = threading.Thread(target=_run_eval, daemon=True)
+        self._async_eval_thread.start()
+
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
     # TODO: there are train/fps drops caused by running the collector N times (its not only the video recording); cause currently unknown
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
+        # In async mode, validation_step is a no-op (eval runs in background)
+        if self.config.eval_async:
+            return
+
         # Run evaluation without recording (videos logged from checkpoints by WandbVideoLoggerCallback)
         val_collector = self.get_rollout_collector("val")
         val_metrics = val_collector.evaluate_episodes(
             n_episodes=self.config.eval_episodes,
             deterministic=self.config.eval_deterministic,
         )
-        
+
         # Log eval metrics
         epoch_fps_values = self.timings.throughput_since("on_validation_epoch_start", values_now=val_metrics)
         epoch_fps = epoch_fps_values.get("cnt/total_vec_steps", epoch_fps_values.get("roll/vec_steps", 0.0))
@@ -334,9 +431,19 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         })
 
     def on_validation_epoch_end(self):
+        # In async mode, check if eval has completed and record metrics if available
+        if self.config.eval_async:
+            with self._async_eval_lock:
+                if self._async_eval_metrics:
+                    self.metrics_recorder.record("val", self._async_eval_metrics)
+                    # Don't clear metrics yet - early stopping callback needs them
         pass
 
     def on_fit_end(self):
+        # Wait for async eval thread to complete if still running
+        if self._async_eval_thread is not None and self._async_eval_thread.is_alive():
+            self._async_eval_thread.join(timeout=10.0)
+
         # If user aborted before training, skip finalization work
         if getattr(self, "_aborted_before_training", False):
             self._final_stop_reason = getattr(self, "_early_stop_reason", "User aborted before training.")
@@ -468,6 +575,11 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
     def set_early_stop_reason(self, reason: str) -> None:
         """Set the early stopping reason. Called by EarlyStoppingCallback."""
         self._early_stop_reason = reason
+
+    def get_async_eval_metric(self, metric_key: str) -> Optional[float]:
+        """Get a metric from async eval results. Returns None if not available."""
+        with self._async_eval_lock:
+            return self._async_eval_metrics.get(metric_key)
 
     # -------------------------
     # Checkpoint save/load

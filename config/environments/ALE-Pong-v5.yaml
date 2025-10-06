@@ -133,7 +133,7 @@ objects_ppo: &objects_ppo
   <<: *env_objects
   algo_id: ppo
   description: "PPO with object-based observations using extracted game objects as features"
-  eval_warmup_epochs: 200
+  #eval_warmup_epochs: 200
   eval_freq_epochs: 50
   eval_episodes: 10
   #accelerator: "gpu"
@@ -146,14 +146,18 @@ objects_deterministic_ppo:
   spec: *spec_objects  # Override to use objects spec instead of base spec
   description: "PPO with object-based observations - deterministic version (no sticky actions)"
   early_stop_on_train_threshold: 19.0
-  seed: 42 # Converged with this seed
-  ent_coef: 0.0 # Deterministic, entropy not essential
-  batch_size: 1024
-  clip_range: 0.238
+  early_stop_on_eval_threshold: 19.0
   n_envs: 32
   n_steps: 256
+  batch_size: 1024
   policy_lr: 0.002
+  clip_range: 0.238
+  ent_coef: 0.0
   hidden_dims: [64, 64]
+  eval_async: true
+  eval_warmup_epochs: 100
+  eval_freq_epochs: 5
+  eval_episodes: 10
 
 
   # Plateau intervention: automatically adjust hyperparameters when training stagnates

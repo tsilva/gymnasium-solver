@@ -136,12 +136,12 @@ objects_ppo: &objects_ppo
   early_stop_on_train_threshold: 19.0
   early_stop_on_eval_threshold: 19.0
   n_envs: 32
-  n_steps: 256
-  batch_size: 1024
-  policy_lr: 0.002
-  clip_range: 0.238
-  ent_coef: 0.01
-  hidden_dims: [64, 64]
+  n_steps: 512 #n_steps: 256
+  batch_size: 512 #batch_size: 1024
+  policy_lr: 0.0006 #policy_lr: 0.002
+  clip_range: 0.17 # clip_range: 0.238
+  ent_coef: 0.04 # ent_coef: 0.01
+  hidden_dims: [64, 64, 64] #hidden_dims: [64, 64]
   eval_async: true
   eval_warmup_epochs: 100
   eval_freq_epochs: 5

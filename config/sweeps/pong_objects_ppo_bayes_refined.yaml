@@ -1,0 +1,52 @@
+name: pong-objects-ppo-bayes-refined
+project: ALE-Pong-v5
+method: bayes
+metric:
+  name: train/roll/ep_rew/mean
+  goal: maximize
+early_terminate:
+  type: hyperband
+  min_iter: 100
+
+parameters:
+  # LOCKED: n_steps=512 was clearly optimal in previous sweep
+  n_steps:
+    value: 512
+
+  # REFINED: Focus on successful range (0.0006-0.003)
+  policy_lr:
+    distribution: log_uniform_values
+    min: 0.0005
+    max: 0.003
+
+  # REFINED: Narrow around top performers (0.16-0.25)
+  clip_range:
+    min: 0.16
+    max: 0.25
+
+  # REFINED: Focus on sweet spot (0.015-0.045)
+  ent_coef:
+    min: 0.015
+    max: 0.045
+
+  # EXPANDED: Both 512 and 1024 worked well, add 768
+  batch_size:
+    values: [512, 768, 1024]
+
+  # REFINED: Focus on 8-10 (faster), keep 15 as option
+  n_epochs:
+    values: [8, 10, 15]
+
+  # EXPLORE: [128,128] won but [64,64,64] was close second
+  # Add [128,64] as middle ground
+  hidden_dims:
+    values: [[64, 64, 64], [128, 128], [128, 64]]
+
+program: train.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - --config_id
+  - "ALE-Pong-v5:objects_ppo"
+  - --wandb_sweep

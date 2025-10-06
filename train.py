@@ -1,6 +1,8 @@
 import argparse
 import warnings
 
+import torch
+
 from utils.train_launcher import launch_training_from_args
 from utils.environment_registry import list_available_environments
 
@@ -9,6 +11,10 @@ from utils.environment_registry import list_available_environments
 # DataLoader only indexes them, so multi-process workers add IPC overhead
 # without benefit.
 warnings.filterwarnings("ignore", message=".*does not have many workers.*")
+
+# Set matmul precision for Tensor Cores on CUDA devices (RTX 4090, etc.)
+# 'medium' balances precision and performance on GPUs with Tensor Cores
+torch.set_float32_matmul_precision("medium")
 
 
 def main():

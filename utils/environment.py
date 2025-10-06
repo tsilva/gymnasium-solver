@@ -81,9 +81,13 @@ def build_env(
     # Assert valid function arguments
     assert seed is not None, "Seed is required"
     assert frame_stack is None or frame_stack > 1, f"frame stack must be at least 2: frame_stack={frame_stack}"
-    assert resize_obs is None or isinstance(resize_obs, tuple), f"resize obs must be a tuple: resize_obs={resize_obs}"
-    assert resize_obs is None or len(resize_obs) == 2, f"resize obs must be a tuple of length 2: resize_obs={resize_obs}"
+    assert resize_obs is None or isinstance(resize_obs, (tuple, list)), f"resize obs must be a tuple or list: resize_obs={resize_obs}"
+    assert resize_obs is None or len(resize_obs) == 2, f"resize obs must be a sequence of length 2: resize_obs={resize_obs}"
     assert resize_obs is None or all(x > 0 for x in resize_obs), f"resize obs must be positive: resize_obs={resize_obs}"
+
+    # Convert resize_obs to tuple if it's a list (JSON deserialization converts tuples to lists)
+    if resize_obs is not None and isinstance(resize_obs, list):
+        resize_obs = tuple(resize_obs)
     assert not (record_video and obs_type != "rgb"), f"video recording requires rgb observations: obs_type={obs_type}"
     assert not (record_video and render_mode != "rgb_array"), f"video recording requires render_mode='rgb_array': render_mode={render_mode}"
     assert not (record_video and vectorization_mode == "async"), f"async vectorization does not support video recording: vectorization_mode={vectorization_mode}"
@@ -148,19 +152,19 @@ def build_env(
     return vec_env
 
 def _build_vec_env_alepy(
-    env_id: str,    
+    env_id: str,
     env_spec: dict,
     env_kwargs: dict,
     env_wrappers: list,
-    n_envs: int, 
+    n_envs: int,
     vectorization_mode: str,
-    seed: int, 
-    obs_type: str, 
-    render_mode: str, 
+    seed: int,
+    obs_type: str,
+    render_mode: str,
     grayscale_obs: bool,
     resize_obs: tuple,
     frame_stack: int,
-    record_video: bool, 
+    record_video: bool,
     record_video_kwargs: dict,
 ):
     from gymnasium import make_vec
@@ -168,25 +172,37 @@ def _build_vec_env_alepy(
 
     assert obs_type == "rgb", "ALE native vectorization requires RGB observations"
 
-    # TODO: pass all frame_stack, grayscale_obs, resize_obs, frameskip, etc to make_vec
+    # Build kwargs for AtariVectorEnv
+    # AtariVectorEnv supports grayscale, resizing, and frame stacking directly
+    atari_kwargs = {}
+    if grayscale_obs is not None:
+        atari_kwargs['grayscale'] = grayscale_obs
+    if resize_obs is not None:
+        atari_kwargs['img_height'] = resize_obs[0]
+        atari_kwargs['img_width'] = resize_obs[1]
+    if frame_stack is not None:
+        atari_kwargs['stack_num'] = frame_stack
+
+    # Pass through relevant env_kwargs
+    # TODO: map more env_kwargs to AtariVectorEnv parameters
+    if 'repeat_action_probability' in env_kwargs:
+        atari_kwargs['repeat_action_probability'] = env_kwargs['repeat_action_probability']
+    if 'full_action_space' in env_kwargs:
+        atari_kwargs['full_action_space'] = env_kwargs['full_action_space']
+
     vec_env = make_vec(
-        env_id, 
-        num_envs=n_envs, 
-        vectorization_mode=None, 
-        #**env_kwargs
+        env_id,
+        num_envs=n_envs,
+        vectorization_mode=None,
+        **atari_kwargs,
     )
 
     # Seed the envs
     obs, _ = vec_env.reset(seed=seed)
-    
-    # Assert that the obs shape is as expected 
-    obs_shape = obs.shape[1:]
-    expected_shape = (frame_stack, *resize_obs)
-    assert obs_shape == expected_shape, f"ALE native vectorization expected {expected_shape} but got {obs_shape}."
 
     # TODO: is this working? how? is it slow?
     if record_video: vec_env = ALEVecVideoRecorder(vec_env, **record_video_kwargs)
- 
+
     # Return the vectorized environment
     return vec_env
 

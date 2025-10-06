@@ -27,7 +27,7 @@ dependencies = [
     "gradio>=4.0.0",
     "vizdoom",
     "mcp",
-    "modal>=0.64.0",
+    "modal>=0.64.0"
 ]
 
 [project.optional-dependencies]

@@ -469,7 +469,7 @@ class Config:
             self.grayscale_obs = True
         if self.resize_obs is None:
             self.resize_obs = (84, 84)
-        if self.frame_stack == 1:  # Default value
+        if self.frame_stack is None:
             self.frame_stack = 4
         if self.frameskip is None:
             self.frameskip = 4

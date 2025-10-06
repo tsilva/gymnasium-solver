@@ -108,23 +108,41 @@ def build_env(
     if vectorization_mode == "auto" and is_stable_retro_env: vectorization_mode = "async" if n_envs > 1 else "sync"
 
     # Create the vectorized environment
-    _build_vec_env_fn = vectorization_mode == "alepy" and _build_vec_env_alepy or _build_vec_env_gym
-    vec_env = _build_vec_env_fn(
-        env_id, 
-        env_spec,
-        env_kwargs,
-        env_wrappers,
-        n_envs, 
-        vectorization_mode,
-        seed, 
-        obs_type,
-        render_mode, 
-        grayscale_obs,
-        resize_obs,
-        frame_stack,
-        record_video, 
-        record_video_kwargs, 
-    )
+    if vectorization_mode == "alepy":
+        vec_env = _build_vec_env_alepy(
+            env_id,
+            env_spec,
+            env_kwargs,
+            env_wrappers,
+            n_envs,
+            vectorization_mode,
+            seed,
+            obs_type,
+            render_mode,
+            grayscale_obs,
+            resize_obs,
+            frame_stack,
+            record_video,
+            record_video_kwargs,
+        )
+    else:
+        vec_env = _build_vec_env_gym(
+            env_id,
+            env_spec,
+            env_kwargs,
+            env_wrappers,
+            n_envs,
+            vectorization_mode,
+            seed,
+            obs_type,
+            render_mode,
+            grayscale_obs,
+            resize_obs,
+            frame_stack,
+            record_video,
+            record_video_kwargs,
+            max_episode_steps,
+        )
     
     # Add episode statistics recorder wrapper
     vec_env = RecordEpisodeStatistics(vec_env)
@@ -207,20 +225,21 @@ def _build_vec_env_alepy(
     return vec_env
 
 def _build_vec_env_gym(
-    env_id: str, 
+    env_id: str,
     env_spec: dict,
     env_kwargs: dict,
     env_wrappers: list,
-    n_envs: int, 
+    n_envs: int,
     vectorization_mode: str,
-    seed: int, 
-    obs_type: str, 
-    render_mode: str, 
+    seed: int,
+    obs_type: str,
+    render_mode: str,
     grayscale_obs: bool,
     resize_obs: tuple,
     frame_stack: int,
-    record_video: bool, 
+    record_video: bool,
     record_video_kwargs: dict,
+    max_episode_steps: int,
 ):
     from gym_wrappers.env_info import EnvInfoWrapper
     from gym_wrappers.env_video_recorder import EnvVideoRecorder
@@ -238,13 +257,16 @@ def _build_vec_env_gym(
         elif is_bandit_env: env = _build_env_mab(env_id, obs_type, render_mode, **env_kwargs)
         else: env = _build_env_gym(env_id, obs_type, render_mode, **env_kwargs)
 
-        from gymnasium.wrappers import GrayscaleObservation, ResizeObservation, FrameStackObservation
+        from gymnasium.wrappers import GrayscaleObservation, ResizeObservation, FrameStackObservation, TimeLimit
         if grayscale_obs: env = GrayscaleObservation(env, keep_dim=False)
         if resize_obs: env = ResizeObservation(env, shape=resize_obs)
         if frame_stack: env = FrameStackObservation(env, stack_size=frame_stack)
 
         # Apply custom wrappers first (before frame stacking) so they operate on raw observations
         for wrapper in env_wrappers: env = EnvWrapperRegistry.apply(env, wrapper)
+
+        # Apply TimeLimit wrapper if max_episode_steps is specified
+        if max_episode_steps is not None: env = TimeLimit(env, max_episode_steps=max_episode_steps)
 
         env = EnvInfoWrapper(env, obs_type=obs_type, project_id=env_id, spec=env_spec) # TODO: project id shouldn't be in env info wrapper
 

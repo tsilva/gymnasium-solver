@@ -44,6 +44,7 @@ def main():
     parser.add_argument('--state', type=str, default=None, help='Starting state (e.g., Level1-1)')
     parser.add_argument('--headless', action='store_true', help='Force headless mode (no rendering window)')
     parser.add_argument('--render', action='store_true', help='Force human rendering mode')
+    parser.add_argument('--max-episode-steps', type=int, default=None, help='Maximum number of steps per episode')
 
     args = parser.parse_args()
 
@@ -80,6 +81,11 @@ def main():
             env_kwargs['state'] = 'Level1-1'
 
     env = retro.make(**env_kwargs)
+
+    # Apply TimeLimit wrapper if max_episode_steps is specified
+    if args.max_episode_steps is not None:
+        from gymnasium.wrappers import TimeLimit
+        env = TimeLimit(env, max_episode_steps=args.max_episode_steps)
 
     # Action space: MultiBinary(9)
     # Buttons: [B, null, SELECT, START, UP, DOWN, LEFT, RIGHT, A]

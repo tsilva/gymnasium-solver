@@ -136,23 +136,17 @@ objects_ppo: &objects_ppo
   early_stop_on_train_threshold: 19.0
   early_stop_on_eval_threshold: 19.0
   n_envs: 32
-  n_steps: 256 # TODO: try 512 (seems to be best)
+  n_steps: 768
   batch_size: 1024
-  policy_lr: 0.002
-  clip_range: 0.238
-  ent_coef: 1e-3 # TODO: try 0.03 seems good
-  #vf_coef: 0.75 # TODO: try 0.75 seems better than 0.75
-  #gae_lambda: 0.99 # TODO: try 0.99-1.0 seems superior
+  policy_lr: 0.003875 # 0.005
+  ent_coef: 0.001 
+  gae_lambda: 0.9675 # 0.9
+  gamma: 0.99
   hidden_dims: [64, 64]
   eval_async: true
   eval_warmup_epochs: 200
   eval_freq_epochs: 5
   eval_episodes: 10
-  batch size: 512 - 1024 are good, others not
-
-  # TODO: try frame stack 3, 4, etc
-  # TODO: confirm that frame stacking is indeed being used
-  #frame_stack: 4 # Experimented with frame-stacking 1-4 and it just made things a bit worse not better
 
 objects_deterministic_ppo:
   <<: *objects_ppo

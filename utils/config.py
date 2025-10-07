@@ -101,6 +101,11 @@ class Config:
     # Experiment seed (for reproducibility)
     seed: int = 42
 
+    # Seeds for train/val/test environments
+    seed_train: int = 42
+    seed_val: int = 1042
+    seed_test: int = 2042
+
     # How many parallel environments are used to collect rollouts
     # Can be an int or "auto" (which resolves to cpu_count())
     n_envs: Union[int, str] = "auto"
@@ -316,7 +321,12 @@ class Config:
             "reinforce": REINFORCEConfig,
             "ppo": PPOConfig,
         }[algo_id]
-        config = config_cls(**_config_dict)
+
+        # Filter out unknown fields to handle config schema evolution
+        valid_fields = set(config_cls.__dataclass_fields__.keys())
+        filtered_dict = {k: v for k, v in _config_dict.items() if k in valid_fields}
+
+        config = config_cls(**filtered_dict)
         return config
 
     @classmethod
@@ -703,6 +713,7 @@ class PPOConfig(Config):
     gamma: float = 0.99
     gae_lambda: float = 0.95
     clip_range: Union[float, Dict[str, Any]] = 0.2
+    clip_vloss: bool = True
     target_kl: Optional[float] = None
     ent_coef: float = 0.0
     vf_coef: Union[float, Dict[str, Any]] = 0.5
@@ -710,7 +721,7 @@ class PPOConfig(Config):
     returns_type: "Config.ReturnsType" = Config.ReturnsType.gae_rtg
     advantages_type: "Config.AdvantagesType" = Config.AdvantagesType.gae
     policy_targets: "Config.PolicyTargetsType" = Config.PolicyTargetsType.advantages  # type: ignore[assignment]
-    normalize_advantages: "Config.AdvantageNormType" = Config.AdvantageNormType.rollout
+    normalize_advantages: "Config.AdvantageNormType" = Config.AdvantageNormType.batch
 
     @property
     def algo_id(self) -> str:

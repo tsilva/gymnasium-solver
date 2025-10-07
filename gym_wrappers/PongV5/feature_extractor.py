@@ -5,6 +5,17 @@ from typing import Optional, Sequence
 
 from gym_wrappers.ocatari_helpers import center_x, center_y, normalize_linear, normalize_position, normalize_velocity, index_objects_by_category
 
+
+def _find_env_with_objects(env):
+    """Drill through wrapper stack to find environment with 'objects' attribute."""
+    current = env
+    while current is not None:
+        if hasattr(current, 'objects'):
+            return current
+        current = getattr(current, 'env', None)
+    return None
+
+
 # Screen dimensions for Atari Pong (for normalizing positions)
 SCREEN_W: float = 160.0
 SCREEN_H: float = 210.0
@@ -243,10 +254,11 @@ class PongV5_FeatureExtractor(gym.ObservationWrapper):
         self._last_action_one_hot[vector_index] = 1.0
 
     def _infer_executed_action(self, fallback: int) -> int:
-        """Best-effort inference of the action ALE executed after stickiness."""
-        objects = getattr(self.env, "objects", None)
-        if objects is None:
+        """Infer the action ALE executed after stickiness by observing paddle velocity."""
+        ocatari_env = _find_env_with_objects(self.env)
+        if ocatari_env is None:
             return fallback
+        objects = ocatari_env.objects
 
         try:
             obj_map = index_objects_by_category(objects)
@@ -258,24 +270,24 @@ class PongV5_FeatureExtractor(gym.ObservationWrapper):
             return fallback
 
         dy = float(getattr(player_obj, "dy", 0.0))
-        # When the paddle isn't moving we can't infer the executed action.
-        # Fall back to the command we issued so the one-hot stays aligned.
+
+        # When the paddle is stationary, NOOP (action 0) must have executed.
+        # This is true whether we requested NOOP (correct) or requested movement
+        # (sticky action caused NOOP to execute instead).
         if abs(dy) <= PADDLE_STILL_EPS:
-            return fallback
+            return 0  # NOOP
 
+        # Paddle is moving: infer direction from velocity
         moving_down = dy > 0.0
-        preferred_action = 3 if moving_down else 2
-        if preferred_action in self._action_index_map:
-            return preferred_action
-
-        # If the preferred action is not tracked (custom mapping), fall back.
-        return fallback
+        return 3 if moving_down else 2  # 3=down action, 2=up action
 
     def observation(self, observation):
         # Convert objects to observation vector using configured bounds.
         # When the ball is invisible, use last-seen kinematics to avoid collisions with valid zeros.
+        ocatari_env = _find_env_with_objects(self.env)
+        assert ocatari_env is not None, "Could not find environment with 'objects' attribute in wrapper stack"
         base_obs = _obs_from_objects(
-            self.env.objects,
+            ocatari_env.objects,
             self.min_y,
             self.max_y,
             self.margin_y,

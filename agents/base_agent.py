@@ -123,12 +123,12 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
 
         default_kwargs = {
             "train": {
-                "seed": self.config.seed,
+                "seed": self.config.seed_train,
             },
             # Record truncated video of first env (requires vectorization_mode='sync', render_mode="rgb_array")
             # When eval_async is enabled, uses fewer envs (set via kwargs above)
             "val": {
-                "seed": self.config.seed + 1000,
+                "seed": self.config.seed_val,
                 "vectorization_mode": "sync",
                 "render_mode": "rgb_array",
                 "record_video": False, #self.config.obs_type == "rgb", # TODO: softcode
@@ -138,7 +138,7 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
             },
             # Record truncated video of first env (requires vectorization_mode='sync', render_mode="rgb_array")
             "test": {
-                "seed": self.config.seed + 2000,
+                "seed": self.config.seed_test,
                 "vectorization_mode": "sync",
                 "render_mode": "rgb_array",
                 "record_video": False, #self.config.obs_type == "rgb", # TODO: softcode

@@ -152,6 +152,7 @@ def main():
         default="trained",
         help="Action mode: 'trained' (use trained policy), 'random' (sample from action space), 'user' (keyboard input)",
     )
+    p.add_argument("--seed", type=str, default=None, help="Random seed for environment (int, 'train', 'val', 'test', or None for test seed)")
     args = p.parse_args()
     target_episodes = max(1, int(args.episodes))
 
@@ -167,14 +168,31 @@ def main():
     if args.mode == "trained":
         assert run.best_checkpoint_dir is not None, "run has no best checkpoint"
 
+    # Resolve seed argument
+    if args.seed is None:
+        # Default to test seed
+        seed = config.seed_test
+    elif args.seed in ["train", "val", "test"]:
+        # Map stage names to corresponding seeds
+        seeds = {
+            "train": config.seed_train,
+            "val": config.seed_val,
+            "test": config.seed_test,
+        }
+        seed = seeds[args.seed]
+    else:
+        # Parse as integer
+        seed = int(args.seed)
+
     # Build a single-env environment with human rendering
     # Force vectorization_mode='sync' to ensure render() is supported (ALE atari vectorization doesn't support it)
-    env = build_env_from_config(
-        config,
-        n_envs=1,
-        vectorization_mode='sync',
-        render_mode="human" if not args.no_render else None
-    )
+    env_overrides = {
+        'n_envs': 1,
+        'vectorization_mode': 'sync',
+        'render_mode': "human" if not args.no_render else None,
+        'seed': seed
+    }
+    env = build_env_from_config(config, **env_overrides)
 
     # Attach a live observation bar printer for interactive play (vector-level wrapper)
     from gym_wrappers.vec_obs_printer import VecObsBarPrinter

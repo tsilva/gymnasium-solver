@@ -136,35 +136,26 @@ objects_ppo: &objects_ppo
   early_stop_on_train_threshold: 19.0
   early_stop_on_eval_threshold: 19.0
   n_envs: 32
-  n_steps: 512 #n_steps: 256
-  batch_size: 512 #batch_size: 1024
-  policy_lr: 0.0006 #policy_lr: 0.002
-  clip_range: 0.17 # clip_range: 0.238
-  ent_coef: 0.04 # ent_coef: 0.01
-  hidden_dims: [64, 64, 64] #hidden_dims: [64, 64]
+  n_steps: 256
+  batch_size: 1024
+  policy_lr: 0.002
+  clip_range: 0.238
+  ent_coef: 1e-3
+  hidden_dims: [64, 64]
   eval_async: true
-  eval_warmup_epochs: 100
+  eval_warmup_epochs: 200
   eval_freq_epochs: 5
   eval_episodes: 10
+  # TODO: try frame stack 3, 4, etc
+  # TODO: confirm that frame stacking is indeed being used
+  frame_stack: 2
 
 objects_deterministic_ppo:
   <<: *objects_ppo
   <<: *env_deterministic
   spec: *spec_objects  # Override to use objects spec instead of base spec
   description: "PPO with object-based observations - deterministic version (no sticky actions)"
-  early_stop_on_train_threshold: 19.0
-  early_stop_on_eval_threshold: 19.0
-  n_envs: 32
-  n_steps: 256
-  batch_size: 1024
-  policy_lr: 0.002
-  clip_range: 0.238
-  ent_coef: 0.0
-  hidden_dims: [64, 64]
-  eval_async: true
-  eval_warmup_epochs: 100
-  eval_freq_epochs: 5
-  eval_episodes: 10
+  
 
   # Plateau intervention: automatically adjust hyperparameters when training stagnates
   # plateau_interventions:

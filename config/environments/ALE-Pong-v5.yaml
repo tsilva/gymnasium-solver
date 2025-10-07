@@ -148,7 +148,7 @@ objects_ppo: &objects_ppo
   eval_episodes: 10
   # TODO: try frame stack 3, 4, etc
   # TODO: confirm that frame stacking is indeed being used
-  frame_stack: 2
+  #frame_stack: 4 # Experimented with frame-stacking 1-4 and it just made things a bit worse not better
 
 objects_deterministic_ppo:
   <<: *objects_ppo

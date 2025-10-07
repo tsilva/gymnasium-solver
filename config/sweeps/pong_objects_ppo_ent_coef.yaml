@@ -1,0 +1,19 @@
+name: pong-objects-ppo-ent-coef
+project: ALE-Pong-v5
+method: grid
+metric:
+  name: train/roll/ep_rew/mean
+  goal: maximize
+
+parameters:
+  ent_coef:
+    values: [0.0, 0.001, 0.005, 0.01, 0.02, 0.03, 0.05]
+
+program: train.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - --config_id
+  - "ALE-Pong-v5:objects_ppo"
+  - --wandb_sweep

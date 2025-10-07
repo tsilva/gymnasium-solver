@@ -1,0 +1,19 @@
+name: pong-objects-ppo-n-steps
+project: ALE-Pong-v5
+method: grid
+metric:
+  name: train/roll/ep_rew/mean
+  goal: maximize
+
+parameters:
+  n_steps:
+    values: [64, 128, 256, 512, 1024]
+
+program: train.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - --config_id
+  - "ALE-Pong-v5:objects_ppo"
+  - --wandb_sweep

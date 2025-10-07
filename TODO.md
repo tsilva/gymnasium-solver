@@ -2,6 +2,7 @@
 
 # NEXT
 
+- dynamic sweep
 - add support for running training in beefed up CPU machine in modal
 - consider intelligent eval strategy
 - parallelize sweeps (docker, spot instances, ray?)

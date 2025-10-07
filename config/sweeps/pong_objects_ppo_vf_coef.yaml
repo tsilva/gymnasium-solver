@@ -1,0 +1,19 @@
+name: pong-objects-ppo-vf-coef
+project: ALE-Pong-v5
+method: grid
+metric:
+  name: train/roll/ep_rew/mean
+  goal: maximize
+
+parameters:
+  vf_coef:
+    values: [0.1, 0.25, 0.5, 0.75, 1.0]
+
+program: train.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - --config_id
+  - "ALE-Pong-v5:objects_ppo"
+  - --wandb_sweep

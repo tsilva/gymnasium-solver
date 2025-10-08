@@ -34,8 +34,6 @@ assert 0.0 <= PLAYFIELD_Y_MIN < PLAYFIELD_Y_MAX <= SCREEN_H, (
 
 # Max Y pixels per frame that paddle can move (for normalizing velocity)
 PADDLE_DY_SCALE: float = 24.0
-# Treat very small paddle velocity as stationary to avoid spurious action flips.
-PADDLE_STILL_EPS: float = 1e-3
 
 # Max X/Y pixels per frame that ball can move (for normalizing velocity)
 BALL_D_SCALE: float = 12.0
@@ -238,10 +236,13 @@ class PongV5_FeatureExtractor(gym.ObservationWrapper):
 
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
-        executed_action = self._infer_executed_action(
-            fallback=int(np.asarray(action).item())
-        )
-        self._record_last_action(executed_action)
+        # Record the requested action directly (not inferred from paddle velocity).
+        # With sticky actions, the agent learns P(s'|s,a) = 0.75*P(execute a) + 0.25*P(execute LastAction).
+        # Inferring from paddle velocity fails because:
+        # 1. Paddles are locked during serve (dy=0 even when issuing movement commands)
+        # 2. Paddles have inertia (1-2 frame lag when changing direction)
+        # 3. Sticky action outcomes are unobservable anyway (can't distinguish locked paddle from NOOP execution)
+        self._record_last_action(int(np.asarray(action).item()))
         obs = self.observation(obs)
         return obs, reward, terminated, truncated, info
 
@@ -252,34 +253,6 @@ class PongV5_FeatureExtractor(gym.ObservationWrapper):
             return
         self._last_action_one_hot.fill(0.0)
         self._last_action_one_hot[vector_index] = 1.0
-
-    def _infer_executed_action(self, fallback: int) -> int:
-        """Infer the action ALE executed after stickiness by observing paddle velocity."""
-        ocatari_env = _find_env_with_objects(self.env)
-        if ocatari_env is None:
-            return fallback
-        objects = ocatari_env.objects
-
-        try:
-            obj_map = index_objects_by_category(objects)
-        except Exception:
-            return fallback
-
-        player_obj = obj_map.get("Player")
-        if player_obj is None:
-            return fallback
-
-        dy = float(getattr(player_obj, "dy", 0.0))
-
-        # When the paddle is stationary, NOOP (action 0) must have executed.
-        # This is true whether we requested NOOP (correct) or requested movement
-        # (sticky action caused NOOP to execute instead).
-        if abs(dy) <= PADDLE_STILL_EPS:
-            return 0  # NOOP
-
-        # Paddle is moving: infer direction from velocity
-        moving_down = dy > 0.0
-        return 3 if moving_down else 2  # 3=down action, 2=up action
 
     def observation(self, observation):
         # Convert objects to observation vector using configured bounds.

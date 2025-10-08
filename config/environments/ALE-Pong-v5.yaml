@@ -144,7 +144,7 @@ objects_ppo: &objects_ppo
   gamma: 0.99
   hidden_dims: [64, 64]
   eval_async: true
-  eval_warmup_epochs: 200
+  eval_warmup_epochs: 100
   eval_freq_epochs: 5
   eval_episodes: 10
 

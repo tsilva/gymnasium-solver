@@ -135,36 +135,37 @@ objects_ppo: &objects_ppo
   description: "PPO with object-based observations using extracted game objects as features"
   early_stop_on_train_threshold: 19.0
   early_stop_on_eval_threshold: 19.0
-  max_env_steps: 2_500_000
-  
-  n_envs: 32
-  n_steps: 768
-  batch_size: 1024
+  max_env_steps: 3_500_000  # Extended for convergence
 
-  # Scheduled hyperparameters to break through stagnation
+  n_envs: 32
+  n_steps: 1024      # Increased rollout length for better value estimates
+  batch_size: 2048   # Larger batches for more stable updates
+  n_epochs: 8        # Fewer passes to prevent overfitting
+
+  # All schedules now work (config loading bug fixed)
   policy_lr:
-    start: 0.003875
-    end: 0.0005
-    from: 0.15  # Start decay at 30% of training
-    to: 1.0
+    start: 0.0055   # Strong initial learning
+    end: 0.00015    # Fine-tuning at end
+    from: 0.0       # Decay from start
+    to: 0.92        # Complete by epoch ~125
 
   ent_coef:
-    start: 0.02   # Higher initial exploration
-    end: 0.001    # Lower final exploitation
-    from: 0.0
-    to: 0.8       # Mostly done by 80% of training
+    start: 0.04     # HIGH exploration during discovery (epochs 0-65)
+    end: 0.0001     # VERY LOW for pure exploitation (epochs 90+)
+    from: 0.48      # Keep high through peak learning phase
+    to: 0.65        # RAPID decay after peak to force convergence
 
   clip_range:
-    start: 0.2
-    end: 0.1
-    from: 0.25     # Keep stable early, then tighten
-    to: 1.0
+    start: 0.3      # Aggressive initial updates
+    end: 0.08       # Tight final clipping
+    from: 0.5       # Start decay after peak learning
+    to: 0.85        # Gradual tightening
 
-  gae_lambda: 0.95
-  gamma: 0.99
-  hidden_dims: [64, 64]
+  gae_lambda: 0.96  # Higher for better long-term credit assignment
+  gamma: 0.995      # Increased for better episode-level optimization
+  hidden_dims: [128, 128]  # Larger network capacity
   eval_async: true
-  eval_warmup_epochs: 100
+  eval_warmup_epochs: 50
   eval_freq_epochs: 5
   eval_episodes: 10
 

@@ -368,8 +368,9 @@ class Config:
                 # Create the variant config
                 variant_id = str(k)
                 variant_cfg = dict(base_config)
-                # Filter out fields not in Config dataclass, but keep algo_id (needed by build_from_dict)
-                variant_cfg.update({k: v for k, v in v.items() if k in config_field_names or k == "algo_id"})
+                # Don't filter here - build_from_dict will filter using the correct subclass fields
+                # after determining algo_id (e.g., PPOConfig has clip_range but base Config doesn't)
+                variant_cfg.update(v)
 
                 # Construct default project_id from env_id + obs_type at variant level
                 # (each variant may have different env_id/obs_type)

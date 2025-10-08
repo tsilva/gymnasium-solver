@@ -2,6 +2,8 @@
 
 # NEXT
 
+- support for deploying runs through modal (ensure max_timesteps)
+- ensure all checkpoints get stored in wandb (check storage limits)
 - debug what happened during point losses
 - try stochastic model on deterministic env
 - dynamic sweep

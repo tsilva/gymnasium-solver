@@ -8,6 +8,7 @@ import platform
 
 from utils.environment import build_env_from_config
 from utils.policy_factory import load_policy_model_from_checkpoint
+from utils.random import set_random_seed
 from utils.rollouts import RolloutCollector
 from utils.run import Run
 
@@ -136,7 +137,7 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
 def main():
     # Parse command line arguments
     p = argparse.ArgumentParser(description="Play a trained agent using RolloutCollector (human render)")
-    p.add_argument("--run-id", default="@last", help="Run ID under runs/ (default: last run with best checkpoint)")
+    p.add_argument("--run-id", default="@best", help="Run ID under runs/ (default: last run with best checkpoint)")
     p.add_argument("--episodes", type=int, default=10, help="Number of episodes to play")
     p.add_argument("--deterministic", action="store_true", default=False, help="Use deterministic actions (mode/argmax)")
     p.add_argument("--no-render", action="store_true", default=False, help="Do not render the environment")
@@ -183,6 +184,9 @@ def main():
     else:
         # Parse as integer
         seed = int(args.seed)
+
+    # Seed all RNGs (Python, NumPy, PyTorch) for reproducibility
+    set_random_seed(seed)
 
     # Build a single-env environment with human rendering
     # Force vectorization_mode='sync' to ensure render() is supported (ALE atari vectorization doesn't support it)

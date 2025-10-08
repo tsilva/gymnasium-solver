@@ -2,6 +2,8 @@
 
 # NEXT
 
+- debug what happened during point losses
+- try stochastic model on deterministic env
 - dynamic sweep
 - add support for running training in beefed up CPU machine in modal
 - consider intelligent eval strategy

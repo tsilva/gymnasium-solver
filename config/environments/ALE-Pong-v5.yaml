@@ -138,9 +138,9 @@ objects_ppo: &objects_ppo
   n_envs: 32
   n_steps: 768
   batch_size: 1024
-  policy_lr: 0.003875 # 0.005
-  ent_coef: 0.001 
-  gae_lambda: 0.9675 # 0.9
+  policy_lr: 0.003875
+  ent_coef: 0.005
+  gae_lambda: 0.95
   gamma: 0.99
   hidden_dims: [64, 64]
   eval_async: true

@@ -135,11 +135,31 @@ objects_ppo: &objects_ppo
   description: "PPO with object-based observations using extracted game objects as features"
   early_stop_on_train_threshold: 19.0
   early_stop_on_eval_threshold: 19.0
+  max_env_steps: 2_500_000
+  
   n_envs: 32
   n_steps: 768
   batch_size: 1024
-  policy_lr: 0.003875
-  ent_coef: 0.005
+
+  # Scheduled hyperparameters to break through stagnation
+  policy_lr:
+    start: 0.003875
+    end: 0.0005
+    from: 0.15  # Start decay at 30% of training
+    to: 1.0
+
+  ent_coef:
+    start: 0.02   # Higher initial exploration
+    end: 0.001    # Lower final exploitation
+    from: 0.0
+    to: 0.8       # Mostly done by 80% of training
+
+  clip_range:
+    start: 0.2
+    end: 0.1
+    from: 0.25     # Keep stable early, then tighten
+    to: 1.0
+
   gae_lambda: 0.95
   gamma: 0.99
   hidden_dims: [64, 64]

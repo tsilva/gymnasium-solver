@@ -94,6 +94,7 @@ _env_deterministic: &env_deterministic
 
 objects_ppo: &objects_ppo
   <<: *env_objects
+  project_id: ALE-Breakout-v5_objects
   algo_id: ppo
   description: "PPO using OCAtari object features for Breakout"
   max_env_steps: 1.2e6
@@ -109,4 +110,5 @@ objects_ppo: &objects_ppo
 objects_deterministic_ppo:
   <<: *objects_ppo
   <<: *env_deterministic
+  project_id: ALE-Breakout-v5_objects_deterministic
   description: "PPO object features without sticky actions"

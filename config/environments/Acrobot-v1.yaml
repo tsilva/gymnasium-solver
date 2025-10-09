@@ -51,6 +51,7 @@ _env: &env
 
 ppo:
   <<: *env
+  project_id: Acrobot-v1
   algo_id: ppo
   description: "Standard PPO on Acrobot - baseline configuration for acrobot swing-up task"
   max_env_steps: 1e6

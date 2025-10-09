@@ -66,6 +66,7 @@ _env_curiosity: &env_curiosity
 
 ppo: &ppo
   <<: *env
+  project_id: MountainCar-v0
   algo_id: ppo
   description: "Standard PPO on MountainCar - baseline configuration for mountain car task"
   eval_warmup_epochs: 50
@@ -79,6 +80,7 @@ ppo: &ppo
 ppo_rewardshaped:
   <<: *ppo
   <<: *env_rewardshaped
+  project_id: MountainCar-v0_rewardshaped
   description: "PPO with reward shaping - uses shaped rewards to guide learning up the mountain"
   frame_stack: 3
   max_env_steps: 1e6
@@ -90,6 +92,7 @@ ppo_rewardshaped:
 ppo_curiosity:
   <<: *ppo
   <<: *env_curiosity
+  project_id: MountainCar-v0_curiosity
   description: "PPO with curiosity-driven exploration bonus based on state visitation counts"
   max_env_steps: 1e6
   n_steps: 256

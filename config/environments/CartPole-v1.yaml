@@ -58,6 +58,7 @@ _env_rewardshaped: &env_rewardshaped
 
 ppo: &ppo
   <<: *env
+  project_id: CartPole-v1
   description: "Standard PPO on state observations - baseline configuration for CartPole"
   algo_id: ppo
   eval_freq_epochs: 10
@@ -65,6 +66,7 @@ ppo: &ppo
 
 ppo_tuned:
   <<: *ppo
+  project_id: CartPole-v1_tuned
   description: "PPO on CartPole - tuned configuration"
   n_envs: 18 # auto
   hidden_dims: [256, 256] # [64, 64]
@@ -79,4 +81,5 @@ ppo_tuned:
 ppo_rewardshaped:
   <<: *ppo
   <<: *env_rewardshaped
+  project_id: CartPole-v1_rewardshaped
   description: "PPO with potential-based reward shaping (angle + position terms)"

@@ -132,6 +132,7 @@ _env_objects: &env_objects
 # NOTE: this seems to be working quite well, but agent is still overconfident with noops
 objects_ppo: &objects_ppo
   <<: *env_objects
+  project_id: ALE-Pong-v5_objects
   algo_id: ppo
   description: "PPO with object-based observations using extracted game objects as features"
   early_stop_on_eval_threshold: 19.0
@@ -173,6 +174,7 @@ objects_ppo: &objects_ppo
 objects_deterministic_ppo:
   <<: *env_objects
   <<: *env_deterministic
+  project_id: ALE-Pong-v5_objects_deterministic
   spec: *spec_objects  # Override to use objects spec instead of base spec
   description: "PPO with object-based observations - deterministic version (no sticky actions)"
   max_env_steps: 1_500_000
@@ -200,6 +202,7 @@ objects_deterministic_ppo:
 
 rgb_ppo: &rgb_ppo
   <<: *env_rgb
+  project_id: ALE-Pong-v5_rgb
   algo_id: ppo
   description: "PPO with 4-frame grayscale stacks (84x84) via ALE atari vectorization"
   accelerator: "gpu"
@@ -217,4 +220,5 @@ rgb_ppo: &rgb_ppo
 rgb_deterministic_ppo:
   <<: *rgb_ppo
   <<: *env_deterministic
+  project_id: ALE-Pong-v5_rgb_deterministic
   description: "PPO with RGB observations - deterministic version with ALE atari vectorization"

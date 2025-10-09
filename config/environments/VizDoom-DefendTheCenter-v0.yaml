@@ -48,6 +48,7 @@ _env: &env
 
 ppo:
   <<: *env
+  project_id: VizDoom-DefendTheCenter-v0
   algo_id: ppo
   description: "PPO on VizDoom DefendTheCenter - standard configuration for center defense task"
   eval_freq_epochs: 10

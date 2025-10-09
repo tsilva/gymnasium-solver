@@ -46,6 +46,7 @@ _env: &env
 
 ppo:
   <<: *env
+  project_id: Bandit-v0
   algo_id: ppo
   description: "PPO on Multi-Armed Bandit - standard configuration for bandit problem"
   max_env_steps: 20_000
@@ -59,6 +60,7 @@ ppo:
 
 reinforce:
   <<: *env
+  project_id: Bandit-v0
   algo_id: reinforce
   description: "REINFORCE on Multi-Armed Bandit - smoke testing configuration"
   max_env_steps: 20_000

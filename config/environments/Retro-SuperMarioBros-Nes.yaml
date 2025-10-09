@@ -62,6 +62,7 @@ _env: &env
 
 ppo:
   <<: *env
+  project_id: Retro-SuperMarioBros-Nes
   algo_id: ppo
   description: "PPO on SuperMarioBros - standard configuration for Mario platformer game"
   max_env_steps: 3e6

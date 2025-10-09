@@ -56,6 +56,7 @@ _env: &env
 
 ppo:
   <<: *env
+  project_id: VizDoom-Basic-v0
   algo_id: ppo
   description: "PPO on VizDoom Basic - standard configuration for basic health gathering task"
   eval_freq_epochs: 1

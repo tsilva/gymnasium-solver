@@ -11,6 +11,7 @@
 - RGB deterministic (limited actions)
 - RGB stochastic
 
+- FEAT: request modal cores proportional to n_envs
 - TODO: test cleanrl envpool implementation
 - FEAT: single plot with fraction of loss
 - compare failures again

@@ -46,6 +46,7 @@ _env: &env
 
 ppo:
   <<: *env
+  project_id: VizDoom-DeadlyCorridor-v0
   algo_id: ppo
   description: "PPO on VizDoom DeadlyCorridor - standard configuration for corridor navigation task"
   eval_freq_epochs: 1

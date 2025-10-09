@@ -129,6 +129,7 @@ _env_objects: &env_objects
 # CONFIGS: obs_type = objects
 ###########################
 
+# NOTE: this seems to be working quite well, but agent is still overconfident with noops
 objects_ppo: &objects_ppo
   <<: *env_objects
   algo_id: ppo
@@ -169,11 +170,34 @@ objects_ppo: &objects_ppo
   eval_freq_epochs: 5
   eval_episodes: 10
 
+# Converges in ~2M steps
+# TODO: run hp tuner
 objects_deterministic_ppo:
-  <<: *objects_ppo
+  <<: *env_objects
   <<: *env_deterministic
   spec: *spec_objects  # Override to use objects spec instead of base spec
   description: "PPO with object-based observations - deterministic version (no sticky actions)"
+
+  algo_id: ppo
+  early_stop_on_train_threshold: 19.0
+  early_stop_on_eval_threshold: 19.0
+
+  ent_coef: 0.0
+  clip_range: 0.1 # TODO: wider clip range?
+  policy_lr: 0.01
+
+  n_envs: 32
+  n_steps: 1024      # Increased rollout length for better value estimates
+  batch_size: 2048   # Larger batches for more stable updates
+  #n_epochs: 8        # Fewer passes to prevent overfitting
+
+  gae_lambda: 0.96  # Higher for better long-term credit assignment
+  gamma: 0.995      # Increased for better episode-level optimization
+  hidden_dims: [64, 64]  # Larger network capacity
+  eval_async: true
+  eval_warmup_epochs: 50
+  eval_freq_epochs: 5
+  eval_episodes: 10
   
 
   # Plateau intervention: automatically adjust hyperparameters when training stagnates
@@ -211,7 +235,7 @@ rgb_ppo: &rgb_ppo
   n_steps: 256
   batch_size: 1024
   n_epochs: 15
-  policy_lr: 3e-2
+  policy_lr: 3e-4
   ent_coef: 0.0
   eval_async: true
   eval_warmup_epochs: 100

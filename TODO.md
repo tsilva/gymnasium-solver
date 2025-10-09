@@ -1,7 +1,14 @@
 # TODO
 
+- Launch runs in modal
+
 # NEXT
 
+- would be best to eval on more seeds
+- I can reach ~15 on eval but it reaches ~19 on deterministic, meaning the dist is not confident enough to reach 19 (not so likely actions are not contributing to outcome)
+- compare failures again
+- test if deterministic rgb converges
+- test if deterministic converges better with these HP
 - support for deploying runs through modal (ensure max_timesteps)
 - ensure all checkpoints get stored in wandb (check storage limits)
 - debug what happened during point losses
@@ -13,14 +20,11 @@
 - FEAT: train from previous run, use that to do multiple runs until convergence (new run loads param); should we restore optimizer? confirm new run starts with same performance, check if it evolves better with same or dfiferent optimizer
 - CHECK: should we reset optimizer when we use another learning rate
 - BUG: rgb env not working
-- FEAT: add max episode steps support (cartpole, atari, vizdoom, nes)
 - TEST: is last eval in uploaded zip file
 - TEST: ensure evaluation is ran exactly same way as train (eg: alevecenv)
 - TEST: ensure frameskip+max is being applied to vizdoom and retro
 - TODO: make key capture not require enter, allow h to show all shortcuts
 - BUG: vecobs not showing action labels for pong rgb
-- TEST: vizdoom env works (with run_play and run_inspect)
-- TEST: super mario env works (with run_play and run_inspect)
 - TEST: smoke tests pass
 - FEAT: speed up eval as much as possible (async mode with few changes)
 - TODO: trace hyperparam tuning process and adjust
@@ -29,11 +33,11 @@
 - TEST: are sweeps still working?
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 - TODO: add env normalization support, make sure normalization is saved
-- TODO: add fit to container zoom in inspect
 - TODO: add action number/ label before each frame stack image in inspect (allows easily seeing which action was performed when each frame was seen)
 
 ## Pong-v5
 
+- NOOPs are overconfident, try training without NOOPs (may change training dynamics)
 - TODO: learn how to read gradient graphs
 - https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/
 - Check best performance on deterministic env, if it reaches 20-21 then the feature extractor is probably ok (note: raise threshold for this env?)
@@ -53,7 +57,6 @@
 - Ensure eval uses domain randomization as well
 - FEAT: add LunarLander-v3 randomization wrapper
 - FEAT: reward shape lunarlander to train faster by penalizing long episodes
-
 
 ## Taxi-v3
 

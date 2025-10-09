@@ -65,6 +65,7 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         self._async_eval_thread = None
         self._async_eval_metrics = {}
         self._async_eval_lock = threading.Lock()
+        self._async_eval_shutdown = threading.Event()
         self._async_eval_pending_epoch = None  # Tracks if we need to eval a newer model
         self._async_eval_running_epoch = None  # Tracks which epoch is currently being evaluated
 
@@ -349,11 +350,15 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         Args:
             eval_epoch: Epoch to evaluate. If None, uses current_epoch.
         """
+        if self._async_eval_shutdown.is_set():
+            return
         if eval_epoch is None:
             eval_epoch = int(self.current_epoch)
 
         # If eval is already running, mark this epoch as pending and return
         if self._async_eval_thread is not None and self._async_eval_thread.is_alive():
+            if self._async_eval_shutdown.is_set():
+                return
             with self._async_eval_lock:
                 self._async_eval_pending_epoch = eval_epoch
             return
@@ -367,6 +372,9 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
             # Capture the epoch we're evaluating (thread-safe)
             with self._async_eval_lock:
                 current_eval_epoch = self._async_eval_running_epoch
+
+            if self._async_eval_shutdown.is_set():
+                return
 
             val_collector = self.get_rollout_collector("val")
             val_metrics = val_collector.evaluate_episodes(
@@ -400,7 +408,7 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
                         callback._maybe_stop(self.trainer, self)
 
             # If there's a pending epoch, launch eval for it immediately
-            if pending_epoch is not None:
+            if pending_epoch is not None and not self._async_eval_shutdown.is_set():
                 self._launch_async_eval(eval_epoch=pending_epoch)
 
         self._async_eval_thread = threading.Thread(target=_run_eval, daemon=True)
@@ -441,8 +449,12 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
 
     def on_fit_end(self):
         # Wait for async eval thread to complete if still running
+        self._async_eval_shutdown.set()
+        with self._async_eval_lock:
+            self._async_eval_pending_epoch = None
         if self._async_eval_thread is not None and self._async_eval_thread.is_alive():
-            self._async_eval_thread.join(timeout=10.0)
+            self._async_eval_thread.join()
+        self._async_eval_thread = None
 
         # If user aborted before training, skip finalization work
         if getattr(self, "_aborted_before_training", False):

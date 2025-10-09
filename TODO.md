@@ -77,7 +77,6 @@
 - FEAT: support for multi-env rollout collectors (eg: solve multiple envs at once; eg: train on multiple configs of LunarLander-v3)
 - FEAT: add support for curriculum learning (take same model through N challenges sequentially)
 - FEAT: add support for publishing run to Hugging Face Hub
-- FEAT: add support for async eval (to avoid blocking training)
 - FEAT: SEEDRL+PPO
 - FEAT: multidiscrete support
 - FEAT: implement RND (Random Network Distillation)

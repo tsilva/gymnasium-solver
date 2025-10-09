@@ -156,7 +156,8 @@ def _ensure_wandb_run_initialized(config) -> None:
 
     # Otherwise create a fresh run using project and full config
     from utils.formatting import sanitize_name
-    project_name = sanitize_name(config.env_id)
+    project_name = config.project_id
+    assert project_name, "project_id is required"
     wandb.init(project=project_name, config=asdict(config))
 
 def _extract_elapsed_seconds(agent) -> Optional[float]:

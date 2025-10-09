@@ -108,12 +108,18 @@ _env_deterministic: &env_deterministic
   <<: *env
   env_kwargs:
     repeat_action_probability: 0.0
+
+_env_wrapper_restricted_actions: &env_wrapper_restricted_actions
+  id: DiscreteActionSpaceRemapperWrapper
+  mapping: [0, 2, 3]
   
 # RGB env
 _env_rgb: &env_rgb
   <<: *env
   spec: *spec_rgb
   obs_type: "rgb"
+  env_wrappers:
+    - *env_wrapper_restricted_actions
 
 # Objects env
 _env_objects: &env_objects
@@ -122,8 +128,8 @@ _env_objects: &env_objects
   obs_type: "objects"
   accelerator: "cpu"
   env_wrappers:
-    - { id: PongV5_FeatureExtractor, action_ids: [0, 2, 3] }
-    - { id: DiscreteActionSpaceRemapperWrapper, mapping: [0, 2, 3] }
+    - *env_wrapper_restricted_actions
+    - { id: PongV5_FeatureExtractor, action_ids: [0, 2, 3] } # TODO: softcode action_ids based on remapper
 
 ###########################
 # CONFIGS: obs_type = objects
@@ -187,10 +193,9 @@ objects_deterministic_ppo:
   policy_lr: 0.01
 
   n_envs: 32
-  n_steps: 1024      # Increased rollout length for better value estimates
-  batch_size: 2048   # Larger batches for more stable updates
-  gae_lambda: 0.96  # Higher for better long-term credit assignment
-  hidden_dims: [64, 64]  # Larger network capacity
+  n_steps: 1024
+  batch_size: 2048
+  hidden_dims: [64, 64]
   eval_async: true
   eval_warmup_epochs: 20
   eval_freq_epochs: 5

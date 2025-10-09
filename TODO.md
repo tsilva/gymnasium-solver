@@ -21,7 +21,7 @@
 - CHECK: should we reset optimizer when we use another learning rate
 - TEST: is last eval in uploaded zip file
 - TEST: ensure evaluation is ran exactly same way as train (eg: alevecenv)
-- TEST: ensure frameskip+max is being applied to vizdoom and retro
+- TEST: ensure frameskip is being applied to vizdoom and retro
 - TODO: make key capture not require enter, allow h to show all shortcuts
 - BUG: vecobs not showing action labels for pong rgb
 - TEST: smoke tests pass

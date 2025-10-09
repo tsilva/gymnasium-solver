@@ -2,15 +2,7 @@
 
 # NEXT
 
-- remove NOOP (deterministic)
-- remove NOOP (stochastic)
-- + n_steps
-- + batch_size
-- + vf_coef 
-- - vf_coef
-- RGB deterministic (limited actions)
-- RGB stochastic
-
+- BUG: can't python run_play.py --run-id j1hp3u4a (crashes due to action remapper)
 - FEAT: request modal cores proportional to n_envs
 - TODO: test cleanrl envpool implementation
 - FEAT: single plot with fraction of loss

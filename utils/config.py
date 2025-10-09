@@ -715,7 +715,7 @@ class PPOConfig(Config):
     gae_lambda: float = 0.95
     clip_range: Union[float, Dict[str, Any]] = 0.2
     clip_vloss: bool = True
-    target_kl: Optional[float] = None
+    target_kl: Optional[float] = None # TODO: 0.015 in spinning up?
     ent_coef: float = 0.0
     vf_coef: Union[float, Dict[str, Any]] = 0.5
     max_grad_norm: float = 0.5

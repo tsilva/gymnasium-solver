@@ -304,8 +304,9 @@ def _build_vec_env_gym(
 
             if frame_stack: env = FrameStackObservation(env, stack_size=frame_stack, padding_type="zero")
         else:
-            if grayscale_obs: env = GrayscaleObservation(env, keep_dim=False)
+            # NOTE: resize before grayscaling for improving downscaling quality
             if resize_obs: env = ResizeObservation(env, shape=resize_obs)
+            if grayscale_obs: env = GrayscaleObservation(env, keep_dim=False)
 
             # Apply custom wrappers before stacking so they operate on per-frame observations
             for wrapper in env_wrappers: env = EnvWrapperRegistry.apply(env, wrapper)

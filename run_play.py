@@ -140,7 +140,7 @@ def main():
     p.add_argument("--run-id", default="@best", help="Run ID under runs/ (default: last run with best checkpoint)")
     p.add_argument("--episodes", type=int, default=10, help="Number of episodes to play")
     p.add_argument("--deterministic", action="store_true", default=False, help="Use deterministic actions (mode/argmax)")
-    p.add_argument("--no-render", action="store_true", default=False, help="Do not render the environment")
+    p.add_argument("--headless", action="store_true", default=False, help="Do not render the environment")
     p.add_argument(
         "--step-by-step",
         dest="step_by_step",
@@ -193,7 +193,7 @@ def main():
     env_overrides = {
         'n_envs': 1,
         'vectorization_mode': 'sync',
-        'render_mode': "human" if not args.no_render else None,
+        'render_mode': "human" if not args.headless else None,
         'seed': seed
     }
     env = build_env_from_config(config, **env_overrides)

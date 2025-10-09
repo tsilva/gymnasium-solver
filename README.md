@@ -384,6 +384,10 @@ VIBES/               # Architecture guide, coding principles, task playbooks
 - **[VIBES/ARCHITECTURE_GUIDE.md](VIBES/ARCHITECTURE_GUIDE.md)**: Detailed architecture documentation
 - **[VIBES/CODING_PRINCIPLES.md](VIBES/CODING_PRINCIPLES.md)**: Coding style and principles
 
+## References
+
+- https://docs.cleanrl.dev/rl-algorithms/ppo
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) file for details.

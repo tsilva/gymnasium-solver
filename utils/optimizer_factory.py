@@ -19,5 +19,11 @@ def build_optimizer(*, params, optimizer, lr: float) -> torch.optim.Optimizer:
         "adamw": torch.optim.AdamW,
     }[opt_id]
 
-    return optimizer_class(params, lr=lr)
+    # TODO: softcode this
+    # NOTE: magic eps from openai baselines: https://github.com/openai/baselines/blob/ea25b9e8b234e6ee1bca43083f8f3cf974143998/baselines/ppo2/model.py#L100
+    #extra_kwargs = {
+    #    "eps": 1e-5,
+    #} if opt_id == "adam" else {}
+
+    return optimizer_class(params, lr=lr)#, **extra_kwargs)
 

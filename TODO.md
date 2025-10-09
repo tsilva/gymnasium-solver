@@ -4,6 +4,15 @@
 
 # NEXT
 
+- TODO: test cleanrl envpool implementation
+- try again with magic eps
+- try again with rollout normalization
+- PONG: try NOOP for deterministic envs
+- PONG: train objects deterministic
+- PONG: train objects deterministic without NOOP (faster?)
+- PONG: train objects normal without NOOP (better?)
+- PONG: train RGB without NOOP
+
 - rgb fix actions
 - would be best to eval on more seeds
 - I can reach ~15 on eval but it reaches ~19 on deterministic, meaning the dist is not confident enough to reach 19 (not so likely actions are not contributing to outcome)

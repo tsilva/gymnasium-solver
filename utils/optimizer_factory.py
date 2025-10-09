@@ -20,6 +20,7 @@ def build_optimizer(*, params, optimizer, lr: float) -> torch.optim.Optimizer:
     }[opt_id]
 
     # TODO: softcode this
+    # NOTE: still not sure if this helps or not
     # NOTE: magic eps from openai baselines: https://github.com/openai/baselines/blob/ea25b9e8b234e6ee1bca43083f8f3cf974143998/baselines/ppo2/model.py#L100
     #extra_kwargs = {
     #    "eps": 1e-5,

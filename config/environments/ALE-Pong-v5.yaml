@@ -169,8 +169,7 @@ objects_ppo: &objects_ppo
   eval_freq_epochs: 5
   eval_episodes: 10
 
-# Converges in ~1.4M steps
-# TODO: run hp tuner
+# Converges in ~1.5M steps
 objects_deterministic_ppo:
   <<: *env_objects
   <<: *env_deterministic

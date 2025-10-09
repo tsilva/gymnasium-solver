@@ -4,32 +4,21 @@
 
 # NEXT
 
-- TODO: test cleanrl envpool implementation
-- try again with magic eps
-- try again with rollout normalization
-- PONG: try NOOP for deterministic envs
-- PONG: train objects deterministic
-- PONG: train objects deterministic without NOOP (faster?)
-- PONG: train objects normal without NOOP (better?)
-- PONG: train RGB without NOOP
+- remove NOOP (deterministic)
+- remove NOOP (stochastic)
+- + n_steps
+- + batch_size
+- + vf_coef 
+- - vf_coef
+- RGB deterministic (limited actions)
+- RGB stochastic
 
-- rgb fix actions
-- would be best to eval on more seeds
-- I can reach ~15 on eval but it reaches ~19 on deterministic, meaning the dist is not confident enough to reach 19 (not so likely actions are not contributing to outcome)
+- TODO: test cleanrl envpool implementation
+- FEAT: single plot with fraction of loss
 - compare failures again
-- test if deterministic rgb converges
-- test if deterministic converges better with these HP
-- support for deploying runs through modal (ensure max_timesteps)
 - ensure all checkpoints get stored in wandb (check storage limits)
-- debug what happened during point losses
-- try stochastic model on deterministic env
-- dynamic sweep
-- add support for running training in beefed up CPU machine in modal
-- consider intelligent eval strategy
-- parallelize sweeps (docker, spot instances, ray?)
 - FEAT: train from previous run, use that to do multiple runs until convergence (new run loads param); should we restore optimizer? confirm new run starts with same performance, check if it evolves better with same or dfiferent optimizer
 - CHECK: should we reset optimizer when we use another learning rate
-- BUG: rgb env not working
 - TEST: is last eval in uploaded zip file
 - TEST: ensure evaluation is ran exactly same way as train (eg: alevecenv)
 - TEST: ensure frameskip+max is being applied to vizdoom and retro
@@ -40,7 +29,6 @@
 - TODO: trace hyperparam tuning process and adjust
 - TEST: logged to correct projects
 - TEST: tune with agent
-- TEST: are sweeps still working?
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 - TODO: add env normalization support, make sure normalization is saved
 - TODO: add action number/ label before each frame stack image in inspect (allows easily seeing which action was performed when each frame was seen)
@@ -49,10 +37,7 @@
 
 - NOOPs are overconfident, try training without NOOPs (may change training dynamics)
 - TODO: learn how to read gradient graphs
-- https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/
 - Check best performance on deterministic env, if it reaches 20-21 then the feature extractor is probably ok (note: raise threshold for this env?)
-- Try tanh and check if performance improves
-- Confirm that we can get >=18 in stochastic env
 - Confirm that Pong-v5 deterministic env reaches 20-21
 - Check if we can get to 20-21 with RGB observations
 - Frame stacking should work to turn POMDP into MDP
@@ -91,3 +76,4 @@
 - FEAT: multidiscrete support
 - FEAT: implement RND (Random Network Distillation)
 - FEAT: Recurrent PPO (eg: PPO-LSTM)
+

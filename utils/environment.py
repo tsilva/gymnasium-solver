@@ -262,19 +262,55 @@ def _build_vec_env_gym(
     is_bandit_env = _is_mab_env_id(env_id)
 
     def env_fn():
-        if is_alepy_env: env = _build_env_alepy(env_id, obs_type, render_mode, **env_kwargs)
-        elif is_vizdoom_env: env = _build_env_vizdoom(env_id, obs_type, render_mode, **env_kwargs)
-        elif is_stable_retro_env: env = _build_env_stable_retro(env_id, obs_type, render_mode, **env_kwargs)
-        elif is_bandit_env: env = _build_env_mab(env_id, obs_type, render_mode, **env_kwargs)
-        else: env = _build_env_gym(env_id, obs_type, render_mode, **env_kwargs)
+        from gymnasium.wrappers import (
+            AtariPreprocessing,
+            FrameStackObservation,
+            GrayscaleObservation,
+            ResizeObservation,
+            TimeLimit,
+        )
 
-        from gymnasium.wrappers import GrayscaleObservation, ResizeObservation, FrameStackObservation, TimeLimit
-        if grayscale_obs: env = GrayscaleObservation(env, keep_dim=False)
-        if resize_obs: env = ResizeObservation(env, shape=resize_obs)
-        if frame_stack: env = FrameStackObservation(env, stack_size=frame_stack)
+        local_env_kwargs = dict(env_kwargs)
+        atari_frame_skip = None
+        if is_alepy_env and obs_type == "rgb":
+            configured_frameskip = local_env_kwargs.get("frameskip")
+            atari_frame_skip = configured_frameskip if configured_frameskip is not None else 4
+            base_frameskip = 1 if atari_frame_skip > 1 else atari_frame_skip
+            local_env_kwargs["frameskip"] = base_frameskip
 
-        # Apply custom wrappers first (before frame stacking) so they operate on raw observations
-        for wrapper in env_wrappers: env = EnvWrapperRegistry.apply(env, wrapper)
+        if is_alepy_env: env = _build_env_alepy(env_id, obs_type, render_mode, **local_env_kwargs)
+        elif is_vizdoom_env: env = _build_env_vizdoom(env_id, obs_type, render_mode, **local_env_kwargs)
+        elif is_stable_retro_env: env = _build_env_stable_retro(env_id, obs_type, render_mode, **local_env_kwargs)
+        elif is_bandit_env: env = _build_env_mab(env_id, obs_type, render_mode, **local_env_kwargs)
+        else: env = _build_env_gym(env_id, obs_type, render_mode, **local_env_kwargs)
+
+        if is_alepy_env and obs_type == "rgb":
+            grayscale_flag = True if grayscale_obs is None else grayscale_obs
+            screen_size = resize_obs if resize_obs is not None else 84
+            if isinstance(screen_size, (tuple, list)):
+                assert len(screen_size) == 2, f"resize_obs must have length 2: resize_obs={screen_size}"
+                screen_size = (screen_size[1], screen_size[0])
+            env = AtariPreprocessing(
+                env,
+                frame_skip=atari_frame_skip or 4,
+                screen_size=screen_size,
+                grayscale_obs=grayscale_flag,
+                grayscale_newaxis=False,
+                scale_obs=False,
+            )
+
+            # Apply custom wrappers on the preprocessed single-frame observations before stacking
+            for wrapper in env_wrappers: env = EnvWrapperRegistry.apply(env, wrapper)
+
+            if frame_stack: env = FrameStackObservation(env, stack_size=frame_stack, padding_type="zero")
+        else:
+            if grayscale_obs: env = GrayscaleObservation(env, keep_dim=False)
+            if resize_obs: env = ResizeObservation(env, shape=resize_obs)
+
+            # Apply custom wrappers before stacking so they operate on per-frame observations
+            for wrapper in env_wrappers: env = EnvWrapperRegistry.apply(env, wrapper)
+
+            if frame_stack: env = FrameStackObservation(env, stack_size=frame_stack)
 
         # Apply TimeLimit wrapper if max_episode_steps is specified
         if max_episode_steps is not None: env = TimeLimit(env, max_episode_steps=max_episode_steps)

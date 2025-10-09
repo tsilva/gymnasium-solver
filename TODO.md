@@ -4,6 +4,7 @@
 
 # NEXT
 
+- rgb fix actions
 - would be best to eval on more seeds
 - I can reach ~15 on eval but it reaches ~19 on deterministic, meaning the dist is not confident enough to reach 19 (not so likely actions are not contributing to outcome)
 - compare failures again

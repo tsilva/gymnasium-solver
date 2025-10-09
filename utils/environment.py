@@ -124,6 +124,7 @@ def build_env(
             frame_stack,
             record_video,
             record_video_kwargs,
+            project_id,
         )
     else:
         vec_env = _build_vec_env_gym(
@@ -184,6 +185,7 @@ def _build_vec_env_alepy(
     frame_stack: int,
     record_video: bool,
     record_video_kwargs: dict,
+    project_id: str,
 ):
     from gymnasium import make_vec
     from gym_wrappers.ale_vec_video_recorder import ALEVecVideoRecorder
@@ -217,6 +219,15 @@ def _build_vec_env_alepy(
 
     # Seed the envs
     obs, _ = vec_env.reset(seed=seed)
+
+    # Annotate env so VecEnvInfoWrapper can expose metadata/compat fallbacks
+    vec_env._ale_atari_vec = True  # type: ignore[attr-defined]
+    vec_env._spec = env_spec  # type: ignore[attr-defined]
+    vec_env.env_id = env_id  # type: ignore[attr-defined]
+    vec_env._project_id = project_id  # type: ignore[attr-defined]
+    vec_env._obs_type = obs_type  # type: ignore[attr-defined]
+    vec_env.render_mode = render_mode  # type: ignore[attr-defined]
+    vec_env._last_seed = seed  # type: ignore[attr-defined]
 
     # TODO: is this working? how? is it slow?
     if record_video: vec_env = ALEVecVideoRecorder(vec_env, **record_video_kwargs)

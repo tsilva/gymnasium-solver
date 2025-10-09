@@ -111,7 +111,7 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         pass
 
     def build_env(self, stage: str, **kwargs):
-        from utils.environment import build_env_from_config
+        from utils.environment import build_env_from_config, _is_alepy_env_id, _is_stable_retro_env_id
 
         # Ensure _envs is initialized
         self._envs = self._envs if hasattr(self, "_envs") else {}
@@ -121,6 +121,13 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         if self.config.eval_async and stage == "val" and "n_envs" not in kwargs:
             eval_n_envs = max(4, min(8, self.config.n_envs // 4))
             kwargs["n_envs"] = eval_n_envs
+
+        reuse_alepy_vectorization = (
+            _is_alepy_env_id(self.config.env_id)
+            and getattr(self.config, "obs_type", None) == "rgb"
+            and self.config.vectorization_mode in ("auto", "alepy")
+            and "vectorization_mode" not in kwargs
+        )
 
         default_kwargs = {
             "train": {
@@ -149,9 +156,12 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
             },
         }
 
+        if reuse_alepy_vectorization:
+            default_kwargs["val"]["vectorization_mode"] = self.config.vectorization_mode
+            default_kwargs["test"]["vectorization_mode"] = self.config.vectorization_mode
+
         # stable-retro doesn't support multiple emulator instances per process
         # Force async vectorization for val/test stages and disable video recording
-        from utils.environment import _is_stable_retro_env_id
         if _is_stable_retro_env_id(self.config.env_id) and stage in ("val", "test"):
             kwargs.setdefault("n_envs", 1)
             kwargs["vectorization_mode"] = "async"

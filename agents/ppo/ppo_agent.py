@@ -33,6 +33,9 @@ class PPOAgent(BaseAgent):
         # Batch-normalize advantage if requested
         if self.config.normalize_advantages == "batch":
             advantages = batch_normalize(advantages)
+            # Track post-normalization advantage statistics
+            adv_norm_mean = advantages.mean()
+            adv_norm_std = advantages.std()
 
         # Infer policy_distribution and value_predictions from the actor critic model
         policy_dist, values_pred = self.policy_model(observations)
@@ -130,6 +133,11 @@ class PPOAgent(BaseAgent):
             'opt/ppo/approx_kl': approx_kl.detach(),
             'opt/value/explained_var': explained_var.detach(),
         }
+
+        # Add post-normalization advantage stats if batch normalization was applied
+        if self.config.normalize_advantages == "batch":
+            metrics['roll/adv/norm/mean'] = adv_norm_mean.detach()
+            metrics['roll/adv/norm/std'] = adv_norm_std.detach()
 
         # In case the KL divergence exceeded the target, stop training on this epoch
         early_stop_epoch = False

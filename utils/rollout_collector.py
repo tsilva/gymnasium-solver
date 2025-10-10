@@ -107,6 +107,7 @@ class RolloutCollector():
         self._rew_stats = RunningStats()
         self._base_stats = RunningStats()
         self._adv_stats = RunningStats()
+        self._adv_norm_stats = RunningStats()  # Normalized advantages (post-normalization)
         self._ret_stats = RunningStats()
 
         # Action histogram (discrete); grows dynamically as needed
@@ -398,23 +399,29 @@ class RolloutCollector():
         if self.normalize_returns:
             returns_buf = _normalize_returns(returns_buf) # TODO: take into account unfinished episodes?
 
-        # Normalize advantages if requested
-        if self.normalize_advantages:
-            advantages_buf = _normalize_advantages(advantages_buf)
-
-        # Update running return/advantage stats (post-normalization so it reflects training distribution)
-        ret_flat_env_major = returns_buf.transpose(1, 0).reshape(-1)
-        if valid_mask_flat_for_stats is not None:
-            self._ret_stats.update(ret_flat_env_major[valid_mask_flat_for_stats])
-        else:
-            self._ret_stats.update(ret_flat_env_major)
-
-        # Advantages
+        # Track pre-normalization advantage stats
         adv_flat_env_major = advantages_buf.transpose(1, 0).reshape(-1)
         if valid_mask_flat_for_stats is not None:
             self._adv_stats.update(adv_flat_env_major[valid_mask_flat_for_stats])
         else:
             self._adv_stats.update(adv_flat_env_major)
+
+        # Normalize advantages if requested
+        if self.normalize_advantages:
+            advantages_buf = _normalize_advantages(advantages_buf)
+            # Track post-normalization advantage stats
+            adv_norm_flat_env_major = advantages_buf.transpose(1, 0).reshape(-1)
+            if valid_mask_flat_for_stats is not None:
+                self._adv_norm_stats.update(adv_norm_flat_env_major[valid_mask_flat_for_stats])
+            else:
+                self._adv_norm_stats.update(adv_norm_flat_env_major)
+
+        # Update running return stats (post-normalization so it reflects training distribution)
+        ret_flat_env_major = returns_buf.transpose(1, 0).reshape(-1)
+        if valid_mask_flat_for_stats is not None:
+            self._ret_stats.update(ret_flat_env_major[valid_mask_flat_for_stats])
+        else:
+            self._ret_stats.update(ret_flat_env_major)
 
         return advantages_buf, returns_buf
 
@@ -669,9 +676,12 @@ class RolloutCollector():
         # Baseline statistics from global aggregates
         baseline_mean = self._base_stats.mean()
         baseline_std = self._base_stats.std()
-        # Advantage statistics (post-normalization if enabled)
+        # Advantage statistics (pre-normalization)
         adv_mean = self._adv_stats.mean()
         adv_std = self._adv_stats.std()
+        # Normalized advantage statistics (post-normalization, if enabled)
+        adv_norm_mean = self._adv_norm_stats.mean()
+        adv_norm_std = self._adv_norm_stats.std()
         # Return statistics (post-normalization if enabled)
         ret_mean = self._ret_stats.mean()
         ret_std = self._ret_stats.std()
@@ -699,6 +709,11 @@ class RolloutCollector():
             "roll/baseline/mean": baseline_mean,
             "roll/baseline/std": baseline_std
         }
+
+        # Include normalized advantage stats if normalization is enabled
+        if self.normalize_advantages and self._adv_norm_stats.count > 0:
+            metrics["roll/adv_norm/mean"] = adv_norm_mean
+            metrics["roll/adv_norm/std"] = adv_norm_std
 
         # Only include episode metrics if at least one episode has completed
         if self.episode_reward_deque:

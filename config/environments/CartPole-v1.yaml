@@ -61,22 +61,20 @@ ppo: &ppo
   project_id: CartPole-v1
   description: "Standard PPO on state observations - baseline configuration for CartPole"
   algo_id: ppo
-  eval_freq_epochs: 10
+  eval_warmup_epochs: 10
+  eval_freq_epochs: 1
   eval_episodes: 100
-
-ppo_tuned:
-  <<: *ppo
-  project_id: CartPole-v1_tuned
-  description: "PPO on CartPole - tuned configuration"
-  n_envs: 18 # auto
-  hidden_dims: [256, 256] # [64, 64]
-  ent_coef: 0
-  clip_range: 0.1
-  batch_size: 0.25
-  n_steps: 2048 #32
-  n_epochs: 20
-  policy_lr: 1e-3
-  gae_lambda: 0.8
+  policy_lr: 3e-3
+  batch_size: 0.5
+  #n_envs: 18 # auto
+  #hidden_dims: [256, 256] # [64, 64]
+  #ent_coef: 0
+  #clip_range: 0.1
+  #batch_size: 0.25
+  #n_steps: 2048 #32
+  #n_epochs: 10
+  #policy_lr: 1e-3
+  #gae_lambda: 0.8
 
 ppo_rewardshaped:
   <<: *ppo

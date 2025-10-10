@@ -603,22 +603,25 @@ class RolloutCollector():
                 break
 
         total_episodes_collected = int(sum(per_env_counts))
-        ep_rew_mean = float(total_reward_sum / total_episodes_collected) if total_episodes_collected > 0 else 0.0
-        ep_len_mean = float(total_length_sum / total_episodes_collected) if total_episodes_collected > 0 else 0.0
 
         base_metrics = self.get_metrics()
 
         # TODO: this is a hack, make sure _dist is being excluded from logging
         base_metrics.pop("action_dist")
 
-        return {
+        metrics = {
             **base_metrics,
             "cnt/total_episodes": total_episodes_collected,
             "cnt/total_env_steps": int(total_timesteps),
             "cnt/total_vec_steps": int(total_vec_steps),
-            "roll/ep_rew/mean": ep_rew_mean,
-            "roll/ep_len/mean": float(ep_len_mean),
         }
+
+        # Only log episode statistics when episodes have been collected
+        if total_episodes_collected > 0:
+            metrics["roll/ep_rew/mean"] = float(total_reward_sum / total_episodes_collected)
+            metrics["roll/ep_len/mean"] = float(total_length_sum / total_episodes_collected)
+
+        return metrics
 
     def slice_trajectories(self, trajectories, idxs):
         """Return a view of the rollout trajectory at the given indices.

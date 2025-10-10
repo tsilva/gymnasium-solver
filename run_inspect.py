@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import random
+import time
 
 # Avoid macOS AppKit main-thread violations when environments initialize
 # Pygame/SDL from Gradio worker threads. Using the headless SDL drivers
@@ -110,11 +112,15 @@ def run_episode(
 
     from utils.environment import build_env_from_config
 
+    # Use random seed for each episode to get diverse initializations
+    seed = int(time.time() * 1000) % (2**31) + random.randint(0, 10000)
+
     env = build_env_from_config(
         config,
         n_envs=1,
         render_mode="rgb_array",
         vectorization_mode='sync',
+        seed=seed,
     )
 
     # Get checkpoint path with backward compatibility for old policy.ckpt format

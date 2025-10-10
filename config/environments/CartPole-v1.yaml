@@ -64,7 +64,6 @@ ppo: &ppo
   description: "Standard PPO on state observations - baseline configuration for CartPole"
   algo_id: ppo
 
-  early_stop_on_train_threshold: True
 
   eval_warmup_epochs: 50
   eval_freq_epochs: 10
@@ -81,7 +80,6 @@ ppo: &ppo
 
   policy_lr: 0.001
   clip_range: 0.1
-  target_kl: 0.1
 
 ppo_rewardshaped:
   <<: *ppo

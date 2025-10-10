@@ -172,7 +172,10 @@ class VecObsBarPrinter(VectorWrapper):
     def _init_from_spec(self) -> None:
         # VecEnvInfoWrapper provides get_spec(); all envs must have it
         spec = self.env.get_spec()
-        print(f"[VecObsBarPrinter] Initializing from spec: {spec.env_id if hasattr(spec, 'env_id') else 'unknown'}")
+
+        # Parse reward range and action metadata first (independent of observation space)
+        self._parse_reward_range_from_spec(spec)
+        self._parse_action_metadata_from_spec(spec)
 
         # Extract observation components from spec
         if spec.observation_space is None:
@@ -205,11 +208,6 @@ class VecObsBarPrinter(VectorWrapper):
             self._labels = labels
             self._ranges = ranges if len(ranges) == len(labels) else None
 
-        # Parse reward range from spec when available
-        self._parse_reward_range_from_spec(spec)
-        # Parse action space metadata (discrete count, optional labels)
-        self._parse_action_metadata_from_spec(spec)
-
     def _parse_reward_range_from_spec(self, spec) -> None:
         rr = spec.get_reward_range()
         if rr is not None and len(rr) == 2:
@@ -223,8 +221,6 @@ class VecObsBarPrinter(VectorWrapper):
                 self._action_discrete_n = int(spec.action_space.discrete)
 
         action_labels = spec.get_action_labels()
-        print(f"[VecObsBarPrinter] Raw action labels from spec: {action_labels}")
-
         if action_labels:
             parsed: Dict[int, str] = {}
             for k, v in action_labels.items():
@@ -234,14 +230,9 @@ class VecObsBarPrinter(VectorWrapper):
                     try:
                         parsed[int(k)] = str(v)
                     except ValueError:
-                        print(f"[VecObsBarPrinter] Failed to parse action label key: {k!r}")
+                        pass
             if parsed:
                 self._action_labels = parsed
-                print(f"[VecObsBarPrinter] Parsed action labels: {parsed}")
-            else:
-                print(f"[VecObsBarPrinter] No action labels parsed")
-        else:
-            print(f"[VecObsBarPrinter] No action labels in spec")
 
     def _maybe_init_from_obs(self, obs: np.ndarray) -> None:
         if self._initialized:

@@ -59,10 +59,3 @@ ppo:
   project_id: VizDoom-Basic-v0
   algo_id: ppo
   description: "PPO on VizDoom Basic - standard configuration for basic health gathering task"
-  eval_freq_epochs: 1
-  eval_episodes: 1
-  max_env_steps: 1e6
-  n_steps: 128
-  n_epochs: 4
-  clip_range: 0.1
-  policy_lr: 2.5e-4

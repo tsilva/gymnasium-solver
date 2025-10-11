@@ -37,6 +37,8 @@ https://spinningup.openai.com/en/latest/spinningup/keypapers.html)
 - [Direct Future Prediction](https://flyyufelix.github.io/2017/11/17/direct-future-prediction.html)
 - LEARN: [RoE - Rarity of Events](https://arxiv.org/pdf/1803.07131)
 - imitation learning (unify pretraining process with minari support)
+- LEARN: [Actor-Mimic](https://arxiv.org/abs/1511.06342) - distil expert policies into single model then finetune it on deathmatch
+- WISH: ability to play against AI agent
 
 ## Pong-v5
 

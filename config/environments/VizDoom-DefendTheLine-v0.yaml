@@ -63,15 +63,15 @@ ppo:
   n_envs: 32
   n_steps: 256
   batch_size: 0.5
-  policy_lr: 2.5e-4
-  n_epochs: 20
-  #ent_coef: 0.03
-  ent_coef:
-    start: 0.03     # HIGH exploration during discovery (epochs 0-65)
-    end: 0.0001     # VERY LOW for pure exploitation (epochs 90+)
-    from: 0.40      # Keep high through peak learning phase
-    to: 0.60        # RAPID decay after peak to force convergence
+  policy_lr:
+    start: 2.5e-4
+    end: 2.5e-5
+    from: 0.0
+    to: 1.0
 
+  n_epochs: 20
+  ent_coef: 0.03
+  
 
   eval_warmup_epochs: 10
   eval_freq_epochs: 10

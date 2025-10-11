@@ -2,6 +2,7 @@
 
 # NEXT
 
+- FEAT: add support for adding shared configs between envs (eg: atari defaults, vizdoom defaults)
 - BUG: VizDoom is not using spec render_fps for run_play
 - FEAT: single plot with fraction of scaled losses
 - TEST: ensure all checkpoints get stored in wandb (check storage limits)

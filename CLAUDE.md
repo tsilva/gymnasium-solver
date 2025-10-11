@@ -57,6 +57,10 @@ pytest -m "not slow" -q
 # Play trained policy (auto-loads best/last checkpoint)
 python run_play.py --run-id @last --episodes 5
 
+# Play random policy with any environment config (no training required)
+python run_play.py --config-id VizDoom-Basic-v0:ppo --episodes 5
+python run_play.py --config-id CartPole-v1:ppo --mode user  # keyboard control
+
 # Launch Gradio inspector UI
 python run_inspect.py --run-id @last --port 7860
 ```
@@ -292,7 +296,7 @@ These tools are particularly useful for automated workflows, hyperparameter tuni
 ## Important Files & Directories
 
 - **`train.py`**: Main training entry point.
-- **`run_play.py`**: Play trained policy with rendering.
+- **`run_play.py`**: Play trained policy with rendering (`--run-id`) or test environments with random/user policy (`--config-id`).
 - **`run_inspect.py`**: Gradio episode browser UI.
 - **`run_publish.py`**: Publish to Hugging Face Hub.
 - **`agents/`**: PPO, REINFORCE, base agent.

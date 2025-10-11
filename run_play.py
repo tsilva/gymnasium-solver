@@ -149,7 +149,9 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
 def main():
     # Parse command line arguments
     p = argparse.ArgumentParser(description="Play a trained agent using RolloutCollector (human render)")
-    p.add_argument("--run-id", default="@best", help="Run ID under runs/ (default: last run with best checkpoint)")
+    id_group = p.add_mutually_exclusive_group(required=False)
+    id_group.add_argument("--run-id", default=None, help="Run ID under runs/ (default: last run with best checkpoint)")
+    id_group.add_argument("--config-id", default=None, help="Config ID in 'env:variant' format (e.g., 'VizDoom-Basic-v0:ppo') - runs with random/user policy")
     p.add_argument("--episodes", type=int, default=10, help="Number of episodes to play")
     p.add_argument("--deterministic", action="store_true", default=False, help="Use deterministic actions (mode/argmax)")
     p.add_argument("--headless", action="store_true", default=False, help="Do not render the environment")
@@ -162,40 +164,72 @@ def main():
     p.add_argument(
         "--mode",
         choices=["trained", "random", "user"],
-        default="trained",
-        help="Action mode: 'trained' (use trained policy), 'random' (sample from action space), 'user' (keyboard input)",
+        default=None,
+        help="Action mode: 'trained' (use trained policy), 'random' (sample from action space), 'user' (keyboard input). Default: 'trained' for --run-id, 'random' for --config-id",
     )
     p.add_argument("--seed", type=str, default=None, help="Random seed for environment (int, 'train', 'val', 'test', or None for test seed)")
     p.add_argument("--fps", type=int, default=None, help="Limit playback to target FPS (frames per second)")
     args = p.parse_args()
     target_episodes = max(1, int(args.episodes))
 
+    # Default to run-id mode if neither specified
+    if args.run_id is None and args.config_id is None:
+        args.run_id = "@best"
+
     # Best-effort: prefer software renderer on WSL to avoid GLX issues
     is_wsl = ("microsoft" in platform.release().lower()) or ("WSL_INTEROP" in os.environ)
     if is_wsl: os.environ.setdefault("SDL_RENDER_DRIVER", "software")
 
-    # Resolve run ID (handle @last symlink)
-    run_id = args.run_id
-    if run_id == "@last":
-        from utils.run import LAST_RUN_DIR
-        if not LAST_RUN_DIR.exists():
-            raise FileNotFoundError("No @last run found. Train a model first.")
-        run_id = LAST_RUN_DIR.resolve().name
+    # Branch: config-id mode or run-id mode
+    if args.config_id is not None:
+        # Config-id mode: load config from YAML, no trained policy
+        from utils.config import load_config
 
-    # Check if run exists locally, if not try to download from W&B
-    run_dir = Run._resolve_run_dir(run_id)
-    if not run_dir.exists():
-        print(f"Run {run_id} not found locally. Attempting to download from W&B...")
-        from utils.wandb_artifacts import download_run_artifact
-        download_run_artifact(run_id)
+        # Parse config_id in 'env:variant' format
+        if ':' not in args.config_id:
+            raise ValueError(f"config_id must be in 'env:variant' format (e.g., 'VizDoom-Basic-v0:ppo'), got: {args.config_id}")
+        env_id, variant_id = args.config_id.split(':', 1)
 
-    # Load run and config
-    run = Run.load(run_id)
-    config = run.load_config()
+        # Load config
+        config = load_config(env_id, variant_id)
 
-    # For trained mode, require checkpoint
-    if args.mode == "trained":
-        assert run.best_checkpoint_dir is not None, "run has no best checkpoint"
+        # Default mode to random for config-id
+        if args.mode is None:
+            args.mode = "random"
+
+        # Trained mode is not allowed with config-id
+        if args.mode == "trained":
+            raise ValueError("--mode trained requires --run-id, not --config-id")
+
+        run = None
+    else:
+        # Run-id mode: load trained policy from checkpoint
+        # Resolve run ID (handle @last symlink)
+        run_id = args.run_id
+        if run_id == "@last":
+            from utils.run import LAST_RUN_DIR
+            if not LAST_RUN_DIR.exists():
+                raise FileNotFoundError("No @last run found. Train a model first.")
+            run_id = LAST_RUN_DIR.resolve().name
+
+        # Check if run exists locally, if not try to download from W&B
+        run_dir = Run._resolve_run_dir(run_id)
+        if not run_dir.exists():
+            print(f"Run {run_id} not found locally. Attempting to download from W&B...")
+            from utils.wandb_artifacts import download_run_artifact
+            download_run_artifact(run_id)
+
+        # Load run and config
+        run = Run.load(run_id)
+        config = run.load_config()
+
+        # Default mode to trained for run-id
+        if args.mode is None:
+            args.mode = "trained"
+
+        # For trained mode, require checkpoint
+        if args.mode == "trained":
+            assert run.best_checkpoint_dir is not None, "run has no best checkpoint"
 
     # Resolve seed argument
     if args.seed is None:
@@ -238,6 +272,7 @@ def main():
         return
 
     # Trained mode: load policy
+    assert run is not None, "run must be loaded for trained mode"
     # TODO: we should be loading the agent and having it run the episode
     policy_model, _ = load_policy_model_from_checkpoint(run.best_checkpoint_path, env, config)
 

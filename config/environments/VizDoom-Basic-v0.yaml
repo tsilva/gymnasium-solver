@@ -61,9 +61,13 @@ ppo:
   n_steps: 256
   batch_size: 0.5
   policy_lr: 1e-3
-  #ent_coef: 0.03
   n_epochs: 20
-  #target_kl: 0.02
   eval_warmup_epochs: 20
   eval_freq_epochs: 10
   eval_episodes: 10
+
+# TODO: test
+#n_epochs: 10
+#n_steps: 128
+#batch_size: 0.25
+#ent_coef: 0.01

@@ -52,6 +52,16 @@ _env: &env
   spec: *spec
   env_id: VizDoom-HealthGathering-v0
   render_mode: 'rgb_array'
+    # TODO: defaults are not being applied
+  obs_type: rgb
+  render_mode: 'rgb_array'
+  policy_kwargs:
+    channels: [32, 64, 64]
+    kernel_sizes: [8, 4, 3]
+    strides: [4, 2, 1]
+  grayscale_obs: true
+  resize_obs: [84, 84]
+  frame_stack: 4
 
 # =====================
 # configs
@@ -62,10 +72,14 @@ ppo:
   project_id: VizDoom-HealthGathering-v0
   algo_id: ppo
   description: "PPO on VizDoom HealthGathering - standard configuration for health gathering survival task"
-  eval_freq_epochs: 1
-  eval_episodes: 1
-  max_env_steps: 2e6
-  n_steps: 128
-  n_epochs: 4
-  clip_range: 0.1
+  n_envs: 32
+  n_steps: 256
+  batch_size: 0.25
   policy_lr: 2.5e-4
+  n_epochs: 15
+  ent_coef: 0.03
+  clip_range: 0.1
+  eval_warmup_epochs: 10
+  eval_freq_epochs: 10
+  eval_episodes: 10
+  target_kl: 0.01

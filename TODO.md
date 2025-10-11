@@ -2,9 +2,23 @@
 
 # NEXT
 
-- BUG: can't python run_play.py --run-id j1hp3u4a (crashes due to action remapper)
-- FEAT: request modal cores proportional to n_envs
-- TODO: test cleanrl envpool implementation
+- TEST: CleanRL's envpool implementation
+- FEAT: run_inspect.py add support for monitoring rollouts with different hyperparams
+
+## VizDoom
+
+- FEAT: add support for regulating difficulty
+- TEST: are seeds working?
+- TEST: is frameskip working
+- TEST: is frameskip useful?
+- BUG: action labels are invalid (use keyboard input to figure out correct labels)
+- Learn from this series: https://lkieliger.medium.com/playing-doom-with-deep-reinforcement-learning-part-3-boosting-performance-with-reward-shaping-b1de246bda1d
+https://spinningup.openai.com/en/latest/spinningup/keypapers.html
+- [Direct Future Prediction](https://flyyufelix.github.io/2017/11/17/direct-future-prediction.html)
+
+- LEARN: [RoE - Rarity of Events](https://arxiv.org/pdf/1803.07131)
+
+- VIZDOOM: imitation learning (unify pretraining process with minari support)
 - FEAT: single plot with fraction of loss
 - compare failures again
 - ensure all checkpoints get stored in wandb (check storage limits)
@@ -12,10 +26,7 @@
 - CHECK: should we reset optimizer when we use another learning rate
 - TEST: is last eval in uploaded zip file
 - TEST: ensure evaluation is ran exactly same way as train (eg: alevecenv)
-- TEST: ensure frameskip is being applied to vizdoom and retro
 - TODO: make key capture not require enter, allow h to show all shortcuts
-- BUG: vecobs not showing action labels for pong rgb
-- TEST: smoke tests pass
 - FEAT: speed up eval as much as possible (async mode with few changes)
 - TODO: trace hyperparam tuning process and adjust
 - TEST: logged to correct projects

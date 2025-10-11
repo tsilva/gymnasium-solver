@@ -41,6 +41,17 @@ _env: &env
   policy: 'cnn_actorcritic'
   env_wrappers:
     - { id: VizDoom_RewardShaper, noop_penalty: 0.01, move_reward: 0.004, turn_reward: 0.004 }
+    # TODO: defaults are not being applied
+  obs_type: rgb
+  render_mode: 'rgb_array'
+  policy_kwargs:
+    channels: [32, 64, 64]
+    kernel_sizes: [8, 4, 3]
+    strides: [4, 2, 1]
+  grayscale_obs: true
+  resize_obs: [84, 84]
+  frame_stack: 4
+
 
 # =====================
 # configs
@@ -51,11 +62,12 @@ ppo:
   project_id: VizDoom-DefendTheCenter-v0
   algo_id: ppo
   description: "PPO on VizDoom DefendTheCenter - standard configuration for center defense task"
-  eval_freq_epochs: 10
-  eval_episodes: 1
-  max_env_steps: 5e6
+  n_envs: 32
   n_steps: 256
-  n_epochs: 4
-  ent_coef: 0.01
-  clip_range: {start: 0.2, end: 0.0}
-  policy_lr: {start: 0.0003, end: 0.0}
+  batch_size: 0.5
+  policy_lr: 1e-3
+  n_epochs: 20
+  ent_coef: 0.03
+  eval_warmup_epochs: 20
+  eval_freq_epochs: 10
+  eval_episodes: 10

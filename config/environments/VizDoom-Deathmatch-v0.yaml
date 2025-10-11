@@ -49,6 +49,8 @@ _env: &env
   grayscale_obs: true
   resize_obs: [84, 84]
   frame_stack: 4
+  env_wrappers:
+    - { id: VizDoom_RewardShaper, ammo_waste_penalty: 0.1, health_loss_penalty: 0.01 }
 
 
 # =====================
@@ -58,6 +60,7 @@ _env: &env
 ppo:
   <<: *env
   project_id: VizDoom-Deathmatch-v0
+  init_from_run: zlsai5ud/@best
 
   algo_id: ppo
   description: "PPO on VizDoom Deathmatch - agent learns to navigate and eliminate bots"
@@ -68,11 +71,11 @@ ppo:
   n_epochs: 20
 
   policy_lr:
-    start: 2.5e-4
-    end: 2.5e-5
+    start: 1e-4
+    end: 1e-5
 
   ent_coef: 0.03
 
-  #eval_warmup_epochs: 10
-  eval_freq_epochs: 1
-  eval_episodes: 1
+  eval_warmup_epochs: 20
+  eval_freq_epochs: 10
+  eval_episodes: 10

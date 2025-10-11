@@ -57,6 +57,21 @@ class VizDoomEnv(gym.Env):
                 "VIZDOOM_SCENARIOS_DIR to the directory containing the scenario files."
             )
 
+        # For scenarios requiring doom.wad, locate it before loading config
+        if scenario and scenario.lower() in ("e1m1",):
+            doom_wad_path = self._find_doom_wad()
+            if doom_wad_path:
+                self._game.set_doom_game_path(str(doom_wad_path))
+            else:
+                raise FileNotFoundError(
+                    f"doom.wad not found for scenario '{scenario}'. "
+                    "Please obtain doom.wad (from Steam/GOG) or use FreeDoom, and place it in one of:\n"
+                    f"  1. VizDoom scenarios dir: {Path(self._vzd.__file__).parent / 'scenarios'}\n"
+                    f"  2. VIZDOOM_SCENARIOS_DIR env var location\n"
+                    f"  3. Current working directory: {Path.cwd()}\n"
+                    "See vizdoom_configs/README.md for detailed setup instructions."
+                )
+
         self._game.load_config(str(cfg_path))
 
         # Configure visibility based on render mode
@@ -156,6 +171,28 @@ class VizDoomEnv(gym.Env):
             p = scenarios_dir / cfg_name
             if p.is_file():
                 return p
+
+        return None
+
+    def _find_doom_wad(self) -> Optional[Path]:
+        """Search for doom.wad in standard locations."""
+        # Check VIZDOOM_SCENARIOS_DIR
+        env_dir = os.environ.get("VIZDOOM_SCENARIOS_DIR")
+        if env_dir:
+            p = Path(env_dir) / "doom.wad"
+            if p.is_file():
+                return p
+
+        # Check installed vizdoom package scenarios directory
+        pkg_dir = Path(self._vzd.__file__).parent
+        p = pkg_dir / "scenarios" / "doom.wad"
+        if p.is_file():
+            return p
+
+        # Check current working directory
+        p = Path.cwd() / "doom.wad"
+        if p.is_file():
+            return p
 
         return None
 

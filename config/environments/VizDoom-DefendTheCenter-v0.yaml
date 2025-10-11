@@ -73,7 +73,7 @@ ppo:
   max_env_steps: 2e6
   n_envs: 32
   n_steps: 256
-  batch_size: 0.25 # 0.5
+  batch_size: 2048 # tuned: higher seems to be worse
   n_epochs: 20
 
   policy_lr:

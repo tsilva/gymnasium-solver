@@ -2,6 +2,7 @@
 
 # NEXT
 
+- BUG: VizDoom is not using spec render_fps for run_play
 - FEAT: single plot with fraction of scaled losses
 - TEST: ensure all checkpoints get stored in wandb (check storage limits)
 - TEST: CleanRL's envpool implementation
@@ -17,9 +18,13 @@
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 - TODO: add env normalization support, make sure normalization is saved
 - TODO: add action number/ label before each frame stack image in inspect (allows easily seeing which action was performed when each frame was seen)
+- FEAT: CNN filter/activation inspectors
 
 ## VizDoom-v0
 
+- FEAT: reward shape defend the center to penalize shooting
+- FEAT: ensure standard action space between envs (for easier curriculum learning)
+- TEST: is it faster to learn defendtheX after basic env
 - FEAT: add support for regulating difficulty
 - TEST: are seeds working?
 - TEST: is frameskip working
@@ -75,4 +80,4 @@ https://spinningup.openai.com/en/latest/spinningup/keypapers.html)
 - FEAT: multidiscrete support
 - FEAT: implement RND (Random Network Distillation)
 - FEAT: Recurrent PPO (eg: PPO-LSTM)
-
+- FEAT: ensure huggingface uploader, publishes run URL and 

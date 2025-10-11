@@ -2,8 +2,8 @@
 # Environment Specification
 # =====================
 spec: &spec
-  source: https://github.com/mwydmuch/ViZDoom/tree/master/scenarios#defend-the-center
-  description: Stand in the center and defend against approaching enemies from all sides.
+  source: https://github.com/mwydmuch/ViZDoom/tree/master/scenarios#my-way-home
+  description: Navigate a labyrinth to find the green vest. Agent spawns in random room facing random direction.
 
   render_fps: 35
 
@@ -21,13 +21,13 @@ spec: &spec
         note: Height/width depend on the ViZDoom cfg; wrapper enforces RGB24 and HWC.
 
   rewards:
-    description: Survive and eliminate enemies; penalties for death.
+    description: Find the green vest as quickly as possible.
     components:
-      - {name: kill_reward, sign: positive}
-      - {name: survival_time, sign: positive}
-      - {name: death_penalty, value: -100.0}
-    threshold_solved: 1000
-    range: [-100, 2000]
+      - {name: vest_reward, sign: positive, value: 1.0}
+      - {name: timestep_penalty, value: -0.0001, note: "Encourages faster navigation"}
+    threshold_solved: 0.5
+    range: [-0.21, 1.0]
+    note: Episode terminates on vest collection or timeout (2100 frames / 60 seconds)
 
 # =====================
 # env variants
@@ -36,12 +36,11 @@ spec: &spec
 # Base env
 _env: &env
   spec: *spec
-  env_id: VizDoom-DefendTheCenter-v0
+  env_id: VizDoom-MyWayHome-v0
   render_mode: 'rgb_array'
   policy: 'cnn_actorcritic'
   env_wrappers:
     - { id: VizDoom_RewardShaper, noop_penalty: 0.01, move_reward: 0.004, turn_reward: 0.004 }
-    # TODO: defaults are not being applied
   obs_type: rgb
   render_mode: 'rgb_array'
   policy_kwargs:
@@ -57,18 +56,16 @@ _env: &env
 # configs
 # =====================
 
-# TODO: try no frame stack (should train faster and still work)
-
 ppo:
   <<: *env
-  project_id: VizDoom-DefendTheCenter-v0
+  project_id: VizDoom-MyWayHome-v0
 
   algo_id: ppo
-  description: "PPO on VizDoom DefendTheCenter - standard configuration for center defense task"
-  max_env_steps: 2e6
+  description: "PPO on VizDoom MyWayHome - agent learns navigation in labyrinth to find vest"
+  max_env_steps: 5e6
   n_envs: 32
   n_steps: 256
-  batch_size: 0.25 # 0.5
+  batch_size: 0.25
   n_epochs: 20
 
   policy_lr:
@@ -76,9 +73,7 @@ ppo:
     end: 2.5e-5
 
   ent_coef: 0.03
-  #  start: 0.03
-  #  end: 0.01
-  
+
   eval_warmup_epochs: 10
   eval_freq_epochs: 10
   eval_episodes: 10

@@ -2,8 +2,8 @@
 # Environment Specification
 # =====================
 spec: &spec
-  source: https://github.com/mwydmuch/ViZDoom/tree/master/scenarios#defend-the-center
-  description: Stand in the center and defend against approaching enemies from all sides.
+  source: https://doom.fandom.com/wiki/E1M1:_Hangar_(Doom)
+  description: Original Doom Episode 1 Map 1 (Hangar). Navigate facility, collect items, eliminate enemies, find exit.
 
   render_fps: 35
 
@@ -21,13 +21,14 @@ spec: &spec
         note: Height/width depend on the ViZDoom cfg; wrapper enforces RGB24 and HWC.
 
   rewards:
-    description: Survive and eliminate enemies; penalties for death.
+    description: Complete the level by reaching the exit. Kills and items provide score.
     components:
-      - {name: kill_reward, sign: positive}
-      - {name: survival_time, sign: positive}
-      - {name: death_penalty, value: -100.0}
-    threshold_solved: 1000
-    range: [-100, 2000]
+      - {name: kill_reward, sign: positive, note: "1 point per kill"}
+      - {name: item_reward, sign: positive, note: "Points for items/secrets"}
+      - {name: living_penalty, value: -0.0001, note: "Encourages efficiency"}
+    threshold_solved: 100
+    range: [-0.21, 500]
+    note: Episode terminates on death or timeout (2100 frames / 60 seconds) or level exit
 
 # =====================
 # env variants
@@ -36,12 +37,13 @@ spec: &spec
 # Base env
 _env: &env
   spec: *spec
-  env_id: VizDoom-DefendTheCenter-v0
+  env_id: VizDoom-E1M1-v0
   render_mode: 'rgb_array'
   policy: 'cnn_actorcritic'
+  env_kwargs:
+    scenario: e1m1
   env_wrappers:
     - { id: VizDoom_RewardShaper, noop_penalty: 0.01, move_reward: 0.004, turn_reward: 0.004 }
-    # TODO: defaults are not being applied
   obs_type: rgb
   render_mode: 'rgb_array'
   policy_kwargs:
@@ -57,18 +59,16 @@ _env: &env
 # configs
 # =====================
 
-# TODO: try no frame stack (should train faster and still work)
-
 ppo:
   <<: *env
-  project_id: VizDoom-DefendTheCenter-v0
+  project_id: VizDoom-E1M1-v0
 
   algo_id: ppo
-  description: "PPO on VizDoom DefendTheCenter - standard configuration for center defense task"
-  max_env_steps: 2e6
+  description: "PPO on Doom E1M1 - agent learns to complete the classic Hangar level"
+  max_env_steps: 1e7
   n_envs: 32
   n_steps: 256
-  batch_size: 0.25 # 0.5
+  batch_size: 0.25
   n_epochs: 20
 
   policy_lr:
@@ -76,9 +76,7 @@ ppo:
     end: 2.5e-5
 
   ent_coef: 0.03
-  #  start: 0.03
-  #  end: 0.01
-  
-  eval_warmup_epochs: 10
-  eval_freq_epochs: 10
+
+  eval_warmup_epochs: 20
+  eval_freq_epochs: 20
   eval_episodes: 10

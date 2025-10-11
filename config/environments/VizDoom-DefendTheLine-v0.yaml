@@ -54,6 +54,8 @@ _env: &env
 # configs
 # =====================
 
+# TODO: try no frame stack (should train faster and still work)
+# TODO: tune LR decay to minimize approxkl oob and cliprange oob
 ppo:
   <<: *env
   project_id: VizDoom-DefendTheLine-v0
@@ -62,17 +64,17 @@ ppo:
   max_env_steps: 2e6
   n_envs: 32
   n_steps: 256
-  batch_size: 0.5
+  batch_size: 0.25 # TODO: test if batch sizes make any difference
+  n_epochs: 20
+
   policy_lr:
     start: 2.5e-4
     end: 2.5e-5
-    from: 0.0
-    to: 1.0
 
-  n_epochs: 20
   ent_coef: 0.03
+  #  start: 0.03
+  #  end: 0.01
   
-
   eval_warmup_epochs: 10
   eval_freq_epochs: 10
   eval_episodes: 10

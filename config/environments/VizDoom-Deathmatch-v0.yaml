@@ -2,8 +2,8 @@
 # Environment Specification
 # =====================
 spec: &spec
-  source: https://github.com/mwydmuch/ViZDoom/tree/master/scenarios#defend-the-center
-  description: Stand in the center and defend against approaching enemies from all sides.
+  source: https://github.com/mwydmuch/ViZDoom/tree/master/scenarios#deathmatch
+  description: Navigate arena and eliminate bots in a deathmatch scenario.
 
   render_fps: 35
 
@@ -21,13 +21,12 @@ spec: &spec
         note: Height/width depend on the ViZDoom cfg; wrapper enforces RGB24 and HWC.
 
   rewards:
-    description: Survive and eliminate enemies; penalties for death.
+    description: Score points for eliminating bots; lose points for dying.
     components:
-      - {name: kill_reward, sign: positive}
-      - {name: survival_time, sign: positive}
-      - {name: death_penalty, value: -100.0}
-    threshold_solved: 1000
-    range: [-100, 2000]
+      - {name: frag_reward, sign: positive, value: 1.0}
+      - {name: death_penalty, value: -1.0}
+    threshold_solved: 10
+    range: [-1, 20]
 
 # =====================
 # env variants
@@ -36,12 +35,11 @@ spec: &spec
 # Base env
 _env: &env
   spec: *spec
-  env_id: VizDoom-DefendTheCenter-v0
+  env_id: VizDoom-Deathmatch-v0
   render_mode: 'rgb_array'
   policy: 'cnn_actorcritic'
   env_wrappers:
     - { id: VizDoom_RewardShaper, noop_penalty: 0.01, move_reward: 0.004, turn_reward: 0.004 }
-    # TODO: defaults are not being applied
   obs_type: rgb
   render_mode: 'rgb_array'
   policy_kwargs:
@@ -57,18 +55,16 @@ _env: &env
 # configs
 # =====================
 
-# TODO: try no frame stack (should train faster and still work)
-
 ppo:
   <<: *env
-  project_id: VizDoom-DefendTheCenter-v0
+  project_id: VizDoom-Deathmatch-v0
 
   algo_id: ppo
-  description: "PPO on VizDoom DefendTheCenter - standard configuration for center defense task"
-  max_env_steps: 2e6
+  description: "PPO on VizDoom Deathmatch - agent learns to navigate and eliminate bots"
+  max_env_steps: 5e6
   n_envs: 32
   n_steps: 256
-  batch_size: 0.25 # 0.5
+  batch_size: 0.25
   n_epochs: 20
 
   policy_lr:
@@ -76,9 +72,7 @@ ppo:
     end: 2.5e-5
 
   ent_coef: 0.03
-  #  start: 0.03
-  #  end: 0.01
-  
-  eval_warmup_epochs: 10
-  eval_freq_epochs: 10
-  eval_episodes: 10
+
+  #eval_warmup_epochs: 10
+  eval_freq_epochs: 1
+  eval_episodes: 1

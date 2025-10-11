@@ -2,26 +2,10 @@
 
 # NEXT
 
+- FEAT: single plot with fraction of scaled losses
+- TEST: ensure all checkpoints get stored in wandb (check storage limits)
 - TEST: CleanRL's envpool implementation
 - FEAT: run_inspect.py add support for monitoring rollouts with different hyperparams
-
-## VizDoom
-
-- FEAT: add support for regulating difficulty
-- TEST: are seeds working?
-- TEST: is frameskip working
-- TEST: is frameskip useful?
-- BUG: action labels are invalid (use keyboard input to figure out correct labels)
-- Learn from this series: https://lkieliger.medium.com/playing-doom-with-deep-reinforcement-learning-part-3-boosting-performance-with-reward-shaping-b1de246bda1d
-https://spinningup.openai.com/en/latest/spinningup/keypapers.html
-- [Direct Future Prediction](https://flyyufelix.github.io/2017/11/17/direct-future-prediction.html)
-
-- LEARN: [RoE - Rarity of Events](https://arxiv.org/pdf/1803.07131)
-
-- VIZDOOM: imitation learning (unify pretraining process with minari support)
-- FEAT: single plot with fraction of loss
-- compare failures again
-- ensure all checkpoints get stored in wandb (check storage limits)
 - FEAT: train from previous run, use that to do multiple runs until convergence (new run loads param); should we restore optimizer? confirm new run starts with same performance, check if it evolves better with same or dfiferent optimizer
 - CHECK: should we reset optimizer when we use another learning rate
 - TEST: is last eval in uploaded zip file
@@ -33,6 +17,20 @@ https://spinningup.openai.com/en/latest/spinningup/keypapers.html
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 - TODO: add env normalization support, make sure normalization is saved
 - TODO: add action number/ label before each frame stack image in inspect (allows easily seeing which action was performed when each frame was seen)
+
+## VizDoom-v0
+
+- FEAT: add support for regulating difficulty
+- TEST: are seeds working?
+- TEST: is frameskip working
+- TEST: is frameskip useful?
+- BUG: action labels are invalid (use keyboard input to figure out correct labels)
+- LEARN: [Medium Lesson](https://lkieliger.medium.com/playing-doom-with-deep-reinforcement-learning-part-3-boosting-performance-with-reward-shaping-b1de246bda1d
+https://spinningup.openai.com/en/latest/spinningup/keypapers.html)
+- LEARN: [HF Course Lesson](https://huggingface.co/learn/deep-rl-course/unit8/hands-on-sf)
+- [Direct Future Prediction](https://flyyufelix.github.io/2017/11/17/direct-future-prediction.html)
+- LEARN: [RoE - Rarity of Events](https://arxiv.org/pdf/1803.07131)
+- imitation learning (unify pretraining process with minari support)
 
 ## Pong-v5
 

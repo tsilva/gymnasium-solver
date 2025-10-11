@@ -33,6 +33,9 @@ class PPOAgent(BaseAgent):
         # Batch-normalize advantage if requested
         if self.config.normalize_advantages == "batch":
             advantages = batch_normalize(advantages)
+            # Track post-normalization advantage statistics
+            adv_norm_mean = advantages.mean()
+            adv_norm_std = advantages.std()
 
         # Infer policy_distribution and value_predictions from the actor critic model
         policy_dist, values_pred = self.policy_model(observations)
@@ -65,16 +68,29 @@ class PPOAgent(BaseAgent):
         mean_advantage = min_scaled_advantages.mean()
 
         # Negating the mean advantage give us the policy loss.
-        # Gradient descent will minimize the loss, and as a 
+        # Gradient descent will minimize the loss, and as a
         # consequence will maximize the mean advantage. Since
         # this advantage is always within a secure range, there
         # will be less variance in the policy loss making optimization more stable.
         policy_loss = -mean_advantage
 
-        # The value head must predict the returns, so its loss is 
+        # The value head must predict the returns, so its loss is
         # just the MSE between the predicted (values) and target returns
         # NOTE: this must be done in order, second argument must be the target
-        value_loss = F.mse_loss(values_pred, returns) # TODO: what is this scale?
+        if self.config.clip_vloss:
+            # Clip value function updates to prevent large changes (as per PPO paper)
+            values_old = batch.values
+            v_loss_unclipped = (values_pred - returns) ** 2
+            v_clipped = values_old + torch.clamp(
+                values_pred - values_old,
+                -self.clip_range,
+                self.clip_range,
+            )
+            v_loss_clipped = (v_clipped - returns) ** 2
+            v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
+            value_loss = 0.5 * v_loss_max.mean()
+        else:
+            value_loss = F.mse_loss(values_pred, returns)
 
         # TODO: note down why returns cant be normalized (GAE), but why advantages should be
 
@@ -117,6 +133,11 @@ class PPOAgent(BaseAgent):
             'opt/ppo/approx_kl': approx_kl.detach(),
             'opt/value/explained_var': explained_var.detach(),
         }
+
+        # Add post-normalization advantage stats if batch normalization was applied
+        if self.config.normalize_advantages == "batch":
+            metrics['roll/adv/norm/mean'] = adv_norm_mean.detach()
+            metrics['roll/adv/norm/std'] = adv_norm_std.detach()
 
         # In case the KL divergence exceeded the target, stop training on this epoch
         early_stop_epoch = False

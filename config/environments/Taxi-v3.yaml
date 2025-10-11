@@ -47,6 +47,7 @@ _env: &env
 
 ppo:
   <<: *env
+  project_id: Taxi-v3
   algo_id: ppo
   description: "PPO on Taxi - standard configuration for taxi navigation task"
   max_env_steps: 10e6

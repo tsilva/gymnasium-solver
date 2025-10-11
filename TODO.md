@@ -2,35 +2,46 @@
 
 # NEXT
 
-- TODO: not sure sys fps is accruate
-- TODO: add max episode steps support (cartpole, atari, vizdoom, nes)
-- BUG: I think last eval is running after upload...
-- TODO: ensure pong eval is using native, otherwise it may mismatch
-- TODO: ensure frameskip for vizdoom and nes
+- BUG: VizDoom is not using spec render_fps for run_play
+- FEAT: single plot with fraction of scaled losses
+- TEST: ensure all checkpoints get stored in wandb (check storage limits)
+- TEST: CleanRL's envpool implementation
+- FEAT: run_inspect.py add support for monitoring rollouts with different hyperparams
+- FEAT: train from previous run, use that to do multiple runs until convergence (new run loads param); should we restore optimizer? confirm new run starts with same performance, check if it evolves better with same or dfiferent optimizer
+- CHECK: should we reset optimizer when we use another learning rate
+- TEST: is last eval in uploaded zip file
+- TEST: ensure evaluation is ran exactly same way as train (eg: alevecenv)
 - TODO: make key capture not require enter, allow h to show all shortcuts
-TEST: Pong run_play / run_inspect works
-- BUG: vecobs not showing action labels for pong rgb
-TEST: vizdoom env works (with run_play and run_inspect)
-TEST: super mario env works (with run_play and run_inspect)
-TEST: smoke tests pass
-- BUG: action labels not appearing in run inspect
 - FEAT: speed up eval as much as possible (async mode with few changes)
 - TODO: trace hyperparam tuning process and adjust
 - TEST: logged to correct projects
-- TEST: tune with agent
-- TEST: are sweeps still working?
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 - TODO: add env normalization support, make sure normalization is saved
-- TODO: add fit to container zoom in inspect
 - TODO: add action number/ label before each frame stack image in inspect (allows easily seeing which action was performed when each frame was seen)
+- FEAT: CNN filter/activation inspectors
+
+## VizDoom-v0
+
+- FEAT: reward shape defend the center to penalize shooting
+- FEAT: ensure standard action space between envs (for easier curriculum learning)
+- TEST: is it faster to learn defendtheX after basic env
+- FEAT: add support for regulating difficulty
+- TEST: are seeds working?
+- TEST: is frameskip working
+- TEST: is frameskip useful?
+- BUG: action labels are invalid (use keyboard input to figure out correct labels)
+- LEARN: [Medium Lesson](https://lkieliger.medium.com/playing-doom-with-deep-reinforcement-learning-part-3-boosting-performance-with-reward-shaping-b1de246bda1d
+https://spinningup.openai.com/en/latest/spinningup/keypapers.html)
+- LEARN: [HF Course Lesson](https://huggingface.co/learn/deep-rl-course/unit8/hands-on-sf)
+- [Direct Future Prediction](https://flyyufelix.github.io/2017/11/17/direct-future-prediction.html)
+- LEARN: [RoE - Rarity of Events](https://arxiv.org/pdf/1803.07131)
+- imitation learning (unify pretraining process with minari support)
 
 ## Pong-v5
 
+- NOOPs are overconfident, try training without NOOPs (may change training dynamics)
 - TODO: learn how to read gradient graphs
-- https://iclr-blog-track.github.io/2022/03/25/ppo-implementation-details/
 - Check best performance on deterministic env, if it reaches 20-21 then the feature extractor is probably ok (note: raise threshold for this env?)
-- Try tanh and check if performance improves
-- Confirm that we can get >=18 in stochastic env
 - Confirm that Pong-v5 deterministic env reaches 20-21
 - Check if we can get to 20-21 with RGB observations
 - Frame stacking should work to turn POMDP into MDP
@@ -45,7 +56,6 @@ TEST: smoke tests pass
 - Ensure eval uses domain randomization as well
 - FEAT: add LunarLander-v3 randomization wrapper
 - FEAT: reward shape lunarlander to train faster by penalizing long episodes
-
 
 ## Taxi-v3
 
@@ -66,8 +76,8 @@ TEST: smoke tests pass
 - FEAT: support for multi-env rollout collectors (eg: solve multiple envs at once; eg: train on multiple configs of LunarLander-v3)
 - FEAT: add support for curriculum learning (take same model through N challenges sequentially)
 - FEAT: add support for publishing run to Hugging Face Hub
-- FEAT: add support for async eval (to avoid blocking training)
 - FEAT: SEEDRL+PPO
 - FEAT: multidiscrete support
 - FEAT: implement RND (Random Network Distillation)
 - FEAT: Recurrent PPO (eg: PPO-LSTM)
+- FEAT: ensure huggingface uploader, publishes run URL and 

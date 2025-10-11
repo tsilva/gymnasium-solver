@@ -1,0 +1,19 @@
+name: pong-objects-ppo-gae-lambda
+project: ALE-Pong-v5
+method: grid
+metric:
+  name: train/roll/ep_rew/mean
+  goal: maximize
+
+parameters:
+  gae_lambda:
+    values: [0.90, 0.92, 0.94, 0.95, 0.96, 0.98, 0.99]
+
+program: train.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - --config_id
+  - "ALE-Pong-v5:objects_ppo"
+  - --wandb_sweep

@@ -1,0 +1,37 @@
+name: pong-objects-deterministic-ppo-bayes
+project: ALE-Pong-v5
+method: bayes
+metric:
+  name: train/roll/ep_rew/mean
+  goal: maximize
+early_terminate:
+  type: hyperband
+  min_iter: 100
+
+parameters:
+  policy_lr:
+    min: 0.0001
+    max: 0.01
+  clip_range:
+    min: 0.1
+    max: 0.3
+  n_epochs:
+    values: [8, 10, 15]
+  ent_coef:
+    min: 0.0
+    max: 0.02
+  batch_size:
+    values: [128, 256, 512]
+  hidden_dims:
+    values: [[32, 32], [64, 64], [32, 32, 32]]
+  n_steps:
+    values: [64, 128, 256]
+
+program: train.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - --config_id
+  - "ALE-Pong-v5:objects_deterministic_ppo"
+  - --wandb_sweep

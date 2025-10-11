@@ -1,5 +1,6 @@
 """Configuration loading for environment YAML and legacy hyperparams."""
 
+import logging
 import os
 from dataclasses import MISSING, asdict, dataclass, field
 from enum import Enum
@@ -9,6 +10,8 @@ from typing import Any, Dict, Optional, Tuple, Union
 from utils.formatting import sanitize_name
 from utils.io import read_yaml, write_json
 from utils.validators import ensure_in_range, ensure_non_negative, ensure_positive
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -97,6 +100,11 @@ class Config:
     
     # Experiment seed (for reproducibility)
     seed: int = 42
+
+    # Seeds for train/val/test environments
+    seed_train: int = 42
+    seed_val: int = 1042
+    seed_test: int = 2042
 
     # How many parallel environments are used to collect rollouts
     # Can be an int or "auto" (which resolves to cpu_count())
@@ -189,7 +197,7 @@ class Config:
         """Set a schedule attribute to default if it's None."""
         if getattr(self, attr, None) is None:
             setattr(self, attr, default)
-
+    
     def _validate_positive(self, attr: str, allow_none: bool = True) -> None:
         """Validate that an attribute is positive."""
         ensure_positive(getattr(self, attr, None), attr, allow_none=allow_none)
@@ -269,6 +277,10 @@ class Config:
     # (when set, the selected actions will always be the most likely instead of sampling from policy)
     eval_deterministic: bool = False
 
+    # Whether to run evaluation asynchronously (non-blocking)
+    # (when enabled, evaluation runs in background and doesn't block training)
+    eval_async: bool = False
+
     # Whether to stop training when the training reward threshold is reached
     # When set to a float, that value overrides the env spec's reward threshold
     early_stop_on_train_threshold: Union[bool, float] = False
@@ -288,6 +300,11 @@ class Config:
 
     # Whether to enable Weights & Biases logging
     enable_wandb: bool = True
+
+    # Plateau intervention configuration (optional)
+    # When a metric plateaus, cycle through parameter adjustments
+    # Example: {"monitor": "train/roll/ep_rew/mean", "patience": 20, "actions": [...]}
+    plateau_interventions: Optional[Dict[str, Any]] = None
 
     # Run specification to initialize weights from (for transfer learning)
     # Format: 'run_id' or 'run_id/checkpoint'
@@ -312,7 +329,12 @@ class Config:
             "reinforce": REINFORCEConfig,
             "ppo": PPOConfig,
         }[algo_id]
-        config = config_cls(**_config_dict)
+
+        # Filter out unknown fields to handle config schema evolution
+        valid_fields = set(config_cls.__dataclass_fields__.keys())
+        filtered_dict = {k: v for k, v in _config_dict.items() if k in valid_fields}
+
+        config = config_cls(**filtered_dict)
         return config
 
     @classmethod
@@ -354,8 +376,9 @@ class Config:
                 # Create the variant config
                 variant_id = str(k)
                 variant_cfg = dict(base_config)
-                # Filter out fields not in Config dataclass, but keep algo_id (needed by build_from_dict)
-                variant_cfg.update({k: v for k, v in v.items() if k in config_field_names or k == "algo_id"})
+                # Don't filter here - build_from_dict will filter using the correct subclass fields
+                # after determining algo_id (e.g., PPOConfig has clip_range but base Config doesn't)
+                variant_cfg.update(v)
 
                 # Construct default project_id from env_id + obs_type at variant level
                 # (each variant may have different env_id/obs_type)
@@ -465,7 +488,7 @@ class Config:
             self.grayscale_obs = True
         if self.resize_obs is None:
             self.resize_obs = (84, 84)
-        if self.frame_stack == 1:  # Default value
+        if self.frame_stack is None:
             self.frame_stack = 4
         if self.frameskip is None:
             self.frameskip = 4
@@ -622,13 +645,14 @@ class Config:
         self._validate_positive("eval_episodes")
         self._validate_positive("reward_threshold")
 
-        # Validate max_env_steps is divisible by n_envs for clean conversion
+        # Validate and auto-round max_env_steps to be divisible by n_envs for clean conversion
         if self.max_env_steps is not None and self.max_env_steps % self.n_envs != 0:
-            raise ValueError(
-                f"max_env_steps ({self.max_env_steps}) must be divisible by n_envs ({self.n_envs}) "
-                f"for clean conversion to vec_steps. Adjust to {(self.max_env_steps // self.n_envs + 1) * self.n_envs} "
-                f"or {(self.max_env_steps // self.n_envs) * self.n_envs}."
+            rounded = round(self.max_env_steps / self.n_envs) * self.n_envs
+            logger.warning(
+                f"max_env_steps ({self.max_env_steps}) not divisible by n_envs ({self.n_envs}). "
+                f"Auto-rounding to {rounded}."
             )
+            self.max_env_steps = rounded
 
         if self.devices is not None and not (isinstance(self.devices, int) or self.devices == "auto"):
             raise ValueError("devices may be an int, 'auto', or None.")
@@ -687,6 +711,7 @@ class REINFORCEConfig(Config):
     def algo_id(self) -> str:
         return "reinforce"
 
+# TODO: default to 0.01 for atari if none specified
 @dataclass
 class PPOConfig(Config):
     policy: "Config.PolicyType" = Config.PolicyType.mlp_actorcritic  # type: ignore[assignment]
@@ -697,14 +722,15 @@ class PPOConfig(Config):
     gamma: float = 0.99
     gae_lambda: float = 0.95
     clip_range: Union[float, Dict[str, Any]] = 0.2
-    target_kl: Optional[float] = None
+    clip_vloss: bool = True
+    target_kl: Optional[float] = None # TODO: 0.015 in spinning up?
     ent_coef: float = 0.0
     vf_coef: Union[float, Dict[str, Any]] = 0.5
     max_grad_norm: float = 0.5
     returns_type: "Config.ReturnsType" = Config.ReturnsType.gae_rtg
     advantages_type: "Config.AdvantagesType" = Config.AdvantagesType.gae
     policy_targets: "Config.PolicyTargetsType" = Config.PolicyTargetsType.advantages  # type: ignore[assignment]
-    normalize_advantages: "Config.AdvantageNormType" = Config.AdvantageNormType.rollout
+    normalize_advantages: "Config.AdvantageNormType" = Config.AdvantageNormType.batch
 
     @property
     def algo_id(self) -> str:

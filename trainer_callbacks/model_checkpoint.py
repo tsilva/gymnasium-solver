@@ -73,15 +73,18 @@ class ModelCheckpointCallback(pl.Callback):
             json_metrics = prepare_metrics_for_json(metrics)
             write_json(tmp_dir / "metrics.json", json_metrics)
 
-            # Record video directly into checkpoint temp dir (for best checkpoints only)
-            if is_best:
-                video_path = tmp_dir / "best.mp4"
-                val_env = agent.get_env("val")
-                with val_env.recorder(str(video_path), record_video=True):
-                    val_collector = agent.get_rollout_collector("val")
-                    val_collector.evaluate_episodes(
-                        n_episodes=1,
-                        deterministic=agent.config.eval_deterministic,
-                    )
+            # Recording best-checkpoint video is currently disabled.
+            # Previous attempt ran an extra evaluation here, which stalled training throughput.
+            # TODO: restore recording
+            # if is_best:
+            #     video_path = tmp_dir / "best.mp4"
+            #     val_env = agent.get_env("val")
+            #     with val_env.recorder(str(video_path), record_video=True):
+            #         val_collector = agent.get_rollout_collector("val")
+            #         val_collector.evaluate_episodes(
+            #             n_episodes=1,
+            #             deterministic=agent.config.eval_deterministic,
+            #         )
+
 
             self.run.save_checkpoint(epoch, tmp_dir, is_best=is_best)

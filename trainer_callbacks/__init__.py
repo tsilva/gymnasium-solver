@@ -7,6 +7,7 @@ from .hyperparameter_scheduler import HyperparameterSchedulerCallback
 from .keyboard_shortcuts import KeyboardShortcutCallback
 from .model_checkpoint import ModelCheckpointCallback
 from .monitor_metrics import MonitorMetricsCallback
+from .plateau_intervention import PlateauInterventionCallback
 from .upload_run import UploadRunCallback
 from .wandb_video_logger import WandbVideoLoggerCallback
 from .warmup_eval import WarmupEvalCallback
@@ -20,6 +21,7 @@ __all__ = [
     "MonitorMetricsCallback",
     "ConsoleSummaryCallback",
     "HyperparameterSchedulerCallback",
+    "PlateauInterventionCallback",
     "UploadRunCallback",
     "KeyboardShortcutCallback",
 ]

@@ -81,9 +81,13 @@ def build_env(
     # Assert valid function arguments
     assert seed is not None, "Seed is required"
     assert frame_stack is None or frame_stack > 1, f"frame stack must be at least 2: frame_stack={frame_stack}"
-    assert resize_obs is None or isinstance(resize_obs, tuple), f"resize obs must be a tuple: resize_obs={resize_obs}"
-    assert resize_obs is None or len(resize_obs) == 2, f"resize obs must be a tuple of length 2: resize_obs={resize_obs}"
+    assert resize_obs is None or isinstance(resize_obs, (tuple, list)), f"resize obs must be a tuple or list: resize_obs={resize_obs}"
+    assert resize_obs is None or len(resize_obs) == 2, f"resize obs must be a sequence of length 2: resize_obs={resize_obs}"
     assert resize_obs is None or all(x > 0 for x in resize_obs), f"resize obs must be positive: resize_obs={resize_obs}"
+
+    # Convert resize_obs to tuple if it's a list (JSON deserialization converts tuples to lists)
+    if resize_obs is not None and isinstance(resize_obs, list):
+        resize_obs = tuple(resize_obs)
     assert not (record_video and obs_type != "rgb"), f"video recording requires rgb observations: obs_type={obs_type}"
     assert not (record_video and render_mode != "rgb_array"), f"video recording requires render_mode='rgb_array': render_mode={render_mode}"
     assert not (record_video and vectorization_mode == "async"), f"async vectorization does not support video recording: vectorization_mode={vectorization_mode}"
@@ -104,23 +108,42 @@ def build_env(
     if vectorization_mode == "auto" and is_stable_retro_env: vectorization_mode = "async" if n_envs > 1 else "sync"
 
     # Create the vectorized environment
-    _build_vec_env_fn = vectorization_mode == "alepy" and _build_vec_env_alepy or _build_vec_env_gym
-    vec_env = _build_vec_env_fn(
-        env_id, 
-        env_spec,
-        env_kwargs,
-        env_wrappers,
-        n_envs, 
-        vectorization_mode,
-        seed, 
-        obs_type,
-        render_mode, 
-        grayscale_obs,
-        resize_obs,
-        frame_stack,
-        record_video, 
-        record_video_kwargs, 
-    )
+    if vectorization_mode == "alepy":
+        vec_env = _build_vec_env_alepy(
+            env_id,
+            env_spec,
+            env_kwargs,
+            env_wrappers,
+            n_envs,
+            vectorization_mode,
+            seed,
+            obs_type,
+            render_mode,
+            grayscale_obs,
+            resize_obs,
+            frame_stack,
+            record_video,
+            record_video_kwargs,
+            project_id,
+        )
+    else:
+        vec_env = _build_vec_env_gym(
+            env_id,
+            env_spec,
+            env_kwargs,
+            env_wrappers,
+            n_envs,
+            vectorization_mode,
+            seed,
+            obs_type,
+            render_mode,
+            grayscale_obs,
+            resize_obs,
+            frame_stack,
+            record_video,
+            record_video_kwargs,
+            max_episode_steps,
+        )
     
     # Add episode statistics recorder wrapper
     vec_env = RecordEpisodeStatistics(vec_env)
@@ -148,63 +171,86 @@ def build_env(
     return vec_env
 
 def _build_vec_env_alepy(
-    env_id: str,    
+    env_id: str,
     env_spec: dict,
     env_kwargs: dict,
     env_wrappers: list,
-    n_envs: int, 
+    n_envs: int,
     vectorization_mode: str,
-    seed: int, 
-    obs_type: str, 
-    render_mode: str, 
+    seed: int,
+    obs_type: str,
+    render_mode: str,
     grayscale_obs: bool,
     resize_obs: tuple,
     frame_stack: int,
-    record_video: bool, 
+    record_video: bool,
     record_video_kwargs: dict,
+    project_id: str,
 ):
     from gymnasium import make_vec
     from gym_wrappers.ale_vec_video_recorder import ALEVecVideoRecorder
 
     assert obs_type == "rgb", "ALE native vectorization requires RGB observations"
 
-    # TODO: pass all frame_stack, grayscale_obs, resize_obs, frameskip, etc to make_vec
+    # Build kwargs for AtariVectorEnv
+    # AtariVectorEnv supports grayscale, resizing, and frame stacking directly
+    atari_kwargs = {}
+    if grayscale_obs is not None:
+        atari_kwargs['grayscale'] = grayscale_obs
+    if resize_obs is not None:
+        atari_kwargs['img_height'] = resize_obs[0]
+        atari_kwargs['img_width'] = resize_obs[1]
+    if frame_stack is not None:
+        atari_kwargs['stack_num'] = frame_stack
+
+    # Pass through relevant env_kwargs
+    # TODO: map more env_kwargs to AtariVectorEnv parameters
+    if 'repeat_action_probability' in env_kwargs:
+        atari_kwargs['repeat_action_probability'] = env_kwargs['repeat_action_probability']
+    if 'full_action_space' in env_kwargs:
+        atari_kwargs['full_action_space'] = env_kwargs['full_action_space']
+
     vec_env = make_vec(
-        env_id, 
-        num_envs=n_envs, 
-        vectorization_mode=None, 
-        #**env_kwargs
+        env_id,
+        num_envs=n_envs,
+        vectorization_mode=None,
+        **atari_kwargs,
     )
 
     # Seed the envs
     obs, _ = vec_env.reset(seed=seed)
-    
-    # Assert that the obs shape is as expected 
-    obs_shape = obs.shape[1:]
-    expected_shape = (frame_stack, *resize_obs)
-    assert obs_shape == expected_shape, f"ALE native vectorization expected {expected_shape} but got {obs_shape}."
+
+    # Annotate env so VecEnvInfoWrapper can expose metadata/compat fallbacks
+    vec_env._ale_atari_vec = True  # type: ignore[attr-defined]
+    vec_env._spec = env_spec  # type: ignore[attr-defined]
+    vec_env.env_id = env_id  # type: ignore[attr-defined]
+    vec_env._project_id = project_id  # type: ignore[attr-defined]
+    vec_env._obs_type = obs_type  # type: ignore[attr-defined]
+    vec_env.render_mode = render_mode  # type: ignore[attr-defined]
+    vec_env._last_seed = seed  # type: ignore[attr-defined]
 
     # TODO: is this working? how? is it slow?
     if record_video: vec_env = ALEVecVideoRecorder(vec_env, **record_video_kwargs)
- 
+
     # Return the vectorized environment
     return vec_env
 
 def _build_vec_env_gym(
-    env_id: str, 
+    env_id: str,
     env_spec: dict,
     env_kwargs: dict,
     env_wrappers: list,
-    n_envs: int, 
+    n_envs: int,
     vectorization_mode: str,
-    seed: int, 
-    obs_type: str, 
-    render_mode: str, 
+    seed: int,
+    obs_type: str,
+    render_mode: str,
     grayscale_obs: bool,
     resize_obs: tuple,
     frame_stack: int,
-    record_video: bool, 
+    record_video: bool,
     record_video_kwargs: dict,
+    max_episode_steps: int,
 ):
     from gym_wrappers.env_info import EnvInfoWrapper
     from gym_wrappers.env_video_recorder import EnvVideoRecorder
@@ -216,19 +262,59 @@ def _build_vec_env_gym(
     is_bandit_env = _is_mab_env_id(env_id)
 
     def env_fn():
-        if is_alepy_env: env = _build_env_alepy(env_id, obs_type, render_mode, **env_kwargs)
-        elif is_vizdoom_env: env = _build_env_vizdoom(env_id, obs_type, render_mode, **env_kwargs)
-        elif is_stable_retro_env: env = _build_env_stable_retro(env_id, obs_type, render_mode, **env_kwargs)
-        elif is_bandit_env: env = _build_env_mab(env_id, obs_type, render_mode, **env_kwargs)
-        else: env = _build_env_gym(env_id, obs_type, render_mode, **env_kwargs)
+        from gymnasium.wrappers import (
+            AtariPreprocessing,
+            FrameStackObservation,
+            GrayscaleObservation,
+            ResizeObservation,
+            TimeLimit,
+        )
 
-        from gymnasium.wrappers import GrayscaleObservation, ResizeObservation, FrameStackObservation
-        if grayscale_obs: env = GrayscaleObservation(env, keep_dim=False)
-        if resize_obs: env = ResizeObservation(env, shape=resize_obs)
-        if frame_stack: env = FrameStackObservation(env, stack_size=frame_stack)
+        local_env_kwargs = dict(env_kwargs)
+        atari_frame_skip = None
+        if is_alepy_env and obs_type == "rgb":
+            configured_frameskip = local_env_kwargs.get("frameskip")
+            atari_frame_skip = configured_frameskip if configured_frameskip is not None else 4
+            base_frameskip = 1 if atari_frame_skip > 1 else atari_frame_skip
+            local_env_kwargs["frameskip"] = base_frameskip
 
-        # Apply custom wrappers first (before frame stacking) so they operate on raw observations
-        for wrapper in env_wrappers: env = EnvWrapperRegistry.apply(env, wrapper)
+        if is_alepy_env: env = _build_env_alepy(env_id, obs_type, render_mode, **local_env_kwargs)
+        elif is_vizdoom_env: env = _build_env_vizdoom(env_id, obs_type, render_mode, **local_env_kwargs)
+        elif is_stable_retro_env: env = _build_env_stable_retro(env_id, obs_type, render_mode, **local_env_kwargs)
+        elif is_bandit_env: env = _build_env_mab(env_id, obs_type, render_mode, **local_env_kwargs)
+        else: env = _build_env_gym(env_id, obs_type, render_mode, **local_env_kwargs)
+
+        if is_alepy_env and obs_type == "rgb":
+            grayscale_flag = True if grayscale_obs is None else grayscale_obs
+            screen_size = resize_obs if resize_obs is not None else 84
+            if isinstance(screen_size, (tuple, list)):
+                assert len(screen_size) == 2, f"resize_obs must have length 2: resize_obs={screen_size}"
+                screen_size = (screen_size[1], screen_size[0])
+            env = AtariPreprocessing(
+                env,
+                frame_skip=atari_frame_skip or 4,
+                screen_size=screen_size,
+                grayscale_obs=grayscale_flag,
+                grayscale_newaxis=False,
+                scale_obs=False,
+            )
+
+            # Apply custom wrappers on the preprocessed single-frame observations before stacking
+            for wrapper in env_wrappers: env = EnvWrapperRegistry.apply(env, wrapper)
+
+            if frame_stack: env = FrameStackObservation(env, stack_size=frame_stack, padding_type="zero")
+        else:
+            # NOTE: resize before grayscaling for improving downscaling quality
+            if resize_obs: env = ResizeObservation(env, shape=resize_obs)
+            if grayscale_obs: env = GrayscaleObservation(env, keep_dim=False)
+
+            # Apply custom wrappers before stacking so they operate on per-frame observations
+            for wrapper in env_wrappers: env = EnvWrapperRegistry.apply(env, wrapper)
+
+            if frame_stack: env = FrameStackObservation(env, stack_size=frame_stack)
+
+        # Apply TimeLimit wrapper if max_episode_steps is specified
+        if max_episode_steps is not None: env = TimeLimit(env, max_episode_steps=max_episode_steps)
 
         env = EnvInfoWrapper(env, obs_type=obs_type, project_id=env_id, spec=env_spec) # TODO: project id shouldn't be in env info wrapper
 

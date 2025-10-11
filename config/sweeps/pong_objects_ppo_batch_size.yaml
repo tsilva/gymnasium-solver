@@ -1,0 +1,19 @@
+name: pong-objects-ppo-batch-size
+project: ALE-Pong-v5
+method: grid
+metric:
+  name: train/roll/ep_rew/mean
+  goal: maximize
+
+parameters:
+  batch_size:
+    values: [256, 512, 1024, 2048, 4096]
+
+program: train.py
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - --config_id
+  - "ALE-Pong-v5:objects_ppo"
+  - --wandb_sweep

@@ -31,5 +31,4 @@ command:
   - ${program}
   - --config_id
   - "CartPole-v1:ppo"
-  - -q
   - --wandb_sweep

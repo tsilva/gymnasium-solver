@@ -39,11 +39,17 @@ class EarlyStoppingCallback(pl.Callback):
 
         # If no threshold was provided, this callback is disabled
         if self.threshold is None: return
-        
-        # If value is not available yet, do nothing
+
+        # Try to get value from logged metrics first (sync eval)
         value = trainer.logged_metrics.get(self.metric_key)
+
+        # If not available in logged metrics, try async eval metrics
+        if value is None and hasattr(pl_module, 'get_async_eval_metric'):
+            value = pl_module.get_async_eval_metric(self.metric_key)
+
+        # If value is still not available, do nothing
         if value is None: return
-        
+
         # If threshold wasn't reached yet then return (do nothing)
         _should_stop_max = self.mode == "max" and float(value) >= self.threshold
         _should_stop_min = self.mode == "min" and float(value) <= self.threshold

@@ -36,15 +36,18 @@ class HyperparameterMixin:
 
     def _read_hyperparameters_from_run(self: "BaseAgent") -> None:
         """Read hyperparameters from run config and apply changes."""
+        if self.run is None:
+            return
+
         loaded_config = asdict(self.run.load_config())
         current_config = asdict(self.config)
 
         # Identify parameters with active schedules (to skip reloading them)
-        scheduled_params = set()
-        for key in current_config.keys():
-            if key.endswith("_schedule") and current_config.get(key):
-                param = key[: -len("_schedule")]
-                scheduled_params.add(param)
+        scheduled_params = {
+            key[: -len("_schedule")]
+            for key, value in vars(self.config).items()
+            if key.endswith("_schedule") and value
+        }
 
         changes_map = {}
         for key, value in loaded_config.items():

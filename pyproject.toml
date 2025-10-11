@@ -28,6 +28,7 @@ dependencies = [
     "vizdoom",
     "mcp",
     "python-dotenv",
+    "modal>=0.64.0"
 ]
 
 [project.optional-dependencies]

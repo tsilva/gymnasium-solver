@@ -107,6 +107,7 @@ class RolloutCollector():
         self._rew_stats = RunningStats()
         self._base_stats = RunningStats()
         self._adv_stats = RunningStats()
+        self._adv_norm_stats = RunningStats()  # Normalized advantages (post-normalization)
         self._ret_stats = RunningStats()
 
         # Action histogram (discrete); grows dynamically as needed
@@ -398,23 +399,29 @@ class RolloutCollector():
         if self.normalize_returns:
             returns_buf = _normalize_returns(returns_buf) # TODO: take into account unfinished episodes?
 
-        # Normalize advantages if requested
-        if self.normalize_advantages:
-            advantages_buf = _normalize_advantages(advantages_buf)
-
-        # Update running return/advantage stats (post-normalization so it reflects training distribution)
-        ret_flat_env_major = returns_buf.transpose(1, 0).reshape(-1)
-        if valid_mask_flat_for_stats is not None:
-            self._ret_stats.update(ret_flat_env_major[valid_mask_flat_for_stats])
-        else:
-            self._ret_stats.update(ret_flat_env_major)
-
-        # Advantages
+        # Track pre-normalization advantage stats
         adv_flat_env_major = advantages_buf.transpose(1, 0).reshape(-1)
         if valid_mask_flat_for_stats is not None:
             self._adv_stats.update(adv_flat_env_major[valid_mask_flat_for_stats])
         else:
             self._adv_stats.update(adv_flat_env_major)
+
+        # Normalize advantages if requested
+        if self.normalize_advantages:
+            advantages_buf = _normalize_advantages(advantages_buf)
+            # Track post-normalization advantage stats
+            adv_norm_flat_env_major = advantages_buf.transpose(1, 0).reshape(-1)
+            if valid_mask_flat_for_stats is not None:
+                self._adv_norm_stats.update(adv_norm_flat_env_major[valid_mask_flat_for_stats])
+            else:
+                self._adv_norm_stats.update(adv_norm_flat_env_major)
+
+        # Update running return stats (post-normalization so it reflects training distribution)
+        ret_flat_env_major = returns_buf.transpose(1, 0).reshape(-1)
+        if valid_mask_flat_for_stats is not None:
+            self._ret_stats.update(ret_flat_env_major[valid_mask_flat_for_stats])
+        else:
+            self._ret_stats.update(ret_flat_env_major)
 
         return advantages_buf, returns_buf
 
@@ -596,22 +603,25 @@ class RolloutCollector():
                 break
 
         total_episodes_collected = int(sum(per_env_counts))
-        ep_rew_mean = float(total_reward_sum / total_episodes_collected) if total_episodes_collected > 0 else 0.0
-        ep_len_mean = float(total_length_sum / total_episodes_collected) if total_episodes_collected > 0 else 0.0
 
         base_metrics = self.get_metrics()
 
         # TODO: this is a hack, make sure _dist is being excluded from logging
         base_metrics.pop("action_dist")
 
-        return {
+        metrics = {
             **base_metrics,
             "cnt/total_episodes": total_episodes_collected,
             "cnt/total_env_steps": int(total_timesteps),
             "cnt/total_vec_steps": int(total_vec_steps),
-            "roll/ep_rew/mean": ep_rew_mean,
-            "roll/ep_len/mean": float(ep_len_mean),
         }
+
+        # Only log episode statistics when episodes have been collected
+        if total_episodes_collected > 0:
+            metrics["roll/ep_rew/mean"] = float(total_reward_sum / total_episodes_collected)
+            metrics["roll/ep_len/mean"] = float(total_length_sum / total_episodes_collected)
+
+        return metrics
 
     def slice_trajectories(self, trajectories, idxs):
         """Return a view of the rollout trajectory at the given indices.
@@ -643,8 +653,6 @@ class RolloutCollector():
 
 
     def get_metrics(self):
-        ep_rew_mean = float(self.episode_reward_deque.mean()) if self.episode_reward_deque else 0.0
-        ep_len_mean = int(self.episode_length_deque.mean()) if self.episode_length_deque else 0
         rollout_fps = float(self.rollout_fpss.mean()) if self.rollout_fpss else 0.0
 
         # Observation statistics from running aggregates
@@ -671,14 +679,17 @@ class RolloutCollector():
         # Baseline statistics from global aggregates
         baseline_mean = self._base_stats.mean()
         baseline_std = self._base_stats.std()
-        # Advantage statistics (post-normalization if enabled)
+        # Advantage statistics (pre-normalization)
         adv_mean = self._adv_stats.mean()
         adv_std = self._adv_stats.std()
+        # Normalized advantage statistics (post-normalization, if enabled)
+        adv_norm_mean = self._adv_norm_stats.mean()
+        adv_norm_std = self._adv_norm_stats.std()
         # Return statistics (post-normalization if enabled)
         ret_mean = self._ret_stats.mean()
         ret_std = self._ret_stats.std()
 
-        return {
+        metrics = {
             "cnt/total_env_steps": self.total_steps,
             "cnt/total_vec_steps": self.total_vec_steps,  # canonical step counter for history
             "cnt/total_episodes": self.total_episodes,
@@ -687,11 +698,6 @@ class RolloutCollector():
             "roll/vec_steps": self.rollout_vec_steps,
             "roll/episodes": self.rollout_episodes,
             "roll/fps": rollout_fps,  # average fps over recent rollouts
-            "roll/ep_rew/best": float(self._best_episode_reward),
-            "roll/ep_rew/last": float(self._last_episode_reward),
-            "roll/ep_len/last": int(self._last_episode_length),
-            "roll/ep_rew/mean": ep_rew_mean,
-            "roll/ep_len/mean": ep_len_mean,
             "roll/obs/mean": obs_mean,
             "roll/obs/std": obs_std,
             "roll/reward/mean": reward_mean,
@@ -706,6 +712,21 @@ class RolloutCollector():
             "roll/baseline/mean": baseline_mean,
             "roll/baseline/std": baseline_std
         }
+
+        # Include normalized advantage stats if normalization is enabled
+        if self.normalize_advantages and self._adv_norm_stats.count > 0:
+            metrics["roll/adv_norm/mean"] = adv_norm_mean
+            metrics["roll/adv_norm/std"] = adv_norm_std
+
+        # Only include episode metrics if at least one episode has completed
+        if self.episode_reward_deque:
+            metrics["roll/ep_rew/mean"] = float(self.episode_reward_deque.mean())
+            metrics["roll/ep_len/mean"] = int(self.episode_length_deque.mean())
+            metrics["roll/ep_rew/best"] = float(self._best_episode_reward)
+            metrics["roll/ep_rew/last"] = float(self._last_episode_reward)
+            metrics["roll/ep_len/last"] = int(self._last_episode_length)
+
+        return metrics
 
     def pop_recent_episodes(self) -> List[Tuple[int, float, int, bool]]:
         """Return and clear episodes finished since the last pop."""

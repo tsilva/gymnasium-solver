@@ -111,6 +111,7 @@ class MetricsTableLogger(LightningLoggerBase):
         self._last_height: int = 0
         self._history: Dict[str, List[float]] = {}
         self._metrics_with_triggered_alerts: set[str] = set()
+        self._last_rendered_stage: str = "TRAIN"
 
 
     # --- Lightning Logger API ---
@@ -135,7 +136,12 @@ class MetricsTableLogger(LightningLoggerBase):
         simple: Dict[str, Any] = {k: _to_python_scalar(v) for k, v in dict(metrics).items() if "/" in k}
 
         # Detect current stage from newly logged metrics (before sticky merge)
-        current_stage = "VAL" if any(k.startswith("val/") for k in simple.keys()) else "TRAIN"
+        if any(k.startswith("val/") for k in simple.keys()):
+            current_stage = "VAL"
+        elif any(k.startswith("test/") for k in simple.keys()):
+            current_stage = "TEST"
+        else:
+            current_stage = "TRAIN"
 
         # Sticky display: merge with previous known metrics so missing keys
         # keep their last values when printing.
@@ -147,6 +153,15 @@ class MetricsTableLogger(LightningLoggerBase):
 
         # Track across calls
         self.previous_metrics = dict(merged)
+
+    def set_stage(self, stage: str) -> None:
+        """Force the table header to show a specific stage using cached metrics."""
+        stage_upper = stage.upper()
+        self._last_rendered_stage = stage_upper
+        if not self.previous_metrics:
+            return
+
+        self._render_table(dict(self.previous_metrics), current_stage=stage_upper, update_history=False)
 
     def _calc_deltas(self, metrics: Dict[str, Any]) -> Dict[str, Tuple[str, Optional[str]]]:
         """Compute deltas and validate delta rules in a single pass.
@@ -461,11 +476,20 @@ class MetricsTableLogger(LightningLoggerBase):
         lines.append(dimensions.border)
         return lines
 
-    def _render_table(self, metrics: Dict[str, Any], current_stage: str) -> None:
+    def _render_table(
+        self,
+        metrics: Dict[str, Any],
+        current_stage: str,
+        *,
+        update_history: bool = True,
+    ) -> None:
         assert metrics, "metrics cannot be empty"
 
+        self._last_rendered_stage = current_stage
+
         # Add metrics to the logger history (eg: used for sparklines)
-        self._update_history(metrics)
+        if update_history:
+            self._update_history(metrics)
 
         # Get active alerts and track any newly triggered alerts for this session
         active_alerts = self.metrics_monitor.get_active_alerts()

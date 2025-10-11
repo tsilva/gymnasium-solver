@@ -18,14 +18,18 @@ class REINFORCEAgent(BaseAgent):
 
         # Assert that the tensors are detached
         assert_detached(observations, actions, returns, advantages)
-        
+
         # Normalize returns if requested
         if self.config.normalize_returns == "batch":
             returns = batch_normalize(returns)
+            returns_norm_mean = returns.mean()
+            returns_norm_std = returns.std()
 
         # Normalize advantages if requested
         if self.config.normalize_advantages == "batch":
             advantages = batch_normalize(advantages)
+            adv_norm_mean = advantages.mean()
+            adv_norm_std = advantages.std()
 
         # Pick the configured policy targets
         if self.config.policy_targets == "returns": 
@@ -71,7 +75,7 @@ class REINFORCEAgent(BaseAgent):
         loss = policy_loss + (ent_coef * entropy_loss)
         
         # Log the metrics for monitoring training progress
-        self.metrics_recorder.record("train", {
+        metrics = {
             'opt/loss/total' : loss.detach(),
             'opt/loss/policy': policy_loss.detach(),
             'opt/loss/entropy': entropy_loss.detach(),
@@ -79,8 +83,19 @@ class REINFORCEAgent(BaseAgent):
             'opt/ppo/kl': kl_div.detach(),
             'opt/ppo/approx_kl': approx_kl.detach(),
             'policy_targets_mean': policy_targets.mean().detach(),
-            'policy_targets_std': policy_targets.std().detach()
-        })
+            'policy_targets_std': policy_targets.std().detach(),
+        }
+
+        # Add post-normalization stats if normalization was applied
+        if self.config.normalize_returns == "batch":
+            metrics['roll/return_norm/mean'] = returns_norm_mean.detach()
+            metrics['roll/return_norm/std'] = returns_norm_std.detach()
+
+        if self.config.normalize_advantages == "batch":
+            metrics['roll/adv_norm/mean'] = adv_norm_mean.detach()
+            metrics['roll/adv_norm/std'] = adv_norm_std.detach()
+
+        self.metrics_recorder.record("train", metrics)
 
         # Return result for training step
         return dict(

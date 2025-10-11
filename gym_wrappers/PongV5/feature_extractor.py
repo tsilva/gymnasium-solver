@@ -5,6 +5,17 @@ from typing import Optional, Sequence
 
 from gym_wrappers.ocatari_helpers import center_x, center_y, normalize_linear, normalize_position, normalize_velocity, index_objects_by_category
 
+
+def _find_env_with_objects(env):
+    """Drill through wrapper stack to find environment with 'objects' attribute."""
+    current = env
+    while current is not None:
+        if hasattr(current, 'objects'):
+            return current
+        current = getattr(current, 'env', None)
+    return None
+
+
 # Screen dimensions for Atari Pong (for normalizing positions)
 SCREEN_W: float = 160.0
 SCREEN_H: float = 210.0
@@ -23,8 +34,6 @@ assert 0.0 <= PLAYFIELD_Y_MIN < PLAYFIELD_Y_MAX <= SCREEN_H, (
 
 # Max Y pixels per frame that paddle can move (for normalizing velocity)
 PADDLE_DY_SCALE: float = 24.0
-# Treat very small paddle velocity as stationary to avoid spurious action flips.
-PADDLE_STILL_EPS: float = 1e-3
 
 # Max X/Y pixels per frame that ball can move (for normalizing velocity)
 BALL_D_SCALE: float = 12.0
@@ -227,10 +236,13 @@ class PongV5_FeatureExtractor(gym.ObservationWrapper):
 
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
-        executed_action = self._infer_executed_action(
-            fallback=int(np.asarray(action).item())
-        )
-        self._record_last_action(executed_action)
+        # Record the requested action directly (not inferred from paddle velocity).
+        # With sticky actions, the agent learns P(s'|s,a) = 0.75*P(execute a) + 0.25*P(execute LastAction).
+        # Inferring from paddle velocity fails because:
+        # 1. Paddles are locked during serve (dy=0 even when issuing movement commands)
+        # 2. Paddles have inertia (1-2 frame lag when changing direction)
+        # 3. Sticky action outcomes are unobservable anyway (can't distinguish locked paddle from NOOP execution)
+        self._record_last_action(int(np.asarray(action).item()))
         obs = self.observation(obs)
         return obs, reward, terminated, truncated, info
 
@@ -242,40 +254,13 @@ class PongV5_FeatureExtractor(gym.ObservationWrapper):
         self._last_action_one_hot.fill(0.0)
         self._last_action_one_hot[vector_index] = 1.0
 
-    def _infer_executed_action(self, fallback: int) -> int:
-        """Best-effort inference of the action ALE executed after stickiness."""
-        objects = getattr(self.env, "objects", None)
-        if objects is None:
-            return fallback
-
-        try:
-            obj_map = index_objects_by_category(objects)
-        except Exception:
-            return fallback
-
-        player_obj = obj_map.get("Player")
-        if player_obj is None:
-            return fallback
-
-        dy = float(getattr(player_obj, "dy", 0.0))
-        # When the paddle isn't moving we can't infer the executed action.
-        # Fall back to the command we issued so the one-hot stays aligned.
-        if abs(dy) <= PADDLE_STILL_EPS:
-            return fallback
-
-        moving_down = dy > 0.0
-        preferred_action = 3 if moving_down else 2
-        if preferred_action in self._action_index_map:
-            return preferred_action
-
-        # If the preferred action is not tracked (custom mapping), fall back.
-        return fallback
-
     def observation(self, observation):
         # Convert objects to observation vector using configured bounds.
         # When the ball is invisible, use last-seen kinematics to avoid collisions with valid zeros.
+        ocatari_env = _find_env_with_objects(self.env)
+        assert ocatari_env is not None, "Could not find environment with 'objects' attribute in wrapper stack"
         base_obs = _obs_from_objects(
-            self.env.objects,
+            ocatari_env.objects,
             self.min_y,
             self.max_y,
             self.margin_y,

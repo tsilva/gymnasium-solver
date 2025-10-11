@@ -22,6 +22,7 @@ Fast, config-first reinforcement learning framework built on PyTorch Lightning a
 - **Video capture**: Automatic episode recording during evaluation
 - **Inspector UI**: Gradio-based step-by-step episode browser with frame visualization
 - **W&B integration**: Automatic dashboard creation, metrics tracking, video uploads
+- **W&B Sweeps**: Local and distributed (Modal AI) hyperparameter optimization
 - **Hugging Face Hub**: One-command publishing of trained models
 - **Hyperparameter schedules**: Linear interpolation for learning rates, clip ranges, entropy coefficients
 - **CLI overrides**: Override config values without editing YAML files
@@ -248,21 +249,49 @@ Requires W&B login (`wandb login`) or `WANDB_API_KEY` environment variable.
 
 ### W&B Sweeps
 
-Hyperparameter sweeps are supported via W&B Agent:
+#### Local Sweeps
+
+Run hyperparameter sweeps locally via W&B Agent:
 
 ```bash
-# Launch a sweep
+# Create sweep
 wandb sweep config/sweeps/cartpole_ppo_grid.yaml
+
+# Run sweep agent locally
 wandb agent <entity>/<project>/<sweep_id>
 ```
 
-The script auto-detects W&B Agent via `WANDB_SWEEP_ID` and merges `wandb.config` into the main config before training.
+#### Distributed Sweeps (Modal AI)
 
-**Parameter mapping**: Config fields map 1:1 to sweep parameters (e.g., `n_envs`, `n_steps`, `batch_size`, `policy_lr`, `clip_range`, `gamma`, `gae_lambda`). Dict-based schedules like `{start: 0.001, end: 0.0}` are supported.
+Scale out sweeps across multiple cloud CPU instances using Modal AI:
+
+```bash
+# Install Modal dependencies (one-time)
+pip install -e ".[modal]"
+modal token new
+modal secret create wandb-secret WANDB_API_KEY=<your-key>
+
+# Create sweep and launch 10 Modal workers
+python scripts/sweep_modal.py config/sweeps/cartpole_ppo_grid.yaml --count 10
+
+# Launch workers for existing sweep
+python scripts/sweep_modal.py --sweep-id <sweep_id> --count 20
+
+# Configure parallelism (50 runs, 5 per worker = 10 workers)
+python scripts/sweep_modal.py --sweep-id <sweep_id> --count 50 --runs-per-worker 5
+```
+
+Each Modal worker runs on 2 CPUs with 4GB RAM and 1-hour timeout (configurable in `scripts/modal_sweep_runner.py`). See [scripts/README_MODAL.md](scripts/README_MODAL.md) for detailed documentation.
+
+**Configuration**:
+- Auto-detects sweep mode via `WANDB_SWEEP_ID` and merges `wandb.config` into main config
+- Config fields map 1:1 to sweep parameters (e.g., `n_envs`, `policy_lr`, `clip_range`)
+- Dict-based schedules like `{start: 0.001, end: 0.0}` are supported
 
 **Example sweep specs**:
 - Grid search: `config/sweeps/cartpole_ppo_grid.yaml`
 - Bayesian optimization: `config/sweeps/cartpole_ppo_bayes.yaml`
+- See [config/sweeps/README.md](config/sweeps/README.md) for sweep configuration guide
 
 ## Environment Variables
 
@@ -354,6 +383,10 @@ VIBES/               # Architecture guide, coding principles, task playbooks
 - **[CLAUDE.md](CLAUDE.md)**: Comprehensive guide for working with the codebase
 - **[VIBES/ARCHITECTURE_GUIDE.md](VIBES/ARCHITECTURE_GUIDE.md)**: Detailed architecture documentation
 - **[VIBES/CODING_PRINCIPLES.md](VIBES/CODING_PRINCIPLES.md)**: Coding style and principles
+
+## References
+
+- https://docs.cleanrl.dev/rl-algorithms/ppo
 
 ## License
 

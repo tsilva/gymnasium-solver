@@ -5,16 +5,21 @@ from __future__ import annotations
 import argparse
 import os
 import platform
+import time
 
 from utils.environment import build_env_from_config
 from utils.policy_factory import load_policy_model_from_checkpoint
+from utils.random import set_random_seed
 from utils.rollouts import RolloutCollector
 from utils.run import Run
 
 
-def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: bool = False):
+def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: bool = False, fps: int | None = None):
     """Play episodes with random actions or user input."""
     import numpy as np
+
+    # Calculate frame delay for FPS limiting
+    frame_delay = 1.0 / fps if fps else 0
 
     # Get action space info
     action_space = env.single_action_space
@@ -109,9 +114,17 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
                     action = 0
 
         # Execute action
+        step_start = time.perf_counter()
         obs, reward, terminated, truncated, info = env.step(np.array([action]))
         episode_reward += reward[0]
         episode_length += 1
+
+        # Apply FPS limiting if specified
+        if frame_delay > 0:
+            elapsed = time.perf_counter() - step_start
+            sleep_time = max(0, frame_delay - elapsed)
+            if sleep_time > 0:
+                time.sleep(sleep_time)
 
         # Check if episode finished
         done = terminated[0] or truncated[0]
@@ -136,10 +149,10 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
 def main():
     # Parse command line arguments
     p = argparse.ArgumentParser(description="Play a trained agent using RolloutCollector (human render)")
-    p.add_argument("--run-id", default="@last", help="Run ID under runs/ (default: last run with best checkpoint)")
+    p.add_argument("--run-id", default="@best", help="Run ID under runs/ (default: last run with best checkpoint)")
     p.add_argument("--episodes", type=int, default=10, help="Number of episodes to play")
     p.add_argument("--deterministic", action="store_true", default=False, help="Use deterministic actions (mode/argmax)")
-    p.add_argument("--no-render", action="store_true", default=False, help="Do not render the environment")
+    p.add_argument("--headless", action="store_true", default=False, help="Do not render the environment")
     p.add_argument(
         "--step-by-step",
         dest="step_by_step",
@@ -152,6 +165,8 @@ def main():
         default="trained",
         help="Action mode: 'trained' (use trained policy), 'random' (sample from action space), 'user' (keyboard input)",
     )
+    p.add_argument("--seed", type=str, default=None, help="Random seed for environment (int, 'train', 'val', 'test', or None for test seed)")
+    p.add_argument("--fps", type=int, default=None, help="Limit playback to target FPS (frames per second)")
     args = p.parse_args()
     target_episodes = max(1, int(args.episodes))
 
@@ -182,14 +197,34 @@ def main():
     if args.mode == "trained":
         assert run.best_checkpoint_dir is not None, "run has no best checkpoint"
 
+    # Resolve seed argument
+    if args.seed is None:
+        # Default to test seed
+        seed = config.seed_test
+    elif args.seed in ["train", "val", "test"]:
+        # Map stage names to corresponding seeds
+        seeds = {
+            "train": config.seed_train,
+            "val": config.seed_val,
+            "test": config.seed_test,
+        }
+        seed = seeds[args.seed]
+    else:
+        # Parse as integer
+        seed = int(args.seed)
+
+    # Seed all RNGs (Python, NumPy, PyTorch) for reproducibility
+    set_random_seed(seed)
+
     # Build a single-env environment with human rendering
     # Force vectorization_mode='sync' to ensure render() is supported (ALE atari vectorization doesn't support it)
-    env = build_env_from_config(
-        config,
-        n_envs=1,
-        vectorization_mode='sync',
-        render_mode="human" if not args.no_render else None
-    )
+    env_overrides = {
+        'n_envs': 1,
+        'vectorization_mode': 'sync',
+        'render_mode': "human" if not args.headless else None,
+        'seed': seed
+    }
+    env = build_env_from_config(config, **env_overrides)
 
     # Attach a live observation bar printer for interactive play (vector-level wrapper)
     from gym_wrappers.vec_obs_printer import VecObsBarPrinter
@@ -198,7 +233,7 @@ def main():
     # Handle different modes
     if args.mode in ["random", "user"]:
         # Manual control modes don't need policy
-        play_episodes_manual(env, target_episodes, args.mode, args.step_by_step)
+        play_episodes_manual(env, target_episodes, args.mode, args.step_by_step, args.fps)
         print("Done.")
         return
 
@@ -206,11 +241,11 @@ def main():
     # TODO: we should be loading the agent and having it run the episode
     policy_model, _ = load_policy_model_from_checkpoint(run.best_checkpoint_path, env, config)
 
-    # Initialize rollout collector; step-by-step mode uses single-step rollouts
+    # Initialize rollout collector; step-by-step mode or FPS limiting uses single-step rollouts
     collector = RolloutCollector(
         env=env,
         policy_model=policy_model,
-        n_steps=1 if args.step_by_step else config.n_steps,
+        n_steps=1 if (args.step_by_step or args.fps) else config.n_steps,
         **config.rollout_collector_hyperparams(),
     )
 
@@ -222,6 +257,7 @@ def main():
 
     # Collect episodes until target episodes reached
     reported_episodes = 0
+    frame_delay = 1.0 / args.fps if args.fps else 0
     while reported_episodes < target_episodes:
         if args.step_by_step:
             try:
@@ -231,7 +267,15 @@ def main():
             if isinstance(user, str) and user.strip().lower() in {"q", "quit", "exit"}:
                 break
 
+        step_start = time.perf_counter()
         _ = collector.collect(deterministic=args.deterministic)
+
+        # Apply FPS limiting if specified
+        if frame_delay > 0:
+            elapsed = time.perf_counter() - step_start
+            sleep_time = max(0, frame_delay - elapsed)
+            if sleep_time > 0:
+                time.sleep(sleep_time)
         finished_eps = collector.pop_recent_episodes()
         if not finished_eps:
             continue  # Keep collecting until we finish a full episode

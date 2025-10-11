@@ -1,0 +1,78 @@
+# =====================
+# Environment Specification
+# =====================
+spec: &spec
+  source: https://github.com/mwydmuch/ViZDoom/tree/master/scenarios#deathmatch
+  description: Navigate arena and eliminate bots in a deathmatch scenario.
+
+  render_fps: 35
+
+  action_space:
+    discrete: 9
+    labels: {0: noop, 1: forward, 2: backward, 3: strafe_left, 4: strafe_right, 5: turn_left, 6: turn_right, 7: attack, 8: forward_attack}
+
+  observation_space:
+    default: rgb
+    variants:
+      rgb:
+        shape: [height, width, 3]
+        dtype: uint8
+        range: [0, 255]
+        note: Height/width depend on the ViZDoom cfg; wrapper enforces RGB24 and HWC.
+
+  rewards:
+    description: Score points for eliminating bots; lose points for dying.
+    components:
+      - {name: frag_reward, sign: positive, value: 1.0}
+      - {name: death_penalty, value: -1.0}
+    threshold_solved: 10
+    range: [-1, 20]
+
+# =====================
+# env variants
+# =====================
+
+# Base env
+_env: &env
+  spec: *spec
+  env_id: VizDoom-Deathmatch-v0
+  render_mode: 'rgb_array'
+  policy: 'cnn_actorcritic'
+  env_wrappers:
+    - { id: VizDoom_RewardShaper, noop_penalty: 0.01, move_reward: 0.004, turn_reward: 0.004 }
+  obs_type: rgb
+  render_mode: 'rgb_array'
+  policy_kwargs:
+    channels: [32, 64, 64]
+    kernel_sizes: [8, 4, 3]
+    strides: [4, 2, 1]
+  grayscale_obs: true
+  resize_obs: [84, 84]
+  frame_stack: 4
+
+
+# =====================
+# configs
+# =====================
+
+ppo:
+  <<: *env
+  project_id: VizDoom-Deathmatch-v0
+
+  algo_id: ppo
+  description: "PPO on VizDoom Deathmatch - agent learns to navigate and eliminate bots"
+  max_env_steps: 5e6
+  n_envs: 32
+  n_steps: 256
+  batch_size: 0.25
+  n_epochs: 20
+
+  policy_lr:
+    start: 2.5e-4
+    end: 2.5e-5
+
+  ent_coef: 0.03
+
+  #eval_warmup_epochs: 10
+  eval_freq_epochs: 1
+  eval_episodes: 1

@@ -47,8 +47,6 @@ _env: &env
   grayscale_obs: true
   resize_obs: [84, 84]
   frame_stack: 4
-  eval_freq_epochs: 1
-  eval_episodes: 1
 
 # =====================
 # configs
@@ -56,12 +54,20 @@ _env: &env
 
 ppo:
   <<: *env
+  project_id: VizDoom-Basic-v0
   algo_id: ppo
   description: "PPO on VizDoom Basic - standard configuration for basic health gathering task"
-  eval_freq_epochs: 1
-  eval_episodes: 1
-  max_env_steps: 1e6
-  n_steps: 128
-  n_epochs: 4
-  clip_range: 0.1
-  policy_lr: 2.5e-4
+  n_envs: 32
+  n_steps: 256
+  batch_size: 0.5
+  policy_lr: 1e-3
+  n_epochs: 20
+  eval_warmup_epochs: 20
+  eval_freq_epochs: 10
+  eval_episodes: 10
+
+# TODO: test
+#n_epochs: 10
+#n_steps: 128
+#batch_size: 0.25
+#ent_coef: 0.01

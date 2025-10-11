@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import random
+import time
 
 # Avoid macOS AppKit main-thread violations when environments initialize
 # Pygame/SDL from Gradio worker threads. Using the headless SDL drivers
@@ -137,11 +139,15 @@ def run_episode(
 
     from utils.environment import build_env_from_config
 
+    # Use random seed for each episode to get diverse initializations
+    seed = int(time.time() * 1000) % (2**31) + random.randint(0, 10000)
+
     env = build_env_from_config(
         config,
         n_envs=1,
         render_mode="rgb_array",
         vectorization_mode='sync',
+        seed=seed,
     )
 
     # Get checkpoint path with backward compatibility for old policy.ckpt format
@@ -443,6 +449,7 @@ def run_episode(
             truncated_buf.append(truncated)
 
             action_idx = int(action[0]) if isinstance(action, np.ndarray) else int(action)
+            matches_greedy = bool(action_idx == int(np.argmax(probs))) if probs is not None else None
             steps.append({
                 "step": t,
                 "action": action_idx,
@@ -452,6 +459,7 @@ def run_episode(
                 "value": float(val) if val is not None else None,
                 "done": done,
                 "probs": probs,
+                "matches_greedy": matches_greedy,
             })
 
             t += 1
@@ -524,6 +532,10 @@ def build_ui(default_run_id: str = "@last"):
 
     labels, _, default_label = _checkpoint_choices_for_run(initial_run)
 
+    # Load initial run config to get default n_steps
+    initial_config = Run.load(initial_run).load_config()
+    default_max_steps = int(getattr(initial_config, "n_steps", 1000))
+
     with gr.Blocks(theme=gr.themes.Base(), css="""
         .fit-container img {
             max-height: calc(100vh - 400px) !important;
@@ -556,7 +568,7 @@ def build_ui(default_run_id: str = "@last"):
                 interactive=True,
             )
             deterministic = gr.Checkbox(label="Deterministic policy", value=False)
-            max_steps = gr.Slider(label="Max steps", minimum=10, maximum=5000, value=1000, step=10)
+            max_steps = gr.Slider(label="Max steps", minimum=10, maximum=5000, value=default_max_steps, step=10)
             run_btn = gr.Button("Inspect")
 
         # Display the current frame with a per-step stats table on the right
@@ -625,6 +637,7 @@ def build_ui(default_run_id: str = "@last"):
             "action",
             "action_label",
             "probs",
+            "matches_greedy",
             "reward",
             "cum_reward",
             "mc_return",
@@ -641,6 +654,7 @@ def build_ui(default_run_id: str = "@last"):
                     "number", # action
                     "str",    # action_label
                     "str",    # probs (formatted string)
+                    "bool",   # matches_greedy
                     "number", # reward
                     "number", # cum_reward
                     "number", # mc_return
@@ -648,7 +662,7 @@ def build_ui(default_run_id: str = "@last"):
                     "number", # gae_adv
                 ],
                 row_count=(0, "dynamic"),
-                col_count=(10, "fixed"),
+                col_count=(11, "fixed"),
                 label="Per-step details",
                 interactive=False,
             )
@@ -701,6 +715,7 @@ def build_ui(default_run_id: str = "@last"):
                 step_dict.get("action"),
                 step_dict.get("action_label"),
                 step_dict.get("probs"),
+                step_dict.get("matches_greedy"),
                 step_dict.get("reward"),
                 step_dict.get("cum_reward"),
                 step_dict.get("mc_return"),
@@ -734,6 +749,7 @@ def build_ui(default_run_id: str = "@last"):
                 s["action"],
                 s.get("action_label"),
                 _format_probs(s.get("probs")),
+                s.get("matches_greedy"),
                 s["reward"],
                 s["cum_reward"],
                 _round3(s.get("mc_return", None)),

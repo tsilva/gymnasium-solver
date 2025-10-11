@@ -46,7 +46,7 @@ _env: &env
   render_mode: 'rgb_array'
   env_kwargs:
     state: "Level1-1"
-  max_episode_steps: 10000
+  max_episode_steps: 1000
   # RGB preprocessing for CNN policy
   policy: cnn_actorcritic
   grayscale_obs: true
@@ -62,11 +62,12 @@ _env: &env
 
 ppo:
   <<: *env
+  project_id: Retro-SuperMarioBros-Nes
   algo_id: ppo
   description: "PPO on SuperMarioBros - standard configuration for Mario platformer game"
   max_env_steps: 3e6
-  eval_freq_epochs: 20
-  eval_episodes: 5
+  eval_freq_epochs: 1
+  eval_episodes: 1
   n_steps: 256
   n_epochs: 3
   clip_range: 0.1

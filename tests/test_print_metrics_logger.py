@@ -99,3 +99,27 @@ def test_print_logger_trigger_alert_highlight_persists_and_clears():
     out_after_clear = buf.getvalue()
     assert "\x1b[43m" not in out_after_clear
     assert "train/roll/ep_rew/mean" not in logger.metrics_monitor.active_alerts
+
+
+def test_print_logger_set_stage_before_metrics_is_noop():
+    logger, buf = _make_logger()
+    logger.set_stage("val")
+    assert buf.getvalue() == ""
+
+
+def test_print_logger_stage_override_rerenders_header():
+    logger, buf = _make_logger()
+
+    metrics = {
+        "train/cnt/total_timesteps": 128.0,
+        "train/roll/ep_rew/mean": 10.0,
+    }
+    logger.log_metrics(metrics)
+
+    buf.truncate(0)
+    buf.seek(0)
+
+    logger.set_stage("val")
+
+    out = strip_ansi_codes(buf.getvalue())
+    assert "Stage: VAL" in out

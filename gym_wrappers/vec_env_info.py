@@ -21,13 +21,44 @@ class VecEnvInfoWrapper(VectorWrapper):
 
     def _ale_fallbacks(self, env) -> dict[str, Callable]:
         """Map of fallback implementations for ALE native vectorization."""
-        spec = env._spec
+        spec = getattr(env, "_spec", None)
+
+        def _get_return_threshold_from_spec():
+            if spec is None:
+                return None
+            if hasattr(spec, "get_return_threshold"):
+                return spec.get_return_threshold()
+            if isinstance(spec, dict):
+                returns_cfg = spec.get("returns", {})
+                if isinstance(returns_cfg, dict):
+                    if "threshold_solved" in returns_cfg:
+                        return returns_cfg["threshold_solved"]
+                    if "threshold" in returns_cfg:
+                        return returns_cfg["threshold"]
+            return None
+
+        def _get_max_episode_steps_from_spec():
+            if spec is None:
+                return None
+            if hasattr(spec, "get_max_episode_steps"):
+                return spec.get_max_episode_steps()
+            if isinstance(spec, dict):
+                maybe = spec.get("returns", {})
+                if isinstance(maybe, dict):
+                    return maybe.get("max_episode_steps") or maybe.get("max_steps")
+            return None
 
         def get_return_threshold():
-            return spec.get_return_threshold()
+            threshold = _get_return_threshold_from_spec()
+            if threshold is None:
+                raise AttributeError("Return threshold not available for ALE vector env")
+            return threshold
 
         def get_max_episode_steps():
-            return spec.get_max_episode_steps()
+            max_steps = _get_max_episode_steps_from_spec()
+            if max_steps is None:
+                raise AttributeError("Max episode steps not available for ALE vector env")
+            return max_steps
 
         def is_rgb_env():
             return getattr(env, "_obs_type", None) == "rgb"

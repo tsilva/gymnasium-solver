@@ -56,6 +56,7 @@ _env_deterministic: &env_deterministic
 
 ppo: &ppo
   <<: *env
+  project_id: FrozenLake-v1
   algo_id: ppo
   description: "PPO on FrozenLake - standard configuration for grid navigation task"
   eval_episodes: 10
@@ -67,4 +68,5 @@ ppo: &ppo
 ppo_deterministic:
   <<: *ppo
   <<: *env_deterministic
+  project_id: FrozenLake-v1_deterministic
   description: "PPO on FrozenLake deterministic - no slippery ice, easier navigation"

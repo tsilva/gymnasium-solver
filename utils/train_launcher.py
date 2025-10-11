@@ -83,11 +83,17 @@ def _maybe_merge_wandb_config(config, *, wandb_sweep_flag: bool):
     is_wandb_sweep = bool(wandb_sweep_flag) or bool(wandb_sweep_id)
     if not is_wandb_sweep: return config
 
-    # TODO: confirm this is working as expected
-    # Otherwise, merge the configs and return
-    wandb.init(config=asdict(config))
-    merged = dict(wandb.config)
-    merged_config = Config.build_from_dict(merged)
+    # Initialize wandb with the original config (add algo_id since it's a property)
+    config_dict = asdict(config)
+    config_dict["algo_id"] = config.algo_id
+    wandb.init(config=config_dict)
+
+    # Merge sweep overrides back into the original config dict
+    for key, value in dict(wandb.config).items():
+        config_dict[key] = value
+
+    # Build config from merged dict (preserves all required fields like algo_id)
+    merged_config = Config.build_from_dict(config_dict)
     return merged_config
 
 def _maybe_merge_debugger_config(config):
@@ -150,7 +156,8 @@ def _ensure_wandb_run_initialized(config) -> None:
 
     # Otherwise create a fresh run using project and full config
     from utils.formatting import sanitize_name
-    project_name = sanitize_name(config.env_id)
+    project_name = config.project_id
+    assert project_name, "project_id is required"
     wandb.init(project=project_name, config=asdict(config))
 
 def _extract_elapsed_seconds(agent) -> Optional[float]:
@@ -420,8 +427,12 @@ def launch_training_from_args(args) -> None:
 
     present_prefit_summary(config)
 
-    # Prompt if user wants to start training
-    start_training = prompt_confirm("Start training?", default=True)
+    # Detect if we're in sweep mode
+    wandb_sweep_id = os.environ.get("WANDB_SWEEP_ID") or os.environ.get("SWEEP_ID")
+    is_wandb_sweep = bool(args.wandb_sweep) or bool(wandb_sweep_id)
+
+    # Prompt if user wants to start training (skip prompt in sweep mode)
+    start_training = prompt_confirm("Start training?", default=True, quiet=is_wandb_sweep)
     if not start_training:
         print("Training aborted before initialization.")
         return
@@ -446,7 +457,8 @@ def launch_training_from_args(args) -> None:
     _ensure_wandb_run_initialized(config)
 
     # Create/update the W&B workspace immediately so the dashboard is ready during training
-    if getattr(config, 'enable_wandb', True):
+    # Skip workspace creation during sweeps (not needed and may cause issues)
+    if getattr(config, 'enable_wandb', True) and not is_wandb_sweep:
         create_or_update_workspace_for_current_run(overwrite=True, select_current_run_only=True) # TODO: review this function
 
     # Set global RNG seed for reproducibility

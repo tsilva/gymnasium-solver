@@ -108,55 +108,98 @@ _env_deterministic: &env_deterministic
   <<: *env
   env_kwargs:
     repeat_action_probability: 0.0
+
+_env_wrapper_restricted_actions: &env_wrapper_restricted_actions
+  id: DiscreteActionSpaceRemapperWrapper
+  mapping: [0, 2, 3]
   
 # RGB env
 _env_rgb: &env_rgb
   <<: *env
   spec: *spec_rgb
   obs_type: "rgb"
+  env_wrappers:
+    - *env_wrapper_restricted_actions
 
 # Objects env
 _env_objects: &env_objects
   <<: *env
   spec: *spec_objects
   obs_type: "objects"
+  accelerator: "cpu"
   env_wrappers:
-    - { id: PongV5_FeatureExtractor, action_ids: [0, 2, 3] }
-    - { id: DiscreteActionSpaceRemapperWrapper, mapping: [0, 2, 3] }
+    - *env_wrapper_restricted_actions
+    - { id: PongV5_FeatureExtractor, action_ids: [0, 2, 3] } # TODO: softcode action_ids based on remapper
 
 ###########################
 # CONFIGS: obs_type = objects
 ###########################
 
+# NOTE: this seems to be working quite well, but agent is still overconfident with noops
 objects_ppo: &objects_ppo
   <<: *env_objects
+  project_id: ALE-Pong-v5_objects
   algo_id: ppo
   description: "PPO with object-based observations using extracted game objects as features"
-  n_epochs: 15
-  eval_warmup_epochs: 200
+  early_stop_on_eval_threshold: 19.0
+  max_env_steps: 3_500_000  # Extended for convergence
+
+  n_envs: 32
+  n_steps: 1024      # Increased rollout length for better value estimates
+  batch_size: 2048   # Larger batches for more stable updates
+  n_epochs: 8        # Fewer passes to prevent overfitting
+
+  # All schedules now work (config loading bug fixed)
+  policy_lr:
+    start: 0.0055   # Strong initial learning
+    end: 0.00015    # Fine-tuning at end
+    from: 0.0       # Decay from start
+    to: 0.92        # Complete by epoch ~125
+
+  ent_coef:
+    start: 0.04     # HIGH exploration during discovery (epochs 0-65)
+    end: 0.0001     # VERY LOW for pure exploitation (epochs 90+)
+    from: 0.48      # Keep high through peak learning phase
+    to: 0.65        # RAPID decay after peak to force convergence
+
+  clip_range:
+    start: 0.3      # Aggressive initial updates
+    end: 0.08       # Tight final clipping
+    from: 0.5       # Start decay after peak learning
+    to: 0.85        # Gradual tightening
+
+  gae_lambda: 0.96  # Higher for better long-term credit assignment
+  gamma: 0.995      # Increased for better episode-level optimization
+  hidden_dims: [128, 128]  # Larger network capacity
+  eval_async: true
+  eval_warmup_epochs: 50
   eval_freq_epochs: 5
   eval_episodes: 10
-  ent_coef: 0.005
-  policy_lr: 0.002
-  n_steps: 256
 
-  # TODO: these are the ones that were in 7e7cc48b776b48b55083127ed951681acb053bd4
-  ent_coef: 0.005
-  policy_lr: 0.002
-  clip_range: 0.2
-  n_envs: 32
-  n_steps: 256
-  batch_size: 2048
-  hidden_dims: [256, 256]
-  eval_warmup_epochs: 200
-
+# Converges in ~1.5M steps
 objects_deterministic_ppo:
-  <<: *objects_ppo
+  <<: *env_objects
   <<: *env_deterministic
+  project_id: ALE-Pong-v5_objects_deterministic
+  spec: *spec_objects  # Override to use objects spec instead of base spec
   description: "PPO with object-based observations - deterministic version (no sticky actions)"
-  early_stop_on_train_threshold: 20.0  # Override env spec threshold (18) with custom value
-  eval_warmup_epochs: null
-  eval_freq_epochs: 5 # Disable evaluation during training
+  max_env_steps: 1_500_000
+
+  algo_id: ppo
+  early_stop_on_eval_threshold: 19.0
+
+  ent_coef: 0.0
+  clip_range: 0.1 # TODO: wider clip range?
+  policy_lr: 0.01
+
+  n_envs: 32
+  n_steps: 1024
+  batch_size: 2048
+  hidden_dims: [64, 64]
+  eval_async: true
+  eval_warmup_epochs: 20
+  eval_freq_epochs: 5
+  eval_episodes: 10
 
 ###########################
 # CONFIGS: obs_type = rgb
@@ -164,21 +207,23 @@ objects_deterministic_ppo:
 
 rgb_ppo: &rgb_ppo
   <<: *env_rgb
+  project_id: ALE-Pong-v5_rgb
   algo_id: ppo
   description: "PPO with 4-frame grayscale stacks (84x84) via ALE atari vectorization"
-  max_env_steps: 10_000_000
+  accelerator: "gpu"
+  n_envs: 32
+  n_steps: 256
+  batch_size: 1024
   n_epochs: 15
-  ent_coef: 0.02
-  policy_lr: 0.0025
-  clip_range: 0.1
-  n_steps: 512
-  #eval_warmup_epochs: 200
-  eval_freq_epochs: 2
+  policy_lr: 3e-4
+  ent_coef: 0.0
+  eval_async: true
+  eval_warmup_epochs: 100
+  eval_freq_epochs: 5
   eval_episodes: 10
-  batch_size: 0.25
 
 rgb_deterministic_ppo:
   <<: *rgb_ppo
   <<: *env_deterministic
+  project_id: ALE-Pong-v5_rgb_deterministic
   description: "PPO with RGB observations - deterministic version with ALE atari vectorization"
-  eval_freq_epochs: 5 # Disable evaluation during training

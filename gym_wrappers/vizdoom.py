@@ -10,10 +10,10 @@ class VizDoomEnv(gym.Env):
     """Generic Gymnasium wrapper around ViZDoom scenarios.
 
     Parameters (via env_kwargs):
-        scenario: Optional[str] - One of {"basic", "deadly_corridor", "defend_the_center",
-            "defend_the_line", "health_gathering"}. If provided, the wrapper will try to
-            locate the corresponding .cfg file from either VIZDOOM_SCENARIOS_DIR or the
-            installed vizdoom package. Ignored if config_path is provided.
+        scenario: Optional[str] - One of {"basic", "deadly_corridor", "deathmatch",
+            "defend_the_center", "defend_the_line", "health_gathering"}. If provided,
+            the wrapper will try to locate the corresponding .cfg file from either
+            VIZDOOM_SCENARIOS_DIR or the installed vizdoom package. Ignored if config_path is provided.
         config_path: Optional[str] - Path to a specific scenario .cfg file.
         render_mode: Optional[str] - 'rgb_array' (default) or 'human'.
         seed: Optional[int] - Seed for ViZDoom RNG.
@@ -121,15 +121,24 @@ class VizDoomEnv(gym.Env):
         cfg_by_scenario = {
             "basic": "basic.cfg",
             "deadly_corridor": "deadly_corridor.cfg",
+            "deathmatch": "deathmatch.cfg",
             "defend_the_center": "defend_the_center.cfg",
             "defend_the_line": "defend_the_line.cfg",
             "health_gathering": "health_gathering.cfg",
+            "my_way_home": "my_way_home.cfg",
+            "e1m1": "doom_e1m1.cfg",
         }
 
         cfg_name = None
         key = (scenario or "").strip().lower().replace(" ", "_")
         if key in cfg_by_scenario:
             cfg_name = cfg_by_scenario[key]
+
+        # For custom configs (like e1m1), check project vizdoom_configs directory first
+        if cfg_name and key in ("e1m1",):
+            project_configs = Path(__file__).parent.parent / "vizdoom_configs" / cfg_name
+            if project_configs.is_file():
+                return project_configs
 
         # Try environment variable first
         if cfg_name:

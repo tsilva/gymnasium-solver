@@ -81,6 +81,30 @@ python scripts/setup_wandb_dashboard.py --overwrite
 python scripts/setup_wandb_dashboard.py --select-latest
 ```
 
+### W&B Sweeps on Modal AI (Optional Dependency)
+```bash
+# Install Modal dependencies
+uv pip install -e ".[modal]"
+
+# Configure Modal (one-time setup)
+modal token new
+
+# Configure W&B secret in Modal (one-time setup)
+modal secret create wandb-secret WANDB_API_KEY=<your-key>
+
+# Create sweep and launch Modal workers in one command
+python scripts/sweep_modal.py config/sweeps/cartpole_ppo_grid.yaml --count 10
+
+# Launch workers for existing sweep
+python scripts/sweep_modal.py --sweep-id <sweep_id> --count 20
+
+# Configure worker behavior (e.g., 50 total runs, 5 runs per worker = 10 workers)
+python scripts/sweep_modal.py --sweep-id <sweep_id> --count 50 --runs-per-worker 5
+
+# Only create sweep without launching workers
+python scripts/sweep_modal.py config/sweeps/cartpole_ppo_grid.yaml --create-only
+```
+
 ### Benchmarking
 ```bash
 # Benchmark vectorized environment FPS

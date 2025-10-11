@@ -39,19 +39,42 @@ _env: &env
   spec: *spec
   env_id: VizDoom-DefendTheLine-v0
   render_mode: 'rgb_array'
+    # TODO: defaults are not being applied
+  obs_type: rgb
+  render_mode: 'rgb_array'
+  policy_kwargs:
+    channels: [32, 64, 64]
+    kernel_sizes: [8, 4, 3]
+    strides: [4, 2, 1]
+  grayscale_obs: true
+  resize_obs: [84, 84]
+  frame_stack: 4
 
 # =====================
 # configs
 # =====================
 
+# TODO: try no frame stack (should train faster and still work)
+# TODO: tune LR decay to minimize approxkl oob and cliprange oob
 ppo:
   <<: *env
+  project_id: VizDoom-DefendTheLine-v0
   algo_id: ppo
   description: "PPO on VizDoom DefendTheLine - standard configuration for line defense task"
-  eval_freq_epochs: 1
-  eval_episodes: 1
-  max_env_steps: 3e6
-  n_steps: 128
-  n_epochs: 4
-  clip_range: 0.1
-  policy_lr: 2.5e-4
+  max_env_steps: 2e6
+  n_envs: 32
+  n_steps: 256
+  batch_size: 0.25 # TODO: test if batch sizes make any difference
+  n_epochs: 20
+
+  policy_lr:
+    start: 2.5e-4
+    end: 2.5e-5
+
+  ent_coef: 0.03
+  #  start: 0.03
+  #  end: 0.01
+  
+  eval_warmup_epochs: 10
+  eval_freq_epochs: 10
+  eval_episodes: 10

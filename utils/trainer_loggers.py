@@ -79,4 +79,5 @@ class TrainerLoggersBuilder:
     def _build_print_logger(self) -> MetricsTableLogger:
         """Build print logger."""
         print_logger = MetricsTableLogger(metrics_monitor=self.metrics_monitor, run=self.run)
+        self.agent.attach_print_metrics_logger(print_logger)
         return print_logger

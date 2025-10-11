@@ -10,6 +10,8 @@ class VizDoom_RewardShaper(RewardShaperBase):
     turning/moving actions. This helps PPO break out of local optima where the
     agent idles and occasionally shoots.
 
+    Additionally supports penalties for wasted ammo (shooting without kills) and health loss.
+
     The shaping is potential-free (action-based), so it won't dominate true task rewards.
     """
 
@@ -20,12 +22,20 @@ class VizDoom_RewardShaper(RewardShaperBase):
         move_reward: float = 0.002,
         turn_reward: float = 0.002,
         attack_penalty: float = 0.0,
+        ammo_waste_penalty: float = 0.0,
+        health_loss_penalty: float = 0.0,
     ):
         super().__init__(env)
         self.noop_penalty = float(noop_penalty)
         self.move_reward = float(move_reward)
         self.turn_reward = float(turn_reward)
         self.attack_penalty = float(attack_penalty)
+        self.ammo_waste_penalty = float(ammo_waste_penalty)
+        self.health_loss_penalty = float(health_loss_penalty)
+
+        # Track previous values for delta-based penalties
+        self._prev_ammo = None
+        self._prev_health = None
 
         # Cache action semantics when available (env exposes a discrete action set)
         self._action_meanings = {
@@ -39,6 +49,13 @@ class VizDoom_RewardShaper(RewardShaperBase):
             7: "attack",
             8: "forward_attack",
         }
+
+    def reset(self, **kwargs):
+        obs, info = self.env.reset(**kwargs)
+        # Initialize tracking from first observation
+        self._prev_ammo = info.get("ammo", 0.0)
+        self._prev_health = info.get("health", 0.0)
+        return obs, info
 
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
@@ -58,6 +75,25 @@ class VizDoom_RewardShaper(RewardShaperBase):
                     shaping += self.turn_reward
                 if meaning == "attack":
                     shaping -= self.attack_penalty
+
+        # Penalize ammo waste and health loss
+        curr_ammo = info.get("ammo", 0.0)
+        curr_health = info.get("health", 0.0)
+
+        if self._prev_ammo is not None and self.ammo_waste_penalty > 0:
+            ammo_delta = curr_ammo - self._prev_ammo
+            if ammo_delta < 0:  # Used ammo
+                # Penalize if no kill reward was earned
+                if reward <= 0:
+                    shaping -= self.ammo_waste_penalty * abs(ammo_delta)
+
+        if self._prev_health is not None and self.health_loss_penalty > 0:
+            health_delta = curr_health - self._prev_health
+            if health_delta < 0:  # Lost health
+                shaping -= self.health_loss_penalty * abs(health_delta)
+
+        self._prev_ammo = curr_ammo
+        self._prev_health = curr_health
 
         info = dict(info)
         self._add_shaping_info(info, shaping, accumulate=True)

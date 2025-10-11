@@ -29,11 +29,13 @@ def _build_env_alepy__standard(env_id, obs_type, render_mode, **env_kwargs):
 
 def _build_env_vizdoom(env_id, obs_type, render_mode, **env_kwargs):
     from gym_wrappers.vizdoom import VizDoomEnv
-    scenario = env_id.replace("VizDoom-", "").replace("-v0", "").replace("-v1", "").replace("-", "_")
-    scenario = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', scenario).lower()
+    # Allow env_kwargs to override auto-derived scenario name
+    if "scenario" not in env_kwargs:
+        scenario = env_id.replace("VizDoom-", "").replace("-v0", "").replace("-v1", "").replace("-", "_")
+        scenario = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', scenario).lower()
+        env_kwargs["scenario"] = scenario
     return VizDoomEnv(
-        scenario=scenario, 
-        render_mode=render_mode, 
+        render_mode=render_mode,
         **env_kwargs
     )
 

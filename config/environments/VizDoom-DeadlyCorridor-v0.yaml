@@ -61,10 +61,15 @@ ppo:
   description: "PPO on VizDoom DeadlyCorridor - standard configuration for corridor navigation task"
   n_envs: 32
   n_steps: 256
-  batch_size: 0.5
-  policy_lr: 1e-3
+  batch_size: 0.25
   n_epochs: 20
+
+  policy_lr:
+    start: 2.5e-4
+    end: 2.5e-5
+
   ent_coef: 0.03
+
   eval_warmup_epochs: 20
   eval_freq_epochs: 10
   eval_episodes: 10

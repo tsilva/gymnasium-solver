@@ -41,6 +41,7 @@ _env: &env
   policy: 'cnn_actorcritic'
   env_wrappers:
     - { id: VizDoom_RewardShaper, noop_penalty: 0.01, move_reward: 0.004, turn_reward: 0.004 }
+    #- { id: VizDoom_RewardShaper, noop_penalty: 0.01, move_reward: 0.004, turn_reward: 0.004, ammo_waste_penalty: 0.1, health_loss_penalty: 0.01 }
     # TODO: defaults are not being applied
   obs_type: rgb
   render_mode: 'rgb_array'
@@ -50,6 +51,7 @@ _env: &env
     strides: [4, 2, 1]
   grayscale_obs: true
   resize_obs: [84, 84]
+  # BUG: crashes when no frame stack
   frame_stack: 4
 
 
@@ -59,6 +61,9 @@ _env: &env
 
 # TODO: try no frame stack (should train faster and still work)
 
+# SOLVED: 
+# - ep_rew_mean=27 at 59k vec_env_steps (n_envs=32) when frame stack is 4
+# - ep_rew_mean=27 at 38k vec_env_steps (n_envs=32) when frame stack is 2
 ppo:
   <<: *env
   project_id: VizDoom-DefendTheCenter-v0

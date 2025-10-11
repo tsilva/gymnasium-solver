@@ -286,12 +286,63 @@ def _launch_training_resume(args) -> None:
     print(f"Training completed in {human}. Reason: {reason}")
 
 
+def _load_pretrained_weights(agent, run_spec: str) -> None:
+    """Load pretrained weights from another run's checkpoint.
+
+    Args:
+        agent: Agent to load weights into
+        run_spec: Run specification in format "run_id" or "run_id/checkpoint"
+                 Examples:
+                 - "abc123" -> use @best if available, else @last
+                 - "abc123/@best" -> explicitly use @best
+                 - "abc123/@last" -> explicitly use @last
+                 - "abc123/epoch=13" -> use epoch 13
+                 - "@last" -> most recent run, @best if available else @last
+                 - "@last/@best" -> most recent run, @best checkpoint
+    """
+    from utils.run import Run, LAST_RUN_DIR
+
+    # Parse run_spec into run_id and checkpoint_spec
+    if "/" in run_spec:
+        run_id, checkpoint_spec = run_spec.split("/", 1)
+    else:
+        run_id = run_spec
+        checkpoint_spec = None
+
+    # Resolve run ID (handle @last symlink)
+    if run_id == "@last":
+        if not LAST_RUN_DIR.exists():
+            raise FileNotFoundError("No @last run found. Train a model first.")
+        run_id = LAST_RUN_DIR.resolve().name
+
+    # Check if run exists locally, if not try to download from W&B
+    run_dir = Run._resolve_run_dir(run_id)
+    if not run_dir.exists():
+        print(f"Run {run_id} not found locally. Attempting to download from W&B...")
+        from utils.wandb_artifacts import download_run_artifact
+        download_run_artifact(run_id)
+
+    # Load run
+    print(f"Loading pretrained weights from run: {run_id}")
+    run = Run.load(run_id)
+
+    # Resolve checkpoint directory
+    checkpoint_dir = _resolve_checkpoint_dir(run, epoch_spec=checkpoint_spec)
+    checkpoint_desc = checkpoint_spec if checkpoint_spec else "(@best if available, else @last)"
+    print(f"Loading weights from: {checkpoint_dir} {checkpoint_desc}")
+
+    # Load only model weights (not optimizer/RNG states)
+    # Use strict=False to allow partial loading for transfer learning across different architectures
+    agent.load_checkpoint(checkpoint_dir, resume_training=False, strict=False)
+    print(f"Pretrained weights loaded successfully from {run_id}")
+
+
 def _resolve_checkpoint_dir(run, epoch_spec: Optional[str]) -> Path:
     """Resolve checkpoint directory from epoch spec.
 
     Args:
         run: Run object
-        epoch_spec: Epoch specifier: None, '@best', '@last', or epoch number
+        epoch_spec: Epoch specifier: None, '@best', '@last', 'epoch=N', or epoch number
 
     Returns:
         Path to checkpoint directory
@@ -317,15 +368,19 @@ def _resolve_checkpoint_dir(run, epoch_spec: Optional[str]) -> Path:
             raise FileNotFoundError(f"No last checkpoint found for run {run.run_id}")
         return run.last_checkpoint_dir
 
-    # Handle specific epoch number
+    # Handle specific epoch number (supports both "13" and "epoch=13" formats)
+    epoch_str = epoch_spec
+    if epoch_spec.startswith("epoch="):
+        epoch_str = epoch_spec[6:]  # Strip "epoch=" prefix
+
     try:
-        epoch = int(epoch_spec)
+        epoch = int(epoch_str)
         checkpoint_dir = run.checkpoint_dir_for_epoch(epoch)
         if not checkpoint_dir.exists():
             raise FileNotFoundError(f"Checkpoint for epoch {epoch} not found in run {run.run_id}")
         return checkpoint_dir
     except ValueError:
-        raise ValueError(f"Invalid epoch spec: {epoch_spec}. Use '@best', '@last', or an integer.")
+        raise ValueError(f"Invalid epoch spec: {epoch_spec}. Use '@best', '@last', 'epoch=N', or an integer.")
 
 
 def launch_training_from_args(args) -> None:
@@ -399,6 +454,12 @@ def launch_training_from_args(args) -> None:
 
     # Create the agent and kick off learning
     agent = build_agent(config)
+
+    # Load pretrained weights if requested (CLI arg takes precedence over config)
+    init_from_run = (hasattr(args, 'init_from_run') and args.init_from_run) or config.init_from_run
+    if init_from_run:
+        _load_pretrained_weights(agent, init_from_run)
+
     agent.learn()
 
     # Print final training completion message (duration and normalized reason)

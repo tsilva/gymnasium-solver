@@ -77,3 +77,13 @@ ppo_rewardshaped:
   <<: *ppo
   <<: *env_rewardshaped
   description: "PPO with potential-based reward shaping (angle + position terms)"
+
+ppo_transfer_test:
+  <<: *ppo
+  description: "PPO initialized from another run (for testing transfer learning)"
+  # init_from_run: "abc123"           # Use @best if available, else @last
+  # init_from_run: "abc123/@best"     # Explicitly use @best checkpoint
+  # init_from_run: "abc123/@last"     # Explicitly use @last checkpoint
+  # init_from_run: "abc123/epoch=13"  # Use specific epoch checkpoint
+  # init_from_run: "@last/@best"      # Most recent run, @best checkpoint
+  max_env_steps: 1000

@@ -67,9 +67,22 @@ def resolve_run_dir(run_id: Optional[str]) -> Path:
         if run_dir is None:
             raise FileNotFoundError("Unable to resolve a valid run directory")
     else:
+        # Resolve @last symlink if needed
+        if run_id == "@last":
+            latest = RUNS_DIR / "@last"
+            if not latest.exists():
+                raise FileNotFoundError("No @last run found. Train a model first.")
+            run_id = latest.resolve().name
+
         run_dir = RUNS_DIR / run_id
         if not run_dir.exists():
-            raise FileNotFoundError(f"Run directory not found: {run_dir}")
+            # Try to download from W&B
+            print(f"Run {run_id} not found locally. Attempting to download from W&B...")
+            from utils.wandb_artifacts import download_run_artifact
+            download_run_artifact(run_id)
+            # Verify it exists now
+            if not run_dir.exists():
+                raise FileNotFoundError(f"Run directory not found: {run_dir}")
     return run_dir
 
 

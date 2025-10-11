@@ -9,6 +9,10 @@ from pathlib import Path
 from typing import Optional
 
 import wandb
+from dotenv import load_dotenv
+
+# Load .env file if it exists (for WANDB_ENTITY, WANDB_PROJECT, etc.)
+load_dotenv()
 
 
 def _recreate_checkpoint_symlinks(run_dir: Path) -> None:
@@ -82,6 +86,35 @@ def _recreate_checkpoint_symlinks(run_dir: Path) -> None:
     print(f"  Recreated symlinks: @last → {last_dir.name}, @best → {best_dir.name}")
 
 
+def _infer_project_from_registry(run_id: str) -> Optional[str]:
+    """Try to infer project from local runs registry."""
+    try:
+        from utils.run import _read_registry
+        entries = _read_registry()
+        for entry in entries:
+            if entry.get("run_id") == run_id:
+                return entry.get("project_id")
+    except Exception:
+        pass
+    return None
+
+
+def _search_wandb_for_run(run_id: str, entity: str) -> Optional[str]:
+    """Search W&B for a run and return its project name."""
+    try:
+        api = wandb.Api()
+        # Try to find the run across all projects
+        # W&B API doesn't have a direct "search by run_id" across projects,
+        # so we need to try common project names or iterate
+        runs = api.runs(f"{entity}", filters={"display_name": run_id})
+        for run in runs:
+            if run.name == run_id:
+                return run.project
+    except Exception:
+        pass
+    return None
+
+
 def download_run_artifact(
     run_id: str,
     entity: Optional[str] = None,
@@ -93,7 +126,7 @@ def download_run_artifact(
     Args:
         run_id: The run ID to download
         entity: W&B entity (username/org). Defaults to WANDB_ENTITY env var.
-        project: W&B project name. Defaults to WANDB_PROJECT env var.
+        project: W&B project name. Defaults to WANDB_PROJECT env var, or inferred from registry.
         target_dir: Directory to extract to. Defaults to "runs/".
 
     Returns:
@@ -109,8 +142,24 @@ def download_run_artifact(
 
     if not entity:
         raise ValueError("entity must be provided or set via WANDB_ENTITY environment variable")
+
+    # Try to infer project if not provided
     if not project:
-        raise ValueError("project must be provided or set via WANDB_PROJECT environment variable")
+        project = _infer_project_from_registry(run_id)
+        if project:
+            print(f"Inferred project from registry: {project}")
+
+    if not project:
+        project = _search_wandb_for_run(run_id, entity)
+        if project:
+            print(f"Found project via W&B search: {project}")
+
+    if not project:
+        raise ValueError(
+            f"project must be provided or set via WANDB_PROJECT environment variable. "
+            f"Could not infer project for run {run_id}. "
+            f"Try setting WANDB_PROJECT in your .env file or pass it explicitly."
+        )
 
     target_dir = target_dir or Path("runs")
     target_dir = Path(target_dir)

@@ -50,11 +50,10 @@ class TrainerLoggersBuilder:
         project_name = (
             self.config.project_id if self.config.project_id else sanitize_name(self.config.env_id)
         )
-        experiment_name = f"{self.config.algo_id}-{self.config.seed}"
         wandb_logger = (
             WandbLogger(
                 project=project_name,
-                name=experiment_name,
+                name=self.run.run_id,
                 log_model=True,
                 config=asdict(self.config),
             )
@@ -65,9 +64,6 @@ class TrainerLoggersBuilder:
         # Define the common step metric
         wandb_run = wandb_logger.experiment
         wandb_run.define_metric("*", step_metric=metrics_config.total_timesteps_key())
-
-        # Change the run name to {algo_id}-{run_id}
-        wandb_run.name = f"{self.config.algo_id}-{wandb_run.id}"
 
         # Log model gradients to wandb
         wandb_logger.watch(self.agent.policy_model, log="gradients", log_freq=100)

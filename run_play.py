@@ -159,8 +159,23 @@ def main():
     is_wsl = ("microsoft" in platform.release().lower()) or ("WSL_INTEROP" in os.environ)
     if is_wsl: os.environ.setdefault("SDL_RENDER_DRIVER", "software")
 
+    # Resolve run ID (handle @last symlink)
+    run_id = args.run_id
+    if run_id == "@last":
+        from utils.run import LAST_RUN_DIR
+        if not LAST_RUN_DIR.exists():
+            raise FileNotFoundError("No @last run found. Train a model first.")
+        run_id = LAST_RUN_DIR.resolve().name
+
+    # Check if run exists locally, if not try to download from W&B
+    run_dir = Run._resolve_run_dir(run_id)
+    if not run_dir.exists():
+        print(f"Run {run_id} not found locally. Attempting to download from W&B...")
+        from utils.wandb_artifacts import download_run_artifact
+        download_run_artifact(run_id)
+
     # Load run and config
-    run = Run.load(args.run_id)
+    run = Run.load(run_id)
     config = run.load_config()
 
     # For trained mode, require checkpoint

@@ -65,6 +65,13 @@ def main():
         metavar="EPOCH",
         help="Specific epoch to resume from. Use epoch number, '@best', or '@last' (default: '@best' if exists, else '@last')."
     )
+    parser.add_argument(
+        "--init-from-run",
+        type=str,
+        default=None,
+        metavar="RUN_SPEC",
+        help="Initialize model weights from another run's checkpoint. Format: 'run_id' or 'run_id/checkpoint'. Checkpoint can be '@best', '@last', or 'epoch=N'. If not specified, uses '@best' if available, else '@last'. Downloads from W&B if not found locally. Examples: 'abc123', 'abc123/@best', 'abc123/epoch=13', '@last/@best'."
+    )
     args = parser.parse_args()
 
 

@@ -37,6 +37,32 @@ from utils.rollouts import (
 from utils.run import Run, list_run_ids
 
 
+def _ensure_run_available(run_id: str) -> str:
+    """Ensure run is available locally, downloading from W&B if necessary.
+
+    Args:
+        run_id: Run ID (may be @last)
+
+    Returns:
+        Resolved run ID (with @last expanded to actual ID)
+    """
+    # Resolve @last symlink
+    if run_id == "@last":
+        from utils.run import LAST_RUN_DIR
+        if not LAST_RUN_DIR.exists():
+            raise FileNotFoundError("No @last run found. Train a model first.")
+        run_id = LAST_RUN_DIR.resolve().name
+
+    # Check if run exists locally, if not try to download from W&B
+    run_dir = Run._resolve_run_dir(run_id)
+    if not run_dir.exists():
+        print(f"Run {run_id} not found locally. Attempting to download from W&B...")
+        from utils.wandb_artifacts import download_run_artifact
+        download_run_artifact(run_id)
+
+    return run_id
+
+
 def _to_batched_array(arr: np.ndarray, dtype) -> np.ndarray:
     """Convert 1D array to batched (T, 1) format."""
     return np.asarray(arr, dtype=dtype).reshape(-1, 1)
@@ -102,6 +128,7 @@ def run_episode(
     deterministic: bool = False,
     max_steps: int = 1000,
 ) -> Tuple[List[np.ndarray], List[np.ndarray] | None, List[np.ndarray] | None, List[Dict[str, Any]], Dict[str, Any]]:
+    run_id = _ensure_run_available(run_id)
     run = Run.load(run_id)
     config = run.load_config()
 
@@ -491,7 +518,8 @@ def build_ui(default_run_id: str = "@last"):
     initial_run = default_run_id if default_run_id else (runs[0] if runs else "@last")
 
     def _checkpoint_choices_for_run(run_identifier: str):
-        checkpoints = Run.load(run_identifier).list_checkpoints()
+        run_id = _ensure_run_available(run_identifier)
+        checkpoints = Run.load(run_id).list_checkpoints()
         return checkpoints, {}, "@best"
 
     labels, _, default_label = _checkpoint_choices_for_run(initial_run)

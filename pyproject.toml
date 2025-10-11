@@ -27,6 +27,7 @@ dependencies = [
     "gradio>=4.0.0",
     "vizdoom",
     "mcp",
+    "python-dotenv",
 ]
 
 [project.optional-dependencies]

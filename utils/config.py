@@ -289,6 +289,14 @@ class Config:
     # Whether to enable Weights & Biases logging
     enable_wandb: bool = True
 
+    # Run specification to initialize weights from (for transfer learning)
+    # Format: 'run_id' or 'run_id/checkpoint'
+    # Checkpoint can be '@best', '@last', or 'epoch=N'
+    # If no checkpoint specified, uses @best if available, otherwise @last
+    # Downloads from W&B if not found locally
+    # Examples: "abc123", "abc123/@best", "abc123/epoch=13", "@last/@best"
+    init_from_run: Optional[str] = None
+
     @property
     def max_vec_steps(self) -> Optional[int]:
         """Computed property: max_env_steps converted to vectorized steps."""

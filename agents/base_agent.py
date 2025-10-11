@@ -534,12 +534,13 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         from utils.io import write_json
         write_json(state_path, state)
 
-    def load_checkpoint(self, checkpoint_dir: Path, resume_training: bool = True) -> None:
+    def load_checkpoint(self, checkpoint_dir: Path, resume_training: bool = True, strict: bool = True) -> None:
         """Restore complete training state from directory.
 
         Args:
             checkpoint_dir: Directory containing checkpoint files
             resume_training: If True, restore optimizer and RNG states for exact resumption
+            strict: If True, require exact match of model state dict keys. If False, allow partial loading (useful for transfer learning)
         """
         import random
         import numpy as np
@@ -552,18 +553,47 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         model_path = checkpoint_dir / "model.pt"
         old_model_path = checkpoint_dir / "policy.ckpt"
 
+        def _load_state_dict_flexible(state_dict, strict):
+            """Load state dict with flexible matching for transfer learning."""
+            if strict:
+                return self.policy_model.load_state_dict(state_dict, strict=True)
+
+            # Filter state dict to only include keys with matching shapes
+            model_state = self.policy_model.state_dict()
+            filtered_state = {}
+            size_mismatches = []
+
+            for key, value in state_dict.items():
+                if key in model_state:
+                    if value.shape == model_state[key].shape:
+                        filtered_state[key] = value
+                    else:
+                        size_mismatches.append(key)
+
+            result = self.policy_model.load_state_dict(filtered_state, strict=False)
+            loaded = len(filtered_state)
+            skipped = len(size_mismatches)
+            missing = len(result.missing_keys)
+
+            if loaded > 0:
+                print(f"Partial weight loading: {loaded} params loaded, {skipped} skipped (size mismatch), {missing} missing")
+            else:
+                print(f"Warning: No compatible weights found for transfer learning")
+
+            return result
+
         if model_path.exists():
             model_state = torch.load(model_path, map_location='cpu', weights_only=True)
-            self.policy_model.load_state_dict(model_state)
+            _load_state_dict_flexible(model_state, strict)
         elif old_model_path.exists():
             # Old checkpoint format
             print("Loading from old checkpoint format (policy.ckpt)")
             checkpoint = torch.load(old_model_path, map_location='cpu', weights_only=False)
             if "model_state_dict" in checkpoint:
-                self.policy_model.load_state_dict(checkpoint["model_state_dict"])
+                _load_state_dict_flexible(checkpoint["model_state_dict"], strict)
             else:
                 # Even older format, direct state dict
-                self.policy_model.load_state_dict(checkpoint)
+                _load_state_dict_flexible(checkpoint, strict)
         else:
             raise FileNotFoundError(f"Model checkpoint not found at {model_path} or {old_model_path}")
 

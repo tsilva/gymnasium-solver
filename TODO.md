@@ -2,6 +2,7 @@
 
 # NEXT
 
+- TODO: share report structure between wandb projects?
 - FEAT: add support for adding shared configs between envs (eg: atari defaults, vizdoom defaults)
 - BUG: VizDoom is not using spec render_fps for run_play
 - FEAT: single plot with fraction of scaled losses
@@ -23,6 +24,11 @@
 
 ## VizDoom-v0
 
+- TODO: test if its possible to change enemy in Doom-Basic-v0
+- BUG: ensure vizdoom reward shaper is truly working by debugging with manual control
+- FEAT: add multibinary support for vizdoom?
+- FEAT: add support for changing "doom_skill" through config, use it to create curriculum for deadly corridor
+- FEAT: speed up training using action masking
 - FEAT: reward shape defend the center to penalize shooting
 - FEAT: ensure standard action space between envs (for easier curriculum learning)
 - TEST: is it faster to learn defendtheX after basic env

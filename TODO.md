@@ -24,18 +24,13 @@
 
 ## VizDoom-v0
 
+- TEST: ensure rewardshaper is working (test manually)
 - FEAT: reduce obs for vizdoom
 - FEAT: read vizdoom vars as input
 - FEAT: action masking to block impossible combos (eg: left+right)
-- make available game variables
 - episodes not incrementing in user mode
-- add multibinary action support to user mode
-- user play allow inputting direclty in window?
-- turn vizdoom from discrete to multibinary action space, this will allow run_play user mode to register multiple keys at once, and policy sampling must take this into account by using other sampler (categorical wont work) and make sure masking is - being used when specified in spec 
-- TODO: test if its possible to change enemy in Doom-Basic-v0
 - BUG: ensure vizdoom reward shaper is truly working by debugging with manual control
 - FEAT: add support for changing "doom_skill" through config, use it to create curriculum for deadly corridor
-- FEAT: speed up training using action masking
 - FEAT: reward shape defend the center to penalize shooting
 - FEAT: ensure standard action space between envs (for easier curriculum learning)
 - TEST: is it faster to learn defendtheX after basic env
@@ -52,6 +47,17 @@ https://spinningup.openai.com/en/latest/spinningup/keypapers.html)
 - imitation learning (unify pretraining process with minari support)
 - LEARN: [Actor-Mimic](https://arxiv.org/abs/1511.06342) - distil expert policies into single model then finetune it on deathmatch
 - WISH: ability to play against AI agent
+- CURRICULUM:
+VizDoom-MyWayHome-v0
+VizDoom-HealthGathering-v0
+VizDoom-DefendTheLine-v0
+VizDoom-DefendTheCenter-v0
+VizDoom-Basic-v0
+VizDoom-PredictPosition-v0
+VizDoom-TakeCover-v0
+VizDoom-DeadlyCorridor-v0
+VizDoom-Deathmatch-v0
+
 
 ## Pong-v5
 

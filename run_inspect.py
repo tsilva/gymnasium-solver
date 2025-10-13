@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import torch
+import gymnasium as gym
 
 if platform.system() == "Darwin":
     os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
@@ -118,9 +119,41 @@ def _to_batch_obs(obs) -> torch.Tensor:
 
 
 def _ensure_action_shape(env, action):
-    if hasattr(env, "num_envs") and env.num_envs == 1:
-        if not isinstance(action, np.ndarray):
-            action = np.array([action])
+    """Normalize sampled actions to match the vectorized env’s expected shape."""
+    single_action_space = getattr(env, "single_action_space", getattr(env, "action_space", None))
+    num_envs = getattr(env, "num_envs", 1)
+
+    if isinstance(single_action_space, gym.spaces.MultiBinary):
+        arr = np.asarray(action, dtype=np.int8)
+        if num_envs == 1:
+            arr = arr.reshape(-1)
+            if arr.size == 1 and single_action_space.n > 1:
+                arr = np.repeat(arr, single_action_space.n)
+            if arr.size != single_action_space.n:
+                raise AssertionError(f"Expected {single_action_space.n} buttons, got {arr.size}")
+            return arr.reshape(1, single_action_space.n)
+        return arr.reshape(num_envs, single_action_space.n)
+
+    if isinstance(single_action_space, gym.spaces.MultiDiscrete):
+        arr = np.asarray(action, dtype=np.int64)
+        expected = int(single_action_space.nvec.size)
+        if num_envs == 1:
+            arr = arr.reshape(-1)
+            if arr.size == 1 and expected > 1:
+                arr = np.repeat(arr, expected)
+            if arr.size != expected:
+                raise AssertionError(f"Expected {expected} discrete components, got {arr.size}")
+            return arr.reshape(1, expected)
+        return arr.reshape(num_envs, expected)
+
+    if num_envs == 1:
+        arr = np.asarray(action, dtype=np.int64)
+        if arr.ndim == 0:
+            return arr.reshape(1)
+        if arr.ndim == 1:
+            return arr.reshape(1)
+        return arr.reshape(1, *arr.shape[1:])
+
     return action
 
 
@@ -155,6 +188,10 @@ def run_episode(
     policy_model, ckpt_data = load_policy_model_from_checkpoint(checkpoint_path, env, config)
 
     # Load action labels from vec env wrapper if available
+    single_action_space = getattr(env, "single_action_space", getattr(env, "action_space", None))
+    is_multibinary_action_space = isinstance(single_action_space, gym.spaces.MultiBinary)
+    is_multidiscrete_action_space = isinstance(single_action_space, gym.spaces.MultiDiscrete)
+
     act_labels_raw = env.get_action_labels()
     action_labels: List[str] | None = None
     if act_labels_raw is not None:
@@ -409,17 +446,39 @@ def run_episode(
                 obs_t = _to_batch_obs(obs)
                 dist, value = policy_model(obs_t)
                 if deterministic:
-                    action_t = getattr(dist, "mode", dist.mean)
+                    action_tensor = getattr(dist, "mode", None)
+                    if action_tensor is None:
+                        action_tensor = dist.mean
                 else:
-                    action_t = dist.sample()
-                action = action_t.squeeze().cpu().numpy()
-                if np.ndim(action) == 0:
-                    action = int(action.item())
-                elif isinstance(action, np.ndarray) and action.shape == (1,):
-                    action = action.item()
-                action = _ensure_action_shape(env, action)
+                    action_tensor = dist.sample()
+
+                action_np = action_tensor.squeeze().cpu().numpy()
+
+                if is_multibinary_action_space:
+                    action_arr = np.asarray(action_np)
+                    if deterministic and action_arr.dtype.kind == "f":
+                        action_arr = (action_arr >= 0.5).astype(np.int8)
+                    else:
+                        action_arr = np.rint(action_arr).astype(np.int8)
+                    action_display = action_arr.reshape(-1).tolist()
+                    action = _ensure_action_shape(env, action_arr)
+                elif is_multidiscrete_action_space:
+                    action_arr = np.asarray(action_np, dtype=np.int64)
+                    action_display = action_arr.reshape(-1).tolist()
+                    action = _ensure_action_shape(env, action_arr)
+                else:
+                    if np.ndim(action_np) == 0:
+                        action_scalar = int(np.asarray(action_np).item())
+                    elif isinstance(action_np, np.ndarray) and action_np.shape == (1,):
+                        action_scalar = int(action_np.item())
+                    else:
+                        action_scalar = int(np.asarray(action_np).reshape(-1)[0])
+                    action_display = action_scalar
+                    action = _ensure_action_shape(env, action_scalar)
 
                 probs = getattr(dist, "probs", None)
+                if probs is None and hasattr(dist, "base_dist"):
+                    probs = getattr(dist.base_dist, "probs", None)
                 if probs is not None:
                     probs = probs.squeeze(0).cpu().numpy().tolist()
                 val = value.squeeze().item() if value is not None else None
@@ -448,12 +507,45 @@ def run_episode(
             dones_buf.append(done)
             truncated_buf.append(truncated)
 
-            action_idx = int(action[0]) if isinstance(action, np.ndarray) else int(action)
-            matches_greedy = bool(action_idx == int(np.argmax(probs))) if probs is not None else None
+            if is_multibinary_action_space:
+                greedy_flags = None
+                if probs is not None:
+                    greedy_flags = [1 if float(p) >= 0.5 else 0 for p in probs]
+                matches_greedy = bool(
+                    greedy_flags is not None
+                    and np.array_equal(
+                        np.asarray(action_display, dtype=np.int8),
+                        np.asarray(greedy_flags, dtype=np.int8),
+                    )
+                ) if probs is not None else None
+                if action_labels is not None:
+                    active_labels = [
+                        action_labels[i]
+                        for i, flag in enumerate(action_display)
+                        if flag and i < len(action_labels)
+                    ]
+                    action_label_value = active_labels if active_labels else None
+                else:
+                    action_label_value = None
+                action_value = action_display
+            elif is_multidiscrete_action_space:
+                matches_greedy = None
+                action_label_value = None
+                action_value = action_display
+            else:
+                action_idx = int(action_display)
+                matches_greedy = bool(action_idx == int(np.argmax(probs))) if probs is not None else None
+                action_label_value = (
+                    action_labels[action_idx]
+                    if action_labels is not None and 0 <= action_idx < len(action_labels)
+                    else None
+                )
+                action_value = action_idx
+
             steps.append({
                 "step": t,
-                "action": action_idx,
-                "action_label": (action_labels[action_idx] if action_labels is not None and 0 <= action_idx < len(action_labels) else None),
+                "action": action_value,
+                "action_label": action_label_value,
                 "reward": reward,
                 "cum_reward": total_reward,
                 "value": float(val) if val is not None else None,

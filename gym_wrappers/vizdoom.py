@@ -151,6 +151,8 @@ class VizDoomEnv(gym.Env):
             "defend_the_line": "defend_the_line.cfg",
             "health_gathering": "health_gathering.cfg",
             "my_way_home": "my_way_home.cfg",
+            "predict_position": "predict_position.cfg",
+            "take_cover": "take_cover.cfg",
             "e1m1": "doom_e1m1.cfg",
         }
 

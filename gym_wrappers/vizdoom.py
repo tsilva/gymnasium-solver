@@ -116,7 +116,7 @@ class VizDoomEnv(gym.Env):
             _action_vector(4),     # 5: turn left
             _action_vector(5),     # 6: turn right
             _action_vector(6),     # 7: attack
-            _action_vector(2, 6),  # 8: forward + attack
+            #_action_vector(2, 6),  # 8: forward + attack
         ]
         self.action_space = gym.spaces.Discrete(len(self._discrete_actions))
 

@@ -2,6 +2,7 @@
 
 # NEXT
 
+- BUG: warmup is not being interpreted correctly
 - TODO: share report structure between wandb projects?
 - FEAT: add support for adding shared configs between envs (eg: atari defaults, vizdoom defaults)
 - BUG: VizDoom is not using spec render_fps for run_play

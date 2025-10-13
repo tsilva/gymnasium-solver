@@ -27,10 +27,24 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
 
     # Try to import pygame for non-blocking keyboard input in GUI mode
     pygame_available = False
+    pygame_screen = None
     if mode == "user" and not step_by_step:
         try:
             import pygame
+            pygame.init()
+            # Create a small control window to capture keyboard events
+            pygame_screen = pygame.display.set_mode((400, 100))
+            pygame.display.set_caption("Keyboard Controls - Press number keys (0-9)")
             pygame_available = True
+
+            # Draw instructions on the control window
+            font = pygame.font.Font(None, 24)
+            pygame_screen.fill((40, 40, 40))
+            text1 = font.render(f"Press keys 0-{n_actions-1} to select action", True, (255, 255, 255))
+            text2 = font.render("Press Q to quit", True, (255, 255, 255))
+            pygame_screen.blit(text1, (10, 25))
+            pygame_screen.blit(text2, (10, 55))
+            pygame.display.flip()
         except ImportError:
             pass
 
@@ -39,7 +53,8 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
             print(f"\nAction controls: Press 0-{n_actions-1} to select action, Enter to execute.")
             print("Step-by-step mode enabled. Press Enter to step, 'q' then Enter to quit.")
         elif pygame_available:
-            print(f"\nAction controls: Press 0-{n_actions-1} keys to select action.")
+            print(f"\nKeyboard control window opened!")
+            print(f"Action controls: Press 0-{n_actions-1} keys in the control window to select action.")
             print("Press Q to quit.")
         else:
             print(f"\nAction controls: Press 0-{n_actions-1} to select action, Enter to execute.")
@@ -81,22 +96,40 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
                     action = 0
             elif pygame_available:
                 # Non-blocking pygame event handling
-                import pygame
+                action_changed = False
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
+                        if pygame_screen:
+                            pygame.quit()
                         return
                     elif event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_q:
+                            if pygame_screen:
+                                pygame.quit()
                             return
                         # Check for number keys (both main keyboard and numpad)
                         elif pygame.K_0 <= event.key <= pygame.K_9:
                             key_action = event.key - pygame.K_0
                             if 0 <= key_action < n_actions:
                                 action = key_action
+                                action_changed = True
                         elif pygame.K_KP0 <= event.key <= pygame.K_KP9:
                             key_action = event.key - pygame.K_KP0
                             if 0 <= key_action < n_actions:
                                 action = key_action
+                                action_changed = True
+
+                # Update control window display to show current action
+                if action_changed and pygame_screen:
+                    font = pygame.font.Font(None, 24)
+                    pygame_screen.fill((40, 40, 40))
+                    text1 = font.render(f"Press keys 0-{n_actions-1} to select action", True, (255, 255, 255))
+                    text2 = font.render("Press Q to quit", True, (255, 255, 255))
+                    text3 = font.render(f"Current action: {action}", True, (100, 255, 100))
+                    pygame_screen.blit(text1, (10, 15))
+                    pygame_screen.blit(text2, (10, 45))
+                    pygame_screen.blit(text3, (10, 75))
+                    pygame.display.flip()
             else:
                 # Fallback: blocking terminal input
                 try:
@@ -144,6 +177,11 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
             obs = env.reset()
             episode_reward = 0.0
             episode_length = 0
+
+    # Cleanup pygame if it was initialized
+    if pygame_available and pygame_screen:
+        import pygame
+        pygame.quit()
 
 
 def main():

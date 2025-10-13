@@ -8,8 +8,17 @@ spec: &spec
   render_fps: 35
 
   action_space:
-    discrete: 9
-    labels: {0: noop, 1: forward, 2: backward, 3: strafe_left, 4: strafe_right, 5: turn_left, 6: turn_right, 7: attack, 8: forward_attack}
+    discrete: 8
+    labels: {
+      0: noop, 
+      1: forward,
+      2: backward, 
+      3: strafe_left, 
+      4: strafe_right,
+      5: turn_left, 
+      6: turn_right, 
+      7: attack
+    }
 
   observation_space:
     default: rgb
@@ -28,6 +37,10 @@ spec: &spec
     threshold_solved: 10
     range: [-10, 100]
 
+# TODO: this is used to standardize vizdoom action spaces across environments
+_env_wrapper_discrete_action_space_remapper: &env_wrapper_discrete_action_space_remapper
+  id: DiscreteActionSpaceRemapperWrapper
+  mapping: [0, 7, 2, 3, 4, 5, 6, 1]
 
 # =====================
 # env variants
@@ -47,6 +60,8 @@ _env: &env
   grayscale_obs: true
   resize_obs: [84, 84]
   frame_stack: 4
+  env_wrappers:
+    - *env_wrapper_discrete_action_space_remapper
 
 # =====================
 # configs

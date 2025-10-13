@@ -440,12 +440,14 @@ class VecObsBarPrinter(VectorWrapper):
                     val_str = f"{prob:.4f}"
                     self._print_bar_line(label, val_str, a_bar, a_lo_eff, a_hi_eff, label_w, value_w)
             elif action_idx is not None:
-                # Show single bar with action index
-                a_lo, a_hi = 0, act_n - 1
-                a_bar, _a_ratio, (a_lo_eff, a_hi_eff) = self._format_bar_scalar(float(action_idx), float(a_lo), float(a_hi), width=self._bar_width)
-                action_label = self._action_labels.get(action_idx) if self._action_labels else None
-                val_str = f"{action_idx} {action_label}" if action_label else f"{action_idx}"
-                self._print_bar_line("action", val_str, a_bar, a_lo_eff, a_hi_eff, label_w, value_w)
+                # Show one bar per action with binary indicator (1.0 for selected, 0.0 for others)
+                for a_idx in range(act_n):
+                    binary_val = 1.0 if a_idx == action_idx else 0.0
+                    a_bar, _a_ratio, (a_lo_eff, a_hi_eff) = self._format_bar_scalar(binary_val, 0.0, 1.0, width=self._bar_width)
+                    action_label = self._action_labels.get(a_idx) if self._action_labels else None
+                    label = f"a[{a_idx}]" + (f" {action_label}" if action_label else "")
+                    val_str = f"{binary_val:.1f}"
+                    self._print_bar_line(label, val_str, a_bar, a_lo_eff, a_hi_eff, label_w, value_w)
             else:
                 # Fallback: show action space size when we can't extract the specific action
                 print(f"action: ? (discrete: {act_n})")

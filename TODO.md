@@ -2,6 +2,7 @@
 
 # NEXT
 
+- BUG: run_play.py user input not working for Atari envs
 - TEST: CleanRL's envpool implementation
 - TEST: is last eval in uploaded zip file
 - BUG: warmup is not being interpreted correctly

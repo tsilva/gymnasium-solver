@@ -61,13 +61,19 @@ def extract_action_labels_from_config(config) -> dict[int, str] | None:
 def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: bool = False, fps: int | None = None, action_labels: dict[int, str] | None = None):
     """Play episodes with random actions or user input."""
     import numpy as np
+    import gymnasium as gym
 
     # Calculate frame delay for FPS limiting
     frame_delay = 1.0 / fps if fps else 0
 
     # Get action space info
     action_space = env.single_action_space
-    n_actions = action_space.n
+    is_multibinary = isinstance(action_space, gym.spaces.MultiBinary)
+
+    if is_multibinary:
+        n_actions = action_space.n  # Number of buttons
+    else:
+        n_actions = action_space.n  # Number of discrete actions
 
     # Try to import pygame for non-blocking keyboard input in GUI mode
     pygame_available = False
@@ -104,23 +110,35 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
 
     if mode == "user":
         if step_by_step:
-            print(f"\nAction controls: Press 0-{n_actions-1} to select action, Enter to execute.")
+            if is_multibinary:
+                print(f"\nAction controls: Press 0-{n_actions-1} (space-separated) for buttons, Enter to execute.")
+            else:
+                print(f"\nAction controls: Press 0-{n_actions-1} to select action, Enter to execute.")
             print("Step-by-step mode enabled. Press Enter to step, 'q' then Enter to quit.")
         elif pygame_available:
             print(f"\nKeyboard control window opened!")
-            print(f"Action controls: Press 0-{n_actions-1} keys in the control window to select action.")
+            if is_multibinary:
+                print(f"Action controls: Hold keys 0-{n_actions-1} simultaneously for multiple buttons.")
+            else:
+                print(f"Action controls: Press 0-{n_actions-1} keys in the control window to select action.")
             print("Press Q to quit.")
         else:
-            print(f"\nAction controls: Press 0-{n_actions-1} to select action, Enter to execute.")
+            if is_multibinary:
+                print(f"\nAction controls: Press 0-{n_actions-1} (space-separated) for buttons, Enter to execute.")
+            else:
+                print(f"\nAction controls: Press 0-{n_actions-1} to select action, Enter to execute.")
 
         # Display action labels if available
         if action_labels:
-            print("\nAction mapping (after any wrappers):")
+            print(f"\n{'Button' if is_multibinary else 'Action'} mapping (after any wrappers):")
             for action_id in range(n_actions):
                 if action_id in action_labels:
                     print(f"  {action_id}: {action_labels[action_id]}")
     else:
-        print(f"\nRandom action mode enabled. Sampling from {n_actions} actions.")
+        if is_multibinary:
+            print(f"\nRandom action mode enabled. Sampling from {n_actions} buttons (MultiBinary).")
+        else:
+            print(f"\nRandom action mode enabled. Sampling from {n_actions} actions.")
         if step_by_step:
             print("Step-by-step mode enabled. Press Enter to step, 'q' then Enter to quit.")
 
@@ -131,7 +149,12 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
     obs = env.reset()
     episode_reward = 0.0
     episode_length = 0
-    action = 0  # Default action
+
+    # Initialize default action based on action space type
+    if is_multibinary:
+        action = np.zeros(n_actions, dtype=np.int8)  # All buttons off
+    else:
+        action = 0  # Default discrete action
 
     while reported_episodes < target_episodes:
         # Choose action based on mode
@@ -170,38 +193,69 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
 
                 # Check currently pressed keys (not sticky - only while held)
                 keys = pygame.key.get_pressed()
-                action_detected = None
 
-                # Check number keys (main keyboard)
-                for i in range(min(10, n_actions)):
-                    if keys[pygame.K_0 + i]:
-                        action_detected = i
-                        break
-
-                # Check numpad keys if no main key pressed
-                if action_detected is None:
+                if is_multibinary:
+                    # MultiBinary: check all buttons simultaneously
+                    action = np.zeros(n_actions, dtype=np.int8)
                     for i in range(min(10, n_actions)):
-                        if keys[pygame.K_KP0 + i]:
+                        # Check main keyboard keys
+                        if keys[pygame.K_0 + i]:
+                            action[i] = 1
+                        # Check numpad keys
+                        elif keys[pygame.K_KP0 + i]:
+                            action[i] = 1
+
+                    # Update control window display to show active buttons
+                    if pygame_screen:
+                        font = pygame.font.Font(None, 24)
+                        pygame_screen.fill((40, 40, 40))
+                        text1 = font.render(f"Press keys 0-{n_actions-1} (hold multiple)", True, (255, 255, 255))
+                        text2 = font.render("Press Q to quit", True, (255, 255, 255))
+
+                        active_buttons = [str(i) for i in range(n_actions) if action[i]]
+                        if active_buttons:
+                            text3 = font.render(f"Active buttons: {','.join(active_buttons)}", True, (100, 255, 100))
+                        else:
+                            text3 = font.render("No buttons pressed", True, (180, 180, 180))
+
+                        pygame_screen.blit(text1, (10, 15))
+                        pygame_screen.blit(text2, (10, 45))
+                        pygame_screen.blit(text3, (10, 75))
+                        pygame.display.flip()
+                else:
+                    # Discrete: single action at a time
+                    action_detected = None
+
+                    # Check number keys (main keyboard)
+                    for i in range(min(10, n_actions)):
+                        if keys[pygame.K_0 + i]:
                             action_detected = i
                             break
 
-                # Use detected action, or default to 0 (NOOP-like)
-                action = action_detected if action_detected is not None else 0
+                    # Check numpad keys if no main key pressed
+                    if action_detected is None:
+                        for i in range(min(10, n_actions)):
+                            if keys[pygame.K_KP0 + i]:
+                                action_detected = i
+                                break
 
-                # Update control window display to show current action
-                if pygame_screen:
-                    font = pygame.font.Font(None, 24)
-                    pygame_screen.fill((40, 40, 40))
-                    text1 = font.render(f"Press keys 0-{n_actions-1} to select action", True, (255, 255, 255))
-                    text2 = font.render("Press Q to quit", True, (255, 255, 255))
-                    if action_detected is not None:
-                        text3 = font.render(f"Current action: {action} (ACTIVE)", True, (100, 255, 100))
-                    else:
-                        text3 = font.render(f"Current action: {action} (default)", True, (180, 180, 180))
-                    pygame_screen.blit(text1, (10, 15))
-                    pygame_screen.blit(text2, (10, 45))
-                    pygame_screen.blit(text3, (10, 75))
-                    pygame.display.flip()
+                    # Use detected action, or default to 0 (NOOP-like)
+                    action = action_detected if action_detected is not None else 0
+
+                    # Update control window display to show current action
+                    if pygame_screen:
+                        font = pygame.font.Font(None, 24)
+                        pygame_screen.fill((40, 40, 40))
+                        text1 = font.render(f"Press keys 0-{n_actions-1} to select action", True, (255, 255, 255))
+                        text2 = font.render("Press Q to quit", True, (255, 255, 255))
+                        if action_detected is not None:
+                            text3 = font.render(f"Current action: {action} (ACTIVE)", True, (100, 255, 100))
+                        else:
+                            text3 = font.render(f"Current action: {action} (default)", True, (180, 180, 180))
+                        pygame_screen.blit(text1, (10, 15))
+                        pygame_screen.blit(text2, (10, 45))
+                        pygame_screen.blit(text3, (10, 75))
+                        pygame.display.flip()
             else:
                 # Fallback: blocking terminal input
                 try:
@@ -220,7 +274,16 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
 
         # Execute action
         step_start = time.perf_counter()
-        obs, reward, terminated, truncated, info = env.step(np.array([action]))
+
+        # Wrap action appropriately for vectorized env
+        if is_multibinary:
+            # MultiBinary: action is already an array, wrap in batch dimension
+            action_batch = action.reshape(1, -1)
+        else:
+            # Discrete: single integer, wrap in array
+            action_batch = np.array([action])
+
+        obs, reward, terminated, truncated, info = env.step(action_batch)
         episode_reward += reward[0]
         episode_length += 1
 

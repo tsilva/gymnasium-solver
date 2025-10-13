@@ -8,18 +8,18 @@ spec: &spec
   render_fps: 35
 
   action_space:
-    discrete: 8
+    multibinary: 8
     labels: {
       0: noop,
-      1: forward,
-      2: backward,
-      3: strafe_left,
-      4: strafe_right,
+      1: move_forward,
+      2: move_backward,
+      3: move_left,
+      4: move_right,
       5: turn_left,
       6: turn_right,
       7: attack
     }
-    valid: [3, 4]
+    valid: [3, 4]  # Only move_left and move_right available in this scenario
 
   observation_space:
     default: rgb

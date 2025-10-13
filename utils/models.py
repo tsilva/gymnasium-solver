@@ -5,7 +5,7 @@ from typing import Dict, Union
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.distributions import Categorical
+from torch.distributions import Categorical, Bernoulli, Independent
 
 from .torch import compute_param_group_grad_norm, init_model_weights
 
@@ -220,6 +220,7 @@ class MLPPolicy(BaseModel):
         input_shape: tuple[int, ...] | None = None,
         output_shape: tuple[int, ...] | None = None,
         valid_actions: list[int] | None = None,
+        action_space_type: str = "discrete",  # "discrete" or "multibinary"
     ):
         super().__init__()
 
@@ -241,6 +242,7 @@ class MLPPolicy(BaseModel):
 
         # Store valid actions for action masking (if specified)
         self.valid_actions = valid_actions
+        self.action_space_type = action_space_type
 
         # Reusable initialization
         init_model_weights(self, default_activation=activation, policy_heads=[self.policy_head])
@@ -264,7 +266,15 @@ class MLPPolicy(BaseModel):
             # Set invalid action logits to -inf
             logits = logits.masked_fill(mask, float('-inf'))
 
-        dist = Categorical(logits=logits)
+        # Create distribution based on action space type
+        if self.action_space_type == "multibinary":
+            # Use Independent Bernoulli for multi-binary actions
+            probs = torch.sigmoid(logits)
+            dist = Independent(Bernoulli(probs=probs), 1)
+        else:
+            # Use Categorical for discrete actions
+            dist = Categorical(logits=logits)
+
         return dist, None  # Return None for value to maintain compatibility
 
     def compute_grad_norms(self) -> Dict[str, float]:
@@ -283,6 +293,7 @@ class MLPActorCritic(BaseModel):
         output_shape: tuple[int, ...],
         activation: str,
         valid_actions: list[int] | None = None,
+        action_space_type: str = "discrete",  # "discrete" or "multibinary"
     ):
         super().__init__()
         assert type(input_shape) in [int, np.int32, np.int64] or len(input_shape) == 1, "Input shape must be 1D"
@@ -302,6 +313,7 @@ class MLPActorCritic(BaseModel):
 
         # Store valid actions for action masking (if specified)
         self.valid_actions = valid_actions
+        self.action_space_type = action_space_type
 
         # TODO: review this
         # Reusable initialization
@@ -338,8 +350,14 @@ class MLPActorCritic(BaseModel):
             # Set invalid action logits to -inf
             logits = logits.masked_fill(mask, float('-inf'))
 
-        # Create categorical distribution from logits
-        policy_dist = Categorical(logits=logits)
+        # Create distribution based on action space type
+        if self.action_space_type == "multibinary":
+            # Use Independent Bernoulli for multi-binary actions
+            probs = torch.sigmoid(logits)
+            policy_dist = Independent(Bernoulli(probs=probs), 1)
+        else:
+            # Use Categorical for discrete actions
+            policy_dist = Categorical(logits=logits)
 
         # Forward through value head and get value prediction
         value_pred = self.value_head(x).squeeze(-1)
@@ -371,6 +389,7 @@ class CNNActorCritic(BaseModel):
         kernel_sizes: tuple[int, ...] = (8, 4, 3),
         strides: tuple[int, ...] = (4, 2, 1),
         valid_actions: list[int] | None = None,
+        action_space_type: str = "discrete",  # "discrete" or "multibinary"
     ):
         """Initialize CNN actor-critic.
 
@@ -415,6 +434,7 @@ class CNNActorCritic(BaseModel):
 
         # Store valid actions for action masking (if specified)
         self.valid_actions = valid_actions
+        self.action_space_type = action_space_type
 
         # Initialize weights
         init_model_weights(
@@ -468,7 +488,14 @@ class CNNActorCritic(BaseModel):
             # Set invalid action logits to -inf
             logits = logits.masked_fill(mask, float('-inf'))
 
-        policy_dist = Categorical(logits=logits)
+        # Create distribution based on action space type
+        if self.action_space_type == "multibinary":
+            # Use Independent Bernoulli for multi-binary actions
+            probs = torch.sigmoid(logits)
+            policy_dist = Independent(Bernoulli(probs=probs), 1)
+        else:
+            # Use Categorical for discrete actions
+            policy_dist = Categorical(logits=logits)
 
         # Value head
         value_pred = self.value_head(x).squeeze(-1)

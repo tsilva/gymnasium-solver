@@ -88,6 +88,13 @@ def build_policy_from_env_and_config(env, config):
     output_shape = act_space.shape
     if not output_shape: output_shape = (act_space.n,)
 
+    # Detect action space type
+    import gymnasium as gym
+    if isinstance(act_space, gym.spaces.MultiBinary):
+        action_space_type = "multibinary"
+    else:
+        action_space_type = "discrete"
+
     # Auto-select CNN policy for multi-dimensional observations (images)
     policy_type = config.policy
     is_image_obs = len(input_shape) > 1
@@ -104,10 +111,11 @@ def build_policy_from_env_and_config(env, config):
         if 'valid' in action_space_spec:
             valid_actions = action_space_spec['valid']
 
-    # Merge valid_actions into policy_kwargs if present
+    # Merge valid_actions and action_space_type into policy_kwargs
     policy_kwargs = dict(config.policy_kwargs)
     if valid_actions is not None:
         policy_kwargs['valid_actions'] = valid_actions
+    policy_kwargs['action_space_type'] = action_space_type
 
     return build_policy(
         policy_type,

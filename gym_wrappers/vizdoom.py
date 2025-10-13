@@ -95,40 +95,60 @@ class VizDoomEnv(gym.Env):
             dtype=np.uint8,
         )
 
-        # Build a small discrete action set mapped to vizdoom button vectors
-        # Query actual buttons from the game to build correct mapping
+        # Use standardized 8-button MultiBinary action space for all VizDoom scenarios
+        # This allows for consistent action spaces across scenarios and transfer learning
+        # Standard layout:
+        #   0: NOOP (no action)
+        #   1: MOVE_FORWARD
+        #   2: MOVE_BACKWARD
+        #   3: MOVE_LEFT / STRAFE_LEFT
+        #   4: MOVE_RIGHT / STRAFE_RIGHT
+        #   5: TURN_LEFT
+        #   6: TURN_RIGHT
+        #   7: ATTACK
+
+        # Query actual buttons available in this scenario
         available_buttons = self._game.get_available_buttons()
-        n_buttons = len(available_buttons)
 
-        def _action_vector(*on_idx: int):
-            vector = [0] * n_buttons
-            for i in on_idx:
-                if 0 <= i < n_buttons:
-                    vector[i] = 1
-            return vector
+        # Build mapping from standardized action space to VizDoom button indices
+        # Standard button index -> VizDoom button index (or None if not available)
+        self._button_mapping = [None] * 8
 
-        # Create button name -> index mapping
-        button_map = {}
-        for idx, button in enumerate(available_buttons):
+        for vizdoom_idx, button in enumerate(available_buttons):
             button_name = str(button).split('.')[-1]  # Extract name from Button.XXX
-            button_map[button_name] = idx
 
-        # Build discrete actions based on what buttons are actually available
-        def _get_button_idx(name: str, fallback: Optional[int] = None) -> Optional[int]:
-            """Get button index by name, return fallback if not found."""
-            return button_map.get(name, fallback)
+            # Map to standard action space
+            if button_name == 'MOVE_FORWARD':
+                self._button_mapping[1] = vizdoom_idx
+            elif button_name == 'MOVE_BACKWARD':
+                self._button_mapping[2] = vizdoom_idx
+            elif button_name in ('MOVE_LEFT', 'STRAFE_LEFT'):
+                self._button_mapping[3] = vizdoom_idx
+            elif button_name in ('MOVE_RIGHT', 'STRAFE_RIGHT'):
+                self._button_mapping[4] = vizdoom_idx
+            elif button_name == 'TURN_LEFT':
+                self._button_mapping[5] = vizdoom_idx
+            elif button_name == 'TURN_RIGHT':
+                self._button_mapping[6] = vizdoom_idx
+            elif button_name == 'ATTACK':
+                self._button_mapping[7] = vizdoom_idx
 
-        self._discrete_actions = [
-            _action_vector(),  # 0: noop
-            _action_vector(_get_button_idx('MOVE_FORWARD') or 0),    # 1: forward
-            _action_vector(_get_button_idx('MOVE_BACKWARD') or 0),   # 2: backward
-            _action_vector(_get_button_idx('MOVE_LEFT') or 0),       # 3: strafe left
-            _action_vector(_get_button_idx('MOVE_RIGHT') or 0),      # 4: strafe right
-            _action_vector(_get_button_idx('TURN_LEFT') or 0),       # 5: turn left
-            _action_vector(_get_button_idx('TURN_RIGHT') or 0),      # 6: turn right
-            _action_vector(_get_button_idx('ATTACK') or 0),          # 7: attack
-        ]
-        self.action_space = gym.spaces.Discrete(len(self._discrete_actions))
+        # Store for reference
+        self.button_map = {
+            'NOOP': 0,
+            'MOVE_FORWARD': 1,
+            'MOVE_BACKWARD': 2,
+            'MOVE_LEFT': 3,
+            'MOVE_RIGHT': 4,
+            'TURN_LEFT': 5,
+            'TURN_RIGHT': 6,
+            'ATTACK': 7
+        }
+        self.n_vizdoom_buttons = len(available_buttons)
+
+        # Use standardized MultiBinary(8) action space
+        self.action_space = gym.spaces.MultiBinary(8)
+        self.n_buttons = 8
 
         self._last_obs: Optional[np.ndarray] = None
 
@@ -217,12 +237,19 @@ class VizDoomEnv(gym.Env):
         return obs, info
 
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
-        # Map Discrete action index to a vizdoom button vector
-        idx = int(action) if not isinstance(action, (list, tuple, np.ndarray)) else int(np.asarray(action).item())
-        idx = max(0, min(idx, len(self._discrete_actions) - 1))
-        action_list = self._discrete_actions[idx]
+        # Convert standardized 8-button action to VizDoom-specific button vector
+        action_array = np.asarray(action).flatten()
+        assert len(action_array) == 8, f"Expected 8 buttons (standardized), got {len(action_array)}"
 
-        reward = float(self._game.make_action(action_list, self._frame_skip))
+        # Map standardized actions to VizDoom button vector
+        vizdoom_action = [0] * self.n_vizdoom_buttons
+
+        for std_idx in range(8):
+            if action_array[std_idx] and self._button_mapping[std_idx] is not None:
+                vizdoom_idx = self._button_mapping[std_idx]
+                vizdoom_action[vizdoom_idx] = 1
+
+        reward = float(self._game.make_action(vizdoom_action, self._frame_skip))
 
         terminated = self._game.is_episode_finished()
         truncated = False

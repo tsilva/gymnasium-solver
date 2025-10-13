@@ -15,8 +15,6 @@
 - CHECK: should we reset optimizer when we use another learning rate
 - TEST: ensure evaluation is ran exactly same way as train (eg: alevecenv)
 - TODO: make key capture not require enter, allow h to show all shortcuts
-- FEAT: speed up eval as much as possible (async mode with few changes)
-- TODO: trace hyperparam tuning process and adjust
 - TEST: logged to correct projects
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 - TODO: add env normalization support, make sure normalization is saved

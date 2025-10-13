@@ -24,6 +24,7 @@
 
 ## VizDoom-v0
 
+- FEAT: action masking to block impossible combos (eg: left+right)
 - vizdoom, reduce obs frame (remove hud)
 - add support for action masks in multibinary (when one is pressed, act is others arent)
 - make available game variables

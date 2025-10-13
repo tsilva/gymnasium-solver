@@ -182,9 +182,8 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
                     print(f"Invalid action: {e}. Using action 0.")
                     action = 0
             elif pygame_available:
-                # Process ALL events to ensure key state stays synchronized
-                # This prevents keys from getting stuck when focus changes
-                window_lost_focus = False
+                # Process events and manually track key state to avoid stuck keys
+                # This is more reliable than pygame.key.get_pressed() which can hold stale state
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         if pygame_screen:
@@ -195,36 +194,27 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
                             if pygame_screen:
                                 pygame.quit()
                             return
-                    # Detect focus loss (handle both pygame 1.x and 2.x)
+                        # Track key presses manually
+                        pressed_keys.add(event.key)
+                    elif event.type == pygame.KEYUP:
+                        # Remove key from pressed set when released
+                        pressed_keys.discard(event.key)
+                    # Clear all keys on focus loss to prevent stuck keys
                     elif hasattr(pygame, 'WINDOWFOCUSLOST') and event.type == pygame.WINDOWFOCUSLOST:
-                        window_lost_focus = True
+                        pressed_keys.clear()
                     elif event.type == pygame.ACTIVEEVENT:
                         if hasattr(event, 'state') and event.state == 1 and hasattr(event, 'gain') and not event.gain:
-                            window_lost_focus = True
-
-                # Pump events to ensure key state is current
-                # This is critical for preventing stuck keys when window focus changes
-                pygame.event.pump()
-
-                # Check currently pressed keys (not sticky - only while held)
-                keys = pygame.key.get_pressed()
-
-                # If window lost focus, force reset action to prevent stuck keys
-                if window_lost_focus:
-                    if is_multibinary:
-                        action = np.zeros(n_actions, dtype=np.int8)
-                    else:
-                        action = 0
+                            pressed_keys.clear()
 
                 if is_multibinary:
                     # MultiBinary: check all buttons simultaneously
                     action = np.zeros(n_actions, dtype=np.int8)
                     for i in range(min(10, n_actions)):
                         # Check main keyboard keys
-                        if keys[pygame.K_0 + i]:
+                        if (pygame.K_0 + i) in pressed_keys:
                             action[i] = 1
                         # Check numpad keys
-                        elif keys[pygame.K_KP0 + i]:
+                        elif (pygame.K_KP0 + i) in pressed_keys:
                             action[i] = 1
 
                     # Update control window display to show active buttons
@@ -250,14 +240,14 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
 
                     # Check number keys (main keyboard)
                     for i in range(min(10, n_actions)):
-                        if keys[pygame.K_0 + i]:
+                        if (pygame.K_0 + i) in pressed_keys:
                             action_detected = i
                             break
 
                     # Check numpad keys if no main key pressed
                     if action_detected is None:
                         for i in range(min(10, n_actions)):
-                            if keys[pygame.K_KP0 + i]:
+                            if (pygame.K_KP0 + i) in pressed_keys:
                                 action_detected = i
                                 break
 

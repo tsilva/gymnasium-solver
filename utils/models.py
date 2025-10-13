@@ -219,6 +219,7 @@ class MLPPolicy(BaseModel):
         # Back-compat and factory-compat kwargs
         input_shape: tuple[int, ...] | None = None,
         output_shape: tuple[int, ...] | None = None,
+        valid_actions: list[int] | None = None,
     ):
         super().__init__()
 
@@ -238,6 +239,9 @@ class MLPPolicy(BaseModel):
         # Create the policy head
         self.policy_head = nn.Linear(hidden_dims[-1], output_dim)
 
+        # Store valid actions for action masking (if specified)
+        self.valid_actions = valid_actions
+
         # Reusable initialization
         init_model_weights(self, default_activation=activation, policy_heads=[self.policy_head])
 
@@ -251,6 +255,15 @@ class MLPPolicy(BaseModel):
     def forward(self, obs: torch.Tensor):
         x = self.backbone(obs)
         logits = self.policy_head(x)
+
+        # Apply action masking if valid_actions is specified
+        if self.valid_actions is not None:
+            # Create a mask for invalid actions
+            mask = torch.ones_like(logits, dtype=torch.bool)
+            mask[:, self.valid_actions] = False
+            # Set invalid action logits to -inf
+            logits = logits.masked_fill(mask, float('-inf'))
+
         dist = Categorical(logits=logits)
         return dist, None  # Return None for value to maintain compatibility
 
@@ -268,7 +281,8 @@ class MLPActorCritic(BaseModel):
         input_shape: Union[tuple[int, ...], int],
         hidden_dims: tuple[int, ...],
         output_shape: tuple[int, ...],
-        activation: str
+        activation: str,
+        valid_actions: list[int] | None = None,
     ):
         super().__init__()
         assert type(input_shape) in [int, np.int32, np.int64] or len(input_shape) == 1, "Input shape must be 1D"
@@ -285,6 +299,9 @@ class MLPActorCritic(BaseModel):
         value_input_dim = hidden_dims[-1]
         value_output_dim = 1
         self.value_head = nn.Linear(value_input_dim, value_output_dim)
+
+        # Store valid actions for action masking (if specified)
+        self.valid_actions = valid_actions
 
         # TODO: review this
         # Reusable initialization
@@ -309,10 +326,18 @@ class MLPActorCritic(BaseModel):
         # TODO: this is a hack to deal with the extra dimension provided by embeddings, need to softcode this
         if x.ndim > 2 and x.shape[1] == 1:
             x = x.squeeze(1)
-        
+
         # Forward through policy head and get policy logits
         logits = self.policy_head(x)
-  
+
+        # Apply action masking if valid_actions is specified
+        if self.valid_actions is not None:
+            # Create a mask for invalid actions
+            mask = torch.ones_like(logits, dtype=torch.bool)
+            mask[:, self.valid_actions] = False
+            # Set invalid action logits to -inf
+            logits = logits.masked_fill(mask, float('-inf'))
+
         # Create categorical distribution from logits
         policy_dist = Categorical(logits=logits)
 
@@ -345,6 +370,7 @@ class CNNActorCritic(BaseModel):
         channels: tuple[int, ...] = (32, 64, 64),
         kernel_sizes: tuple[int, ...] = (8, 4, 3),
         strides: tuple[int, ...] = (4, 2, 1),
+        valid_actions: list[int] | None = None,
     ):
         """Initialize CNN actor-critic.
 
@@ -356,6 +382,7 @@ class CNNActorCritic(BaseModel):
             channels: CNN channel sizes
             kernel_sizes: CNN kernel sizes
             strides: CNN strides
+            valid_actions: Optional list of valid action indices for masking
         """
         super().__init__()
         assert len(input_shape) == 3, f"CNN input must be 3D (C, H, W), got {input_shape}"
@@ -385,6 +412,9 @@ class CNNActorCritic(BaseModel):
 
         # Value head
         self.value_head = nn.Linear(mlp_output_dim, 1)
+
+        # Store valid actions for action masking (if specified)
+        self.valid_actions = valid_actions
 
         # Initialize weights
         init_model_weights(
@@ -429,6 +459,15 @@ class CNNActorCritic(BaseModel):
 
         # Policy head
         logits = self.policy_head(x)
+
+        # Apply action masking if valid_actions is specified
+        if self.valid_actions is not None:
+            # Create a mask for invalid actions
+            mask = torch.ones_like(logits, dtype=torch.bool)
+            mask[:, self.valid_actions] = False
+            # Set invalid action logits to -inf
+            logits = logits.masked_fill(mask, float('-inf'))
+
         policy_dist = Categorical(logits=logits)
 
         # Value head

@@ -97,13 +97,25 @@ def build_policy_from_env_and_config(env, config):
         elif policy_type == "mlp_actorcritic":
             policy_type = "cnn_actorcritic"
 
+    # Extract valid actions from config spec if available
+    valid_actions = None
+    if hasattr(config, 'spec') and config.spec:
+        action_space_spec = config.spec.get('action_space', {})
+        if 'valid' in action_space_spec:
+            valid_actions = action_space_spec['valid']
+
+    # Merge valid_actions into policy_kwargs if present
+    policy_kwargs = dict(config.policy_kwargs)
+    if valid_actions is not None:
+        policy_kwargs['valid_actions'] = valid_actions
+
     return build_policy(
         policy_type,
         input_shape=input_shape,
         output_shape=output_shape,
         hidden_dims=config.hidden_dims,
         activation=config.activation,
-        **config.policy_kwargs,
+        **policy_kwargs,
     )
 
 

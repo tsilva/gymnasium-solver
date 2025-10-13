@@ -305,6 +305,21 @@ class RolloutCollector():
         # For discrete observations, VecEnv returns (n_envs,), treat as 1-feature
         obs_shape = (1,) if self.obs.ndim == 1 else self.obs.shape[1:]
 
+        # Determine action shape and dtype from action space
+        from gymnasium.spaces import Discrete, MultiBinary
+        action_space = self.env.single_action_space
+        if isinstance(action_space, Discrete):
+            action_shape = ()
+            action_dtype = np.int64
+        elif isinstance(action_space, MultiBinary):
+            action_shape = action_space.shape
+            action_dtype = np.float32  # Bernoulli distribution requires float
+        else:
+            # For other action spaces, infer from sample
+            action_sample = action_space.sample()
+            action_shape = () if np.isscalar(action_sample) else action_sample.shape
+            action_dtype = np.int64 if np.isscalar(action_sample) else np.float32
+
         # TODO: review this
         maxsize = self.buffer_maxsize if self.buffer_maxsize is not None else self.n_steps
 
@@ -314,6 +329,8 @@ class RolloutCollector():
             obs_dtype=self.obs.dtype,
             device=self.device,
             maxsize=maxsize,
+            action_shape=action_shape,
+            action_dtype=action_dtype,
         )
 
     def _update_running_stats_after_rollout(self, start: int, end: int) -> None:

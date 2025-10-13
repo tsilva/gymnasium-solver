@@ -202,3 +202,45 @@ def test_store_cpu_step_and_flatten_propagates_dones_and_rewards():
     np.testing.assert_array_equal(traj.rewards.cpu().numpy(), np.array([0.5, 2.5, 1.5, 3.5], dtype=np.float32))
     # Dones in env-major order: env0 [F, F], env1 [F, T]
     np.testing.assert_array_equal(traj.dones.cpu().numpy(), np.array([False, False, False, True]))
+
+
+@pytest.mark.unit
+def test_multibinary_action_space():
+    """Test that RolloutBuffer correctly handles MultiBinary action spaces."""
+    n_envs, T, n_actions = 2, 3, 8
+    buf = RolloutBuffer(
+        n_envs=n_envs,
+        obs_shape=(4,),
+        obs_dtype=np.float32,
+        device=torch.device("cpu"),
+        maxsize=T,
+        action_shape=(n_actions,),
+        action_dtype=np.float32  # MultiBinary requires float32
+    )
+    start = buf.begin_rollout(T)
+
+    # Fill buffer with multibinary actions
+    for t in range(T):
+        obs = np.random.randn(n_envs, 4).astype(np.float32)
+        next_obs = np.random.randn(n_envs, 4).astype(np.float32)
+        # MultiBinary actions: shape (n_envs, n_actions), float32 for Bernoulli
+        actions = np.random.randint(0, 2, size=(n_envs, n_actions)).astype(np.float32)
+        logps = np.random.randn(n_envs).astype(np.float32)
+        values = np.random.randn(n_envs).astype(np.float32)
+        rewards = np.random.randn(n_envs).astype(np.float32)
+        dones = np.array([False] * n_envs, dtype=bool)
+        timeouts = np.array([False] * n_envs, dtype=bool)
+
+        buf.add(start + t, obs, next_obs, actions, logps, values, rewards, dones, timeouts)
+
+    adv = np.zeros((T, n_envs), dtype=np.float32)
+    ret = np.zeros((T, n_envs), dtype=np.float32)
+    traj = buf.flatten_slice_env_major(start, start + T, adv, ret)
+
+    # Check shapes: actions should be (n_envs * T, n_actions)
+    assert traj.actions.shape == (n_envs * T, n_actions)
+    assert traj.observations.shape == (n_envs * T, 4)
+    assert traj.rewards.shape == (n_envs * T,)
+
+    # Verify dtypes: MultiBinary actions must be float32 for Bernoulli distribution
+    assert traj.actions.dtype == torch.float32

@@ -78,6 +78,9 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
     # Try to import pygame for non-blocking keyboard input in GUI mode
     pygame_available = False
     pygame_screen = None
+    # Track key state manually using events to avoid stuck keys
+    pressed_keys = set()  # Track which keys are currently pressed
+
     if mode == "user" and not step_by_step:
         try:
             import pygame
@@ -179,7 +182,9 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
                     print(f"Invalid action: {e}. Using action 0.")
                     action = 0
             elif pygame_available:
-                # Process events for quit detection
+                # Process ALL events to ensure key state stays synchronized
+                # This prevents keys from getting stuck when focus changes
+                window_lost_focus = False
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         if pygame_screen:
@@ -190,9 +195,26 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
                             if pygame_screen:
                                 pygame.quit()
                             return
+                    # Detect focus loss (handle both pygame 1.x and 2.x)
+                    elif hasattr(pygame, 'WINDOWFOCUSLOST') and event.type == pygame.WINDOWFOCUSLOST:
+                        window_lost_focus = True
+                    elif event.type == pygame.ACTIVEEVENT:
+                        if hasattr(event, 'state') and event.state == 1 and hasattr(event, 'gain') and not event.gain:
+                            window_lost_focus = True
+
+                # Pump events to ensure key state is current
+                # This is critical for preventing stuck keys when window focus changes
+                pygame.event.pump()
 
                 # Check currently pressed keys (not sticky - only while held)
                 keys = pygame.key.get_pressed()
+
+                # If window lost focus, force reset action to prevent stuck keys
+                if window_lost_focus:
+                    if is_multibinary:
+                        action = np.zeros(n_actions, dtype=np.int8)
+                    else:
+                        action = 0
 
                 if is_multibinary:
                     # MultiBinary: check all buttons simultaneously
@@ -322,6 +344,7 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
 def main():
     # Parse command line arguments
     p = argparse.ArgumentParser(description="Play a trained agent using RolloutCollector (human render)")
+    p.add_argument("id", nargs="?", default=None, help="Config ID (env:variant) or Run ID (auto-detected by presence of ':')")
     id_group = p.add_mutually_exclusive_group(required=False)
     id_group.add_argument("--run-id", default=None, help="Run ID under runs/ (default: last run with best checkpoint)")
     id_group.add_argument("--config-id", default=None, help="Config ID in 'env:variant' format (e.g., 'VizDoom-Basic-v0:ppo') - runs with random/user policy")
@@ -344,6 +367,18 @@ def main():
     p.add_argument("--fps", type=int, default=None, help="Limit playback to target FPS (frames per second)")
     args = p.parse_args()
     target_episodes = max(1, int(args.episodes))
+
+    # Auto-detect config-id vs run-id from positional argument
+    if args.id is not None:
+        # Ensure no explicit --run-id or --config-id was also provided
+        if args.run_id is not None or args.config_id is not None:
+            raise ValueError("Cannot specify positional ID and --run-id/--config-id simultaneously")
+
+        # Auto-detect: if contains ':', treat as config-id, otherwise as run-id
+        if ':' in args.id:
+            args.config_id = args.id
+        else:
+            args.run_id = args.id
 
     # Default to run-id mode if neither specified
     if args.run_id is None and args.config_id is None:

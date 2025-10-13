@@ -2,18 +2,16 @@
 
 # NEXT
 
-- BUG: VizDoom is not using spec render_fps for run_play
-
+- TEST: CleanRL's envpool implementation
+- TEST: is last eval in uploaded zip file
 - BUG: warmup is not being interpreted correctly
 - TODO: share report structure between wandb projects?
 - FEAT: add support for adding shared configs between envs (eg: atari defaults, vizdoom defaults)
 - FEAT: single plot with fraction of scaled losses
 - TEST: ensure all checkpoints get stored in wandb (check storage limits)
-- TEST: CleanRL's envpool implementation
 - FEAT: run_inspect.py add support for monitoring rollouts with different hyperparams
 - FEAT: train from previous run, use that to do multiple runs until convergence (new run loads param); should we restore optimizer? confirm new run starts with same performance, check if it evolves better with same or dfiferent optimizer
 - CHECK: should we reset optimizer when we use another learning rate
-- TEST: is last eval in uploaded zip file
 - TEST: ensure evaluation is ran exactly same way as train (eg: alevecenv)
 - TODO: make key capture not require enter, allow h to show all shortcuts
 - FEAT: speed up eval as much as possible (async mode with few changes)
@@ -26,8 +24,8 @@
 
 ## VizDoom-v0
 
-- add support for action masks in multibinary (when one is pressed, act is others arent)
 - vizdoom, reduce obs frame (remove hud)
+- add support for action masks in multibinary (when one is pressed, act is others arent)
 - make available game variables
 - allow propgating doom skill
 - episodes not incrementing in user mode

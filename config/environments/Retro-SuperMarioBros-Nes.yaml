@@ -11,11 +11,32 @@ spec: &spec
     typically reflect in-game score/progress.
 
   render_fps: 60
-
+   
+  # TODO: figure out other actions
+  # TODO: why stuck keys
+  # TODO: why env end early
+  # TODO: why showing only 0-8
   action_space:
+    multibinary: 10
+    labels: {
+      0: B,
+      1: unknown1,
+      2: unknown2,
+      3: unknown3,
+      4: unknown4,
+      5: dpad_down,
+      6: dpad_left,
+      7: dpad_right,
+      8: A,
+      9: unknown5
+    }
+    valid: [0, 5, 6, 7, 8]
+
+
+  #action_space:
     # When using stable-retro with use_restricted_actions=FILTERED, actions are a
     # filtered discrete set of gamepad combinations. Exact count can vary by game.
-    note: filtered discrete action set (retro.Actions.FILTERED)
+  #  note: filtered discrete action set (retro.Actions.FILTERED)
 
   observation_space:
     default: rgb

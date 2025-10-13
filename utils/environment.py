@@ -43,7 +43,7 @@ def _build_env_stable_retro(env_id, obs_type, render_mode, **env_kwargs):
     import retro
     game = env_id.replace("Retro/", "")
     make_kwargs = dict(env_kwargs)
-    make_kwargs.setdefault("use_restricted_actions", retro.Actions.DISCRETE)
+    #make_kwargs.setdefault("use_restricted_actions", retro.Actions.DISCRETE)
     state = make_kwargs.pop("state", None)
     return retro.make(game=game, state=state, render_mode=render_mode, **make_kwargs)
 

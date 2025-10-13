@@ -321,7 +321,7 @@ class VecObsBarPrinter(VectorWrapper):
             return None
 
     def _extract_action_index(self) -> Optional[int]:
-        """Extract action index from last actions array."""
+        """Extract action index from last actions array (for Discrete action spaces)."""
         try:
             if self._last_actions is not None:
                 arr = np.asarray(self._last_actions)
@@ -336,6 +336,21 @@ class VecObsBarPrinter(VectorWrapper):
                         return int(val.flatten()[0])
                     else:
                         return int(val)
+        except Exception:
+            pass
+        return None
+
+    def _extract_multibinary_action(self) -> Optional[np.ndarray]:
+        """Extract action vector from last actions array (for MultiBinary action spaces)."""
+        try:
+            if self._last_actions is not None:
+                arr = np.asarray(self._last_actions)
+                # For MultiBinary, expect shape (n_envs, n_actions)
+                if arr.ndim >= 2 and arr.shape[0] > self._env_index:
+                    return arr[self._env_index]
+                # If shape is (n_actions,), assume single env
+                elif arr.ndim == 1:
+                    return arr
         except Exception:
             pass
         return None
@@ -418,14 +433,21 @@ class VecObsBarPrinter(VectorWrapper):
 
         # Action bars: show probabilities/values for each action
         action_idx = self._extract_action_index()
+        multibinary_action = self._extract_multibinary_action()
 
         # For VectorEnv, use single_action_space
         action_space = getattr(self, 'single_action_space', self.action_space)
-        act_n = (
-            int(action_space.n) if isinstance(action_space, spaces.Discrete)
-            else self._action_discrete_n if isinstance(self._action_discrete_n, int) and self._action_discrete_n > 0
-            else None
-        )
+        is_multibinary = isinstance(action_space, spaces.MultiBinary)
+
+        # Determine number of actions based on action space type
+        if isinstance(action_space, spaces.Discrete):
+            act_n = int(action_space.n)
+        elif is_multibinary:
+            act_n = int(action_space.n)  # Number of binary actions/buttons
+        elif isinstance(self._action_discrete_n, int) and self._action_discrete_n > 0:
+            act_n = self._action_discrete_n
+        else:
+            act_n = None
 
         # Display action info
         if act_n is not None and act_n > 0:
@@ -439,8 +461,17 @@ class VecObsBarPrinter(VectorWrapper):
                     label = f"a[{a_idx}]" + (f" {action_label}" if action_label else "")
                     val_str = f"{prob:.4f}"
                     self._print_bar_line(label, val_str, a_bar, a_lo_eff, a_hi_eff, label_w, value_w)
+            elif is_multibinary and multibinary_action is not None:
+                # MultiBinary: show one bar per button with 0 or 1 value
+                for a_idx in range(min(act_n, len(multibinary_action))):
+                    binary_val = float(multibinary_action[a_idx])
+                    a_bar, _a_ratio, (a_lo_eff, a_hi_eff) = self._format_bar_scalar(binary_val, 0.0, 1.0, width=self._bar_width)
+                    action_label = self._action_labels.get(a_idx) if self._action_labels else None
+                    label = f"a[{a_idx}]" + (f" {action_label}" if action_label else "")
+                    val_str = f"{int(binary_val)}"  # Show as 0 or 1 (integer)
+                    self._print_bar_line(label, val_str, a_bar, a_lo_eff, a_hi_eff, label_w, value_w)
             elif action_idx is not None:
-                # Show one bar per action with binary indicator (1.0 for selected, 0.0 for others)
+                # Discrete: show one bar per action with binary indicator (1.0 for selected, 0.0 for others)
                 for a_idx in range(act_n):
                     binary_val = 1.0 if a_idx == action_idx else 0.0
                     a_bar, _a_ratio, (a_lo_eff, a_hi_eff) = self._format_bar_scalar(binary_val, 0.0, 1.0, width=self._bar_width)
@@ -450,7 +481,8 @@ class VecObsBarPrinter(VectorWrapper):
                     self._print_bar_line(label, val_str, a_bar, a_lo_eff, a_hi_eff, label_w, value_w)
             else:
                 # Fallback: show action space size when we can't extract the specific action
-                print(f"action: ? (discrete: {act_n})")
+                space_type = "multibinary" if is_multibinary else "discrete"
+                print(f"action: ? ({space_type}: {act_n})")
 
         print("─" * (label_w + value_w + bar_w + 24))
 

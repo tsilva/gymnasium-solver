@@ -34,18 +34,22 @@ class RolloutBuffer:
         obs_shape: Tuple[int, ...],
         obs_dtype: np.dtype,
         device: torch.device,
-        maxsize: int
+        maxsize: int,
+        action_shape: Tuple[int, ...] = (),
+        action_dtype: np.dtype = np.int64
     ) -> None:
         self.n_envs = n_envs
         self.obs_shape = obs_shape
         self.obs_dtype = obs_dtype
         self.device = device
         self.maxsize = int(maxsize)
+        self.action_shape = action_shape
+        self.action_dtype = action_dtype
 
         # Initialize buffers
         self.obs_buf = np.zeros((self.maxsize, self.n_envs, *self.obs_shape), dtype=self.obs_dtype)
         self.next_obs_buf = np.zeros((self.maxsize, self.n_envs, *self.obs_shape), dtype=self.obs_dtype)
-        self.actions_buf = np.zeros((self.maxsize, self.n_envs), dtype=np.int64)
+        self.actions_buf = np.zeros((self.maxsize, self.n_envs, *self.action_shape), dtype=self.action_dtype)
         self.rewards_buf = np.zeros((self.maxsize, self.n_envs), dtype=np.float32)
         self.values_buf = np.zeros((self.maxsize, self.n_envs), dtype=np.float32)
         self.dones_buf = np.zeros((self.maxsize, self.n_envs), dtype=bool)
@@ -124,8 +128,20 @@ class RolloutBuffer:
         def _flat_env_major_cpu_to_torch(arr: np.ndarray, dtype: torch.dtype) -> torch.Tensor:
             return torch.as_tensor(_flat_env_major(arr, start, end), dtype=dtype, device=self.device)
 
-        # TODO: why env major, and can we do env major by default if necessary?
-        actions = _flat_env_major_cpu_to_torch(self.actions_buf, torch.int64)
+        # Handle actions: preserve action shape (e.g., MultiBinary)
+        # For discrete actions (shape=()), flatten to (N*T,)
+        # For multibinary actions (shape=(n_actions,)), flatten to (N*T, n_actions)
+        actions_slice = self.actions_buf[start:end]  # (T, N, *action_shape)
+        # Use appropriate torch dtype based on action_dtype
+        torch_action_dtype = torch.int64 if self.action_dtype == np.int64 else torch.float32
+        actions_t = torch.as_tensor(actions_slice, dtype=torch_action_dtype, device=self.device)
+        actions_t_env_major = actions_t.transpose(0, 1)  # (N, T, *action_shape)
+        if len(self.action_shape) == 0:
+            # Discrete actions: flatten to (N*T,)
+            actions = actions_t_env_major.reshape(n_envs * T)
+        else:
+            # Multibinary or other structured actions: flatten to (N*T, *action_shape)
+            actions = actions_t_env_major.reshape(n_envs * T, *self.action_shape)
         logprobs = _flat_env_major_cpu_to_torch(self.logprobs_buf, torch.float32)
         values = _flat_env_major_cpu_to_torch(self.values_buf, torch.float32)
 

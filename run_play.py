@@ -156,8 +156,7 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
                     print(f"Invalid action: {e}. Using action 0.")
                     action = 0
             elif pygame_available:
-                # Non-blocking pygame event handling
-                action_changed = False
+                # Process events for quit detection
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         if pygame_screen:
@@ -168,25 +167,37 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
                             if pygame_screen:
                                 pygame.quit()
                             return
-                        # Check for number keys (both main keyboard and numpad)
-                        elif pygame.K_0 <= event.key <= pygame.K_9:
-                            key_action = event.key - pygame.K_0
-                            if 0 <= key_action < n_actions:
-                                action = key_action
-                                action_changed = True
-                        elif pygame.K_KP0 <= event.key <= pygame.K_KP9:
-                            key_action = event.key - pygame.K_KP0
-                            if 0 <= key_action < n_actions:
-                                action = key_action
-                                action_changed = True
+
+                # Check currently pressed keys (not sticky - only while held)
+                keys = pygame.key.get_pressed()
+                action_detected = None
+
+                # Check number keys (main keyboard)
+                for i in range(min(10, n_actions)):
+                    if keys[pygame.K_0 + i]:
+                        action_detected = i
+                        break
+
+                # Check numpad keys if no main key pressed
+                if action_detected is None:
+                    for i in range(min(10, n_actions)):
+                        if keys[pygame.K_KP0 + i]:
+                            action_detected = i
+                            break
+
+                # Use detected action, or default to 0 (NOOP-like)
+                action = action_detected if action_detected is not None else 0
 
                 # Update control window display to show current action
-                if action_changed and pygame_screen:
+                if pygame_screen:
                     font = pygame.font.Font(None, 24)
                     pygame_screen.fill((40, 40, 40))
                     text1 = font.render(f"Press keys 0-{n_actions-1} to select action", True, (255, 255, 255))
                     text2 = font.render("Press Q to quit", True, (255, 255, 255))
-                    text3 = font.render(f"Current action: {action}", True, (100, 255, 100))
+                    if action_detected is not None:
+                        text3 = font.render(f"Current action: {action} (ACTIVE)", True, (100, 255, 100))
+                    else:
+                        text3 = font.render(f"Current action: {action} (default)", True, (180, 180, 180))
                     pygame_screen.blit(text1, (10, 15))
                     pygame_screen.blit(text2, (10, 45))
                     pygame_screen.blit(text3, (10, 75))

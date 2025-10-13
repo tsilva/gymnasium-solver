@@ -96,7 +96,9 @@ class VizDoomEnv(gym.Env):
         )
 
         # Build a small discrete action set mapped to vizdoom button vectors
-        n_buttons = int(self._game.get_available_buttons_size())
+        # Query actual buttons from the game to build correct mapping
+        available_buttons = self._game.get_available_buttons()
+        n_buttons = len(available_buttons)
 
         def _action_vector(*on_idx: int):
             vector = [0] * n_buttons
@@ -105,18 +107,26 @@ class VizDoomEnv(gym.Env):
                     vector[i] = 1
             return vector
 
-        # Common minimal controls. Index order follows vizdoom available buttons
-        # Typical order: MOVE_LEFT, MOVE_RIGHT, MOVE_FORWARD, MOVE_BACKWARD, TURN_LEFT, TURN_RIGHT, ATTACK
+        # Create button name -> index mapping
+        button_map = {}
+        for idx, button in enumerate(available_buttons):
+            button_name = str(button).split('.')[-1]  # Extract name from Button.XXX
+            button_map[button_name] = idx
+
+        # Build discrete actions based on what buttons are actually available
+        def _get_button_idx(name: str, fallback: Optional[int] = None) -> Optional[int]:
+            """Get button index by name, return fallback if not found."""
+            return button_map.get(name, fallback)
+
         self._discrete_actions = [
-            _action_vector(),      # 0: noop
-            _action_vector(2),     # 1: forward
-            _action_vector(3),     # 2: backward
-            _action_vector(0),     # 3: strafe left
-            _action_vector(1),     # 4: strafe right
-            _action_vector(4),     # 5: turn left
-            _action_vector(5),     # 6: turn right
-            _action_vector(6),     # 7: attack
-            #_action_vector(2, 6),  # 8: forward + attack
+            _action_vector(),  # 0: noop
+            _action_vector(_get_button_idx('MOVE_FORWARD') or 0),    # 1: forward
+            _action_vector(_get_button_idx('MOVE_BACKWARD') or 0),   # 2: backward
+            _action_vector(_get_button_idx('MOVE_LEFT') or 0),       # 3: strafe left
+            _action_vector(_get_button_idx('MOVE_RIGHT') or 0),      # 4: strafe right
+            _action_vector(_get_button_idx('TURN_LEFT') or 0),       # 5: turn left
+            _action_vector(_get_button_idx('TURN_RIGHT') or 0),      # 6: turn right
+            _action_vector(_get_button_idx('ATTACK') or 0),          # 7: attack
         ]
         self.action_space = gym.spaces.Discrete(len(self._discrete_actions))
 

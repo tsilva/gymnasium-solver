@@ -14,7 +14,51 @@ from utils.rollouts import RolloutCollector
 from utils.run import Run
 
 
-def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: bool = False, fps: int | None = None):
+def extract_action_labels_from_config(config) -> dict[int, str] | None:
+    """Extract and remap action labels from config spec.
+
+    Returns a dict mapping action_id (after wrappers) to label string.
+    Returns None if labels are not available in config.
+    """
+    # Check if config has spec with action_space labels
+    if not hasattr(config, 'spec') or config.spec is None:
+        return None
+
+    spec = config.spec
+    if not isinstance(spec, dict) or 'action_space' not in spec:
+        return None
+
+    action_space_spec = spec['action_space']
+    if not isinstance(action_space_spec, dict) or 'labels' not in action_space_spec:
+        return None
+
+    original_labels = action_space_spec['labels']
+    if not isinstance(original_labels, dict):
+        return None
+
+    # Check if there's a DiscreteActionSpaceRemapperWrapper
+    remapping = None
+    if hasattr(config, 'env_wrappers') and config.env_wrappers:
+        for wrapper_spec in config.env_wrappers:
+            if isinstance(wrapper_spec, dict) and wrapper_spec.get('id') == 'DiscreteActionSpaceRemapperWrapper':
+                remapping = wrapper_spec.get('mapping')
+                break
+
+    # Apply remapping if present
+    if remapping:
+        # remapping[i] = original_action_id
+        # So new_action_id i maps to original_labels[remapping[i]]
+        remapped_labels = {}
+        for new_id, orig_id in enumerate(remapping):
+            if orig_id in original_labels:
+                remapped_labels[new_id] = original_labels[orig_id]
+        return remapped_labels
+    else:
+        # No remapping, return original labels
+        return original_labels
+
+
+def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: bool = False, fps: int | None = None, action_labels: dict[int, str] | None = None):
     """Play episodes with random actions or user input."""
     import numpy as np
 
@@ -44,6 +88,16 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
             text2 = font.render("Press Q to quit", True, (255, 255, 255))
             pygame_screen.blit(text1, (10, 25))
             pygame_screen.blit(text2, (10, 55))
+
+            # Show action labels if available
+            if action_labels:
+                small_font = pygame.font.Font(None, 16)
+                y_offset = 85
+                for action_id in range(min(n_actions, 8)):  # Limit to first 8 actions
+                    if action_id in action_labels:
+                        label_text = small_font.render(f"{action_id}:{action_labels[action_id]}", True, (180, 180, 180))
+                        pygame_screen.blit(label_text, (10 + (action_id % 4) * 95, y_offset + (action_id // 4) * 15))
+
             pygame.display.flip()
         except ImportError:
             pass
@@ -58,6 +112,13 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
             print("Press Q to quit.")
         else:
             print(f"\nAction controls: Press 0-{n_actions-1} to select action, Enter to execute.")
+
+        # Display action labels if available
+        if action_labels:
+            print("\nAction mapping (after any wrappers):")
+            for action_id in range(n_actions):
+                if action_id in action_labels:
+                    print(f"  {action_id}: {action_labels[action_id]}")
     else:
         print(f"\nRandom action mode enabled. Sampling from {n_actions} actions.")
         if step_by_step:
@@ -302,10 +363,13 @@ def main():
     from gym_wrappers.vec_obs_printer import VecObsBarPrinter
     env = VecObsBarPrinter(env, bar_width=40, env_index=0, enable=True, target_episodes=target_episodes)
 
+    # Extract action labels from config
+    action_labels = extract_action_labels_from_config(config)
+
     # Handle different modes
     if args.mode in ["random", "user"]:
         # Manual control modes don't need policy
-        play_episodes_manual(env, target_episodes, args.mode, args.step_by_step, args.fps)
+        play_episodes_manual(env, target_episodes, args.mode, args.step_by_step, args.fps, action_labels)
         print("Done.")
         return
 

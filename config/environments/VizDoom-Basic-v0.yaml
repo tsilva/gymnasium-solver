@@ -71,9 +71,9 @@ ppo:
   batch_size: 0.5
   policy_lr: 1e-3
   n_epochs: 20
-  #eval_warmup_epochs: 20
-  eval_freq_epochs: 1
-  eval_episodes: 1
+  eval_warmup_epochs: 20
+  eval_freq_epochs: 10
+  eval_episodes: 10
 
 # TODO: test
 #n_epochs: 10

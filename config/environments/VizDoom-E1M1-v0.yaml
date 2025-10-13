@@ -19,6 +19,7 @@ spec: &spec
       6: turn_right, 
       7: attack
     }
+    valid: [0, 1, 2, 3, 4, 5, 6, 7]
 
   observation_space:
     default: rgb
@@ -39,10 +40,6 @@ spec: &spec
     range: [-0.21, 500]
     note: Episode terminates on death or timeout (2100 frames / 60 seconds) or level exit
 
-_env_wrapper_discrete_action_space_remapper: &env_wrapper_discrete_action_space_remapper
-  id: DiscreteActionSpaceRemapperWrapper
-  mapping: [0, 1, 2, 3, 4, 5, 6, 7]
-
 # =====================
 # env variants
 # =====================
@@ -56,7 +53,6 @@ _env: &env
   env_kwargs:
     scenario: e1m1
   env_wrappers:
-    - *env_wrapper_discrete_action_space_remapper
     - { id: VizDoom_RewardShaper, noop_penalty: 0.01, move_reward: 0.004, turn_reward: 0.004 }
   obs_type: rgb
   render_mode: 'rgb_array'

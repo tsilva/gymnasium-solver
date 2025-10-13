@@ -10,16 +10,16 @@ spec: &spec
   action_space:
     discrete: 8
     labels: {
-      0: noop, # masked
-      1: forward, # masked
-      2: backward, # masked
-      3: strafe_left, # masked
-      4: strafe_right, # masked
+      0: noop,
+      1: forward,
+      2: backward,
+      3: strafe_left,
+      4: strafe_right,
       5: turn_left, 
       6: turn_right, 
-      7: attack, 
-      #8: forward_attack # TODO: get rid of this possibility
+      7: attack
     }
+    valid: [5, 6, 7]
 
   observation_space:
     default: rgb
@@ -38,11 +38,6 @@ spec: &spec
       - {name: death_penalty, value: -100.0}
     threshold_solved: 1000
     range: [-100, 2000]
-
-# TODO: this is used to standardize vizdoom action spaces across environments
-_env_wrapper_discrete_action_space_remapper: &env_wrapper_discrete_action_space_remapper
-  id: DiscreteActionSpaceRemapperWrapper
-  mapping: [0, 7, 2, 5, 6, 3, 4, 1]
 
 # =====================
 # env variants
@@ -63,8 +58,6 @@ _env: &env
   grayscale_obs: true
   resize_obs: [84, 84]
   frame_stack: 4
-  env_wrappers:
-    - *env_wrapper_discrete_action_space_remapper
 
 # =====================
 # configs

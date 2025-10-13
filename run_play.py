@@ -404,6 +404,10 @@ def main():
         if args.mode == "trained":
             assert run.best_checkpoint_dir is not None, "run has no best checkpoint"
 
+    # Fall back to render_fps from config spec if fps not provided
+    if args.fps is None and config.spec and 'render_fps' in config.spec:
+        args.fps = config.spec['render_fps']
+
     # Resolve seed argument
     if args.seed is None:
         # Default to test seed

@@ -24,6 +24,7 @@
 
 ## VizDoom-v0
 
+- BUG: E1M1 cant open doors
 - TEST: ensure rewardshaper is working (test manually)
 - FEAT: reduce obs for vizdoom
 - FEAT: read vizdoom vars as input

@@ -372,7 +372,7 @@ def main():
 
     # Default to run-id mode if neither specified
     if args.run_id is None and args.config_id is None:
-        args.run_id = "@best"
+        args.run_id = "@last"
 
     # Best-effort: prefer software renderer on WSL to avoid GLX issues
     is_wsl = ("microsoft" in platform.release().lower()) or ("WSL_INTEROP" in os.environ)

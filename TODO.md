@@ -24,19 +24,16 @@
 
 ## VizDoom-v0
 
+- FEAT: reduce obs for vizdoom
+- FEAT: read vizdoom vars as input
 - FEAT: action masking to block impossible combos (eg: left+right)
-- vizdoom, reduce obs frame (remove hud)
-- add support for action masks in multibinary (when one is pressed, act is others arent)
 - make available game variables
-- allow propgating doom skill
 - episodes not incrementing in user mode
-- use bernoulli for vizdoom
 - add multibinary action support to user mode
 - user play allow inputting direclty in window?
 - turn vizdoom from discrete to multibinary action space, this will allow run_play user mode to register multiple keys at once, and policy sampling must take this into account by using other sampler (categorical wont work) and make sure masking is - being used when specified in spec 
 - TODO: test if its possible to change enemy in Doom-Basic-v0
 - BUG: ensure vizdoom reward shaper is truly working by debugging with manual control
-- FEAT: add multibinary support for vizdoom?
 - FEAT: add support for changing "doom_skill" through config, use it to create curriculum for deadly corridor
 - FEAT: speed up training using action masking
 - FEAT: reward shape defend the center to penalize shooting

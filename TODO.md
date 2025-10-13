@@ -24,6 +24,7 @@
 
 ## VizDoom-v0
 
+- FEAT: run_play.py make random mode instead of random sampling just do regular init but with random policy (this way action masking will still be applied)
 - BUG: E1M1 cant open doors
 - TEST: ensure rewardshaper is working (test manually)
 - FEAT: reduce obs for vizdoom
@@ -31,11 +32,9 @@
 - FEAT: action masking to block impossible combos (eg: left+right)
 - episodes not incrementing in user mode
 - BUG: ensure vizdoom reward shaper is truly working by debugging with manual control
-- FEAT: add support for changing "doom_skill" through config, use it to create curriculum for deadly corridor
 - FEAT: reward shape defend the center to penalize shooting
-- FEAT: ensure standard action space between envs (for easier curriculum learning)
 - TEST: is it faster to learn defendtheX after basic env
-- FEAT: add support for regulating difficulty
+- FEAT: add support for regulating difficulty (doom_skill)
 - TEST: are seeds working?
 - TEST: is frameskip working
 - TEST: is frameskip useful?

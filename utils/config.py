@@ -442,8 +442,8 @@ class Config:
 
         is_cnn_policy = self.policy in [self.PolicyType.cnn, self.PolicyType.cnn_actorcritic]
         if is_cnn_policy and self.policy_kwargs is None:
+            # Only CNN-specific params; hidden_dims handled by CNNActorCritic default (512,)
             self.policy_kwargs = {
-                "hidden_dims": [256, 256],
                 "channels": [32, 64, 64],
                 "kernel_sizes": [8, 4, 3],
                 "strides": [4, 2, 1],

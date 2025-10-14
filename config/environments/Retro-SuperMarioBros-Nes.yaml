@@ -108,4 +108,3 @@ ppo:
   eval_warmup_epochs: 10
   eval_freq_epochs: 10
   eval_episodes: 1
-  normalize_advantages: "rollout"

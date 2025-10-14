@@ -2,7 +2,8 @@
 
 # NEXT
 
-- TODO: sticky action wrapper should only abe applied durint raining
+- add support for masking invalid action combos, making sure that the highest logit wins (the loser is masked)
+- TODO: ensure clip_range_vf exists
 - BUG: run_play.py user input not working for Atari envs
 - TEST: CleanRL's envpool implementation
 - TEST: is last eval in uploaded zip file
@@ -19,6 +20,7 @@
 - TODO: add env normalization support, make sure normalization is saved
 - TODO: add action number/ label before each frame stack image in inspect (allows easily seeing which action was performed when each frame was seen)
 - FEAT: CNN filter/activation inspectors
+- BUG: is eval not imposing timelimits?
 
 ## SuperMarioBros-Nes
 
@@ -28,8 +30,12 @@
 - TODO: use action combo instead of multibinary
 - EpisodicLifeEnv wrapper
 - Penalize time spent more?
-- Remove timelimit?
 - TEST: is eval not imposing timelimits?
+- REWARD: instead of measuring velocity can we just use time passed to deduct movement reward?
+- REWARD: abort when no reward increased for N steps?
+- TODO: try with variable frame skip including no frame skip (eg: starting in 1)
+- Should we remove frame skip in evaluation?
+
 
 ## VizDoom-v0
 

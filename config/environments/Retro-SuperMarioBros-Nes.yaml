@@ -99,12 +99,12 @@ ppo:
   algo_id: ppo
   description: "PPO on SuperMarioBros - standard configuration for Mario platformer game"
   #max_env_steps: 3e6
-  n_envs: 8
+  n_envs: 8 # TODO: faster training with more envs?
   n_steps: 1024
   batch_size: 0.25
-  policy_lr: 1e-4
-  ent_coef: 0.03
+  policy_lr: 1e-4 # 5e-4 seems ok too
+  ent_coef: 0.03 # TODO: how is entropy behaving?
   #max_episode_steps: 10_000
   eval_warmup_epochs: 10
   eval_freq_epochs: 10
-  eval_episodes: 1
+  eval_episodes: 1 # TODO: increase this

@@ -132,6 +132,7 @@ class RetroSuperMarioBros_RewardShaper(RewardShaperBase):
         self.prev_lives = current_lives
 
         # Add shaping to original reward
-        shaped_reward = reward + scaled_shaping
+        shaped_reward = scaled_shaping
+        #print("Shaped reward: ", shaped_reward)
 
         return obs, shaped_reward, terminated, truncated, info

@@ -80,12 +80,12 @@ _env: &env
     - id: FrameSkipWrapper
       skip: [2, 5]  # Stochastic frame skip: randomly skip 2-5 frames each step
     - id: RetroSuperMarioBros_RewardShaper
-      reward_scale: 0.01
-      death_penalty: -50.0
-      level_complete_bonus: 50.0
-      time_penalty_scale: 0.1
-      x_position_scale: 1.0
-      score_scale: 0.01
+      reward_scale: 1.0
+      death_penalty: -10.0
+      level_complete_bonus: 10.0
+      time_penalty_scale: 0.02
+      x_position_scale: 0.2
+      score_scale: 0.002
   #  - id: StickyActionsWrapper
  #     sticky_buttons: {0: 0.95, 7: 0.10}  # dpad_right pressed 75% of the time
 
@@ -98,15 +98,14 @@ ppo:
   project_id: Retro-SuperMarioBros-Nes
   algo_id: ppo
   description: "PPO on SuperMarioBros - standard configuration for Mario platformer game"
-  max_env_steps: 3e6
+  #max_env_steps: 3e6
   n_envs: 8
   n_steps: 1024
   batch_size: 0.25
-  policy_lr: 
-    start: 1e-3
-    end: 1e-4
+  policy_lr: 1e-4
   ent_coef: 0.03
-  max_episode_steps: 10_000
+  #max_episode_steps: 10_000
   eval_warmup_epochs: 10
   eval_freq_epochs: 10
   eval_episodes: 1
+  normalize_advantages: "rollout"

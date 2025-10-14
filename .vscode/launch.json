@@ -83,6 +83,19 @@
       "env": {}
     },
     {
+      "name": "Debug: train.py (Retro-SuperMarioBros-Nes:ppo)",
+      "type": "python",
+      "request": "launch",
+      "program": "train.py",
+      "justMyCode": false,
+      "args": [
+        "--config_id",
+        "Retro-SuperMarioBros-Nes:ppo"
+      ],
+      "console": "integratedTerminal",
+      "env": {}
+    },
+    {
       "name": "Debug: run_play.py (best)",
       "type": "python",
       "request": "launch",

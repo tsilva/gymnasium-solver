@@ -2,11 +2,10 @@
 
 # NEXT
 
+- TODO: sticky action wrapper should only abe applied durint raining
 - BUG: run_play.py user input not working for Atari envs
 - TEST: CleanRL's envpool implementation
 - TEST: is last eval in uploaded zip file
-- BUG: warmup is not being interpreted correctly
-- TODO: share report structure between wandb projects?
 - FEAT: add support for adding shared configs between envs (eg: atari defaults, vizdoom defaults)
 - FEAT: single plot with fraction of scaled losses
 - TEST: ensure all checkpoints get stored in wandb (check storage limits)
@@ -20,6 +19,17 @@
 - TODO: add env normalization support, make sure normalization is saved
 - TODO: add action number/ label before each frame stack image in inspect (allows easily seeing which action was performed when each frame was seen)
 - FEAT: CNN filter/activation inspectors
+
+## SuperMarioBros-Nes
+
+- https://github.com/nemanja-m/super-mario-agent - implement architecture; implement stochastic frame skip wrapper
+- don't use sticky actions wrapper during eval
+- TODO: confirm that sticky actions wrapper guarantees that policy performs those actions after training
+- TODO: use action combo instead of multibinary
+- EpisodicLifeEnv wrapper
+- Penalize time spent more?
+- Remove timelimit?
+- TEST: is eval not imposing timelimits?
 
 ## VizDoom-v0
 

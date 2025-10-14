@@ -8,10 +8,13 @@ from .discrete_action_space_remapper import (
     DiscreteActionSpaceRemapperWrapper,
 )
 from .action_reward_shaper import ActionRewardShaper
+from .sticky_actions import StickyActionsWrapper
 from .BreakoutV5.feature_extractor import BreakoutV5_FeatureExtractor
 from .PongV5.feature_extractor import PongV5_FeatureExtractor
 from .PongV5.reward_shaper import PongV5_RewardShaper
 from .VizDoom.reward_shaper import VizDoom_RewardShaper
+from .RetroSuperMarioBros.reward_shaper import RetroSuperMarioBros_RewardShaper
+from .frame_skip import FrameSkipWrapper
 
 # VizDoom generic env is available via gym_wrappers.vizdoom: VizDoomEnv
 
@@ -26,6 +29,8 @@ _wrappers_to_register = [
     DiscreteEncoder,
     DiscreteActionSpaceRemapperWrapper,
     ActionRewardShaper,
+    StickyActionsWrapper,
+    FrameSkipWrapper,
     BreakoutV5_FeatureExtractor,
     PongV5_FeatureExtractor,
     PongV5_RewardShaper,
@@ -33,6 +38,7 @@ _wrappers_to_register = [
     MountainCarV0_StateCountBonus,
     CartPoleV1_RewardShaper,
     VizDoom_RewardShaper,
+    RetroSuperMarioBros_RewardShaper,
     PixelObservationWrapper,
 ]
 EnvWrapperRegistry.register(_wrappers_to_register)

@@ -3,12 +3,15 @@
 ## Remote training loop
 
 - Ensure training is easy to launch (merge with train.py)
-- Ensure ROMs are imported remotely
 - Is it possible to store built containers?
 
 # NEXT
 
 - TODO: ensure clip_range_vf exists
+- BUG: wandb runs dont have the run id
+- TODO: add support for standard model configs by id
+- BUG: modal is not reserving the number of cores defined in n_envs
+
 - add support for masking invalid action combos, making sure that the highest logit wins (the loser is masked)
 - BUG: run_play.py user input not working for Atari envs
 - TEST: CleanRL's envpool implementation
@@ -21,7 +24,6 @@
 - CHECK: should we reset optimizer when we use another learning rate
 - TEST: ensure evaluation is ran exactly same way as train (eg: alevecenv)
 - TODO: make key capture not require enter, allow h to show all shortcuts
-- TEST: logged to correct projects
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 - TODO: add env normalization support, make sure normalization is saved
 - TODO: add action number/ label before each frame stack image in inspect (allows easily seeing which action was performed when each frame was seen)

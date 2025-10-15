@@ -88,7 +88,7 @@ class PPOAgent(BaseAgent):
             )
             v_loss_clipped = (v_clipped - returns) ** 2
             v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
-            value_loss = 0.5 * v_loss_max.mean()
+            value_loss = v_loss_max.mean()
         else:
             value_loss = F.mse_loss(values_pred, returns)
 

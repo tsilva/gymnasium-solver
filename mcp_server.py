@@ -22,10 +22,14 @@ import mcp.types as types
 from mcp.server import NotificationOptions, Server
 from mcp.server.models import InitializationOptions
 
+# Change to script directory to ensure correct working directory
+SCRIPT_DIR = Path(__file__).parent.absolute()
+os.chdir(SCRIPT_DIR)
+
 # Import project utilities
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(SCRIPT_DIR))
 from utils.config import load_config
-from utils.run import Run, list_run_ids, RUNS_DIR
+from utils.run import Run, RUNS_DIR
 
 # Track running training processes
 _running_processes: Dict[str, subprocess.Popen] = {}
@@ -276,6 +280,41 @@ async def handle_list_tools() -> list[types.Tool]:
                 "required": ["env_id"],
             },
         ),
+        types.Tool(
+            name="plot_run_metric",
+            description="Generate a plot for one or more metrics from a training run",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "run_id": {
+                        "type": "string",
+                        "description": "Run ID or '@last' for most recent run"
+                    },
+                    "metric_names": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of metric names to plot"
+                    },
+                    "x_axis": {
+                        "type": "string",
+                        "description": "X-axis column (default: 'epoch')"
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Optional plot title"
+                    },
+                    "width": {
+                        "type": "integer",
+                        "description": "Plot width in pixels (default: 800)"
+                    },
+                    "height": {
+                        "type": "integer",
+                        "description": "Plot height in pixels (default: 600)"
+                    }
+                },
+                "required": ["run_id", "metric_names"],
+            },
+        ),
     ]
 
 
@@ -337,6 +376,15 @@ async def handle_call_tool(
                 args["env_id"],
                 args.get("metric", "val/roll/ep_rew/mean"),
                 args.get("minimize", False)
+            )
+        elif name == "plot_run_metric":
+            return await plot_run_metric(
+                args["run_id"],
+                args["metric_names"],
+                args.get("x_axis", "epoch"),
+                args.get("title"),
+                args.get("width", 800),
+                args.get("height", 600)
             )
         else:
             raise ValueError(f"Unknown tool: {name}")
@@ -457,7 +505,7 @@ async def list_runs(
 
 async def get_run_info(run_id: str) -> Dict[str, Any]:
     """Get detailed information about a training run."""
-    run = Run.from_id(run_id)
+    run = Run.load(run_id)
     config = run.load_config()
 
     # Get checkpoint info
@@ -498,7 +546,7 @@ async def get_run_metrics(
     limit: Optional[int] = None
 ) -> Dict[str, Any]:
     """Get metrics data from a training run."""
-    run = Run.from_id(run_id)
+    run = Run.load(run_id)
     metrics_file = Path(run.run_dir) / "metrics.csv"
 
     if not metrics_file.exists():
@@ -529,7 +577,7 @@ async def get_run_metrics(
 
 async def get_run_logs(run_id: str, lines: int = 100) -> Dict[str, Any]:
     """Get log output from a training run."""
-    run = Run.from_id(run_id)
+    run = Run.load(run_id)
     log_file = Path(run.run_dir) / "run.log"
 
     if not log_file.exists():
@@ -657,7 +705,7 @@ async def get_training_status(run_id: str) -> Dict[str, Any]:
 
 async def list_checkpoints(run_id: str) -> Dict[str, Any]:
     """List available checkpoints for a run."""
-    run = Run.from_id(run_id)
+    run = Run.load(run_id)
     checkpoints_dir = Path(run.run_dir) / "checkpoints"
 
     if not checkpoints_dir.exists():
@@ -701,7 +749,7 @@ async def compare_runs(
     comparison = {}
     for run_id in run_ids:
         try:
-            run = Run.from_id(run_id)
+            run = Run.load(run_id)
             metrics_file = Path(run.run_dir) / "metrics.csv"
 
             if not metrics_file.exists():
@@ -792,6 +840,111 @@ async def get_best_run(
         "best_value": best_value,
         "best_run": best_run
     }
+
+
+async def plot_run_metric(
+    run_id: str,
+    metric_names: List[str],
+    x_axis: str = "epoch",
+    title: Optional[str] = None,
+    width: int = 800,
+    height: int = 600
+) -> list[types.ImageContent]:
+    """Generate a plot for metrics from a training run."""
+    import base64
+    import io
+    import matplotlib
+    matplotlib.use('Agg')  # Non-interactive backend
+    import matplotlib.pyplot as plt
+
+    # Load metrics
+    run = Run.load(run_id)
+    metrics_file = Path(run.run_dir) / "metrics.csv"
+
+    if not metrics_file.exists():
+        return [types.TextContent(
+            type="text",
+            text=json.dumps({"error": f"No metrics file found for run {run_id}"})
+        )]
+
+    # Read CSV data
+    with open(metrics_file) as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+
+    if not rows:
+        return [types.TextContent(
+            type="text",
+            text=json.dumps({"error": "No data in metrics file"})
+        )]
+
+    # Check if x_axis column exists
+    if x_axis not in rows[0]:
+        return [types.TextContent(
+            type="text",
+            text=json.dumps({"error": f"X-axis column '{x_axis}' not found in metrics"})
+        )]
+
+    # Check if all metrics exist
+    missing_metrics = [m for m in metric_names if m not in rows[0]]
+    if missing_metrics:
+        return [types.TextContent(
+            type="text",
+            text=json.dumps({"error": f"Metrics not found: {missing_metrics}"})
+        )]
+
+    # Extract data
+    x_data = []
+    y_data = {metric: [] for metric in metric_names}
+
+    for row in rows:
+        if x_axis in row and row[x_axis]:
+            x_val = float(row[x_axis])
+            x_data.append(x_val)
+
+            for metric in metric_names:
+                if metric in row and row[metric]:
+                    try:
+                        y_data[metric].append(float(row[metric]))
+                    except (ValueError, TypeError):
+                        y_data[metric].append(None)
+                else:
+                    y_data[metric].append(None)
+
+    # Create plot
+    fig, ax = plt.subplots(figsize=(width/100, height/100), dpi=100)
+
+    # Plot each metric
+    for metric in metric_names:
+        # Filter out None values
+        valid_indices = [i for i, v in enumerate(y_data[metric]) if v is not None]
+        valid_x = [x_data[i] for i in valid_indices]
+        valid_y = [y_data[metric][i] for i in valid_indices]
+
+        if valid_x and valid_y:
+            ax.plot(valid_x, valid_y, label=metric, marker='o', markersize=3)
+
+    ax.set_xlabel(x_axis)
+    ax.set_ylabel('Value')
+    ax.set_title(title or f"Metrics for run {run_id}")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    # Save to buffer
+    buf = io.BytesIO()
+    plt.tight_layout()
+    plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+    buf.seek(0)
+    plt.close(fig)
+
+    # Encode as base64
+    img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+
+    return [types.ImageContent(
+        type="image",
+        data=img_base64,
+        mimeType="image/png"
+    )]
 
 
 # ============================================================================

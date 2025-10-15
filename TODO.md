@@ -7,18 +7,15 @@
 - Check if checkpoints are working locally
 - Ensure correct resources are reserved by remote training run
 - Softcodde for different remote backends
-- Delete and rerun 2bjavmlt 
+- BUG: modal is not reserving the number of cores defined in n_envs
 
 # NEXT
 
+- FEAT: sweep from run/checkpoint/
+- FEAT: make frameskip first level citizen, call it frame_skip, apply wrapper when frame_skip 
 - BUG: remote wandb run ids are being named with human sounding names when I want the actual run id to tbe their name (same as the run dir name)
-- FEAT: checkpoint rendering video (one episode per policy)
 - TODO: progress bar for rollout collection
-- TODO: try running remote run locally
-- TODO: add MCP for run, add support for plotting, interact with agent
-- BUG: wandb runs dont have the run id
 - TODO: add support for standard model configs by id
-- BUG: modal is not reserving the number of cores defined in n_envs
 - add support for masking invalid action combos, making sure that the highest logit wins (the loser is masked)
 - BUG: run_play.py user input not working for Atari envs
 - TEST: CleanRL's envpool implementation
@@ -37,6 +34,7 @@
 
 ## SuperMarioBros-Nes
 
+- FEAT: multidiscrete support
 - https://github.com/nemanja-m/super-mario-agent - implement architecture; implement stochastic frame skip wrapper
 - don't use sticky actions wrapper during eval
 - TODO: confirm that sticky actions wrapper guarantees that policy performs those actions after training
@@ -62,8 +60,7 @@
 - TEST: is it faster to learn defendtheX after basic env
 - FEAT: add support for regulating difficulty (doom_skill)
 - TEST: are seeds working?
-- TEST: is frameskip working
-- TEST: is frameskip useful?
+- TEST: are we using frameskip? should we?
 - BUG: action labels are invalid (use keyboard input to figure out correct labels)
 - LEARN: [Medium Lesson](https://lkieliger.medium.com/playing-doom-with-deep-reinforcement-learning-part-3-boosting-performance-with-reward-shaping-b1de246bda1d
 https://spinningup.openai.com/en/latest/spinningup/keypapers.html)
@@ -125,7 +122,6 @@ VizDoom-Deathmatch-v0
 - FEAT: add support for curriculum learning (take same model through N challenges sequentially)
 - FEAT: add support for publishing run to Hugging Face Hub
 - FEAT: SEEDRL+PPO
-- FEAT: multidiscrete support
 - FEAT: implement RND (Random Network Distillation)
 - FEAT: Recurrent PPO (eg: PPO-LSTM)
 - FEAT: ensure huggingface uploader, publishes run URL and 

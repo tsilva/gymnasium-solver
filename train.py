@@ -78,8 +78,23 @@ def main():
         metavar="RUN_SPEC",
         help="Initialize model weights from another run's checkpoint. Format: 'run_id' or 'run_id/checkpoint'. Checkpoint can be '@best', '@last', or 'epoch=N'. If not specified, uses '@best' if available, else '@last'. Downloads from W&B if not found locally. Examples: 'abc123', 'abc123/@best', 'abc123/epoch=13', '@last/@best'."
     )
+    parser.add_argument(
+        "--modal",
+        action="store_true",
+        default=False,
+        help="Run training remotely on Modal AI infrastructure. Requires Modal account and token configured."
+    )
     args = parser.parse_args()
 
+    # If --modal flag is set, launch training on Modal instead of locally
+    if args.modal:
+        try:
+            from utils.modal_train import launch_modal_training
+            launch_modal_training(args)
+            return
+        except ImportError:
+            print("Error: Modal dependencies not installed. Install with: uv pip install -e '.[modal]'")
+            sys.exit(1)
 
     # In case list envs flag is passed, use argument as search
     # term and show all available environments matching it

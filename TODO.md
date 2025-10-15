@@ -1,5 +1,11 @@
 # TODO
 
+## Remote training loop
+
+- Ensure training is easy to launch (merge with train.py)
+- Ensure ROMs are imported remotely
+- Is it possible to store built containers?
+
 # NEXT
 
 - add support for masking invalid action combos, making sure that the highest logit wins (the loser is masked)

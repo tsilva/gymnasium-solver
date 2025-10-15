@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.13' and platform_machine == 'aarch64' and sys_platform == 'linux'",
@@ -949,6 +949,7 @@ dependencies = [
     { name = "numpy" },
     { name = "ocatari" },
     { name = "pytest" },
+    { name = "python-dotenv" },
     { name = "pytorch-lightning" },
     { name = "pyyaml" },
     { name = "ruamel-yaml" },
@@ -981,6 +982,7 @@ requires-dist = [
     { name = "numpy" },
     { name = "ocatari", specifier = ">=2.2.1" },
     { name = "pytest" },
+    { name = "python-dotenv" },
     { name = "pytorch-lightning" },
     { name = "pyyaml" },
     { name = "ruamel-yaml" },

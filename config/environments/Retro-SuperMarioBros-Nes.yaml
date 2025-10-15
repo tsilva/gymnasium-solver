@@ -63,21 +63,12 @@ spec: &spec
 # Base env
 _env: &env
   spec: *spec
+  project_id: Retro-SuperMarioBros-Nes
   env_id: Retro/SuperMarioBros-Nes
-  render_mode: 'rgb_array'
   env_kwargs:
     state: "Level1-1"
-  # RGB preprocessing for CNN policy
-  policy: cnn_actorcritic
-  grayscale_obs: true
-  resize_obs: [84, 84]
-  frame_stack: 4
-  # Retro library only allows one emulator instance per process
-  vectorization_mode: async
-  # Frame skip as first-class config parameter
-  frame_skip: 4  # Repeat action 4 times per step
+
   env_wrappers:
-    # Frame skip now applied automatically before custom wrappers
     - id: RetroSuperMarioBros_RewardShaper
       reward_scale: 1.0
       death_penalty: -10.0
@@ -94,9 +85,7 @@ _env: &env
 
 ppo:
   <<: *env
-  project_id: Retro-SuperMarioBros-Nes
   algo_id: ppo
-  model_id: mlp_small
   description: "PPO on SuperMarioBros - standard configuration for Mario platformer game"
   #max_env_steps: 3e6
   n_envs: 16 # TODO: faster training with more envs?

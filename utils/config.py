@@ -447,6 +447,7 @@ class Config:
         self._resolve_n_envs()
         self._resolve_atari_defaults()
         self._resolve_vizdoom_defaults()
+        self._resolve_retro_defaults()
         self._resolve_numeric_strings()
         self._resolve_batch_size()
         self._resolve_eval_warmup_epochs()
@@ -540,6 +541,43 @@ class Config:
             self.resize_obs = (84, 84)
         if self.frame_stack is None:
             self.frame_stack = 4
+        if self.model_id is None:
+            self.model_id = "cnn_nature"
+
+    def _resolve_retro_defaults(self) -> None:
+        """Apply Retro (stable-retro) defaults when params are not explicitly set.
+
+        Standard Retro preprocessing pipeline:
+        - obs_type: rgb
+        - grayscale: True
+        - img_height: 84
+        - img_width: 84
+        - frame_stack: 4
+        - frame_skip: 4
+        - vectorization_mode: async
+        - model_id: cnn_nature
+
+        Retro uses async vectorization because only one emulator core is supported per process.
+        This ensures consistent behavior across Retro environments while still
+        allowing YAML configs to override any of these defaults.
+        """
+        from utils.environment import _is_stable_retro_env_id
+        if not _is_stable_retro_env_id(self.env_id):
+            return
+
+        # Apply Retro defaults if not explicitly set
+        if self.obs_type == Config.ObsType.vector:
+            self.obs_type = Config.ObsType.rgb
+        if self.grayscale_obs is None:
+            self.grayscale_obs = True
+        if self.resize_obs is None:
+            self.resize_obs = (84, 84)
+        if self.frame_stack is None:
+            self.frame_stack = 4
+        if self.frame_skip is None:
+            self.frame_skip = 4
+        if self.vectorization_mode == "auto":
+            self.vectorization_mode = "async"
         if self.model_id is None:
             self.model_id = "cnn_nature"
 

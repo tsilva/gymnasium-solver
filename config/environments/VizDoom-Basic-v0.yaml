@@ -39,7 +39,7 @@ spec: &spec
 
   returns:
     episodic: cumulative over episode
-    range: [-200, 20]
+    range: [-200, 100]
     threshold_solved: 80
 
 # =====================

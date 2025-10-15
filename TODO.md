@@ -17,7 +17,6 @@
 - BUG: runs executed through modal dont seem to have same wandb run id
 - FEAT: sweep from run/checkpoint/
 - TODO: progress bar for rollout collection
-- add support for masking invalid action combos, making sure that the highest logit wins (the loser is masked)
 - BUG: run_play.py user input not working for Atari envs
 - TEST: CleanRL's envpool implementation
 - FEAT: run_inspect.py add support for monitoring rollouts with different hyperparams
@@ -36,7 +35,6 @@
 - don't use sticky actions wrapper during eval
 - TODO: confirm that sticky actions wrapper guarantees that policy performs those actions after training
 - TODO: use action combo instead of multibinary
-- EpisodicLifeEnv wrapper
 - Penalize time spent more?
 - REWARD: instead of measuring velocity can we just use time passed to deduct movement reward?
 - REWARD: abort when no reward increased for N steps?

@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "gymnasium-solver-env"
 version = "0.1.0"
@@ -28,15 +32,26 @@ dependencies = [
     "vizdoom",
     "mcp",
     "python-dotenv",
-    "modal>=0.64.0"
-]
-
-[project.optional-dependencies]
-retro = [
+    "modal>=0.64.0",
     # NOTE: stable-retro 0.9.5 is BROKEN on M1 Mac (arm64 wheel contains x86_64 binary)
     # Building from source also fails. Use with Rosetta or wait for upstream fix.
     "stable-retro>=0.9.5",
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = [
+    "agents*",
+    "config*",
+    "gym_envs*",
+    "gym_wrappers*",
+    "loggers*",
+    "schemas*",
+    "trainer_callbacks*",
+    "utils*",
+    "vizdoom_configs*",
+]
+exclude = ["tests*", "VIBES*", "scripts*"]
 
 [tool.pytest.ini_options]
 # Test discovery patterns

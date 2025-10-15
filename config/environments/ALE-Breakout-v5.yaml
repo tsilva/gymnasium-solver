@@ -77,6 +77,7 @@ _env: &env
 # Objects env
 _env_objects: &env_objects
   <<: *env
+  project_id: ALE-Breakout-v5_objects
   spec: *spec_objects
   obs_type: "objects"
   env_wrappers:
@@ -85,6 +86,7 @@ _env_objects: &env_objects
 # Deterministic env
 _env_deterministic: &env_deterministic
   <<: *env
+  project_id: ALE-Breakout-v5_objects_deterministic
   env_kwargs:
     repeat_action_probability: 0.0
 
@@ -94,7 +96,6 @@ _env_deterministic: &env_deterministic
 
 objects_ppo: &objects_ppo
   <<: *env_objects
-  project_id: ALE-Breakout-v5_objects
   algo_id: ppo
   model_id: mlp_small
   description: "PPO using OCAtari object features for Breakout"
@@ -111,5 +112,4 @@ objects_ppo: &objects_ppo
 objects_deterministic_ppo:
   <<: *objects_ppo
   <<: *env_deterministic
-  project_id: ALE-Breakout-v5_objects_deterministic
   description: "PPO object features without sticky actions"

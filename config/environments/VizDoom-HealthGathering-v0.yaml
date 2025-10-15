@@ -50,13 +50,6 @@ spec: &spec
 _env: &env
   spec: *spec
   env_id: VizDoom-HealthGathering-v0
-  render_mode: 'rgb_array'
-    # TODO: defaults are not being applied
-  obs_type: rgb
-  render_mode: 'rgb_array'
-  grayscale_obs: true
-  resize_obs: [84, 84]
-  frame_stack: 4
 
 # =====================
 # configs

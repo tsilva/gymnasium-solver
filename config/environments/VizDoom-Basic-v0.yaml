@@ -50,12 +50,6 @@ spec: &spec
 _env: &env
   spec: *spec
   env_id: VizDoom-Basic-v0
-  obs_type: rgb
-  render_mode: 'rgb_array'
-  grayscale_obs: true
-  resize_obs: [84, 84]
-  frame_stack: 4
-  model_id: cnn_nature
 
 # =====================
 # configs

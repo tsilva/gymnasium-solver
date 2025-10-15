@@ -446,6 +446,7 @@ class Config:
         self._resolve_defaults()
         self._resolve_n_envs()
         self._resolve_atari_defaults()
+        self._resolve_vizdoom_defaults()
         self._resolve_numeric_strings()
         self._resolve_batch_size()
         self._resolve_eval_warmup_epochs()
@@ -511,6 +512,36 @@ class Config:
             self.frame_stack = 4
         if self.frame_skip is None:
             self.frame_skip = 4
+
+    def _resolve_vizdoom_defaults(self) -> None:
+        """Apply VizDoom defaults when params are not explicitly set.
+
+        Standard VizDoom preprocessing pipeline:
+        - obs_type: rgb
+        - grayscale: True
+        - img_height: 84
+        - img_width: 84
+        - frame_stack: 4
+        - model_id: cnn_nature
+
+        This ensures consistent behavior across VizDoom environments while still
+        allowing YAML configs to override any of these defaults.
+        """
+        from utils.environment import _is_vizdoom_env_id
+        if not _is_vizdoom_env_id(self.env_id):
+            return
+
+        # Apply VizDoom defaults if not explicitly set
+        if self.obs_type == Config.ObsType.vector:
+            self.obs_type = Config.ObsType.rgb
+        if self.grayscale_obs is None:
+            self.grayscale_obs = True
+        if self.resize_obs is None:
+            self.resize_obs = (84, 84)
+        if self.frame_stack is None:
+            self.frame_stack = 4
+        if self.model_id is None:
+            self.model_id = "cnn_nature"
 
     def _resolve_numeric_strings(self) -> None:
         for key, value in list(asdict(self).items()):

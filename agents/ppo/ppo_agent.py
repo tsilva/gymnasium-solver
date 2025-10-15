@@ -12,6 +12,9 @@ class PPOAgent(BaseAgent):
     def __init__(self, config):
         super().__init__(config)
 
+        # Initialize PPO-specific hyperparameters
+        self.clip_range_vf = config.clip_range_vf
+
         # Register PPO-specific metric monitors
         self.metrics_monitor.register_bundle(PPOAlerts(self))
 
@@ -77,20 +80,18 @@ class PPOAgent(BaseAgent):
         # The value head must predict the returns, so its loss is
         # just the MSE between the predicted (values) and target returns
         # NOTE: this must be done in order, second argument must be the target
-        if self.config.clip_vloss:
-            # Clip value function updates to prevent large changes (as per PPO paper)
-            values_old = batch.values
-            v_loss_unclipped = (values_pred - returns) ** 2
-            v_clipped = values_old + torch.clamp(
-                values_pred - values_old,
-                -self.clip_range,
-                self.clip_range,
-            )
-            v_loss_clipped = (v_clipped - returns) ** 2
-            v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
-            value_loss = v_loss_max.mean()
-        else:
-            value_loss = F.mse_loss(values_pred, returns)
+        # Clip value function updates to prevent large changes (as per PPO paper)
+        values_old = batch.values
+        values_delta = values_pred - values_old
+        v_loss_unclipped = (values_pred - returns) ** 2
+        v_clipped = values_old + torch.clamp(
+            values_delta,
+            -self.clip_range_vf,
+            self.clip_range_vf,
+        )
+        v_loss_clipped = (v_clipped - returns) ** 2
+        v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
+        value_loss = v_loss_max.mean()
 
         # TODO: note down why returns cant be normalized (GAE), but why advantages should be
 
@@ -116,6 +117,9 @@ class PPOAgent(BaseAgent):
             # Measure how many log probs moved beyond the trusted region (average of how many samples are outside the allowed range)
             clip_fraction = ((ratio < 1.0 - self.clip_range) | (ratio > 1.0 + self.clip_range)).float().mean()
 
+            # Measure how many value predictions were clipped
+            vf_clip_fraction = ((values_delta < -self.clip_range_vf) | (values_delta > self.clip_range_vf)).float().mean()
+
             kl_div, approx_kl = compute_kl_diagnostics(old_logprobs, new_logprobs)
             # TODO: should I make metric explain that explained_var is for value head?
             explained_var = 1 - torch.var(returns - values_pred) / torch.var(returns)
@@ -129,6 +133,7 @@ class PPOAgent(BaseAgent):
             'opt/loss/value_scaled': scaled_value_loss.detach(),
             'opt/policy/entropy': entropy.detach(),
             'opt/ppo/clip_fraction': clip_fraction.detach(),
+            'opt/ppo/vf_clip_fraction': vf_clip_fraction.detach(),
             'opt/ppo/kl': kl_div.detach(),
             'opt/ppo/approx_kl': approx_kl.detach(),
             'opt/value/explained_var': explained_var.detach(),

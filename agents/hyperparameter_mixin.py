@@ -77,6 +77,8 @@ class HyperparameterMixin:
                 self._change_optimizers_lr(value)
             elif key == "clip_range":
                 self.clip_range = value
+            elif key == "clip_range_vf":
+                self.clip_range_vf = value
             elif key == "vf_coef":
                 self.vf_coef = value
             elif key == "ent_coef":
@@ -94,6 +96,9 @@ class HyperparameterMixin:
             "clip_range": self.clip_range,
             "policy_lr": self.policy_lr,
         }
+        # Add PPO-specific hyperparameters if present
+        if hasattr(self, "clip_range_vf"):
+            metrics["clip_range_vf"] = self.clip_range_vf
         prefixed = {f"hp/{k}": v for k, v in metrics.items()}
         self.metrics_recorder.record("train", prefixed)
 

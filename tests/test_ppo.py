@@ -73,7 +73,6 @@ def test_ppo_policy_clipping_math():
     agent = object.__new__(PPOAgent)
     agent.config = SimpleNamespace(
         normalize_advantages="off",  # do not renormalize in test
-        clip_vloss=False,  # disable value clipping for this test
         target_kl=None,
         ent_coef=0.0,
         vf_coef=0.0,
@@ -81,6 +80,7 @@ def test_ppo_policy_clipping_math():
         hidden_dims=(64, 64),
     )
     agent.clip_range = clip
+    agent.clip_range_vf = 1e6  # effectively disable value clipping for this test
     agent.vf_coef = 0.0
     agent.ent_coef = 0.0
     agent.policy_model = _FakePolicy(new_logps, values)

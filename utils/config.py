@@ -722,7 +722,7 @@ class PPOConfig(Config):
     gamma: float = 0.99
     gae_lambda: float = 0.95
     clip_range: Union[float, Dict[str, Any]] = 0.2
-    clip_vloss: bool = True
+    clip_range_vf: Union[float, Dict[str, Any]] = 0.2
     target_kl: Optional[float] = None # TODO: 0.015 in spinning up?
     ent_coef: float = 0.0
     vf_coef: Union[float, Dict[str, Any]] = 0.5
@@ -737,10 +737,10 @@ class PPOConfig(Config):
         return "ppo"
 
     def _resolve_schedules(self) -> None:
-        # PPO adds vf_coef and clip_range to schedulable params
+        # PPO adds vf_coef, clip_range, and clip_range_vf to schedulable params
         super()._resolve_schedules()
 
-        schedulable_params = {'vf_coef', 'clip_range'}
+        schedulable_params = {'vf_coef', 'clip_range', 'clip_range_vf'}
         for key in list(vars(self).keys()):
             value = getattr(self, key)
             if isinstance(value, dict) and key in schedulable_params:
@@ -770,6 +770,7 @@ class PPOConfig(Config):
         self._validate_positive("target_kl")
         self._validate_range("gae_lambda", 0, 1)
         self._validate_range("clip_range", 0, 1, inclusive_min=False, inclusive_max=False)
+        self._validate_range("clip_range_vf", 0, 1, inclusive_min=False, inclusive_max=False)
         self._validate_non_negative("vf_coef")
 
         if self.normalize_advantages is not None and self.normalize_advantages not in {Config.AdvantageNormType.rollout, Config.AdvantageNormType.batch, Config.AdvantageNormType.off}:  # type: ignore[operator]

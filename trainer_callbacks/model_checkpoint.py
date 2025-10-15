@@ -28,6 +28,7 @@ class ModelCheckpointCallback(pl.Callback):
         self.metric = metric
         self.mode = mode
         self.best_value = float("-inf") if mode == "max" else float("inf")
+        self.first_eval = True  # Track if this is the first evaluation
 
     def on_validation_epoch_end(self, trainer: pl.Trainer, pl_module: pl.LightningModule):
         self._if_best_epoch_save_checkpoint(trainer, pl_module)
@@ -41,16 +42,31 @@ class ModelCheckpointCallback(pl.Callback):
         metric_value = metrics[self.metric]
         is_best = (metric_value > self.best_value) if (self.mode == "max") else (metric_value < self.best_value)
 
-        # Save checkpoint if best OR if training is stopping (early stop, max steps, etc.)
-        should_save = is_best or trainer.should_stop
+        # Save checkpoint if:
+        # - This is the first eval (no basis for comparison), OR
+        # - This is the best so far, OR
+        # - Training is stopping (early stop, max steps, etc.)
+        should_save = self.first_eval or is_best or trainer.should_stop
 
-        # If neither condition is met, return (do nothing)
+        # If none of the conditions are met, return (do nothing)
         if not should_save: return
 
         # Save checkpoint with video recorded into checkpoint dir
         epoch = pl_module.current_epoch
-        if is_best: self.best_value = metric_value
-        self._save_checkpoint(pl_module, epoch, metrics, is_best=is_best)
+
+        # Determine if this checkpoint should be marked as best
+        # (either genuinely best, or first eval which serves as initial best)
+        mark_as_best = is_best or self.first_eval
+
+        # Update best value if this is better (or if first eval)
+        if mark_as_best:
+            self.best_value = metric_value
+
+        # Mark that we've completed first eval
+        if self.first_eval:
+            self.first_eval = False
+
+        self._save_checkpoint(pl_module, epoch, metrics, is_best=mark_as_best)
 
     def _save_checkpoint(
         self,

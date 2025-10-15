@@ -4,6 +4,7 @@ from .console_summary import ConsoleSummaryCallback
 from .dispatch_metrics import DispatchMetricsCallback
 from .early_stopping import EarlyStoppingCallback
 from .hyperparameter_scheduler import HyperparameterSchedulerCallback
+from .incremental_wandb_upload import IncrementalWandbUploadCallback
 from .keyboard_shortcuts import KeyboardShortcutCallback
 from .model_checkpoint import ModelCheckpointCallback
 from .monitor_metrics import MonitorMetricsCallback
@@ -23,5 +24,6 @@ __all__ = [
     "HyperparameterSchedulerCallback",
     "PlateauInterventionCallback",
     "UploadRunCallback",
+    "IncrementalWandbUploadCallback",
     "KeyboardShortcutCallback",
 ]

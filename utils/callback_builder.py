@@ -6,6 +6,7 @@ from trainer_callbacks import (
     ConsoleSummaryCallback,
     DispatchMetricsCallback,
     EarlyStoppingCallback,
+    IncrementalWandbUploadCallback,
     KeyboardShortcutCallback,
     ModelCheckpointCallback,
     MonitorMetricsCallback,
@@ -73,6 +74,15 @@ class CallbackBuilder:
                 mode="max",
             )
         )
+
+        # Incremental W&B upload: upload checkpoints to W&B as they're saved (only if W&B is enabled)
+        # Must run AFTER ModelCheckpointCallback so checkpoints exist when we try to upload
+        if getattr(self.config, "enable_wandb", True):
+            callbacks.append(
+                IncrementalWandbUploadCallback(
+                    run_dir=self.run.run_dir,
+                )
+            )
 
         # Video logger watches checkpoints directory recursively for videos (only if W&B is enabled)
         if getattr(self.config, "enable_wandb", True):

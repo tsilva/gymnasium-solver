@@ -106,6 +106,6 @@ ppo:
   policy_lr: 5e-4
   ent_coef: 0.03 # TODO: how is entropy behaving?
   #max_episode_steps: 10_000
-  eval_warmup_epochs: 10
-  eval_freq_epochs: 10
+  #eval_warmup_epochs: 10
+  eval_freq_epochs: 1
   eval_episodes: 1 # TODO: increase this

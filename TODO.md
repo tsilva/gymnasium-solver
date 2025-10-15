@@ -4,19 +4,23 @@
 
 - Ensure training is easy to launch (merge with train.py)
 - Is it possible to store built containers?
+- Check if checkpoints are working locally
+- Ensure correct resources are reserved by remote training run
+- Softcodde for different remote backends
 
 # NEXT
 
+- BUG: remote wandb run ids are being named with human sounding names when I want the actual run id to tbe their name (same as the run dir name)
+- FEAT: checkpoint rendering video (one episode per policy)
+- TODO: progress bar for rollout collection
 - TODO: try running remote run locally
 - TODO: add MCP for run, add support for plotting, interact with agent
 - BUG: wandb runs dont have the run id
 - TODO: add support for standard model configs by id
 - BUG: modal is not reserving the number of cores defined in n_envs
-
 - add support for masking invalid action combos, making sure that the highest logit wins (the loser is masked)
 - BUG: run_play.py user input not working for Atari envs
 - TEST: CleanRL's envpool implementation
-- TEST: is last eval in uploaded zip file
 - FEAT: add support for adding shared configs between envs (eg: atari defaults, vizdoom defaults)
 - FEAT: single plot with fraction of scaled losses
 - TEST: ensure all checkpoints get stored in wandb (check storage limits)
@@ -24,7 +28,6 @@
 - FEAT: train from previous run, use that to do multiple runs until convergence (new run loads param); should we restore optimizer? confirm new run starts with same performance, check if it evolves better with same or dfiferent optimizer
 - CHECK: should we reset optimizer when we use another learning rate
 - TEST: ensure evaluation is ran exactly same way as train (eg: alevecenv)
-- TODO: make key capture not require enter, allow h to show all shortcuts
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 - TODO: add env normalization support, make sure normalization is saved
 - TODO: add action number/ label before each frame stack image in inspect (allows easily seeing which action was performed when each frame was seen)
@@ -39,12 +42,10 @@
 - TODO: use action combo instead of multibinary
 - EpisodicLifeEnv wrapper
 - Penalize time spent more?
-- TEST: is eval not imposing timelimits?
 - REWARD: instead of measuring velocity can we just use time passed to deduct movement reward?
 - REWARD: abort when no reward increased for N steps?
 - TODO: try with variable frame skip including no frame skip (eg: starting in 1)
 - Should we remove frame skip in evaluation?
-
 
 ## VizDoom-v0
 

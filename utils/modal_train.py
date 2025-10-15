@@ -1,16 +1,16 @@
 """Modal AI training runner for remote training execution.
 
-Enables running training jobs on Modal infrastructure by adding --modal flag to train.py.
+Enables running training jobs on Modal infrastructure by specifying --backend modal in train.py.
 
 Usage:
     # Run training remotely on Modal
-    python train.py CartPole-v1:ppo --modal
+    python train.py CartPole-v1:ppo --backend modal
 
     # With additional arguments
-    python train.py CartPole-v1:ppo --modal --max-env-steps 50000 -q
+    python train.py CartPole-v1:ppo --backend modal --max-env-steps 50000 -q
 
     # Resume training remotely
-    python train.py --resume @last --modal
+    python train.py --resume @last --backend modal
 
 Requirements:
     - Modal account (modal.com)

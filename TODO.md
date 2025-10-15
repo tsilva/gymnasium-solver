@@ -2,9 +2,6 @@
 
 ## Remote training loop
 
-- Ensure training is easy to launch (merge with train.py)
-- Is it possible to store built containers?
-- Check if checkpoints are working locally
 - Ensure correct resources are reserved by remote training run
 - Softcodde for different remote backends
 - BUG: modal is not reserving the number of cores defined in n_envs

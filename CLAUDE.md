@@ -40,9 +40,9 @@ python train.py --list-envs
 python train.py --list-envs CartPole
 
 # Run training remotely on Modal AI (optional, requires Modal account)
-python train.py CartPole-v1:ppo --modal
-python train.py CartPole-v1:ppo --modal --max-env-steps 50000
-python train.py --resume @last --modal
+python train.py CartPole-v1:ppo --backend modal
+python train.py CartPole-v1:ppo --backend modal --max-env-steps 50000
+python train.py --resume @last --backend modal
 ```
 
 ### Testing
@@ -162,7 +162,7 @@ These tools are particularly useful for automated workflows, hyperparameter tuni
 - **Config override**: `--max-env-steps` injects into `config.max_env_steps` after sweep merges.
 - **Resume training**: `--resume <run-id>` resumes from checkpoint. If run not found locally, automatically downloads from W&B (requires `WANDB_ENTITY` and `WANDB_PROJECT` env vars). Supports `@last` for most recent run and `--epoch` to select checkpoint (`@best`, `@last`, or epoch number).
 - **Transfer learning**: `--init-from-run <run-spec>` initializes model weights from another run's checkpoint before training. Format: `<run-id>` or `<run-id>/<checkpoint>`. Checkpoint can be `@best`, `@last`, or `epoch=N`. If no checkpoint specified, uses `@best` if available, otherwise `@last`. Downloads from W&B if not found locally. Handles architecture mismatches gracefully by loading only compatible weights (matching keys and shapes). Useful for pretraining on simpler tasks before tackling harder ones. Can also be specified in YAML config via `init_from_run` field (CLI arg takes precedence). Examples: `abc123`, `abc123/@best`, `abc123/epoch=13`, `@last/@best`.
-- **Modal AI training**: `--modal` flag runs training remotely on Modal infrastructure (`utils.modal_train`). Requires Modal account and token configured. All CLI arguments are passed through to remote training. Useful for scaling training without local compute.
+- **Modal AI training**: `--backend modal` runs training remotely on Modal infrastructure (`utils.modal_train`). Requires Modal account and token configured. All CLI arguments are passed through to remote training. Useful for scaling training without local compute.
 - **W&B Sweeps**: Auto-detected via `WANDB_SWEEP_ID` or `--wandb_sweep` flag. Merges `wandb.config` into main `Config` before training. Supports schedules specified as dicts (e.g., `{start: 0.001, end: 0.0}`).
 - **Debugger detection**: When a debugger is attached, `train.py` forces `n_envs=1`, `vectorization_mode='sync'`, and adjusts `batch_size` to remain compatible.
 

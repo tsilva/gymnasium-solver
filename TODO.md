@@ -9,6 +9,7 @@
 
 # NEXT
 
+- mario: make policy more robust to timing differences by finetuning with variable frameskip
 - make another run with higher LR for SM
 - python scripts/render_checkpoint_progression.py nh6utowp (make cooler video)
 - BUG: remote runs are still creating local run folder (empty)

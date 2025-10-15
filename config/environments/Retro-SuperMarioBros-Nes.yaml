@@ -91,7 +91,7 @@ ppo:
   n_envs: 16 # TODO: faster training with more envs?
   n_steps: 1024
   batch_size: 0.25
-  policy_lr: 5e-4
+  policy_lr: 1e-3 # 5e-4 worked
   max_env_steps: 3e6
   #ent_coef: 0.03 # TODO: how is entropy behaving? I think we can reduce this
   #max_episode_steps: 10_000

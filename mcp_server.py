@@ -354,7 +354,10 @@ async def handle_call_tool(
 
 async def list_environments(filter_str: Optional[str] = None) -> Dict[str, Any]:
     """List all available environment configurations."""
+    import os
+    cwd = os.getcwd()
     config_dir = Path("config/environments")
+    config_dir_abs = config_dir.absolute()
     env_files = sorted(config_dir.glob("*.yaml"))
 
     envs = []
@@ -369,7 +372,14 @@ async def list_environments(filter_str: Optional[str] = None) -> Dict[str, Any]:
 
     return {
         "count": len(envs),
-        "environments": envs
+        "environments": envs,
+        "_debug": {
+            "cwd": cwd,
+            "config_dir": str(config_dir),
+            "config_dir_abs": str(config_dir_abs),
+            "exists": config_dir.exists(),
+            "files_found": len(env_files)
+        }
     }
 
 

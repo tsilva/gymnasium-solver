@@ -7,6 +7,7 @@
 - Check if checkpoints are working locally
 - Ensure correct resources are reserved by remote training run
 - Softcodde for different remote backends
+- Delete and rerun 2bjavmlt 
 
 # NEXT
 

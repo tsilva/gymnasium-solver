@@ -41,6 +41,9 @@ import modal
 # Define Modal app
 app = modal.App("gymnasium-solver-train")
 
+# Volume for Retro ROMs
+roms_volume = modal.Volume.from_name("roms", create_if_missing=True)
+
 # Get the project root (where pyproject.toml lives)
 PROJECT_ROOT = Path(__file__).parent.parent
 
@@ -222,6 +225,7 @@ def create_training_function(resources: ResourceRequirements):
     function_kwargs = {
         "image": image,
         "secrets": [modal.Secret.from_name("wandb-secret")],
+        "volumes": {"/roms": roms_volume},
         "cpu": resources.cpu,
         "memory": resources.memory,
         "timeout": resources.timeout,
@@ -273,6 +277,44 @@ def create_training_function(resources: ResourceRequirements):
             if run_id:
                 os.environ["WANDB_RUN_ID"] = run_id
                 yield f"Using pre-generated run ID: {run_id}\n"
+
+            # Check if this is a Retro environment and import ROM if needed
+            config_spec = None
+            for i, arg in enumerate(train_args):
+                if not arg.startswith("--") and ":" in arg:
+                    config_spec = arg
+                    break
+                elif arg == "--config_id" and i + 1 < len(train_args):
+                    config_spec = train_args[i + 1]
+                    break
+
+            if config_spec and config_spec.startswith("Retro"):
+                # Extract game ID from config spec (e.g., "Retro-SuperMarioBros-Nes:ppo" -> "SuperMarioBros-Nes")
+                env_id = config_spec.split(":")[0]  # Get env part before variant
+                rom_game_id = env_id.replace("Retro-", "")  # Remove "Retro-" prefix
+
+                yield f"Detected Retro environment: {rom_game_id}\n"
+                yield f"Importing ROM from volume...\n"
+
+                rom_path = Path(f"/roms/retro-roms/{rom_game_id}")
+                if not rom_path.exists():
+                    raise RuntimeError(
+                        f"ROM directory not found in volume at {rom_path}. "
+                        f"Upload ROM with: python scripts/upload_rom_to_modal.py {rom_game_id}"
+                    )
+
+                # Import the ROM using retro.import
+                import_cmd = ["python", "-m", "retro.import", str(rom_path)]
+                yield f"Running: {' '.join(import_cmd)}\n"
+                result = subprocess.run(import_cmd, capture_output=True, text=True)
+
+                if result.returncode != 0:
+                    yield f"ROM import failed:\n"
+                    yield f"STDOUT: {result.stdout}\n"
+                    yield f"STDERR: {result.stderr}\n"
+                    raise RuntimeError(f"ROM import failed with return code {result.returncode}")
+
+                yield f"ROM imported successfully\n\n"
 
             # Build command
             cmd = ["python", "-u", "train.py"] + train_args  # -u for unbuffered output

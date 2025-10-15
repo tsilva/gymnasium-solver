@@ -176,7 +176,7 @@ def main(
         print(f"ROM found at: {rom_path}")
 
         # Create Modal mount for the ROM directory
-        rom_mount = modal.Mount.from_local_dir(
+        rom_mount = modal.mount.Mount.from_local_dir(
             local_path=rom_path,
             remote_path=f"/tmp/retro-roms/{game_id}",
         )

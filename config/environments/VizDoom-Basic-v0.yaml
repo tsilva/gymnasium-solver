@@ -51,7 +51,7 @@ _env: &env
   spec: *spec
   env_id: VizDoom-Basic-v0
   # TODO: temporary
-  frame_skip: 3
+  frame_skip: 2
   frame_stack: 2
 
 # =====================

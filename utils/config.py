@@ -543,6 +543,8 @@ class Config:
             self.frame_stack = 4
         if self.model_id is None:
             self.model_id = "cnn_nature"
+        if self.vectorization_mode is None or self.vectorization_mode == "auto":
+            self.vectorization_mode = "async"
 
     def _resolve_retro_defaults(self) -> None:
         """Apply Retro (stable-retro) defaults when params are not explicitly set.
@@ -576,7 +578,7 @@ class Config:
             self.frame_stack = 4
         if self.frame_skip is None:
             self.frame_skip = 4
-        if self.vectorization_mode == "auto":
+        if self.vectorization_mode is None or self.vectorization_mode == "auto":
             self.vectorization_mode = "async"
         if self.model_id is None:
             self.model_id = "cnn_nature"

@@ -2,8 +2,6 @@
 
 ## Remote training loop
 
-- Ensure correct resources are reserved by remote training run
-- Softcodde for different remote backends
 - BUG: modal is not reserving the number of cores defined in n_envs
 
 # NEXT

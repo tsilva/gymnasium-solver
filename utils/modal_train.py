@@ -19,11 +19,59 @@ Requirements:
 """
 
 import os
+import tomllib
+from pathlib import Path
 
 import modal
 
 # Define Modal app
 app = modal.App("gymnasium-solver-train")
+
+# Get the project root (where pyproject.toml lives)
+PROJECT_ROOT = Path(__file__).parent.parent
+
+
+def get_training_dependencies():
+    """Read dependencies from pyproject.toml and filter for training.
+
+    Returns:
+        List of dependency strings suitable for pip_install()
+    """
+    pyproject_path = PROJECT_ROOT / "pyproject.toml"
+
+    with open(pyproject_path, "rb") as f:
+        pyproject = tomllib.load(f)
+
+    all_deps = pyproject["project"]["dependencies"]
+
+    # Dependencies to exclude from Modal image (not needed for training)
+    exclude = {
+        "modal",  # Modal SDK not needed inside containers
+        "ipykernel",  # Jupyter kernel not needed for training
+        "jupyter",  # Jupyter not needed for training
+        "pytest",  # Testing framework not needed for training
+        "gradio",  # UI framework not needed for training
+        "matplotlib",  # Plotting not needed for training
+        "python-dotenv",  # Env loading not needed (Modal handles secrets)
+    }
+
+    # Filter out excluded dependencies
+    training_deps = []
+    for dep in all_deps:
+        # Extract package name (before any version specifiers or extras)
+        pkg_name = (
+            dep.split("[")[0]
+            .split(">")[0]
+            .split("<")[0]
+            .split("=")[0]
+            .split("!")[0]
+            .strip()
+        )
+        if pkg_name not in exclude:
+            training_deps.append(dep)
+
+    return training_deps
+
 
 # Create Modal image with all dependencies
 image = (
@@ -35,27 +83,7 @@ image = (
         "libgl1-mesa-glx",  # OpenGL for rendering
         "libglib2.0-0",  # Required by some Gym environments
     )
-    .pip_install(
-        # Core dependencies (match pyproject.toml)
-        "gymnasium[classic-control,atari,box2d,mujoco,other]",
-        "gymnasium-robotics",
-        "ale-py",
-        "minari[hdf5]",
-        "torch",
-        "numpy",
-        "wandb",
-        "wandb-workspaces",
-        "ocatari>=2.2.1",
-        "pytorch-lightning",
-        "torchvision",
-        "pyyaml",
-        "ruamel.yaml",
-        "watchdog",
-        "setuptools<80",
-        "huggingface_hub>=0.22.0",
-        "vizdoom",
-        "mcp",
-    )
+    .pip_install(*get_training_dependencies())
 )
 
 

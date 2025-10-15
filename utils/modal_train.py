@@ -233,11 +233,12 @@ def create_training_function(resources: ResourceRequirements):
         function_kwargs["gpu"] = resources.gpu
 
     @app.function(serialized=True, **function_kwargs)
-    def run_training(train_args: list[str]):
+    def run_training(train_args: list[str], run_id: str = None):
         """Run training with given CLI arguments on Modal.
 
         Args:
             train_args: List of CLI arguments to pass to train.py (excluding --modal)
+            run_id: Pre-generated run ID to use for W&B and local run directory
 
         Yields:
             Log lines from training process
@@ -266,6 +267,12 @@ def create_training_function(resources: ResourceRequirements):
             # Set environment variables for quiet operation
             os.environ["VIBES_QUIET"] = "1"
             os.environ["VIBES_DISABLE_SESSION_LOGS"] = "1"
+
+            # If run_id was provided, set it as environment variable
+            # so train.py will use it for W&B initialization
+            if run_id:
+                os.environ["WANDB_RUN_ID"] = run_id
+                yield f"Using pre-generated run ID: {run_id}\n"
 
             # Build command
             cmd = ["python", "-u", "train.py"] + train_args  # -u for unbuffered output
@@ -302,6 +309,10 @@ def launch_modal_training(args):
     Args:
         args: Parsed argparse arguments from train.py
     """
+    import wandb
+    from utils.run import Run
+    from utils.config import load_config
+
     # Parse config_id and variant_id to estimate resources
     config_spec = None
     if args.config:
@@ -319,6 +330,7 @@ def launch_modal_training(args):
             gpu=None,
             timeout=7200,
         )
+        run_id = None  # Resume mode will use existing run ID
     else:
         # Parse env:variant format
         if ":" in config_spec:
@@ -336,6 +348,15 @@ def launch_modal_training(args):
             max_env_steps=args.max_env_steps,
         )
         print(f"Resource requirements: {resources}")
+
+        # Generate run ID locally and create local run directory stub
+        # This ensures W&B run name matches local run directory
+        run_id = wandb.util.generate_id()
+        config = load_config(config_id, variant_id)
+
+        # Create local run directory with the generated ID
+        print(f"Creating local run directory: runs/{run_id}")
+        Run.create(run_id=run_id, config=config)
 
     # Build CLI arguments list (exclude --backend flag)
     train_args = []
@@ -379,7 +400,7 @@ def launch_modal_training(args):
     # Run on Modal and stream logs via generator
     try:
         with app.run():
-            for log_line in run_training_fn.remote_gen(train_args):
+            for log_line in run_training_fn.remote_gen(train_args, run_id):
                 print(log_line, end="", flush=True)
         print("-" * 80)
         print("\n✓ Modal training completed!")

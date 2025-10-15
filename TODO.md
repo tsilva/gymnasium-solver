@@ -6,17 +6,17 @@
 
 # NEXT
 
+- FEAT: add support for adding shared configs between envs (eg: atari defaults, vizdoom defaults)
+
+
 - BUG: runs executed through modal dont seem to have same wandb run id
 - FEAT: sweep from run/checkpoint/
 - TODO: progress bar for rollout collection
 - add support for masking invalid action combos, making sure that the highest logit wins (the loser is masked)
 - BUG: run_play.py user input not working for Atari envs
 - TEST: CleanRL's envpool implementation
-- FEAT: add support for adding shared configs between envs (eg: atari defaults, vizdoom defaults)
-- FEAT: single plot with fraction of scaled losses
 - FEAT: run_inspect.py add support for monitoring rollouts with different hyperparams
 - FEAT: train from previous run, use that to do multiple runs until convergence (new run loads param); should we restore optimizer? confirm new run starts with same performance, check if it evolves better with same or dfiferent optimizer
-- CHECK: should we reset optimizer when we use another learning rate
 - TEST: ensure evaluation is ran exactly same way as train (eg: alevecenv)
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 - TODO: add env normalization support, make sure normalization is saved
@@ -72,7 +72,6 @@ VizDoom-PredictPosition-v0
 VizDoom-TakeCover-v0
 VizDoom-DeadlyCorridor-v0
 VizDoom-Deathmatch-v0
-
 
 ## Pong-v5
 

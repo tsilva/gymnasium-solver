@@ -83,11 +83,11 @@ def _maybe_merge_wandb_config(config, *, wandb_sweep_flag: bool):
     is_wandb_sweep = bool(wandb_sweep_flag) or bool(wandb_sweep_id)
     if not is_wandb_sweep: return config
 
-    # Generate a unique run ID and use it as both id and name
+    # Generate a unique run ID or use pre-generated one from Modal
     # This ensures the W&B run name matches the ID (which becomes the local run dir name)
     from utils.formatting import sanitize_name
     project_name = config.project_id if config.project_id else sanitize_name(config.env_id)
-    run_id = wandb.util.generate_id()
+    run_id = os.environ.get("WANDB_RUN_ID") or wandb.util.generate_id()
 
     # Initialize wandb with the original config (add algo_id since it's a property)
     config_dict = asdict(config)
@@ -152,6 +152,7 @@ def _ensure_wandb_run_initialized(config) -> None:
     - If running under a W&B Sweep, `_maybe_merge_wandb_config` already called
       `wandb.init`, so this becomes a no-op.
     - Otherwise, initialize a run with the project's name and full config.
+    - If WANDB_RUN_ID env var is set (e.g., from Modal training), use that ID.
     """
 
     # If W&B is disabled, do nothing
@@ -161,11 +162,11 @@ def _ensure_wandb_run_initialized(config) -> None:
     if wandb.run is not None: return
 
     # Otherwise create a fresh run using project and full config
-    # Generate a unique run ID and use it as both id and name
+    # Generate a unique run ID or use pre-generated one from Modal
     # This ensures the W&B run name matches the ID (which becomes the local run dir name)
     project_name = config.project_id
     assert project_name, "project_id is required"
-    run_id = wandb.util.generate_id()
+    run_id = os.environ.get("WANDB_RUN_ID") or wandb.util.generate_id()
     wandb.init(project=project_name, id=run_id, name=run_id, config=asdict(config))
 
 def _extract_elapsed_seconds(agent) -> Optional[float]:

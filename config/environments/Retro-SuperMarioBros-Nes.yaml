@@ -103,8 +103,8 @@ ppo:
   n_steps: 1024
   batch_size: 0.25
   policy_lr: 5e-4
-  ent_coef: 0.03 # TODO: how is entropy behaving?
-  #max_episode_steps: 10_000
-  #eval_warmup_epochs: 10
-  eval_freq_epochs: 1
-  eval_episodes: 1 # TODO: increase this
+  ent_coef: 0.03 # TODO: how is entropy behaving? I think we can reduce this
+  max_episode_steps: 10_000
+  eval_warmup_epochs: 10
+  eval_freq_epochs: 10
+  eval_episodes: 1 # TODO: increase once eval_async works

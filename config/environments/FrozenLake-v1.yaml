@@ -34,6 +34,7 @@ spec: &spec
 # Base env
 _env: &env
   spec: *spec
+  project_id: FrozenLake-v1
   env_id: FrozenLake-v1
   accelerator: cpu
   env_kwargs:
@@ -42,10 +43,14 @@ _env: &env
   env_wrappers:
     - id: DiscreteEncoder
       encoding: array
+  eval_warmup_epochs: 10
+  eval_episodes: 10
+  eval_freq_epochs: 10
 
 # Deterministic env
 _env_deterministic: &env_deterministic
   <<: *env
+  project_id: FrozenLake-v1__deterministic
   env_kwargs:
     is_slippery: false
     map_name: "4x4"
@@ -56,14 +61,9 @@ _env_deterministic: &env_deterministic
 
 ppo: &ppo
   <<: *env
-  project_id: FrozenLake-v1
   algo_id: ppo
   model_id: mlp_tiny
   description: "PPO on FrozenLake - standard configuration for grid navigation task"
-  eval_episodes: 10
-  eval_freq_epochs: 10
-  n_steps: 512
-  policy_lr: 9e-3
 
 ppo_deterministic:
   <<: *ppo

@@ -4,16 +4,14 @@
 
 - BUG: modal is not reserving the number of cores defined in n_envs
 - TEST: run completes
-- TEST: logged to wandb correcvtl
 - TEST: can check locally
-- BUG: dont show progress bars (eg: epoch) when backend is not local
 - TEST: compare FPS against local
 
 # NEXT
 
+- BUG: cant train VizDoom-Basic-v0 when frame_stack is 1
+- FEAT: add sweep.py with --backend modal support
 - FEAT: add support for adding shared configs between envs (eg: atari defaults, vizdoom defaults)
-
-
 - BUG: runs executed through modal dont seem to have same wandb run id
 - FEAT: sweep from run/checkpoint/
 - TODO: progress bar for rollout collection
@@ -22,11 +20,11 @@
 - FEAT: run_inspect.py add support for monitoring rollouts with different hyperparams
 - FEAT: train from previous run, use that to do multiple runs until convergence (new run loads param); should we restore optimizer? confirm new run starts with same performance, check if it evolves better with same or dfiferent optimizer
 - TEST: ensure evaluation is ran exactly same way as train (eg: alevecenv)
-- TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 - TODO: add env normalization support, make sure normalization is saved
 - TODO: add action number/ label before each frame stack image in inspect (allows easily seeing which action was performed when each frame was seen)
 - FEAT: CNN filter/activation inspectors
 - BUG: is eval not imposing timelimits?
+- TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 
 ## SuperMarioBros-Nes
 

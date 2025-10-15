@@ -62,6 +62,7 @@ def present_prefit_summary(config) -> None:
         "ent_coef": _format_summary_value(getattr(config, "ent_coef", None)),
         "vf_coef": _format_summary_value(getattr(config, "vf_coef", None)),
         "clip_range": _format_summary_value(getattr(config, "clip_range", None)),
+        "clip_range_vf": _format_summary_value(getattr(config, "clip_range_vf", None)),
         "max_grad_norm": _format_summary_value(getattr(config, "max_grad_norm", None)),
         "returns_type": _format_summary_value(getattr(config, "returns_type", None)),
         "normalize_returns": _format_summary_value(getattr(config, "normalize_returns", None)),

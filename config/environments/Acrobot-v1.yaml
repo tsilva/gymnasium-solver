@@ -10,7 +10,11 @@ spec: &spec
 
   action_space:
     discrete: 3
-    labels: {0: torque_negative, 1: torque_zero, 2: torque_positive}
+    labels: {
+      0: torque_negative, 
+      1: torque_zero, 
+      2: torque_positive
+    }
 
   observation_space:
     default: state
@@ -41,6 +45,7 @@ spec: &spec
 # Base env
 _env: &env
   spec: *spec
+  project_id: Acrobot-v1
   env_id: Acrobot-v1
   accelerator: cpu
   n_envs: 32
@@ -51,14 +56,9 @@ _env: &env
 
 ppo:
   <<: *env
-  project_id: Acrobot-v1
   algo_id: ppo
   model_id: mlp_small
   description: "Standard PPO on Acrobot - baseline configuration for acrobot swing-up task"
   max_env_steps: 1e6
-  n_epochs: 4
-  n_steps: 256
-  gae_lambda: 0.94
-  clip_range: 0.3
   eval_freq_epochs: 10
-  eval_episodes: 10
+  eval_episodes: 100

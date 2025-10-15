@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import List
 
 import pytorch_lightning as pl
@@ -23,10 +24,14 @@ def build_trainer(
     batches_per_epoch = (config.n_envs * config.n_steps) // config.batch_size
     log_every_n_steps = max(1, batches_per_epoch // 10)  # Log ~10 times per epoch
 
+    # Disable progress bars in non-interactive environments (e.g., Modal remote training)
+    # VIBES_QUIET is set by Modal and other remote execution environments
+    enable_progress_bar = not bool(os.environ.get("VIBES_QUIET"))
+
     return pl.Trainer(
         logger=logger,
         max_epochs=config.max_epochs if config.max_epochs is not None else -1,
-        enable_progress_bar=True,
+        enable_progress_bar=enable_progress_bar,
         enable_checkpointing=False,
         accelerator=config.accelerator,
         devices=config.devices,

@@ -7,7 +7,12 @@ spec: &spec
 
   action_space:
     discrete: 4
-    labels: {0: do_nothing, 1: fire_left, 2: fire_main, 3: fire_right}
+    labels: {
+      0: do_nothing, 
+      1: fire_left, 
+      2: fire_main, 
+      3: fire_right
+    }
 
   observation_space:
     default: state
@@ -36,8 +41,10 @@ spec: &spec
 # Base env
 _env: &env
   spec: *spec
+  project_id: LunarLander-v3
   env_id: LunarLander-v3
   accelerator: cpu
+  model_id: mlp_small
 
 # =====================
 # configs
@@ -45,17 +52,9 @@ _env: &env
 
 ppo:
   <<: *env
-  project_id: LunarLander-v3
   algo_id: ppo
-  model_id: mlp_small
   description: "PPO on LunarLander - standard configuration for lunar landing task"
-  max_env_steps: 5000004
-  eval_episodes: 10
-  n_steps: 512
-  gae_lambda: 0.98
-  gamma: 0.999
-  n_epochs: 4
-  policy_lr: 5e-4
-  ent_coef: 0.01
+  max_env_steps: 5e6
   eval_warmup_epochs: 50
   eval_freq_epochs: 10
+  eval_episodes: 10

@@ -83,7 +83,7 @@ def build_env(
    
     # Assert valid function arguments
     assert seed is not None, "Seed is required"
-    assert frame_stack is None or frame_stack > 1, f"frame stack must be at least 2: frame_stack={frame_stack}"
+    assert frame_stack is None or frame_stack >= 1, f"frame stack must be at least 1: frame_stack={frame_stack}"
     assert frame_skip is None or frame_skip >= 1, f"frame skip must be at least 1: frame_skip={frame_skip}"
     assert resize_obs is None or isinstance(resize_obs, (tuple, list)), f"resize obs must be a tuple or list: resize_obs={resize_obs}"
     assert resize_obs is None or len(resize_obs) == 2, f"resize obs must be a sequence of length 2: resize_obs={resize_obs}"
@@ -327,7 +327,7 @@ def _build_vec_env_gym(
             # Apply custom wrappers on the preprocessed single-frame observations before stacking
             for wrapper in env_wrappers: env = EnvWrapperRegistry.apply(env, wrapper)
 
-            if frame_stack: env = FrameStackObservation(env, stack_size=frame_stack, padding_type="zero")
+            if frame_stack is not None and frame_stack > 1: env = FrameStackObservation(env, stack_size=frame_stack, padding_type="zero")
         else:
             # NOTE: resize before grayscaling for improving downscaling quality
             if resize_obs: env = ResizeObservation(env, shape=resize_obs)
@@ -340,7 +340,7 @@ def _build_vec_env_gym(
             # Apply custom wrappers before stacking so they operate on per-frame observations
             for wrapper in env_wrappers: env = EnvWrapperRegistry.apply(env, wrapper)
 
-            if frame_stack: env = FrameStackObservation(env, stack_size=frame_stack)
+            if frame_stack is not None and frame_stack > 1: env = FrameStackObservation(env, stack_size=frame_stack)
 
         # Apply TimeLimit wrapper if max_episode_steps is specified
         if max_episode_steps is not None: env = TimeLimit(env, max_episode_steps=max_episode_steps)

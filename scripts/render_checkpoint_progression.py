@@ -11,17 +11,20 @@ This script:
 from __future__ import annotations
 
 import argparse
+import multiprocessing as mp
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import numpy as np
-from moviepy import TextClip, ImageSequenceClip, VideoFileClip, concatenate_videoclips
+from PIL import Image, ImageDraw, ImageFont
 
 from utils.config import Config
 from utils.environment import build_env_from_config
@@ -74,10 +77,10 @@ def list_checkpoints_up_to_best(run: Run, best_epoch: int) -> list[tuple[int, Pa
 
 
 def create_separator_frame(width: int, height: int, epoch: int, fps: int) -> ImageSequenceClip:
-    """Create a 2-second separator clip showing the epoch number."""
+    """Create a 0.5-second separator clip showing the epoch number."""
     # Create a text clip
     text = f"Epoch {epoch}"
-    duration = 2.0  # 2 seconds
+    duration = 0.5  # 0.5 seconds
 
     txt_clip = TextClip(
         text=text,
@@ -98,6 +101,23 @@ def create_separator_frame(width: int, height: int, epoch: int, fps: int) -> Ima
     return ImageSequenceClip(frames, fps=fps)
 
 
+def _render_checkpoint_worker(args: tuple) -> tuple[int, Path]:
+    """Worker function for parallel checkpoint rendering.
+
+    Args:
+        args: Tuple of (epoch, checkpoint_path, config, seed, video_path)
+
+    Returns:
+        Tuple of (epoch, video_path) for sorting and concatenation
+    """
+    epoch, checkpoint_path, config, seed, video_path = args
+
+    # Render the episode
+    render_episode_for_checkpoint(checkpoint_path, config, seed, video_path)
+
+    return (epoch, video_path)
+
+
 def render_episode_for_checkpoint(
     checkpoint_path: Path,
     config: Config,
@@ -105,7 +125,8 @@ def render_episode_for_checkpoint(
     video_path: Path
 ) -> None:
     """Render a single episode using the checkpoint policy and save to video."""
-    print(f"  Rendering episode from {checkpoint_path.parent.name}...")
+    epoch = parse_epoch_from_checkpoint(checkpoint_path.parent.name)
+    print(f"  [PID {mp.current_process().pid}] Rendering episode from {checkpoint_path.parent.name}...")
 
     # Build environment with rgb_array mode
     env = build_env_from_config(
@@ -146,7 +167,7 @@ def render_episode_for_checkpoint(
     episodes_finished = 0
 
     # Initial frame after reset
-    obs = env.reset()
+    env.reset()
     frame = first_env.render()
     frames.append(frame)
 
@@ -196,6 +217,12 @@ def main():
         default=None,
         help="Random seed for episodes (default: test seed from config)"
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help="Number of parallel workers for rendering (default: cpu_count)"
+    )
     args = parser.parse_args()
 
     # Resolve run ID
@@ -230,12 +257,13 @@ def main():
     temp_dir = Path(tempfile.mkdtemp(prefix="checkpoint_progression_"))
     print(f"Using temp directory: {temp_dir}")
 
+    # Determine number of workers
+    n_workers = args.workers if args.workers is not None else mp.cpu_count()
+    print(f"Using {n_workers} parallel workers for rendering")
+
     try:
-        # Render each checkpoint
-        video_clips = []
-        fps = config.spec.get('render_fps', 30) if config.spec else 30
-        frame_width = None
-        frame_height = None
+        # Prepare tasks for parallel rendering
+        tasks = []
 
         for epoch, checkpoint_dir in checkpoints:
             # Construct checkpoint path
@@ -248,10 +276,25 @@ def main():
                 print(f"  WARNING: Checkpoint not found at {checkpoint_path}, skipping")
                 continue
 
-            # Render episode to temp video
+            # Prepare task
             video_path = temp_dir / f"epoch_{epoch:02d}.mp4"
-            render_episode_for_checkpoint(checkpoint_path, config, seed, video_path)
+            tasks.append((epoch, checkpoint_path, config, seed, video_path))
 
+        # Render checkpoints in parallel
+        print(f"Rendering {len(tasks)} checkpoints in parallel...")
+        with mp.Pool(processes=n_workers) as pool:
+            results = pool.map(_render_checkpoint_worker, tasks)
+
+        # Sort results by epoch
+        results.sort(key=lambda x: x[0])
+
+        # Load video clips and create separators
+        fps = config.spec.get('render_fps', 30) if config.spec else 30
+        frame_width = None
+        frame_height = None
+        video_clips = []
+
+        for epoch, video_path in results:
             # Load the video clip
             clip = VideoFileClip(str(video_path))
 

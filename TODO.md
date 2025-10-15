@@ -8,8 +8,8 @@
 
 # NEXT
 
-- add support for masking invalid action combos, making sure that the highest logit wins (the loser is masked)
 - TODO: ensure clip_range_vf exists
+- add support for masking invalid action combos, making sure that the highest logit wins (the loser is masked)
 - BUG: run_play.py user input not working for Atari envs
 - TEST: CleanRL's envpool implementation
 - TEST: is last eval in uploaded zip file

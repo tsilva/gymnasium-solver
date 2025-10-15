@@ -1,17 +1,23 @@
 """Modal AI runner for single training runs.
 
 Usage:
-    modal run scripts/modal_train.py --config-id Retro-SuperMarioBros-Nes:ppo --max-env-steps 1000000
+    # Non-Retro environments
+    modal run scripts/modal_train.py --config-id CartPole-v1:ppo --max-env-steps 50000
+
+    # Retro environments (requires ROMs uploaded to Modal volume)
+    python scripts/upload_rom_to_modal.py SuperMarioBros-Nes
+    modal run scripts/modal_train.py --config-id Retro-SuperMarioBros-Nes:ppo
 """
 
 import os
-import sys
-from pathlib import Path
 
 import modal
 
 # Define Modal app
 app = modal.App("gymnasium-solver-train")
+
+# Volume for Retro ROMs
+roms_volume = modal.Volume.from_name("roms", create_if_missing=True)
 
 # Get repo URL from environment or use default
 REPO_URL = os.environ.get(
@@ -38,6 +44,7 @@ image = (
 @app.function(
     image=image,
     secrets=[modal.Secret.from_name("wandb-secret")],
+    volumes={"/roms": roms_volume},
     cpu=4.0,  # 4 CPUs
     memory=8192,  # 8GB RAM
     timeout=7200,  # 2 hours max
@@ -52,26 +59,31 @@ def train(
     """Run training on Modal.
 
     Args:
-        config_id: Environment:variant config (e.g., 'Retro-SuperMarioBros-Nes:ppo')
+        config_id: Environment:variant config (e.g., 'CartPole-v1:ppo')
         max_env_steps: Max environment steps (optional override)
         wandb_mode: W&B mode (online, offline, disabled)
         rom_game_id: Retro game ID for ROM import (e.g., 'SuperMarioBros-Nes')
     """
     import subprocess
+    from pathlib import Path
 
     # Package already installed in image from pyproject.toml
     os.chdir("/tmp/gymnasium-solver")
     print(f"Working directory: {os.getcwd()}")
 
-    # If this is a Retro environment, import the ROM first
+    # If this is a Retro environment, import the ROM from volume
     if rom_game_id:
         print(f"Importing Retro ROM for game: {rom_game_id}")
-        rom_path = f"/tmp/retro-roms/{rom_game_id}"
-        if not Path(rom_path).exists():
-            raise RuntimeError(f"ROM directory not found at {rom_path}")
+        rom_path = Path(f"/roms/retro-roms/{rom_game_id}")
+
+        if not rom_path.exists():
+            raise RuntimeError(
+                f"ROM directory not found in volume at {rom_path}. "
+                f"Upload ROM with: python scripts/upload_rom_to_modal.py {rom_game_id}"
+            )
 
         # Import the ROM using retro.import
-        import_cmd = ["python", "-m", "retro.import", rom_path]
+        import_cmd = ["python", "-m", "retro.import", str(rom_path)]
         print(f"Running: {' '.join(import_cmd)}")
         result = subprocess.run(import_cmd, capture_output=True, text=True)
 
@@ -133,7 +145,7 @@ def main(
     """Launch training on Modal.
 
     Args:
-        config_id: Environment:variant config (e.g., 'Retro-SuperMarioBros-Nes:ppo')
+        config_id: Environment:variant config (e.g., 'CartPole-v1:ppo')
         max_env_steps: Max environment steps (optional override)
         wandb_mode: W&B mode (online, offline, disabled)
     """
@@ -142,53 +154,14 @@ def main(
         print(f"Max env steps: {max_env_steps}")
     print(f"W&B mode: {wandb_mode}")
 
-    # Check if this is a Retro environment
-    rom_mount = None
+    # Check for Retro environments and extract game ID
     rom_game_id = None
-
     if _is_retro_env(config_id):
-        print("Detected Retro environment, checking for ROM...")
+        rom_game_id = _extract_game_id_from_config(config_id)
+        print(f"Detected Retro environment: {rom_game_id}")
+        print(f"ROM will be loaded from volume: /roms/retro-roms/{rom_game_id}")
 
-        # Import the ROM mapping function
-        sys.path.insert(0, str(Path(__file__).parent))
-        from list_retro_roms import get_retro_games_map
-
-        # Get the game ID
-        game_id = _extract_game_id_from_config(config_id)
-        print(f"Game ID: {game_id}")
-
-        # Get ROM information
-        games_map = get_retro_games_map()
-        if game_id not in games_map:
-            raise RuntimeError(
-                f"Game '{game_id}' not found in stable-retro. "
-                f"Available games: {sorted([g for g in games_map.keys() if games_map[g]['rom_exists']])}"
-            )
-
-        game_info = games_map[game_id]
-        if not game_info["rom_exists"]:
-            raise RuntimeError(
-                f"ROM for game '{game_id}' not imported. "
-                f"Import it with: python -m retro.import /path/to/rom/directory"
-            )
-
-        rom_path = game_info["path"]
-        print(f"ROM found at: {rom_path}")
-
-        # Create Modal mount for the ROM directory
-        rom_mount = modal.mount.Mount.from_local_dir(
-            local_path=rom_path,
-            remote_path=f"/tmp/retro-roms/{game_id}",
-        )
-        rom_game_id = game_id
-        print(f"ROM will be uploaded to Modal at: /tmp/retro-roms/{game_id}")
-
-    # Launch training with ROM mount if needed
-    if rom_mount:
-        train.with_options(mounts=[rom_mount]).remote(
-            config_id, max_env_steps, wandb_mode, rom_game_id
-        )
-    else:
-        train.remote(config_id, max_env_steps, wandb_mode, None)
+    # Launch training
+    train.remote(config_id, max_env_steps, wandb_mode, rom_game_id)
 
     print("\nTraining completed!")

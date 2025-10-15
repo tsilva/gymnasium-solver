@@ -3,6 +3,11 @@
 ## Remote training loop
 
 - BUG: modal is not reserving the number of cores defined in n_envs
+- TEST: run completes
+- TEST: logged to wandb correcvtl
+- TEST: can check locally
+- BUG: dont show progress bars (eg: epoch) when backend is not local
+- TEST: compare FPS against local
 
 # NEXT
 

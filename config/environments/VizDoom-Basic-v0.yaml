@@ -35,8 +35,12 @@ spec: &spec
     components:
       - {name: pickup_reward, sign: positive}
       - {name: step_penalty, sign: negative}
-    threshold_solved: 10
     range: [-10, 100]
+
+  returns:
+    episodic: cumulative over episode
+    range: [-200, 20]
+    threshold_solved: 80
 
 # =====================
 # env variants
@@ -46,12 +50,12 @@ spec: &spec
 _env: &env
   spec: *spec
   env_id: VizDoom-Basic-v0
-  # TODO: defaults are not being applied
   obs_type: rgb
   render_mode: 'rgb_array'
   grayscale_obs: true
   resize_obs: [84, 84]
   frame_stack: 4
+  model_id: cnn_nature
 
 # =====================
 # configs
@@ -61,8 +65,8 @@ ppo:
   <<: *env
   project_id: VizDoom-Basic-v0
   algo_id: ppo
-  model_id: cnn_nature
   description: "PPO on VizDoom Basic - standard configuration for basic health gathering task"
+  max_env_steps: 2e6
   n_envs: 32
   n_steps: 256
   batch_size: 0.5
@@ -71,9 +75,3 @@ ppo:
   eval_warmup_epochs: 20
   eval_freq_epochs: 10
   eval_episodes: 10
-
-# TODO: test
-#n_epochs: 10
-#n_steps: 128
-#batch_size: 0.25
-#ent_coef: 0.01

@@ -74,11 +74,10 @@ _env: &env
   frame_stack: 4
   # Retro library only allows one emulator instance per process
   vectorization_mode: async
+  # Frame skip as first-class config parameter
+  frame_skip: 4  # Repeat action 4 times per step
   env_wrappers:
-    # TODO: turn this into first level citizen
-    # Frame skip BEFORE reward shaper so reward shaping sees accumulated rewards
-    - id: FrameSkipWrapper
-      skip: 4 # [2, 5]  # Stochastic frame skip: randomly skip 2-5 frames each step
+    # Frame skip now applied automatically before custom wrappers
     - id: RetroSuperMarioBros_RewardShaper
       reward_scale: 1.0
       death_penalty: -10.0

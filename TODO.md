@@ -6,10 +6,7 @@
 
 # NEXT
 
-- FEAT: make frameskip first level citizen, call it frame_skip, apply wrapper when frame_skip 
-frame_skip=1 means no frames are skipped — the action is applied exactly once per env.step(). In Gym/Gymnasium, the parameter controls how many consecutive internal frames the same action is repeated for; an integer value N means “repeat the action N times.” So 1 ⇒ no repetition beyond the single step; 2 ⇒ repeat twice; 4 ⇒ repeat four times, etc. 
-
-
+- BUG: runs executed through modal dont seem to have same wandb run id
 - FEAT: sweep from run/checkpoint/
 - TODO: progress bar for rollout collection
 - add support for masking invalid action combos, making sure that the highest logit wins (the loser is masked)

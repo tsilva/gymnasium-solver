@@ -68,6 +68,7 @@ def build_env(
     grayscale_obs: bool = False,
     resize_obs: tuple = None,
     frame_stack: int = None,
+    frame_skip: int = None,
     max_episode_steps: int = None,
     project_id: str = None,
     normalize_obs: bool = False,
@@ -83,6 +84,7 @@ def build_env(
     # Assert valid function arguments
     assert seed is not None, "Seed is required"
     assert frame_stack is None or frame_stack > 1, f"frame stack must be at least 2: frame_stack={frame_stack}"
+    assert frame_skip is None or frame_skip >= 1, f"frame skip must be at least 1: frame_skip={frame_skip}"
     assert resize_obs is None or isinstance(resize_obs, (tuple, list)), f"resize obs must be a tuple or list: resize_obs={resize_obs}"
     assert resize_obs is None or len(resize_obs) == 2, f"resize obs must be a sequence of length 2: resize_obs={resize_obs}"
     assert resize_obs is None or all(x > 0 for x in resize_obs), f"resize obs must be positive: resize_obs={resize_obs}"
@@ -124,6 +126,7 @@ def build_env(
             grayscale_obs,
             resize_obs,
             frame_stack,
+            frame_skip,
             record_video,
             record_video_kwargs,
             project_id,
@@ -142,6 +145,7 @@ def build_env(
             grayscale_obs,
             resize_obs,
             frame_stack,
+            frame_skip,
             record_video,
             record_video_kwargs,
             max_episode_steps,
@@ -185,6 +189,7 @@ def _build_vec_env_alepy(
     grayscale_obs: bool,
     resize_obs: tuple,
     frame_stack: int,
+    frame_skip: int,
     record_video: bool,
     record_video_kwargs: dict,
     project_id: str,
@@ -195,7 +200,7 @@ def _build_vec_env_alepy(
     assert obs_type == "rgb", "ALE native vectorization requires RGB observations"
 
     # Build kwargs for AtariVectorEnv
-    # AtariVectorEnv supports grayscale, resizing, and frame stacking directly
+    # AtariVectorEnv supports grayscale, resizing, frame stacking, and frameskip directly
     atari_kwargs = {}
     if grayscale_obs is not None:
         atari_kwargs['grayscale'] = grayscale_obs
@@ -204,6 +209,8 @@ def _build_vec_env_alepy(
         atari_kwargs['img_width'] = resize_obs[1]
     if frame_stack is not None:
         atari_kwargs['stack_num'] = frame_stack
+    if frame_skip is not None:
+        atari_kwargs['frameskip'] = frame_skip
 
     # Pass through relevant env_kwargs
     # TODO: map more env_kwargs to AtariVectorEnv parameters
@@ -250,6 +257,7 @@ def _build_vec_env_gym(
     grayscale_obs: bool,
     resize_obs: tuple,
     frame_stack: int,
+    frame_skip: int,
     record_video: bool,
     record_video_kwargs: dict,
     max_episode_steps: int,
@@ -271,14 +279,24 @@ def _build_vec_env_gym(
             ResizeObservation,
             TimeLimit,
         )
+        from gym_wrappers.frame_skip import FrameSkipWrapper
 
         local_env_kwargs = dict(env_kwargs)
-        atari_frame_skip = None
+
+        # For ALE RGB environments, disable native frameskip when using FrameSkipWrapper
+        # to avoid double frameskipping
+        use_frameskip_wrapper = frame_skip is not None and frame_skip > 1
+        atari_native_frameskip = None
+
         if is_alepy_env and obs_type == "rgb":
-            configured_frameskip = local_env_kwargs.get("frameskip")
-            atari_frame_skip = configured_frameskip if configured_frameskip is not None else 4
-            base_frameskip = 1 if atari_frame_skip > 1 else atari_frame_skip
-            local_env_kwargs["frameskip"] = base_frameskip
+            if use_frameskip_wrapper:
+                # Use FrameSkipWrapper: set native frameskip to 1
+                atari_native_frameskip = 1
+            else:
+                # Use native frameskip (default 4 for ALE)
+                atari_native_frameskip = frame_skip if frame_skip is not None else 4
+
+            local_env_kwargs["frameskip"] = atari_native_frameskip
 
         if is_alepy_env: env = _build_env_alepy(env_id, obs_type, render_mode, **local_env_kwargs)
         elif is_vizdoom_env: env = _build_env_vizdoom(env_id, obs_type, render_mode, **local_env_kwargs)
@@ -294,12 +312,17 @@ def _build_vec_env_gym(
                 screen_size = (screen_size[1], screen_size[0])
             env = AtariPreprocessing(
                 env,
-                frame_skip=atari_frame_skip or 4,
+                frame_skip=atari_native_frameskip or 1,
                 screen_size=screen_size,
                 grayscale_obs=grayscale_flag,
                 grayscale_newaxis=False,
                 scale_obs=False,
             )
+
+            # Apply FrameSkipWrapper AFTER preprocessing but BEFORE custom wrappers
+            # so it operates on preprocessed single-frame observations
+            if use_frameskip_wrapper:
+                env = FrameSkipWrapper(env, skip=frame_skip)
 
             # Apply custom wrappers on the preprocessed single-frame observations before stacking
             for wrapper in env_wrappers: env = EnvWrapperRegistry.apply(env, wrapper)
@@ -309,6 +332,10 @@ def _build_vec_env_gym(
             # NOTE: resize before grayscaling for improving downscaling quality
             if resize_obs: env = ResizeObservation(env, shape=resize_obs)
             if grayscale_obs: env = GrayscaleObservation(env, keep_dim=False)
+
+            # Apply FrameSkipWrapper BEFORE custom wrappers so it operates on preprocessed observations
+            if use_frameskip_wrapper:
+                env = FrameSkipWrapper(env, skip=frame_skip)
 
             # Apply custom wrappers before stacking so they operate on per-frame observations
             for wrapper in env_wrappers: env = EnvWrapperRegistry.apply(env, wrapper)

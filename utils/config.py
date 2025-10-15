@@ -132,9 +132,11 @@ class Config:
     # How many N last observations to stack (N=1 means no stacking, only current observation)
     frame_stack: int = None
 
-    # Number of frames to skip between actions (ALE environments)
+    # Number of times to repeat each action (frame skip)
+    # frame_skip=1 means no frames are skipped (action applied once per step)
+    # frame_skip=N means repeat the action N times
     # None means unset; will be filled with Atari defaults when vectorization_mode='atari'
-    frameskip: Optional[int] = None
+    frame_skip: Optional[int] = None
 
     # Whether to normalize observations using running mean and variance
     normalize_obs: bool = False
@@ -482,7 +484,7 @@ class Config:
         """Apply Atari defaults when vectorization_mode='atari' and params are not set.
 
         ALE native vectorization applies these transformations under the hood:
-        - frameskip: 4
+        - frame_skip: 4
         - grayscale: True
         - img_height: 84
         - img_width: 84
@@ -507,8 +509,8 @@ class Config:
             self.resize_obs = (84, 84)
         if self.frame_stack is None:
             self.frame_stack = 4
-        if self.frameskip is None:
-            self.frameskip = 4
+        if self.frame_skip is None:
+            self.frame_skip = 4
 
     def _resolve_numeric_strings(self) -> None:
         for key, value in list(asdict(self).items()):
@@ -599,11 +601,6 @@ class Config:
             self._default_schedule_attr(f"{param}_schedule_end", 1.0)
 
     def get_env_args(self) -> Dict[str, Any]:
-        # Copy env_kwargs and add frameskip if set
-        env_kwargs = dict(self.env_kwargs)
-        if self.frameskip is not None:
-            env_kwargs['frameskip'] = self.frameskip
-
         return dict(
             env_id=self.env_id,
             project_id=self.project_id,
@@ -616,12 +613,13 @@ class Config:
             resize_obs=self.resize_obs,
             normalize_obs=self.normalize_obs,
             frame_stack=self.frame_stack,
+            frame_skip=self.frame_skip,
             obs_type=self.obs_type,
             render_mode=None,
             vectorization_mode=self.vectorization_mode,
             record_video=False,
             record_video_kwargs={},
-            env_kwargs=env_kwargs
+            env_kwargs=self.env_kwargs
         )
 
     def rollout_collector_hyperparams(self) -> Dict[str, Any]:
@@ -659,7 +657,7 @@ class Config:
         self._validate_positive("n_steps")
         self._validate_positive("batch_size")
         self._validate_positive("max_env_steps")
-        self._validate_positive("frameskip")
+        self._validate_positive("frame_skip")
         self._validate_range("gamma", 0, 1)
         self._validate_positive("eval_freq_epochs")
         self._validate_non_negative("eval_warmup_epochs", allow_none=False)

@@ -173,15 +173,15 @@ def _render_checkpoint_worker(args: tuple) -> tuple[int, Path]:
     """Worker function for parallel checkpoint rendering.
 
     Args:
-        args: Tuple of (epoch, checkpoint_path, config, seed, frames_path)
+        args: Tuple of (epoch, checkpoint_path, config, seed, frames_path, deterministic)
 
     Returns:
         Tuple of (epoch, frames_path) for sorting and concatenation
     """
-    epoch, checkpoint_path, config, seed, frames_path = args
+    epoch, checkpoint_path, config, seed, frames_path, deterministic = args
 
     # Render the episode and save frames as numpy array
-    render_episode_for_checkpoint(checkpoint_path, config, seed, frames_path)
+    render_episode_for_checkpoint(checkpoint_path, config, seed, frames_path, deterministic)
 
     return (epoch, frames_path)
 
@@ -190,7 +190,8 @@ def render_episode_for_checkpoint(
     checkpoint_path: Path,
     config: Config,
     seed: int,
-    frames_path: Path
+    frames_path: Path,
+    deterministic: bool = False
 ) -> None:
     """Render a single episode using the checkpoint policy and save frames as numpy array."""
     epoch = parse_epoch_from_checkpoint(checkpoint_path.parent.name)
@@ -241,7 +242,7 @@ def render_episode_for_checkpoint(
 
     while episodes_finished < 1:
         # Collect one step
-        _ = collector.collect(deterministic=True)
+        _ = collector.collect(deterministic=deterministic)
 
         # Capture frame
         frame = first_env.render()
@@ -295,6 +296,12 @@ def main():
         choices=['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium'],
         default='ultrafast',
         help="ffmpeg encoding preset (default: ultrafast). Use 'medium' for better compression at cost of speed."
+    )
+    parser.add_argument(
+        "--deterministic",
+        action="store_true",
+        default=False,
+        help="Use deterministic actions (argmax) instead of stochastic sampling. Default: stochastic (False)"
     )
     args = parser.parse_args()
 
@@ -352,7 +359,7 @@ def main():
 
             # Prepare task - save frames as .npz instead of .mp4
             frames_path = temp_dir / f"epoch_{epoch:02d}.npz"
-            tasks.append((epoch, checkpoint_path, config, seed, frames_path))
+            tasks.append((epoch, checkpoint_path, config, seed, frames_path, args.deterministic))
 
         # Render checkpoints in parallel
         print(f"Rendering {len(tasks)} checkpoints in parallel...")

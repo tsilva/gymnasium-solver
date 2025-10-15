@@ -9,6 +9,9 @@
 
 # NEXT
 
+- make another run with higher LR for SM
+- python scripts/render_checkpoint_progression.py nh6utowp (make cooler video)
+- BUG: remote runs are still creating local run folder (empty)
 - BUG: cant train VizDoom-Basic-v0 when frame_stack is 1
 - FEAT: add sweep.py with --backend modal support
 - FEAT: add support for adding shared configs between envs (eg: atari defaults, vizdoom defaults)
@@ -28,7 +31,11 @@
 
 ## SuperMarioBros-Nes
 
-- FEAT: multidiscrete support
+- FEAT: figure out how to consider training finished when level changes
+- FEAT: train next levels using starting point of previous levels, create master checkpoint for each level
+- FEAT: distil policy that plays all levels
+- FEAT: try training directly on a different level per env?
+- FEAT: allow overriding level through command line, use it to spawn all remote workers at once
 - https://github.com/nemanja-m/super-mario-agent - implement architecture; implement stochastic frame skip wrapper
 - don't use sticky actions wrapper during eval
 - TODO: confirm that sticky actions wrapper guarantees that policy performs those actions after training

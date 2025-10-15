@@ -6,17 +6,17 @@
 
 # NEXT
 
-- FEAT: sweep from run/checkpoint/
 - FEAT: make frameskip first level citizen, call it frame_skip, apply wrapper when frame_skip 
-- BUG: remote wandb run ids are being named with human sounding names when I want the actual run id to tbe their name (same as the run dir name)
+frame_skip=1 means no frames are skipped — the action is applied exactly once per env.step(). In Gym/Gymnasium, the parameter controls how many consecutive internal frames the same action is repeated for; an integer value N means “repeat the action N times.” So 1 ⇒ no repetition beyond the single step; 2 ⇒ repeat twice; 4 ⇒ repeat four times, etc. 
+
+
+- FEAT: sweep from run/checkpoint/
 - TODO: progress bar for rollout collection
-- TODO: add support for standard model configs by id
 - add support for masking invalid action combos, making sure that the highest logit wins (the loser is masked)
 - BUG: run_play.py user input not working for Atari envs
 - TEST: CleanRL's envpool implementation
 - FEAT: add support for adding shared configs between envs (eg: atari defaults, vizdoom defaults)
 - FEAT: single plot with fraction of scaled losses
-- TEST: ensure all checkpoints get stored in wandb (check storage limits)
 - FEAT: run_inspect.py add support for monitoring rollouts with different hyperparams
 - FEAT: train from previous run, use that to do multiple runs until convergence (new run loads param); should we restore optimizer? confirm new run starts with same performance, check if it evolves better with same or dfiferent optimizer
 - CHECK: should we reset optimizer when we use another learning rate

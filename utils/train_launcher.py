@@ -83,10 +83,16 @@ def _maybe_merge_wandb_config(config, *, wandb_sweep_flag: bool):
     is_wandb_sweep = bool(wandb_sweep_flag) or bool(wandb_sweep_id)
     if not is_wandb_sweep: return config
 
+    # Generate a unique run ID and use it as both id and name
+    # This ensures the W&B run name matches the ID (which becomes the local run dir name)
+    from utils.formatting import sanitize_name
+    project_name = config.project_id if config.project_id else sanitize_name(config.env_id)
+    run_id = wandb.util.generate_id()
+
     # Initialize wandb with the original config (add algo_id since it's a property)
     config_dict = asdict(config)
     config_dict["algo_id"] = config.algo_id
-    wandb.init(config=config_dict)
+    wandb.init(project=project_name, id=run_id, name=run_id, config=config_dict)
 
     # Merge sweep overrides back into the original config dict
     for key, value in dict(wandb.config).items():
@@ -155,10 +161,12 @@ def _ensure_wandb_run_initialized(config) -> None:
     if wandb.run is not None: return
 
     # Otherwise create a fresh run using project and full config
-    from utils.formatting import sanitize_name
+    # Generate a unique run ID and use it as both id and name
+    # This ensures the W&B run name matches the ID (which becomes the local run dir name)
     project_name = config.project_id
     assert project_name, "project_id is required"
-    wandb.init(project=project_name, config=asdict(config))
+    run_id = wandb.util.generate_id()
+    wandb.init(project=project_name, id=run_id, name=run_id, config=asdict(config))
 
 def _extract_elapsed_seconds(agent) -> Optional[float]:
     """Return elapsed seconds from agent without broad exception handling.
@@ -246,12 +254,14 @@ def _launch_training_resume(args) -> None:
     # Initialize W&B if enabled
     if getattr(config, 'enable_wandb', True):
         # Resume existing W&B run
+        # Use run_id as both id and name (name should match existing run, this is just explicit)
         from utils.formatting import sanitize_name
         project_name = config.project_id if config.project_id else sanitize_name(config.env_id)
         from dataclasses import asdict
         wandb.init(
             project=project_name,
             id=run_id,
+            name=run_id,
             resume="must",
             config=asdict(config)
         )

@@ -51,10 +51,6 @@ _env: &env
     # TODO: defaults are not being applied
   obs_type: rgb
   render_mode: 'rgb_array'
-  policy_kwargs:
-    channels: [32, 64, 64]
-    kernel_sizes: [8, 4, 3]
-    strides: [4, 2, 1]
   grayscale_obs: true
   resize_obs: [84, 84]
   frame_stack: 4
@@ -67,6 +63,7 @@ ppo:
   <<: *env
   project_id: VizDoom-DeadlyCorridor-v0
   algo_id: ppo
+  model_id: cnn_nature
   description: "PPO on VizDoom DeadlyCorridor - standard configuration for corridor navigation task"
   max_env_steps: 2e6
 

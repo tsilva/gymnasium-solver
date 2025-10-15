@@ -49,6 +49,7 @@ ppo:
   <<: *env
   project_id: Taxi-v3
   algo_id: ppo
+  model_id: mlp_tiny
   description: "PPO on Taxi - standard configuration for taxi navigation task"
   max_env_steps: 10e6
   ent_coef: 0.01
@@ -57,4 +58,3 @@ ppo:
   n_steps: 1024
   n_epochs: 20
   policy_lr: 1e-2
-  hidden_dims: [4, 16]

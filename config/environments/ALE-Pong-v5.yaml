@@ -140,6 +140,7 @@ objects_ppo: &objects_ppo
   <<: *env_objects
   project_id: ALE-Pong-v5_objects
   algo_id: ppo
+  model_id: mlp_small
   description: "PPO with object-based observations using extracted game objects as features"
   early_stop_on_eval_threshold: 19.0
   max_env_steps: 3_500_000  # Extended for convergence
@@ -170,7 +171,6 @@ objects_ppo: &objects_ppo
 
   gae_lambda: 0.96  # Higher for better long-term credit assignment
   gamma: 0.995      # Increased for better episode-level optimization
-  hidden_dims: [128, 128]  # Larger network capacity
   eval_async: true
   eval_warmup_epochs: 50
   eval_freq_epochs: 5
@@ -186,6 +186,7 @@ objects_deterministic_ppo:
   max_env_steps: 1_500_000
 
   algo_id: ppo
+  model_id: mlp_tiny
   early_stop_on_eval_threshold: 19.0
 
   ent_coef: 0.0
@@ -195,7 +196,6 @@ objects_deterministic_ppo:
   n_envs: 32
   n_steps: 1024
   batch_size: 2048
-  hidden_dims: [64, 64]
   eval_async: true
   eval_warmup_epochs: 20
   eval_freq_epochs: 5
@@ -209,6 +209,7 @@ rgb_ppo: &rgb_ppo
   <<: *env_rgb
   project_id: ALE-Pong-v5_rgb
   algo_id: ppo
+  model_id: cnn_nature
   description: "PPO with 4-frame grayscale stacks (84x84) via ALE atari vectorization"
   accelerator: "gpu"
   n_envs: 32

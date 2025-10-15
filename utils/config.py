@@ -155,14 +155,14 @@ class Config:
     # Whether to use an MLP-based policy or actor-critic
     policy: "Config.PolicyType" = PolicyType.mlp  # type: ignore[assignment]
 
-    # The dimensions of the hidden layers in the MLP
-    hidden_dims: Union[int, Tuple[int, ...]] = None
+    # Model architecture preset (e.g., "mlp_small", "cnn_nature")
+    # Specifies policy type, hidden dims, activation, and policy_kwargs
+    model_id: Optional[str] = None
 
-    # The activation function to use in the MLP
-    activation: str = "relu"
-
-    # Additional kwargs to pass to the policy factory
-    policy_kwargs: Optional[Dict[str, Any]] = field(default_factory=lambda: {})
+    # Internal fields populated from model_id during __post_init__
+    _hidden_dims: Optional[Union[int, Tuple[int, ...]]] = field(default=None, init=False, repr=False)
+    _activation: Optional[str] = field(default=None, init=False, repr=False)
+    _policy_kwargs: Optional[Dict[str, Any]] = field(default=None, init=False, repr=False)
 
     # The learning rate for the policy (algo defaults in subclasses)
     # Can be a float or a schedule dict: {start: float, end: float, from: float, to: float, schedule: str}
@@ -321,6 +321,24 @@ class Config:
             return None
         return self.max_env_steps // self.n_envs
 
+    @property
+    def hidden_dims(self) -> Tuple[int, ...]:
+        """Resolved hidden dimensions from model_id."""
+        assert self._hidden_dims is not None, "hidden_dims not resolved. Ensure __post_init__ ran."
+        return self._hidden_dims
+
+    @property
+    def activation(self) -> str:
+        """Resolved activation function from model_id."""
+        assert self._activation is not None, "activation not resolved. Ensure __post_init__ ran."
+        return self._activation
+
+    @property
+    def policy_kwargs(self) -> Dict[str, Any]:
+        """Resolved policy kwargs from model_id."""
+        assert self._policy_kwargs is not None, "policy_kwargs not resolved. Ensure __post_init__ ran."
+        return self._policy_kwargs
+
     @classmethod
     def build_from_dict(cls, config_dict: Dict[str, Any]) -> 'Config':
         _config_dict = config_dict.copy()
@@ -434,20 +452,19 @@ class Config:
         self._resolve_policy()
         self.validate()
         
-    # TODO: cleanup
     def _resolve_policy(self) -> None:
-        is_mlp_policy = self.policy in [self.PolicyType.mlp, self.PolicyType.mlp_actorcritic]   
-        if is_mlp_policy and self.hidden_dims is None:
-            self.hidden_dims = [256, 256]
+        """Resolve model architecture from model_id."""
+        assert self.model_id is not None, \
+            "model_id is required. Available models: mlp_tiny, mlp_small, mlp_medium, mlp_large, cnn_nature, cnn_impala, cnn_large"
 
-        is_cnn_policy = self.policy in [self.PolicyType.cnn, self.PolicyType.cnn_actorcritic]
-        if is_cnn_policy and self.policy_kwargs is None:
-            # Only CNN-specific params; hidden_dims handled by CNNActorCritic default (512,)
-            self.policy_kwargs = {
-                "channels": [32, 64, 64],
-                "kernel_sizes": [8, 4, 3],
-                "strides": [4, 2, 1],
-            }
+        from utils.model_registry import resolve_model_spec
+        spec = resolve_model_spec(self.model_id)
+
+        # Populate internal fields from model spec
+        self.policy = spec.policy
+        self._hidden_dims = spec.hidden_dims
+        self._activation = spec.activation
+        self._policy_kwargs = dict(spec.policy_kwargs)
 
     def _resolve_defaults(self) -> None:
         for f in self.__dataclass_fields__.values():
@@ -625,6 +642,10 @@ class Config:
     def save_to_json(self, path: str) -> None:
         """Save configuration to a JSON file."""
         data = asdict(self)
+        # Remove internal fields that should not be serialized
+        data.pop('_hidden_dims', None)
+        data.pop('_activation', None)
+        data.pop('_policy_kwargs', None)
         data["algo_id"] = self.algo_id # TODO: do this in serializer method instead
         write_json(path, data, indent=2, ensure_ascii=False, default=str)
     

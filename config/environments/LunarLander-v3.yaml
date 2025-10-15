@@ -47,10 +47,10 @@ ppo:
   <<: *env
   project_id: LunarLander-v3
   algo_id: ppo
+  model_id: mlp_small
   description: "PPO on LunarLander - standard configuration for lunar landing task"
   max_env_steps: 5000004
   eval_episodes: 10
-  hidden_dims: [128, 128]
   n_steps: 512
   gae_lambda: 0.98
   gamma: 0.999

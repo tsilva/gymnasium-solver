@@ -97,12 +97,12 @@ ppo:
   <<: *env
   project_id: Retro-SuperMarioBros-Nes
   algo_id: ppo
+  model_id: mlp_small
   description: "PPO on SuperMarioBros - standard configuration for Mario platformer game"
   #max_env_steps: 3e6
   n_envs: 16 # TODO: faster training with more envs?
   n_steps: 1024
   batch_size: 0.25
-  hidden_dims: [512] # TODO: make sure default has this structure
   policy_lr: 5e-4
   ent_coef: 0.03 # TODO: how is entropy behaving?
   #max_episode_steps: 10_000

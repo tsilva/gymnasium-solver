@@ -58,11 +58,11 @@ ppo: &ppo
   <<: *env
   project_id: FrozenLake-v1
   algo_id: ppo
+  model_id: mlp_tiny
   description: "PPO on FrozenLake - standard configuration for grid navigation task"
   eval_episodes: 10
   eval_freq_epochs: 10
   n_steps: 512
-  hidden_dims: [64]
   policy_lr: 9e-3
 
 ppo_deterministic:

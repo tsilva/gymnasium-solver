@@ -96,6 +96,7 @@ objects_ppo: &objects_ppo
   <<: *env_objects
   project_id: ALE-Breakout-v5_objects
   algo_id: ppo
+  model_id: mlp_small
   description: "PPO using OCAtari object features for Breakout"
   max_env_steps: 1.2e6
   eval_warmup_epochs: 125

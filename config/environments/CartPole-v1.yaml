@@ -56,14 +56,13 @@ _env_rewardshaped: &env_rewardshaped
 # configs
 # =====================
 
-# TODO: reduce hidden dims
 # TODO: bug: not all plots are keyed under same axis
 ppo: &ppo
   <<: *env
   project_id: CartPole-v1
   description: "Standard PPO on state observations - baseline configuration for CartPole"
   algo_id: ppo
-
+  model_id: mlp_medium
 
   eval_warmup_epochs: 50
   eval_freq_epochs: 10

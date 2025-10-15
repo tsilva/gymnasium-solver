@@ -68,10 +68,10 @@ ppo: &ppo
   <<: *env
   project_id: MountainCar-v0
   algo_id: ppo
+  model_id: mlp_medium
   description: "Standard PPO on MountainCar - baseline configuration for mountain car task"
   eval_freq_epochs: 1
   eval_episodes: 10
-  #hidden_dims: [128, 128]
   n_steps: 1024
   gamma: 0.999
   policy_lr: 1e-4

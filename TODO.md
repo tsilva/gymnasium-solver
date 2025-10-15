@@ -9,7 +9,6 @@
 
 - TODO: try running remote run locally
 - TODO: add MCP for run, add support for plotting, interact with agent
-- TODO: ensure clip_range_vf exists
 - BUG: wandb runs dont have the run id
 - TODO: add support for standard model configs by id
 - BUG: modal is not reserving the number of cores defined in n_envs

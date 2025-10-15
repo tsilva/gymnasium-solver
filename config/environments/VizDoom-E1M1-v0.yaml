@@ -56,10 +56,6 @@ _env: &env
     - { id: VizDoom_RewardShaper, noop_penalty: 0.01, move_reward: 0.004, turn_reward: 0.004 }
   obs_type: rgb
   render_mode: 'rgb_array'
-  policy_kwargs:
-    channels: [32, 64, 64]
-    kernel_sizes: [8, 4, 3]
-    strides: [4, 2, 1]
   grayscale_obs: true
   resize_obs: [84, 84]
   frame_stack: 4
@@ -74,6 +70,7 @@ ppo:
   project_id: VizDoom-E1M1-v0
 
   algo_id: ppo
+  model_id: cnn_nature
   description: "PPO on Doom E1M1 - agent learns to complete the classic Hangar level"
   max_env_steps: 1e7
   n_envs: 32

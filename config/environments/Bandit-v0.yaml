@@ -48,6 +48,7 @@ ppo:
   <<: *env
   project_id: Bandit-v0
   algo_id: ppo
+  model_id: mlp_small
   description: "PPO on Multi-Armed Bandit - standard configuration for bandit problem"
   max_env_steps: 20_000
   gamma: 1.0

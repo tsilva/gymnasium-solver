@@ -53,6 +53,7 @@ ppo:
   <<: *env
   project_id: Acrobot-v1
   algo_id: ppo
+  model_id: mlp_small
   description: "Standard PPO on Acrobot - baseline configuration for acrobot swing-up task"
   max_env_steps: 1e6
   n_epochs: 4

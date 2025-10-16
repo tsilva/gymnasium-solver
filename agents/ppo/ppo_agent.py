@@ -118,7 +118,7 @@ class PPOAgent(BaseAgent):
             clip_fraction = ((ratio < 1.0 - self.clip_range) | (ratio > 1.0 + self.clip_range)).float().mean()
 
             # Measure how many value predictions were clipped
-            vf_clip_fraction = ((values_delta < -self.clip_range_vf) | (values_delta > self.clip_range_vf)).float().mean()
+            clip_fraction_vf = ((values_delta < -self.clip_range_vf) | (values_delta > self.clip_range_vf)).float().mean()
 
             kl_div, approx_kl = compute_kl_diagnostics(old_logprobs, new_logprobs)
             # TODO: should I make metric explain that explained_var is for value head?
@@ -133,7 +133,7 @@ class PPOAgent(BaseAgent):
             'opt/loss/value_scaled': scaled_value_loss.detach(),
             'opt/policy/entropy': entropy.detach(),
             'opt/ppo/clip_fraction': clip_fraction.detach(),
-            'opt/ppo/vf_clip_fraction': vf_clip_fraction.detach(),
+            'opt/ppo/clip_fraction_vf': clip_fraction_vf.detach(),
             'opt/ppo/kl': kl_div.detach(),
             'opt/ppo/approx_kl': approx_kl.detach(),
             'opt/value/explained_var': explained_var.detach(),

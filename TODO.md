@@ -9,7 +9,6 @@
 
 # NEXT
 
-- TODO: call vf_clip_fraction clip_fraction_vf instead
 - TODO: add alert for clip_fraction_vf
 - BUG: remote runs get killed if I close terminal?
 - dump functional run
@@ -44,11 +43,7 @@
 
 ## SuperMarioBros-Nes
 
-- FIXED: reward function was giving massive negative rewards at level end because:
-  * Timer counting down during fireworks animation → huge time penalty
-  * X position resetting during flag sequence → huge position penalty
-  * terminated=False during animation → no completion bonus applied
-  * Solution: removed timer-based penalties (use constant step penalty instead), detect x position resets (threshold -100) and ignore them
+- TUNE: test giving huge reward when level is completed successfully
 - RUNE: train on level 2 after mastering level 1, check if it forgets level 1
 - TUNE: can I train faster with more n_envs?
 - TUNE: ensure level 1-1 can be completed with a ~100% win rate

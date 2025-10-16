@@ -5,11 +5,11 @@ from gym_wrappers.reward_shaper_base import RewardShaperBase
 class RetroSuperMarioBros_RewardShaper(RewardShaperBase):
     """
     Dense reward shaping for Super Mario Bros based on:
-    R = V + T + D + S
+    R = V + P + D + S
 
     Where:
-    - V: change in x position (rightward progress)
-    - T: change in game clock (time penalty)
+    - V: change in x position (rightward progress, ignoring large resets)
+    - P: step penalty (small constant to discourage standing still)
     - D: death penalty or level completion bonus
     - S: change in in-game score
 
@@ -22,9 +22,10 @@ class RetroSuperMarioBros_RewardShaper(RewardShaperBase):
         reward_scale: float = 0.01,
         death_penalty: float = -50.0,
         level_complete_bonus: float = 50.0,
-        time_penalty_scale: float = 0.1,
+        step_penalty: float = -0.1,
         x_position_scale: float = 1.0,
         score_scale: float = 0.01,
+        x_reset_threshold: float = -100.0,
     ):
         """
         Args:
@@ -32,17 +33,19 @@ class RetroSuperMarioBros_RewardShaper(RewardShaperBase):
             reward_scale: Global scaling factor for total reward (applied at end)
             death_penalty: Penalty when agent dies
             level_complete_bonus: Bonus when agent completes level
-            time_penalty_scale: Scale for time change component
+            step_penalty: Small penalty per step to discourage standing still
             x_position_scale: Scale for x position change component
             score_scale: Scale for score change component
+            x_reset_threshold: Ignore x deltas more negative than this (level transitions)
         """
         super().__init__(env)
         self.reward_scale = reward_scale
         self.death_penalty = death_penalty
         self.level_complete_bonus = level_complete_bonus
-        self.time_penalty_scale = time_penalty_scale
+        self.step_penalty = step_penalty
         self.x_position_scale = x_position_scale
         self.score_scale = score_scale
+        self.x_reset_threshold = x_reset_threshold
 
         # Track previous values
         self.prev_x = None
@@ -78,20 +81,22 @@ class RetroSuperMarioBros_RewardShaper(RewardShaperBase):
 
         # Initialize components
         v_reward = 0.0  # position change
-        t_reward = 0.0  # time change
+        p_reward = self.step_penalty  # step penalty (constant)
         d_reward = 0.0  # death/completion
         s_reward = 0.0  # score change
 
         # V: Change in x position (encourage moving right)
+        # Ignore large negative deltas (level transitions, flag sequence, etc.)
         if self.prev_x is not None:
             x_delta = current_x - self.prev_x
-            v_reward = self.x_position_scale * x_delta
 
-        # T: Change in game clock (typically counts down, so negative change)
-        # Time decreasing is expected, so we apply time_penalty_scale to the delta
-        if self.prev_time is not None:
-            time_delta = current_time - self.prev_time
-            t_reward = self.time_penalty_scale * time_delta
+            # If x position reset or moved backward unrealistically, ignore this step
+            if x_delta < self.x_reset_threshold:
+                # Large reset detected - reset tracking but don't penalize
+                v_reward = 0.0
+            else:
+                # Normal movement - reward rightward progress
+                v_reward = self.x_position_scale * x_delta
 
         # S: Change in score
         if self.prev_score is not None:
@@ -109,7 +114,7 @@ class RetroSuperMarioBros_RewardShaper(RewardShaperBase):
                 d_reward = self.level_complete_bonus
 
         # Combine all components
-        total_shaping = v_reward + t_reward + d_reward + s_reward
+        total_shaping = v_reward + p_reward + d_reward + s_reward
 
         # Scale total reward
         scaled_shaping = self.reward_scale * total_shaping
@@ -119,7 +124,7 @@ class RetroSuperMarioBros_RewardShaper(RewardShaperBase):
             info,
             scaled_shaping,
             v_reward=v_reward,
-            t_reward=t_reward,
+            p_reward=p_reward,
             d_reward=d_reward,
             s_reward=s_reward,
             total_unscaled=total_shaping,

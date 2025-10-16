@@ -533,7 +533,7 @@ async def get_run_info(run_id: str) -> Dict[str, Any]:
     from dataclasses import asdict
     return {
         "run_id": run.run_id,
-        "run_dir": run.run_dir,
+        "run_dir": str(run.run_dir),
         "config": asdict(config),
         "checkpoints": checkpoints,
         "metrics_summary": metrics_summary
@@ -560,18 +560,27 @@ async def get_run_metrics(
     if limit:
         rows = rows[-limit:]
 
-    # Filter columns if specified
-    if metric_names:
-        filtered_rows = []
-        for row in rows:
-            filtered_row = {k: v for k, v in row.items() if k in metric_names or k == "epoch"}
-            filtered_rows.append(filtered_row)
-        rows = filtered_rows
+    # Default to key metrics if not specified to avoid huge responses
+    if not metric_names:
+        metric_names = [
+            "epoch",
+            "train/roll/ep_rew/mean",
+            "train/roll/ep_rew/best",
+            "val/roll/ep_rew/mean",
+            "val/roll/ep_rew/best",
+            "total_timesteps"
+        ]
+
+    # Filter columns
+    filtered_rows = []
+    for row in rows:
+        filtered_row = {k: v for k, v in row.items() if k in metric_names}
+        filtered_rows.append(filtered_row)
 
     return {
         "run_id": run_id,
-        "rows": len(rows),
-        "metrics": rows
+        "rows": len(filtered_rows),
+        "metrics": filtered_rows
     }
 
 

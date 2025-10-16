@@ -73,9 +73,10 @@ _env: &env
       reward_scale: 1.0
       death_penalty: -10.0
       level_complete_bonus: 10.0
-      time_penalty_scale: 0.02
+      step_penalty: -0.1
       x_position_scale: 0.2
       score_scale: 0.002
+      x_reset_threshold: -100.0
   #  - id: StickyActionsWrapper
  #     sticky_buttons: {0: 0.95, 7: 0.10}  # dpad_right pressed 75% of the time
 

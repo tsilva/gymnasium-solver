@@ -557,6 +557,8 @@ def run_episode(
                 "cum_reward": total_reward,
                 "value": float(val) if val is not None else None,
                 "done": done,
+                "terminated": terminated,
+                "truncated": truncated,
                 "probs": probs,
                 "matches_greedy": matches_greedy,
             })
@@ -748,6 +750,8 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None):
         # Table headers are reused for CSV export and for the current-step vertical view
         table_headers = [
             "done",
+            "terminated",
+            "truncated",
             "step",
             "action",
             "action_label",
@@ -765,6 +769,8 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None):
                 headers=table_headers,
                 datatype=[
                     "bool",   # done
+                    "bool",   # terminated
+                    "bool",   # truncated
                     "number", # step
                     "number", # action
                     "str",    # action_label
@@ -777,7 +783,7 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None):
                     "number", # gae_adv
                 ],
                 row_count=(0, "dynamic"),
-                col_count=(11, "fixed"),
+                col_count=(13, "fixed"),
                 label="Per-step details",
                 interactive=False,
             )
@@ -826,6 +832,8 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None):
                 return []
             return [
                 bool(step_dict.get("done")),
+                bool(step_dict.get("terminated")),
+                bool(step_dict.get("truncated")),
                 int(step_dict.get("step", 0)),
                 step_dict.get("action"),
                 step_dict.get("action_label"),
@@ -860,6 +868,8 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None):
         def _table_row_from_step(s: Dict[str, Any]) -> List[Any]:
             return [
                 s["done"],
+                s.get("terminated", False),
+                s.get("truncated", False),
                 s["step"],
                 s["action"],
                 s.get("action_label"),

@@ -44,11 +44,13 @@
 
 ## SuperMarioBros-Nes
 
-- BUG: rewad function is not correct because end of level subtracts time to zero during fireworks, making ending level a negative reward
+- FIXED: reward function was giving massive negative rewards at level end because:
+  * Timer counting down during fireworks animation → huge time penalty
+  * X position resetting during flag sequence → huge position penalty
+  * terminated=False during animation → no completion bonus applied
+  * Solution: removed timer-based penalties (use constant step penalty instead), detect x position resets (threshold -100) and ignore them
 - RUNE: train on level 2 after mastering level 1, check if it forgets level 1
-- BUG: weird bootstrapping issue is causing mario to fear end of level
 - TUNE: can I train faster with more n_envs?
-- Penalize actions instead of time (signal is more constant)
 - TUNE: ensure level 1-1 can be completed with a ~100% win rate
 - FEAT: figure out how to consider training finished when level changes
 - FEAT: train next levels using starting point of previous levels, create master checkpoint for each level

@@ -14,14 +14,9 @@
 - dump functional run
 - mark solve with metric
 - TODO: measure epochs/s
-- TODO: Huber Loss for VF; value normalization/PopArt
 - TODO: consider terminating episodes (mark as done) when levels end
-- BUG: does modal crash?
-- TUNE: can I minimize jumps?
 - TODO: when an environment is solved a "solved" metric must be logged and set to 1 (this way I will be able to filter in wandb for runs that solved env)
 - TODO: how to fix
-- mario: make policy more robust to timing differences by finetuning with variable frameskip
-- make another run with higher LR for SM
 - python scripts/render_checkpoint_progression.py nh6utowp (make cooler video)
 - BUG: remote runs are still creating local run folder (empty)
 - BUG: cant train VizDoom-Basic-v0 when frame_stack is 1
@@ -43,6 +38,21 @@
 
 ## SuperMarioBros-Nes
 
+- BUG: fix reward function until life lost reward is spotted N times (including termination life loss)
+- FEAT: show real time reward plot to be easier to understand if rewards are being applied (plot in run_play?)
+- TEST: quantize image (before or after downscaling)
+- TEST: crop around mario
+- FEAT: resize to preserve aspect ratio (to avoid distortions)
+- FEAT: crop mario frames
+- If VF stabilized try increasing LR
+- mario: make policy more robust to timing differences by finetuning with variable frameskip
+- TODO: Huber Loss for VF; value normalization/PopArt
+- TODO: add support for logging info vars in run_inspect.py
+- UX: color terminated state
+- UX: make table lighter
+- TEST: how mario behaves if reward is just curiosity
+- LEARN: reward standardization - Use automatic weighting (e.g., Pop-Art normalization or reward standardization) to balance magnitudes
+- TEST: try lowering vf_coef to stabilize VF clipping
 - TUNE: test giving huge reward when level is completed successfully
 - RUNE: train on level 2 after mastering level 1, check if it forgets level 1
 - TUNE: can I train faster with more n_envs?

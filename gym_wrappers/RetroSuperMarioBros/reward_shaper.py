@@ -20,11 +20,11 @@ class RetroSuperMarioBros_RewardShaper(RewardShaperBase):
         self,
         env,
         reward_scale: float = 0.01,
-        death_penalty: float = -50.0,
+        death_penalty: float = -150.0,
         level_complete_bonus: float = 50.0,
         step_penalty: float = -0.1,
         x_position_scale: float = 1.0,
-        score_scale: float = 0.01,
+        score_scale: float = 0.1,
         x_reset_threshold: float = -100.0,
     ):
         """
@@ -52,6 +52,7 @@ class RetroSuperMarioBros_RewardShaper(RewardShaperBase):
         self.prev_time = None
         self.prev_score = None
         self.prev_lives = None
+        self.death_this_episode = False
 
     def reset(self, **kwargs):
         obs, info = self.env.reset(**kwargs)
@@ -61,7 +62,8 @@ class RetroSuperMarioBros_RewardShaper(RewardShaperBase):
         self.prev_x = info.get('x', 0) if 'x' in info else info.get('xscrollHi', 0) * 256 + info.get('xscrollLo', 0)
         self.prev_time = info.get('time', 0)
         self.prev_score = info.get('score', 0)
-        self.prev_lives = info.get('lives', 3)
+        self.prev_lives = info.get('lives')  # No default - wait for first step if not present
+        self.death_this_episode = False
 
         return obs, info
 
@@ -77,7 +79,7 @@ class RetroSuperMarioBros_RewardShaper(RewardShaperBase):
 
         current_time = info.get('time', 0)
         current_score = info.get('score', 0)
-        current_lives = info.get('lives', 3)
+        current_lives = info.get('lives')  # No default - must be present for death detection
 
         # Initialize components
         v_reward = 0.0  # position change
@@ -104,11 +106,12 @@ class RetroSuperMarioBros_RewardShaper(RewardShaperBase):
             s_reward = self.score_scale * score_delta
 
         # D: Death penalty or level completion bonus
-        # Penalize ANY life loss, not just final death
+        # Penalize all life losses, including the last one at episode termination
         if self.prev_lives is not None and current_lives < self.prev_lives:
             # Lost a life (whether mid-episode respawn or final death)
             d_reward = self.death_penalty
-        elif terminated:
+            self.death_this_episode = True
+        elif terminated and not self.death_this_episode:
             # Episode ended without life loss - assume level completion
             d_reward = self.level_complete_bonus
 

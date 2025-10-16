@@ -74,6 +74,15 @@ class PPOAlerts(MetricMonitorBundle):
             "Decrease the learning rate or increase the clip range.",
         )
 
+    def _monitor_clip_fraction_vf_oob(self, history: dict):
+        return self._check_threshold_bounds(
+            history, "train/opt/ppo/clip_fraction_vf", 0.05, 0.5,
+            "value function likely under-updating",
+            "Increase the value learning rate or decrease the value clip range.",
+            "many value updates are clipped",
+            "Decrease the value learning rate or increase the value clip range.",
+        )
+
     def _check_kl_ratio(self, history: dict, num_key: str, denom_key: str, num_val: float, denom_val: float, alert_id: str, message_template: str, tip: str):
         if denom_val <= 0.0:
             return None

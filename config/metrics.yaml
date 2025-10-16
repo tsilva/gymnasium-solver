@@ -27,6 +27,7 @@ _global:
       - "roll/ep_len/last"
 
       - "opt/ppo/clip_fraction"
+      - "opt/ppo/clip_fraction_vf"
       - "opt/ppo/kl"
       - "opt/ppo/approx_kl"
       - "opt/value/explained_var"
@@ -233,6 +234,14 @@ opt/ppo/clip_fraction:
   highlight: true
   show_in_table: true
   description: "Fraction of probability ratios that were clipped in PPO objective"
+  precision: 3
+  min: 0.0  # Fraction cannot be negative
+  max: 1.0  # Fraction cannot exceed 1
+
+opt/ppo/clip_fraction_vf:
+  highlight: true
+  show_in_table: true
+  description: "Fraction of value function predictions that were clipped in PPO objective"
   precision: 3
   min: 0.0  # Fraction cannot be negative
   max: 1.0  # Fraction cannot exceed 1

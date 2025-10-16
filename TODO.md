@@ -9,7 +9,7 @@
 
 # NEXT
 
-- TODO: add alert for clip_fraction_vf
+- THINK: how to audit reward structure / mean, std, outliers, and histogram
 - BUG: remote runs get killed if I close terminal?
 - dump functional run
 - mark solve with metric

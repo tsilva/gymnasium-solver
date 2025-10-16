@@ -86,13 +86,13 @@ class RetroSuperMarioBros_RewardShaper(RewardShaperBase):
         s_reward = 0.0  # score change
 
         # V: Change in x position (encourage moving right)
-        # Ignore large negative deltas (level transitions, flag sequence, etc.)
+        # Ignore large deltas in both directions (level transitions, death warps, etc.)
         if self.prev_x is not None:
             x_delta = current_x - self.prev_x
 
-            # If x position reset or moved backward unrealistically, ignore this step
-            if x_delta < self.x_reset_threshold:
-                # Large reset detected - reset tracking but don't penalize
+            # Filter unrealistic x changes (screen resets, death sequences, etc.)
+            if abs(x_delta) > abs(self.x_reset_threshold):
+                # Large change detected - ignore to prevent death-farming exploits
                 v_reward = 0.0
             else:
                 # Normal movement - reward rightward progress
@@ -104,14 +104,13 @@ class RetroSuperMarioBros_RewardShaper(RewardShaperBase):
             s_reward = self.score_scale * score_delta
 
         # D: Death penalty or level completion bonus
-        if terminated:
-            # Check if death (lives decreased) or level completion
-            if self.prev_lives is not None and current_lives < self.prev_lives:
-                # Agent died
-                d_reward = self.death_penalty
-            else:
-                # Assume level completion (reached flag)
-                d_reward = self.level_complete_bonus
+        # Penalize ANY life loss, not just final death
+        if self.prev_lives is not None and current_lives < self.prev_lives:
+            # Lost a life (whether mid-episode respawn or final death)
+            d_reward = self.death_penalty
+        elif terminated:
+            # Episode ended without life loss - assume level completion
+            d_reward = self.level_complete_bonus
 
         # Combine all components
         total_shaping = v_reward + p_reward + d_reward + s_reward

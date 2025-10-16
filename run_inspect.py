@@ -161,7 +161,8 @@ def run_episode(
     run_id: str,
     checkpoint_label: str | None,
     deterministic: bool = False,
-    max_steps: int = 1000,
+    max_env_steps: int = 1000,
+    seed: int | None = None,
 ) -> Tuple[List[np.ndarray], List[np.ndarray] | None, List[np.ndarray] | None, List[Dict[str, Any]], Dict[str, Any]]:
     run_id = _ensure_run_available(run_id)
     run = Run.load(run_id)
@@ -171,9 +172,15 @@ def run_episode(
     checkpoint_dir = run.checkpoints_dir / checkpoint_label
 
     from utils.environment import build_env_from_config
+    from utils.random import set_random_seed
 
-    # Use random seed for each episode to get diverse initializations
-    seed = int(time.time() * 1000) % (2**31) + random.randint(0, 10000)
+    # Use provided seed or fallback to test seed
+    if seed is None:
+        seed = config.seed_test
+
+    # Seed all RNGs (Python, NumPy, PyTorch) for reproducibility
+    # This matches run_play.py behavior and ensures deterministic sampling
+    set_random_seed(seed)
 
     env = build_env_from_config(
         config,
@@ -406,7 +413,7 @@ def run_episode(
     has_stack_hint = bool(n_stack_hint is not None and int(n_stack_hint) > 1)
 
     try:
-        while t < max_steps:
+        while t < max_env_steps:
             # Capture current frame BEFORE stepping (VecEnv resets on done)
             frame = env.render()
             # Handle vectorized env render output (tuple/list of frames)
@@ -557,7 +564,12 @@ def run_episode(
             t += 1
 
             if done:
-                break
+                # Reset environment and continue collecting steps across episodes
+                reset_result = env.reset()
+                if isinstance(reset_result, tuple):
+                    obs, _ = reset_result
+                else:
+                    obs = reset_result
     finally:
         env.close()
 
@@ -572,7 +584,7 @@ def run_episode(
         # MC returns (no bootstrap, pure discounted sum of observed rewards)
         mc_returns = compute_mc_returns(rewards_np, gamma)
 
-        # Determine bootstrap value for the last step if episode truncated or hit max_steps
+        # Determine bootstrap value for the last step if episode truncated or hit max_env_steps
         last_next_value = 0.0
         ended_by_time = bool(truncated_np[-1]) or (not bool(dones_np[-1]))
         if ended_by_time:
@@ -611,11 +623,25 @@ def run_episode(
     }
 
 
-def build_ui(default_run_id: str = "@last"):
+def build_ui(default_run_id: str = "@last", seed_arg: str | None = None):
     import gradio as gr
 
     runs = list_run_ids()
     initial_run = default_run_id if default_run_id else (runs[0] if runs else "@last")
+
+    # Resolve seed argument (same logic as run_play.py)
+    initial_config = Run.load(initial_run).load_config()
+    if seed_arg is None:
+        resolved_seed = initial_config.seed_test
+    elif seed_arg in ["train", "val", "test"]:
+        seeds = {
+            "train": initial_config.seed_train,
+            "val": initial_config.seed_val,
+            "test": initial_config.seed_test,
+        }
+        resolved_seed = seeds[seed_arg]
+    else:
+        resolved_seed = int(seed_arg)
 
     def _checkpoint_choices_for_run(run_identifier: str):
         run_id = _ensure_run_available(run_identifier)
@@ -623,9 +649,6 @@ def build_ui(default_run_id: str = "@last"):
         return checkpoints, {}, "@best"
 
     labels, _, default_label = _checkpoint_choices_for_run(initial_run)
-
-    # Load initial run config to get default n_steps
-    initial_config = Run.load(initial_run).load_config()
     default_max_steps = int(getattr(initial_config, "n_steps", 1000))
 
     with gr.Blocks(theme=gr.themes.Base(), css="""
@@ -660,7 +683,7 @@ def build_ui(default_run_id: str = "@last"):
                 interactive=True,
             )
             deterministic = gr.Checkbox(label="Deterministic policy", value=False)
-            max_steps = gr.Slider(label="Max steps", minimum=10, maximum=5000, value=default_max_steps, step=10)
+            max_steps = gr.Slider(label="Max env steps", minimum=10, maximum=5000, value=default_max_steps, step=10)
             run_btn = gr.Button("Inspect")
 
         # Display the current frame with a per-step stats table on the right
@@ -850,7 +873,7 @@ def build_ui(default_run_id: str = "@last"):
             ]
 
         def _inspect(rid: str, ckpt_label: str | None, det: bool, nsteps: int):
-            frames_raw, _frames_proc_unused, frames_stack, steps, info = run_episode(rid, ckpt_label, det, int(nsteps))
+            frames_raw, _frames_proc_unused, frames_stack, steps, info = run_episode(rid, ckpt_label, det, int(nsteps), resolved_seed)
             rows = [_table_row_from_step(s) for s in steps]
             # Initialize gallery selection, states, play button, and slider range
             # Compute available display modes
@@ -1049,9 +1072,10 @@ def main():
     parser.add_argument("--port", type=int, default=7860)
     parser.add_argument("--host", type=str, default="127.0.0.1")
     parser.add_argument("--share", action="store_true", help="Enable Gradio share link")
+    parser.add_argument("--seed", type=str, default=None, help="Random seed for environment (int, 'train', 'val', 'test', or None for test seed)")
     args = parser.parse_args()
 
-    demo = build_ui(args.run_id)
+    demo = build_ui(args.run_id, args.seed)
     demo.launch(server_port=args.port, server_name=args.host, share=args.share)
 
 

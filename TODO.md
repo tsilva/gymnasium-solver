@@ -9,6 +9,12 @@
 
 # NEXT
 
+- TODO: call vf_clip_fraction clip_fraction_vf instead
+- TODO: add alert for clip_fraction_vf
+- BUG: remote runs get killed if I close terminal?
+- dump functional run
+- mark solve with metric
+- TODO: measure epochs/s
 - TODO: Huber Loss for VF; value normalization/PopArt
 - TODO: consider terminating episodes (mark as done) when levels end
 - BUG: does modal crash?
@@ -38,6 +44,11 @@
 
 ## SuperMarioBros-Nes
 
+- BUG: rewad function is not correct because end of level subtracts time to zero during fireworks, making ending level a negative reward
+- RUNE: train on level 2 after mastering level 1, check if it forgets level 1
+- BUG: weird bootstrapping issue is causing mario to fear end of level
+- TUNE: can I train faster with more n_envs?
+- Penalize actions instead of time (signal is more constant)
 - TUNE: ensure level 1-1 can be completed with a ~100% win rate
 - FEAT: figure out how to consider training finished when level changes
 - FEAT: train next levels using starting point of previous levels, create master checkpoint for each level
@@ -132,3 +143,9 @@ VizDoom-Deathmatch-v0
 - FEAT: implement RND (Random Network Distillation)
 - FEAT: Recurrent PPO (eg: PPO-LSTM)
 - FEAT: ensure huggingface uploader, publishes run URL and 
+- GoExplore: downsample images and threshold them
+use parallelization to init eqch from a different archive state, sample based on inverse visit count
+after rollout ia collected, traverse it to update archive with new cells and trajectories
+do n turns of this loop
+then train for n epochs om archive nor on rollout
+this way we unify both

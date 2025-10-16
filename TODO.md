@@ -9,6 +9,12 @@
 
 # NEXT
 
+- TODO: Huber Loss for VF; value normalization/PopArt
+- TODO: consider terminating episodes (mark as done) when levels end
+- BUG: does modal crash?
+- TUNE: can I minimize jumps?
+- TODO: when an environment is solved a "solved" metric must be logged and set to 1 (this way I will be able to filter in wandb for runs that solved env)
+- TODO: how to fix
 - mario: make policy more robust to timing differences by finetuning with variable frameskip
 - make another run with higher LR for SM
 - python scripts/render_checkpoint_progression.py nh6utowp (make cooler video)
@@ -32,6 +38,7 @@
 
 ## SuperMarioBros-Nes
 
+- TUNE: ensure level 1-1 can be completed with a ~100% win rate
 - FEAT: figure out how to consider training finished when level changes
 - FEAT: train next levels using starting point of previous levels, create master checkpoint for each level
 - FEAT: distil policy that plays all levels

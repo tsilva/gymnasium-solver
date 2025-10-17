@@ -44,7 +44,6 @@
 - TEST: how mario behaves if reward is just curiosity
 - LEARN: reward standardization - Use automatic weighting (e.g., Pop-Art normalization or reward standardization) to balance magnitudes
 - TEST: try lowering vf_coef to stabilize VF clipping
-- TUNE: test giving huge reward when level is completed successfully
 - TUNE: ensure level 1-1 can be completed with a ~100% win rate
 - RUNE: train on level 2 after mastering level 1, check if it forgets level 1
 - TUNE: can I train faster with more n_envs?

@@ -108,6 +108,9 @@ class RewardPlotter:
             # Track if window is still open
             self.is_open = True
 
+            # Connect window close event
+            self.win.closeEvent = lambda event: setattr(self, 'is_open', False)
+
             # Throttling: only update plot at fixed intervals
             self.update_interval = update_interval
             self.last_update_time = time.time()
@@ -253,16 +256,15 @@ class RewardPlotter:
         self.current_curve = None
         self.episode_num += 1
 
-        # Force an update at episode boundaries
-        if self.needs_update:
-            self._update_plots()
-            self.last_update_time = self.time.time()
-            self.needs_update = False
+        # Force an update at episode boundaries (always, regardless of throttling)
+        self._update_plots()
+        self.last_update_time = self.time.time()
+        self.needs_update = False
 
-            # Process events for pyqtgraph
-            if self.use_pyqtgraph:
-                from pyqtgraph.Qt import QtWidgets
-                QtWidgets.QApplication.processEvents()
+        # Process events for pyqtgraph
+        if self.use_pyqtgraph:
+            from pyqtgraph.Qt import QtWidgets
+            QtWidgets.QApplication.processEvents()
 
     def _update_plots(self):
         """Update both subplots with current data."""
@@ -273,6 +275,7 @@ class RewardPlotter:
             if self.use_pyqtgraph:
                 # PyQtGraph (fast) implementation
                 import numpy as np
+                from pyqtgraph.Qt import QtCore
 
                 # Calculate sliding window range (fixed width)
                 # Keep window width constant even at the start
@@ -288,7 +291,7 @@ class RewardPlotter:
                 self.plot_step.clear()
 
                 # Re-add zero line to step plot
-                self.plot_step.addLine(y=0, pen=self.pg.mkPen('k', width=1, style=self.pg.QtCore.Qt.PenStyle.DashLine))
+                self.plot_step.addLine(y=0, pen=self.pg.mkPen('k', width=1, style=QtCore.Qt.PenStyle.DashLine))
 
                 # Plot completed episodes (only visible portion)
                 for i, episode_tuple in enumerate(self.episode_data):
@@ -308,7 +311,7 @@ class RewardPlotter:
                             color = self.colors[i % len(self.colors)]
                             self.plot_episode.plot(
                                 visible_steps, visible_rewards,
-                                pen=self.pg.mkPen(color=color, width=2, style=self.pg.QtCore.Qt.PenStyle.DashLine),
+                                pen=self.pg.mkPen(color=color, width=2, style=QtCore.Qt.PenStyle.DashLine),
                                 name=f'Episode {i+1}'
                             )
 
@@ -435,7 +438,9 @@ class RewardPlotter:
         except Exception as e:
             # Log error and mark plotter as closed to prevent further crashes
             import sys
+            import traceback
             print(f"Error updating reward plot: {e}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
             self.is_open = False
 
     def close(self):

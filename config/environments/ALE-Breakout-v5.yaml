@@ -125,6 +125,7 @@ _spec_objects: &spec_objects
 _env: &env
   spec: *spec
   env_id: ALE/Breakout-v5
+  max_env_steps: 5e6
 
 # Deterministic env
 _env_deterministic: &env_deterministic

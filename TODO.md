@@ -3,7 +3,6 @@
 # NEXT
 
 - BUG: runs executed through modal dont seem to have same wandb run id
-- ~~FEAT: in atari start using full action spaces and then use action masking as appropriate, unify with vizdoom, make discrete action space remappeer obsolete~~ ✓ DONE
 - BUG: clean exit run_play on ctrl+c
 - BUG: remote runs get killed if I close terminal?
 - TODO: measure epochs/s

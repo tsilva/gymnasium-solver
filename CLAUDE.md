@@ -43,7 +43,8 @@ python train.py --list-envs
 python train.py --list-envs CartPole
 
 # Run training remotely on Modal AI (optional, requires Modal account)
-python train.py CartPole-v1:ppo --backend modal
+python train.py CartPole-v1:ppo --backend modal                    # streams logs, blocks until completion
+python train.py CartPole-v1:ppo --backend modal --detach           # detached mode, returns immediately
 python train.py CartPole-v1:ppo --backend modal --max-env-steps 50000
 python train.py --resume @last --backend modal
 ```
@@ -169,7 +170,7 @@ These tools are particularly useful for automated workflows, hyperparameter tuni
 - **env_kwargs override**: `--env-kwargs key=value` merges key-value pairs into `config.env_kwargs`, allowing runtime environment configuration (e.g., `--env-kwargs state=Level2-1` for Retro games). Supports type inference (int, float, bool, string). Can be specified multiple times.
 - **Resume training**: `--resume <run-id>` resumes from checkpoint. If run not found locally, automatically downloads from W&B (requires `WANDB_ENTITY` and `WANDB_PROJECT` env vars). Supports `@last` for most recent run and `--epoch` to select checkpoint (`@best`, `@last`, or epoch number).
 - **Transfer learning**: `--init-from-run <run-spec>` initializes model weights from another run's checkpoint before training. Format: `<run-id>` or `<run-id>/<checkpoint>`. Checkpoint can be `@best`, `@last`, or `epoch=N`. If no checkpoint specified, uses `@best` if available, otherwise `@last`. Downloads from W&B if not found locally. Handles architecture mismatches gracefully by loading only compatible weights (matching keys and shapes). Useful for pretraining on simpler tasks before tackling harder ones. Can also be specified in YAML config via `init_from_run` field (CLI arg takes precedence). Examples: `abc123`, `abc123/@best`, `abc123/epoch=13`, `@last/@best`.
-- **Modal AI training**: `--backend modal` runs training remotely on Modal infrastructure (`utils.modal_train`). Resources (CPU, memory, GPU, timeout) are automatically allocated based on environment configuration: vector envs get CPU-only allocation, image envs get GPU (T4 or A10G); CPU/memory scale with `n_envs`; timeout scales with `max_env_steps`. Requires Modal account and token configured. All CLI arguments are passed through to remote training. Useful for scaling training without local compute.
+- **Modal AI training**: `--backend modal` runs training remotely on Modal infrastructure (`utils.modal_train`). Resources (CPU, memory, GPU, timeout) are automatically allocated based on environment configuration: vector envs get CPU-only allocation, image envs get GPU (T4 or A10G); CPU/memory scale with `n_envs`; timeout scales with `max_env_steps`. Requires Modal account and token configured. All CLI arguments are passed through to remote training. Useful for scaling training without local compute. By default, streams logs and blocks until completion. Add `--detach` to spawn job in detached mode (job continues even if terminal is closed).
 - **W&B Sweeps**: Auto-detected via `WANDB_SWEEP_ID` or `--wandb_sweep` flag. Merges `wandb.config` into main `Config` before training. Supports schedules specified as dicts (e.g., `{start: 0.001, end: 0.0}`).
 - **Debugger detection**: When a debugger is attached, `train.py` forces `n_envs=1`, `vectorization_mode='sync'`, and adjusts `batch_size` to remain compatible.
 

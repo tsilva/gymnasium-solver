@@ -13,6 +13,15 @@ from utils.environment_registry import list_available_environments
 # without benefit.
 warnings.filterwarnings("ignore", message=".*does not have many workers.*")
 
+# Suppress Pydantic warnings when Lightning serializes Config for Modal.
+# These occur when Pydantic auto-converts dataclass fields with Union types and repr=False.
+# The warnings are harmless but noisy - functionality is not affected.
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic._internal._generate_schema")
+
+# Suppress PyTorch TF32 API deprecation warnings.
+# These are informational notices about old API being deprecated after PyTorch 2.9.
+warnings.filterwarnings("ignore", message=".*TF32.*")
+
 # Set matmul precision for Tensor Cores on CUDA devices (RTX 4090, etc.)
 # 'medium' balances precision and performance on GPUs with Tensor Cores
 torch.set_float32_matmul_precision("medium")
@@ -92,6 +101,12 @@ def main():
         choices=["local", "modal"],
         default="local",
         help="Training backend to use. 'local' runs training on current machine (default), 'modal' runs remotely on Modal AI infrastructure (requires Modal account and token configured)."
+    )
+    parser.add_argument(
+        "--detach",
+        action="store_true",
+        default=False,
+        help="When using --backend modal, run training in detached mode (job continues if terminal is closed). Default is to stream logs and block until completion."
     )
     args = parser.parse_args()
 

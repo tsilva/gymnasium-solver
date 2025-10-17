@@ -4,14 +4,22 @@ Enables running training jobs on Modal infrastructure by specifying --backend mo
 Automatically allocates resources (CPU, memory, GPU, timeout) based on environment configuration.
 
 Usage:
-    # Run training remotely on Modal (resources auto-allocated)
+    # Run training remotely on Modal (resources auto-allocated, streams logs)
     python train.py CartPole-v1:ppo --backend modal
+
+    # Run in detached mode (job continues if terminal is closed)
+    python train.py CartPole-v1:ppo --backend modal --detach
 
     # With additional arguments
     python train.py CartPole-v1:ppo --backend modal --max-env-steps 50000 -q
 
     # Resume training remotely (uses default resources)
     python train.py --resume @last --backend modal
+
+Execution Modes:
+    - Streaming (default): Streams logs to terminal, blocks until completion. Job stops if terminal is killed.
+    - Detached (--detach): Spawns job and returns immediately. Job continues running even if terminal is closed.
+      Monitor via Modal dashboard at https://modal.com/apps or W&B.
 
 Resource Allocation:
     - CPU: Scaled based on n_envs (2-16 cores)
@@ -212,11 +220,12 @@ image = (
 )
 
 
-def create_training_function(resources: ResourceRequirements):
+def create_training_function(resources: ResourceRequirements, detached: bool = False):
     """Create a Modal function with specified resource requirements.
 
     Args:
         resources: ResourceRequirements specifying CPU, memory, GPU, and timeout
+        detached: If True, create non-generator function for spawn(). If False, create generator for remote_gen()
 
     Returns:
         Modal function configured with the specified resources
@@ -238,18 +247,139 @@ def create_training_function(resources: ResourceRequirements):
         # Modal now accepts GPU as string (e.g., "T4", "A10G", "A100")
         function_kwargs["gpu"] = resources.gpu
 
-    @app.function(serialized=True, **function_kwargs)
-    def run_training(train_args: list[str], run_id: str = None, project_id: str = None):
-        """Run training with given CLI arguments on Modal.
+    if detached:
+        # Non-generator version for detached execution via spawn()
+        @app.function(serialized=True, **function_kwargs)
+        def run_training(train_args: list[str], run_id: str = None, project_id: str = None):
+            """Run training with given CLI arguments on Modal.
 
-        Args:
-            train_args: List of CLI arguments to pass to train.py (excluding --modal)
-            run_id: Pre-generated run ID to use for W&B and local run directory
-            project_id: W&B project ID from config (used to set WANDB_PROJECT env var)
+            Args:
+                train_args: List of CLI arguments to pass to train.py (excluding --modal)
+                run_id: Pre-generated run ID to use for W&B and local run directory
+                project_id: W&B project ID from config (used to set WANDB_PROJECT env var)
 
-        Yields:
-            Log lines from training process
-        """
+            Returns:
+                Exit code (0 for success, non-zero for failure)
+            """
+            import subprocess
+            import tempfile
+
+            # Get repository URL from environment or use default
+            repo_url = os.environ.get(
+                "REPO_URL", "https://github.com/tsilva/gymnasium-solver.git"
+            )
+
+            # Clone repository to temporary directory
+            with tempfile.TemporaryDirectory() as tmpdir:
+                print(f"Cloning repository to {tmpdir}...", flush=True)
+                subprocess.run(
+                    ["git", "clone", "--depth", "1", repo_url, tmpdir],
+                    check=True,
+                    capture_output=True,
+                )
+
+                # Change to repo directory
+                os.chdir(tmpdir)
+                print(f"Working directory: {os.getcwd()}", flush=True)
+
+                # Set environment variables for quiet operation
+                os.environ["VIBES_QUIET"] = "1"
+                os.environ["VIBES_DISABLE_SESSION_LOGS"] = "1"
+
+                # Suppress warnings in all subprocesses (env stepping, multiprocessing)
+                # This catches warnings that happen in forked/spawned worker processes
+                os.environ["PYTHONWARNINGS"] = "ignore::UserWarning:pydantic._internal._generate_schema,ignore::UserWarning:torch"
+
+                # If project_id was provided, set it as environment variable
+                # This is needed for W&B artifact downloads during --init-from-run
+                if project_id:
+                    os.environ["WANDB_PROJECT"] = project_id
+                    print(f"Using W&B project: {project_id}", flush=True)
+
+                # If run_id was provided, set it as environment variable
+                # so train.py will use it for W&B initialization
+                if run_id:
+                    os.environ["WANDB_RUN_ID"] = run_id
+                    print(f"Using pre-generated run ID: {run_id}", flush=True)
+
+                # Check if this is a Retro environment and import ROM if needed
+                config_spec = None
+                for i, arg in enumerate(train_args):
+                    if not arg.startswith("--") and ":" in arg:
+                        config_spec = arg
+                        break
+                    elif arg == "--config_id" and i + 1 < len(train_args):
+                        config_spec = train_args[i + 1]
+                        break
+
+                if config_spec and config_spec.startswith("Retro"):
+                    # Extract game ID from config spec (e.g., "Retro-SuperMarioBros-Nes:ppo" -> "SuperMarioBros-Nes")
+                    env_id = config_spec.split(":")[0]  # Get env part before variant
+                    rom_game_id = env_id.replace("Retro-", "")  # Remove "Retro-" prefix
+
+                    print(f"Detected Retro environment: {rom_game_id}", flush=True)
+                    print(f"Importing ROM from volume...", flush=True)
+
+                    rom_path = Path(f"/roms/retro-roms/{rom_game_id}")
+                    if not rom_path.exists():
+                        raise RuntimeError(
+                            f"ROM directory not found in volume at {rom_path}. "
+                            f"Upload ROM with: python scripts/upload_rom_to_modal.py {rom_game_id}"
+                        )
+
+                    # Import the ROM using retro.import
+                    import_cmd = ["python", "-m", "retro.import", str(rom_path)]
+                    print(f"Running: {' '.join(import_cmd)}", flush=True)
+                    result = subprocess.run(import_cmd, capture_output=True, text=True)
+
+                    if result.returncode != 0:
+                        print(f"ROM import failed:", flush=True)
+                        print(f"STDOUT: {result.stdout}", flush=True)
+                        print(f"STDERR: {result.stderr}", flush=True)
+                        raise RuntimeError(f"ROM import failed with return code {result.returncode}")
+
+                    print(f"ROM imported successfully\n", flush=True)
+
+                # Build command
+                cmd = ["python", "-u", "train.py"] + train_args  # -u for unbuffered output
+                print(f"Running: {' '.join(cmd)}\n", flush=True)
+
+                # Run training with stdout/stderr capture for streaming
+                process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,  # Line buffered
+                )
+
+                # Stream output line by line
+                for line in process.stdout:
+                    print(line, end="", flush=True)
+
+                # Wait for process to complete
+                returncode = process.wait()
+
+                if returncode != 0:
+                    print(f"\nTraining failed with return code {returncode}", flush=True)
+                    raise RuntimeError("Training execution failed")
+
+                print("\nTraining completed successfully", flush=True)
+                return returncode
+    else:
+        # Generator version for streaming execution via remote_gen()
+        @app.function(serialized=True, **function_kwargs)
+        def run_training(train_args: list[str], run_id: str = None, project_id: str = None):
+            """Run training with given CLI arguments on Modal.
+
+            Args:
+                train_args: List of CLI arguments to pass to train.py (excluding --modal)
+                run_id: Pre-generated run ID to use for W&B and local run directory
+                project_id: W&B project ID from config (used to set WANDB_PROJECT env var)
+
+            Yields:
+                Log lines from training process
+            """
         import subprocess
         import tempfile
 
@@ -279,6 +409,10 @@ def create_training_function(resources: ResourceRequirements):
             # Set environment variables for quiet operation
             os.environ["VIBES_QUIET"] = "1"
             os.environ["VIBES_DISABLE_SESSION_LOGS"] = "1"
+
+            # Suppress warnings in all subprocesses (env stepping, multiprocessing)
+            # This catches warnings that happen in forked/spawned worker processes
+            os.environ["PYTHONWARNINGS"] = "ignore::UserWarning:pydantic._internal._generate_schema,ignore::UserWarning:torch"
 
             # If project_id was provided, set it as environment variable
             # This is needed for W&B artifact downloads during --init-from-run
@@ -369,6 +503,9 @@ def launch_modal_training(args):
     from utils.run import Run
     from utils.config import load_config
 
+    # Check if detached mode is requested
+    detached = getattr(args, 'detach', False)
+
     # Parse config_id and variant_id to estimate resources
     config_spec = None
     if args.config:
@@ -419,7 +556,7 @@ def launch_modal_training(args):
         print(f"Creating local run directory: runs/{run_id}")
         Run.create(run_id=run_id, config=config)
 
-    # Build CLI arguments list (exclude --backend flag)
+    # Build CLI arguments list (exclude --backend and --detach flags)
     train_args = []
 
     # Add config spec (positional)
@@ -451,24 +588,48 @@ def launch_modal_training(args):
     # Display info
     print("\nLaunching training on Modal...")
     print(f"Arguments: {' '.join(train_args)}")
+    print(f"Mode: {'Detached' if detached else 'Streaming (attached)'}")
     print("\nView dashboard: https://modal.com/apps")
-    print("\nStreaming logs...\n")
-    print("-" * 80)
 
     # Create Modal function with dynamic resources
-    run_training_fn = create_training_function(resources)
+    run_training_fn = create_training_function(resources, detached=detached)
 
-    # Run on Modal and stream logs via generator
-    try:
-        with app.run():
-            for log_line in run_training_fn.remote_gen(train_args, run_id, project_id):
-                print(log_line, end="", flush=True)
+    if detached:
+        # Detached mode: spawn the function and return immediately
+        print("\nSpawning detached training job...")
         print("-" * 80)
-        print("\n✓ Modal training completed!")
-    except KeyboardInterrupt:
-        print("\n✗ Modal training cancelled")
-        raise
-    except Exception as e:
+        try:
+            with app.run():
+                function_call = run_training_fn.spawn(train_args, run_id, project_id)
+
+            print("\n✓ Training job spawned successfully!")
+            print(f"\nFunction call ID: {function_call.object_id}")
+            print(f"Run ID: {run_id or '(determined from checkpoint)'}")
+            print("\nThe training will continue running on Modal even if you close this terminal.")
+            print("Monitor progress at: https://modal.com/apps")
+            if run_id:
+                print(f"Or check W&B: https://wandb.ai")
+        except KeyboardInterrupt:
+            print("\n✗ Job spawn cancelled")
+            raise
+        except Exception as e:
+            print("-" * 80)
+            print(f"\n✗ Failed to spawn training job: {e}")
+            raise
+    else:
+        # Streaming mode: stream logs and block until completion (original behavior)
+        print("\nStreaming logs...\n")
         print("-" * 80)
-        print(f"\n✗ Modal training failed: {e}")
-        raise
+        try:
+            with app.run():
+                for log_line in run_training_fn.remote_gen(train_args, run_id, project_id):
+                    print(log_line, end="", flush=True)
+            print("-" * 80)
+            print("\n✓ Modal training completed!")
+        except KeyboardInterrupt:
+            print("\n✗ Modal training cancelled")
+            raise
+        except Exception as e:
+            print("-" * 80)
+            print(f"\n✗ Modal training failed: {e}")
+            raise

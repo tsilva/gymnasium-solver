@@ -796,6 +796,13 @@ def main():
     p.add_argument("--no-plot-rewards", dest="plot_rewards", action="store_false", help="Disable real-time reward plot")
     p.add_argument("--plot-update-interval", type=float, default=0.2, help="Minimum time (seconds) between plot updates (default: 0.2, lower=smoother but slower game)")
     p.add_argument("--plot-window-size", type=int, default=100, help="Number of steps to show in sliding window (default: 100)")
+    p.add_argument(
+        "--env-kwargs",
+        action="append",
+        dest="env_kwargs",
+        metavar="KEY=VALUE",
+        help="Override env_kwargs fields (e.g., --env-kwargs state=Level2-1). Can be specified multiple times.",
+    )
     args = p.parse_args()
     target_episodes = max(1, int(args.episodes))
 
@@ -837,6 +844,11 @@ def main():
         # Load config
         config = load_config(env_id, variant_id)
 
+        # Apply env_kwargs overrides
+        if args.env_kwargs:
+            from utils.train_launcher import _apply_env_kwargs_overrides
+            config = _apply_env_kwargs_overrides(config, args.env_kwargs)
+
         # Default mode to random for config-id
         if args.mode is None:
             args.mode = "random"
@@ -866,6 +878,11 @@ def main():
         # Load run and config
         run = Run.load(run_id)
         config = run.load_config()
+
+        # Apply env_kwargs overrides
+        if args.env_kwargs:
+            from utils.train_launcher import _apply_env_kwargs_overrides
+            config = _apply_env_kwargs_overrides(config, args.env_kwargs)
 
         # Default mode to trained for run-id
         if args.mode is None:

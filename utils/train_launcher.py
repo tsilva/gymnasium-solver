@@ -52,6 +52,32 @@ def _parse_config_overrides(override_list):
 
     return overrides
 
+def _apply_env_kwargs_overrides(config, override_list):
+    """Parse KEY=VALUE strings and merge into config.env_kwargs.
+
+    Args:
+        config: Config object to update
+        override_list: List of KEY=VALUE strings (e.g., ['state=Level2-1'])
+
+    Returns:
+        Updated config object
+    """
+    if not override_list:
+        return config
+
+    # Parse overrides using existing function
+    overrides = _parse_config_overrides(override_list)
+
+    # Merge into config.env_kwargs
+    if not hasattr(config, 'env_kwargs') or config.env_kwargs is None:
+        config.env_kwargs = {}
+
+    for key, value in overrides.items():
+        config.env_kwargs[key] = value
+        print(f"env_kwargs override applied: {key} = {value}")
+
+    return config
+
 def _apply_config_overrides(config, overrides):
     """Apply dict of overrides to config object.
 
@@ -245,6 +271,10 @@ def _launch_training_resume(args) -> None:
     if hasattr(args, 'overrides') and args.overrides:
         overrides_dict = _parse_config_overrides(args.overrides)
         config = _apply_config_overrides(config, overrides_dict)
+
+    # Apply env_kwargs overrides
+    if hasattr(args, 'env_kwargs') and args.env_kwargs:
+        config = _apply_env_kwargs_overrides(config, args.env_kwargs)
 
     # Allow overriding max_env_steps from CLI (takes precedence over --override)
     cli_max_env_steps = int(args.max_env_steps) if args.max_env_steps else None
@@ -459,6 +489,10 @@ def launch_training_from_args(args) -> None:
     if hasattr(args, 'overrides') and args.overrides:
         overrides_dict = _parse_config_overrides(args.overrides)
         config = _apply_config_overrides(config, overrides_dict)
+
+    # Apply env_kwargs overrides
+    if hasattr(args, 'env_kwargs') and args.env_kwargs:
+        config = _apply_env_kwargs_overrides(config, args.env_kwargs)
 
     # Override max env steps if provided through CLI (takes precedence over --override)
     cli_max_env_steps = int(args.max_env_steps) if args.max_env_steps else None

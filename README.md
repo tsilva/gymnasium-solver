@@ -66,6 +66,12 @@ python train.py -q
 # Override max timesteps from CLI
 python train.py CartPole-v1:ppo --max-timesteps 5000
 
+# Override environment kwargs (e.g., Retro game state)
+python train.py Retro/SuperMarioBros-Nes:ppo --env-kwargs state=Level2-1
+
+# Multiple env_kwargs overrides
+python train.py Retro/SuperMarioBros-Nes:ppo --env-kwargs state=Level2-1 --env-kwargs difficulty=1
+
 # List available environments
 python train.py --list-envs
 python train.py --list-envs CartPole
@@ -79,8 +85,17 @@ python train.py --list-envs CartPole
 # Play trained policy (auto-loads best/last checkpoint)
 python run_play.py --run-id @last --episodes 5
 
+# Play with env_kwargs override (e.g., different level)
+python run_play.py --run-id @last --env-kwargs state=Level2-1
+
+# Test environment without trained policy
+python run_play.py --config-id Retro/SuperMarioBros-Nes:ppo --mode random --env-kwargs state=Level2-1
+
 # Launch Gradio inspector UI
 python run_inspect.py --run-id @last --port 7860
+
+# Inspect with env_kwargs override
+python run_inspect.py --run-id @last --env-kwargs state=Level2-1
 ```
 
 ### Publishing
@@ -133,13 +148,39 @@ When `project_id` is omitted in YAML, it defaults to the filename stem.
 
 ### Key Configuration Fields
 
-- **Environment**: `env_id`, `n_envs`, `vectorization_mode`, `env_wrappers`
+- **Environment**: `env_id`, `n_envs`, `vectorization_mode`, `env_wrappers`, `env_kwargs`
 - **Algorithm**: `algo_id` (ppo, reinforce), `policy` (mlp, cnn), `hidden_dims`
 - **Training**: `max_timesteps`, `n_steps`, `batch_size`, `n_epochs`
 - **Optimization**: `policy_lr`, `optimizer` (adam, adamw, sgd)
 - **PPO-specific**: `clip_range`, `vf_coef`, `ent_coef`, `gae_lambda`
 - **Atari**: `obs_type` (rgb, ram, objects)
 - **Normalization**: `normalize_obs` (false, true/rolling, static), `normalize_reward`
+
+### CLI Overrides
+
+Override configuration values from the command line without editing YAML files:
+
+```bash
+# Override config fields
+python train.py CartPole-v1:ppo --override policy_lr=0.001 --override batch_size=128
+
+# Override environment kwargs (passed to gym.make())
+python train.py Retro/SuperMarioBros-Nes:ppo --env-kwargs state=Level2-1 --env-kwargs difficulty=1
+
+# Combine multiple overrides
+python train.py CartPole-v1:ppo --max-timesteps 10000 --override n_envs=16 --env-kwargs render_mode=human
+```
+
+**env_kwargs** are particularly useful for:
+- **Retro games**: Selecting different levels/states (e.g., `state=Level2-1`)
+- **Custom environments**: Passing initialization parameters
+- **Testing**: Trying different environment configurations without creating new YAML files
+
+**Type inference**: Values are automatically converted to appropriate types:
+- Integers: `max_steps=1000` → `1000` (int)
+- Floats: `scale=0.5` → `0.5` (float)
+- Booleans: `enabled=true` → `True` (bool, case-insensitive)
+- Strings: `state=Level2-1` → `"Level2-1"` (str)
 
 ### Schedules
 

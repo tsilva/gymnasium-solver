@@ -67,7 +67,7 @@ _env: &env
   env_id: Retro/SuperMarioBros-Nes
   env_kwargs:
     state: "Level1-1"
-
+    #states: ["Level1-1", "Level1-4", "Level2-1", "Level3-1", "Level4-1", "Level5-1", "Level6-1", "Level7-1", "Level8-1"]
   env_wrappers:
     - id: RetroSuperMarioBros_RewardShaper
       reward_scale: 1.0
@@ -77,8 +77,6 @@ _env: &env
       x_position_scale: 0.2
       score_scale: 0.002
       x_reset_threshold: -100.0
-  #  - id: StickyActionsWrapper
- #     sticky_buttons: {0: 0.95, 7: 0.10}  # dpad_right pressed 75% of the time
 
 # =====================
 # configs

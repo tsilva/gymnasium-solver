@@ -52,6 +52,13 @@ def main():
         help="Override any config field (e.g., --override policy_lr=0.001 --override batch_size=64). Can be specified multiple times.",
     )
     parser.add_argument(
+        "--env-kwargs",
+        action="append",
+        dest="env_kwargs",
+        metavar="KEY=VALUE",
+        help="Override env_kwargs fields (e.g., --env-kwargs state=Level2-1). Can be specified multiple times.",
+    )
+    parser.add_argument(
         "--list-envs",
         nargs="?",
         const="",

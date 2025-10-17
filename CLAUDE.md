@@ -19,6 +19,9 @@ python train.py CartPole-v1:reinforce -q
 # Override max env steps from CLI
 python train.py CartPole-v1:ppo --max-env-steps 5000
 
+# Override env_kwargs from CLI (e.g., for Retro state selection)
+python train.py Retro/SuperMarioBros-Nes:ppo --env-kwargs state=Level2-1
+
 # Resume training from checkpoint (downloads from W&B if not found locally)
 python train.py --resume @last
 python train.py --resume <run-id>
@@ -65,6 +68,9 @@ python run_play.py --run-id @last --episodes 5
 # Play random policy with any environment config (no training required)
 python run_play.py --config-id VizDoom-Basic-v0:ppo --episodes 5
 python run_play.py --config-id CartPole-v1:ppo --mode user  # keyboard control
+
+# Override env_kwargs for playback
+python run_play.py --run-id @last --env-kwargs state=Level2-1
 
 # Launch Gradio inspector UI
 python run_inspect.py --run-id @last --port 7860
@@ -160,6 +166,7 @@ These tools are particularly useful for automated workflows, hyperparameter tuni
 ### Entry Point & Training Flow
 - **`train.py`**: Accepts `<env>:<variant>` config specs (e.g., `CartPole-v1:ppo`), loads `Config` via `utils.config.load_config(env_id, variant_id)`, seeds via `utils.random.set_random_seed()`, builds agent via `agents.build_agent()`, and calls `agent.learn()`.
 - **Config override**: `--max-env-steps` injects into `config.max_env_steps` after sweep merges.
+- **env_kwargs override**: `--env-kwargs key=value` merges key-value pairs into `config.env_kwargs`, allowing runtime environment configuration (e.g., `--env-kwargs state=Level2-1` for Retro games). Supports type inference (int, float, bool, string). Can be specified multiple times.
 - **Resume training**: `--resume <run-id>` resumes from checkpoint. If run not found locally, automatically downloads from W&B (requires `WANDB_ENTITY` and `WANDB_PROJECT` env vars). Supports `@last` for most recent run and `--epoch` to select checkpoint (`@best`, `@last`, or epoch number).
 - **Transfer learning**: `--init-from-run <run-spec>` initializes model weights from another run's checkpoint before training. Format: `<run-id>` or `<run-id>/<checkpoint>`. Checkpoint can be `@best`, `@last`, or `epoch=N`. If no checkpoint specified, uses `@best` if available, otherwise `@last`. Downloads from W&B if not found locally. Handles architecture mismatches gracefully by loading only compatible weights (matching keys and shapes). Useful for pretraining on simpler tasks before tackling harder ones. Can also be specified in YAML config via `init_from_run` field (CLI arg takes precedence). Examples: `abc123`, `abc123/@best`, `abc123/epoch=13`, `@last/@best`.
 - **Modal AI training**: `--backend modal` runs training remotely on Modal infrastructure (`utils.modal_train`). Resources (CPU, memory, GPU, timeout) are automatically allocated based on environment configuration: vector envs get CPU-only allocation, image envs get GPU (T4 or A10G); CPU/memory scale with `n_envs`; timeout scales with `max_env_steps`. Requires Modal account and token configured. All CLI arguments are passed through to remote training. Useful for scaling training without local compute.

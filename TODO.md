@@ -10,9 +10,8 @@
 # NEXT
 
 
-- Need way to override env_kwargs keys through command line, both for train and for run_play and run_inspect. For example I want to be able to specify state=Level2-1 for run_play. (eg:for SuperMarioBros-Nes)
+- TODO: run stable-retro manually, why is windows not working?
 
-- FEAT: add way to specify level for run-play
 - BUG: remote runs get killed if I close terminal?
 - TODO: measure epochs/s
 - BUG: remote runs are still creating local run folder (empty)

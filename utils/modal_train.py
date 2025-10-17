@@ -253,6 +253,11 @@ def create_training_function(resources: ResourceRequirements):
         import subprocess
         import tempfile
 
+        def log_and_yield(msg: str):
+            """Print to Modal container stdout and yield to local client."""
+            print(msg, end="", flush=True)
+            yield msg
+
         # Get repository URL from environment or use default
         repo_url = os.environ.get(
             "REPO_URL", "https://github.com/tsilva/gymnasium-solver.git"
@@ -260,7 +265,7 @@ def create_training_function(resources: ResourceRequirements):
 
         # Clone repository to temporary directory
         with tempfile.TemporaryDirectory() as tmpdir:
-            yield f"Cloning repository to {tmpdir}...\n"
+            yield from log_and_yield(f"Cloning repository to {tmpdir}...\n")
             subprocess.run(
                 ["git", "clone", "--depth", "1", repo_url, tmpdir],
                 check=True,
@@ -269,7 +274,7 @@ def create_training_function(resources: ResourceRequirements):
 
             # Change to repo directory
             os.chdir(tmpdir)
-            yield f"Working directory: {os.getcwd()}\n"
+            yield from log_and_yield(f"Working directory: {os.getcwd()}\n")
 
             # Set environment variables for quiet operation
             os.environ["VIBES_QUIET"] = "1"
@@ -279,13 +284,13 @@ def create_training_function(resources: ResourceRequirements):
             # This is needed for W&B artifact downloads during --init-from-run
             if project_id:
                 os.environ["WANDB_PROJECT"] = project_id
-                yield f"Using W&B project: {project_id}\n"
+                yield from log_and_yield(f"Using W&B project: {project_id}\n")
 
             # If run_id was provided, set it as environment variable
             # so train.py will use it for W&B initialization
             if run_id:
                 os.environ["WANDB_RUN_ID"] = run_id
-                yield f"Using pre-generated run ID: {run_id}\n"
+                yield from log_and_yield(f"Using pre-generated run ID: {run_id}\n")
 
             # Check if this is a Retro environment and import ROM if needed
             config_spec = None
@@ -302,8 +307,8 @@ def create_training_function(resources: ResourceRequirements):
                 env_id = config_spec.split(":")[0]  # Get env part before variant
                 rom_game_id = env_id.replace("Retro-", "")  # Remove "Retro-" prefix
 
-                yield f"Detected Retro environment: {rom_game_id}\n"
-                yield f"Importing ROM from volume...\n"
+                yield from log_and_yield(f"Detected Retro environment: {rom_game_id}\n")
+                yield from log_and_yield(f"Importing ROM from volume...\n")
 
                 rom_path = Path(f"/roms/retro-roms/{rom_game_id}")
                 if not rom_path.exists():
@@ -314,20 +319,20 @@ def create_training_function(resources: ResourceRequirements):
 
                 # Import the ROM using retro.import
                 import_cmd = ["python", "-m", "retro.import", str(rom_path)]
-                yield f"Running: {' '.join(import_cmd)}\n"
+                yield from log_and_yield(f"Running: {' '.join(import_cmd)}\n")
                 result = subprocess.run(import_cmd, capture_output=True, text=True)
 
                 if result.returncode != 0:
-                    yield f"ROM import failed:\n"
-                    yield f"STDOUT: {result.stdout}\n"
-                    yield f"STDERR: {result.stderr}\n"
+                    yield from log_and_yield(f"ROM import failed:\n")
+                    yield from log_and_yield(f"STDOUT: {result.stdout}\n")
+                    yield from log_and_yield(f"STDERR: {result.stderr}\n")
                     raise RuntimeError(f"ROM import failed with return code {result.returncode}")
 
-                yield f"ROM imported successfully\n\n"
+                yield from log_and_yield(f"ROM imported successfully\n\n")
 
             # Build command
             cmd = ["python", "-u", "train.py"] + train_args  # -u for unbuffered output
-            yield f"Running: {' '.join(cmd)}\n\n"
+            yield from log_and_yield(f"Running: {' '.join(cmd)}\n\n")
 
             # Run training with stdout/stderr capture for streaming
             process = subprocess.Popen(
@@ -340,16 +345,16 @@ def create_training_function(resources: ResourceRequirements):
 
             # Stream output line by line
             for line in process.stdout:
-                yield line
+                yield from log_and_yield(line)
 
             # Wait for process to complete
             returncode = process.wait()
 
             if returncode != 0:
-                yield f"\nTraining failed with return code {returncode}\n"
+                yield from log_and_yield(f"\nTraining failed with return code {returncode}\n")
                 raise RuntimeError("Training execution failed")
 
-            yield "\nTraining completed successfully\n"
+            yield from log_and_yield("\nTraining completed successfully\n")
 
     return run_training
 

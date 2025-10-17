@@ -163,10 +163,16 @@ def run_episode(
     deterministic: bool = False,
     max_env_steps: int = 1000,
     seed: int | None = None,
+    env_kwargs_overrides: list | None = None,
 ) -> Tuple[List[np.ndarray], List[np.ndarray] | None, List[np.ndarray] | None, List[Dict[str, Any]], Dict[str, Any]]:
     run_id = _ensure_run_available(run_id)
     run = Run.load(run_id)
     config = run.load_config()
+
+    # Apply env_kwargs overrides
+    if env_kwargs_overrides:
+        from utils.train_launcher import _apply_env_kwargs_overrides
+        config = _apply_env_kwargs_overrides(config, env_kwargs_overrides)
 
     #labels, _, default_label = run.list_checkpoints(), {}, "@best"
     checkpoint_dir = run.checkpoints_dir / checkpoint_label
@@ -625,7 +631,7 @@ def run_episode(
     }
 
 
-def build_ui(default_run_id: str = "@last", seed_arg: str | None = None):
+def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwargs_overrides: list | None = None):
     import gradio as gr
 
     runs = list_run_ids()
@@ -883,7 +889,7 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None):
             ]
 
         def _inspect(rid: str, ckpt_label: str | None, det: bool, nsteps: int):
-            frames_raw, _frames_proc_unused, frames_stack, steps, info = run_episode(rid, ckpt_label, det, int(nsteps), resolved_seed)
+            frames_raw, _frames_proc_unused, frames_stack, steps, info = run_episode(rid, ckpt_label, det, int(nsteps), resolved_seed, env_kwargs_overrides)
             rows = [_table_row_from_step(s) for s in steps]
             # Initialize gallery selection, states, play button, and slider range
             # Compute available display modes
@@ -1083,9 +1089,16 @@ def main():
     parser.add_argument("--host", type=str, default="127.0.0.1")
     parser.add_argument("--share", action="store_true", help="Enable Gradio share link")
     parser.add_argument("--seed", type=str, default=None, help="Random seed for environment (int, 'train', 'val', 'test', or None for test seed)")
+    parser.add_argument(
+        "--env-kwargs",
+        action="append",
+        dest="env_kwargs",
+        metavar="KEY=VALUE",
+        help="Override env_kwargs fields (e.g., --env-kwargs state=Level2-1). Can be specified multiple times.",
+    )
     args = parser.parse_args()
 
-    demo = build_ui(args.run_id, args.seed)
+    demo = build_ui(args.run_id, args.seed, args.env_kwargs)
     demo.launch(server_port=args.port, server_name=args.host, share=args.share)
 
 

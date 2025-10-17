@@ -39,7 +39,7 @@ class RewardPlotter:
 
             # Create window with two plots
             self.win = pg.GraphicsLayoutWidget(show=True, title="Real-time Reward Visualization")
-            self.win.resize(1000, 800)
+            self.win.resize(500, 400)
             self.win.setWindowTitle('Real-time Reward Visualization')
 
             # Position window on the right side of the screen to not overlap with game
@@ -47,11 +47,18 @@ class RewardPlotter:
             self.win.move(1050, 50)  # x=1050 (right side), y=50 (near top)
 
             # Episode reward plot (accumulated reward over steps)
-            self.plot_episode = self.win.addPlot(title="Accumulated Reward per Episode")
-            self.plot_episode.setLabel('left', 'Accumulated Episode Reward')
-            self.plot_episode.setLabel('bottom', 'Step')
+            self.plot_episode = self.win.addPlot(title="<span style='font-size: 9pt'>Accumulated Reward per Episode</span>")
+            self.plot_episode.setLabel('left', 'Accumulated Episode Reward', **{'font-size': '8pt'})
+            self.plot_episode.setLabel('bottom', 'Step', **{'font-size': '8pt'})
             self.plot_episode.showGrid(x=True, y=True, alpha=0.3)
-            self.plot_episode.addLegend()
+            self.plot_episode.addLegend(offset=(5, 5), labelTextSize='7pt')
+            # Set smaller font size for tick labels
+            font = pg.QtGui.QFont()
+            font.setPointSize(7)
+            self.plot_episode.getAxis('left').setTickFont(font)
+            self.plot_episode.getAxis('bottom').setTickFont(font)
+            self.plot_episode.getAxis('left').setStyle(tickTextOffset=3)
+            self.plot_episode.getAxis('bottom').setStyle(tickTextOffset=3)
             # Disable auto-range on x-axis to maintain sliding window
             self.plot_episode.enableAutoRange(axis='x', enable=False)
             self.plot_episode.enableAutoRange(axis='y', enable=True)
@@ -62,10 +69,15 @@ class RewardPlotter:
             self.win.nextRow()
 
             # Step reward plot (individual step rewards)
-            self.plot_step = self.win.addPlot(title="Individual Step Rewards")
-            self.plot_step.setLabel('left', 'Step Reward')
-            self.plot_step.setLabel('bottom', 'Step')
+            self.plot_step = self.win.addPlot(title="<span style='font-size: 9pt'>Individual Step Rewards</span>")
+            self.plot_step.setLabel('left', 'Step Reward', **{'font-size': '8pt'})
+            self.plot_step.setLabel('bottom', 'Step', **{'font-size': '8pt'})
             self.plot_step.showGrid(x=True, y=True, alpha=0.3)
+            # Set smaller font size for tick labels
+            self.plot_step.getAxis('left').setTickFont(font)
+            self.plot_step.getAxis('bottom').setTickFont(font)
+            self.plot_step.getAxis('left').setStyle(tickTextOffset=3)
+            self.plot_step.getAxis('bottom').setStyle(tickTextOffset=3)
             # Disable auto-range on x-axis to maintain sliding window
             self.plot_step.enableAutoRange(axis='x', enable=False)
             self.plot_step.enableAutoRange(axis='y', enable=True)
@@ -113,18 +125,20 @@ class RewardPlotter:
             self.max_steps_shown = max_steps_shown
             self.plt.ion()
 
-            self.fig, (self.ax_episode, self.ax_step) = self.plt.subplots(2, 1, figsize=(10, 8))
-            self.fig.suptitle('Real-time Reward Visualization', fontsize=14, fontweight='bold')
+            self.fig, (self.ax_episode, self.ax_step) = self.plt.subplots(2, 1, figsize=(5, 4))
+            self.fig.suptitle('Real-time Reward Visualization', fontsize=9, fontweight='bold')
 
-            self.ax_episode.set_xlabel('Step')
-            self.ax_episode.set_ylabel('Accumulated Episode Reward')
-            self.ax_episode.set_title('Accumulated Reward per Episode')
+            self.ax_episode.set_xlabel('Step', fontsize=7)
+            self.ax_episode.set_ylabel('Accumulated Episode Reward', fontsize=7)
+            self.ax_episode.set_title('Accumulated Reward per Episode', fontsize=8)
             self.ax_episode.grid(True, alpha=0.3)
+            self.ax_episode.tick_params(labelsize=6)
 
-            self.ax_step.set_xlabel('Step')
-            self.ax_step.set_ylabel('Step Reward')
-            self.ax_step.set_title('Individual Step Rewards')
+            self.ax_step.set_xlabel('Step', fontsize=7)
+            self.ax_step.set_ylabel('Step Reward', fontsize=7)
+            self.ax_step.set_title('Individual Step Rewards', fontsize=8)
             self.ax_step.grid(True, alpha=0.3)
+            self.ax_step.tick_params(labelsize=6)
             self.ax_step.axhline(y=0, color='k', linestyle='-', linewidth=0.5, alpha=0.3)
 
             self.episode_data = []
@@ -350,15 +364,17 @@ class RewardPlotter:
                 self.ax_step.clear()
 
                 # Reapply labels and formatting
-                self.ax_episode.set_xlabel('Step')
-                self.ax_episode.set_ylabel('Accumulated Episode Reward')
-                self.ax_episode.set_title('Accumulated Reward per Episode')
+                self.ax_episode.set_xlabel('Step', fontsize=7)
+                self.ax_episode.set_ylabel('Accumulated Episode Reward', fontsize=7)
+                self.ax_episode.set_title('Accumulated Reward per Episode', fontsize=8)
                 self.ax_episode.grid(True, alpha=0.3)
+                self.ax_episode.tick_params(labelsize=6)
 
-                self.ax_step.set_xlabel('Step')
-                self.ax_step.set_ylabel('Step Reward')
-                self.ax_step.set_title('Individual Step Rewards')
+                self.ax_step.set_xlabel('Step', fontsize=7)
+                self.ax_step.set_ylabel('Step Reward', fontsize=7)
+                self.ax_step.set_title('Individual Step Rewards', fontsize=8)
                 self.ax_step.grid(True, alpha=0.3)
+                self.ax_step.tick_params(labelsize=6)
                 self.ax_step.axhline(y=0, color='k', linestyle='-', linewidth=0.5, alpha=0.3)
 
                 # Plot completed episodes (filtered to window)
@@ -409,7 +425,7 @@ class RewardPlotter:
 
                 # Add legends
                 if len(self.episode_data) + (1 if self.current_episode_steps else 0) > 0:
-                    self.ax_episode.legend(loc='best', fontsize=8)
+                    self.ax_episode.legend(loc='best', fontsize=6)
 
                 self.plt.tight_layout()
                 # Draw the canvas and flush events without blocking
@@ -1070,11 +1086,11 @@ def main():
     )
     p.add_argument("--seed", type=str, default=None, help="Random seed for environment (int, 'train', 'val', 'test', or None for test seed)")
     p.add_argument("--fps", type=int, default=None, help="Limit playback to target FPS (frames per second)")
-    p.add_argument("--plot-rewards", dest="plot_rewards", action="store_true", default=True, help="Show real-time reward plot (default: True)")
-    p.add_argument("--no-plot-rewards", dest="plot_rewards", action="store_false", help="Disable real-time reward plot")
+    p.add_argument("--plot-metrics", dest="plot_metrics", action="store_true", default=True, help="Show real-time reward plot (default: True)")
+    p.add_argument("--no-plot-metrics", dest="plot_metrics", action="store_false", help="Disable real-time reward plot")
     p.add_argument("--plot-update-interval", type=float, default=0.2, help="Minimum time (seconds) between plot updates (default: 0.2, lower=smoother but slower game)")
     p.add_argument("--plot-window-size", type=int, default=100, help="Number of steps to show in sliding window (default: 100)")
-    p.add_argument("--show-preprocessed-obs", dest="show_preprocessed_obs", action="store_true", default=False, help="Show preprocessed observations in separate window (what agent sees)")
+    p.add_argument("--show-preprocessing", dest="show_preprocessing", action="store_true", default=False, help="Show preprocessed observations in separate window (what agent sees)")
     p.add_argument(
         "--env-kwargs",
         action="append",
@@ -1213,7 +1229,7 @@ def main():
 
     # Initialize reward plotter if enabled and not headless
     plotter = None
-    if args.plot_rewards and not args.headless:
+    if args.plot_metrics and not args.headless:
         try:
             plotter = RewardPlotter(
                 update_interval=args.plot_update_interval,
@@ -1229,7 +1245,7 @@ def main():
 
     # Initialize preprocessed observation viewer if enabled and not headless
     obs_viewer = None
-    if args.show_preprocessed_obs and not args.headless:
+    if args.show_preprocessing and not args.headless:
         try:
             obs_viewer = PreprocessedObservationViewer(update_interval=0.05)
             backend = "PyQtGraph (fast)" if obs_viewer.use_pyqtgraph else "Matplotlib"

@@ -99,15 +99,9 @@ objects_ppo: &objects_ppo
   algo_id: ppo
   model_id: mlp_small
   description: "PPO using OCAtari object features for Breakout"
-  max_env_steps: 1.2e6
   eval_warmup_epochs: 125
   eval_freq_epochs: 10
   eval_episodes: 15
-  n_steps: 256
-  n_epochs: 20
-  policy_lr: 1e-2
-  clip_range: 0.15
-  ent_coef: 0.005
 
 objects_deterministic_ppo:
   <<: *objects_ppo

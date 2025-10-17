@@ -100,7 +100,7 @@ def estimate_resources_from_config(config_id: str, variant_id: str, max_env_step
 
     # Override max_env_steps if provided
     if max_env_steps is not None:
-        config.max_env_steps = max_env_steps
+        config.max_env_steps = int(max_env_steps) if isinstance(max_env_steps, str) else max_env_steps
 
     # Determine if GPU is needed
     # Use GPU for:
@@ -152,6 +152,9 @@ def estimate_resources_from_config(config_id: str, variant_id: str, max_env_step
     # Estimate timeout based on max_env_steps
     # Rough estimate: 1000 env_steps per second for simple envs, 100 for complex
     if config.max_env_steps:
+        # Ensure max_env_steps is an int (may be string from YAML)
+        max_steps = int(config.max_env_steps) if isinstance(config.max_env_steps, str) else config.max_env_steps
+
         if needs_gpu:
             # GPU training is faster for image envs
             steps_per_sec = 500 if obs_type_str in {"rgb", "objects"} else 2000
@@ -160,7 +163,7 @@ def estimate_resources_from_config(config_id: str, variant_id: str, max_env_step
             steps_per_sec = 2000 if obs_type_str == "vector" else 200
 
         # Add 50% buffer and minimum 10 minutes
-        estimated_seconds = config.max_env_steps / steps_per_sec
+        estimated_seconds = max_steps / steps_per_sec
         timeout = max(600, int(estimated_seconds * 1.5))
         # Cap at 4 hours
         timeout = min(timeout, 14400)
@@ -438,8 +441,9 @@ def create_training_function(app: modal.App, resources: ResourceRequirements, de
                     process.send_signal(signum)
 
             # Register signal handlers for graceful shutdown on preemption
+            # In detached mode, only handle SIGTERM (preemption), ignore SIGINT
+            # SIGINT can arrive spuriously from Modal infrastructure and shouldn't kill training
             signal.signal(signal.SIGTERM, forward_signal)
-            signal.signal(signal.SIGINT, forward_signal)
 
             # Stream output line by line
             for line in process.stdout:
@@ -575,8 +579,8 @@ def create_training_function(app: modal.App, resources: ResourceRequirements, de
                     process.send_signal(signum)
 
             # Register signal handlers for graceful shutdown on preemption
+            # Only handle SIGTERM (preemption). In streaming mode, SIGINT is handled by Modal client.
             signal.signal(signal.SIGTERM, forward_signal)
-            signal.signal(signal.SIGINT, forward_signal)
 
             # Stream output line by line
             for line in process.stdout:
@@ -705,23 +709,35 @@ def launch_modal_training(args):
         print("\nSpawning detached training job...")
         print("-" * 80)
         try:
+            # Spawn function inside app context
             with app.run():
                 function_call = run_training_fn.spawn(train_args, run_id, project_id)
+                print(f"\nFunction call ID: {function_call.object_id}")
 
-            print("\n✓ Training job spawned successfully!")
-            print(f"\nFunction call ID: {function_call.object_id}")
-            print(f"Run ID: {run_id or '(determined from checkpoint)'}")
-            print("\nThe training will continue running on Modal even if you close this terminal.")
-            print("Monitor progress at: https://modal.com/apps")
-            if run_id:
-                print(f"Or check W&B: https://wandb.ai")
+                # CRITICAL: Wait for Modal to schedule the function before exiting context
+                # If we exit too quickly, Modal cancels the pending function
+                # Give Modal time to transition from queued -> running state
+                import time
+                print("Waiting for Modal to schedule the function...")
+                time.sleep(5)  # 5 seconds should be sufficient for Modal to start the function
+
+            # Context exited - function is now running independently on Modal
         except KeyboardInterrupt:
-            print("\n✗ Job spawn cancelled")
+            # User interrupted during spawn setup
+            print("\n✗ Job spawn cancelled by user")
             raise
         except Exception as e:
             print("-" * 80)
             print(f"\n✗ Failed to spawn training job: {e}")
             raise
+
+        # Spawn succeeded - job will continue running even if terminal is closed
+        print("\n✓ Training job spawned successfully!")
+        print(f"Run ID: {run_id or '(determined from checkpoint)'}")
+        print("\nThe training will continue running on Modal even if you close this terminal.")
+        print("Monitor progress at: https://modal.com/apps")
+        if run_id:
+            print(f"Or check W&B: https://wandb.ai")
     else:
         # Streaming mode: stream logs and block until completion (original behavior)
         print("\nStreaming logs...\n")

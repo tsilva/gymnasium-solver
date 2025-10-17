@@ -21,10 +21,17 @@ def _build_env_alepy(env_id, obs_type, render_mode, **env_kwargs):
 
 def _build_env_alepy__objects(env_id, render_mode, **env_kwargs):
     from ocatari.core import OCAtari
+    # Always use full action space (18 actions) for standardization across all Atari games
+    env_kwargs = dict(env_kwargs)
+    env_kwargs.setdefault('full_action_space', True)
     return OCAtari(env_id, mode="ram", hud=False, render_mode=render_mode, **env_kwargs)
 
 def _build_env_alepy__standard(env_id, obs_type, render_mode, **env_kwargs):
     assert obs_type in ("ram", "rgb"), f"Unsupported obs_type for ALE: {obs_type}" # TODO: use enum to reference obs type
+    # Always use full action space (18 actions) for standardization across all Atari games
+    # Action masking will be handled by the policy model via valid_actions parameter
+    env_kwargs = dict(env_kwargs)
+    env_kwargs.setdefault('full_action_space', True)
     return gym.make(env_id, obs_type=obs_type, render_mode=render_mode, **env_kwargs)
 
 def _build_env_vizdoom(env_id, obs_type, render_mode, **env_kwargs):
@@ -216,6 +223,8 @@ def _build_vec_env_alepy(
     # TODO: map more env_kwargs to AtariVectorEnv parameters
     if 'repeat_action_probability' in env_kwargs:
         atari_kwargs['repeat_action_probability'] = env_kwargs['repeat_action_probability']
+    # Always use full action space (18 actions) for standardization across all Atari games
+    atari_kwargs.setdefault('full_action_space', True)
     if 'full_action_space' in env_kwargs:
         atari_kwargs['full_action_space'] = env_kwargs['full_action_space']
 
@@ -227,7 +236,7 @@ def _build_vec_env_alepy(
     )
 
     # Seed the envs
-    obs, _ = vec_env.reset(seed=seed)
+    _ = vec_env.reset(seed=seed)
 
     # Annotate env so VecEnvInfoWrapper can expose metadata/compat fallbacks
     vec_env._ale_atari_vec = True  # type: ignore[attr-defined]

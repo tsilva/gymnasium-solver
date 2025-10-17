@@ -15,6 +15,7 @@ from .PongV5.reward_shaper import PongV5_RewardShaper
 from .VizDoom.reward_shaper import VizDoom_RewardShaper
 from .RetroSuperMarioBros.reward_shaper import RetroSuperMarioBros_RewardShaper
 from .frame_skip import FrameSkipWrapper
+from .ale_action_masking import ALEActionMaskingWrapper
 
 # VizDoom generic env is available via gym_wrappers.vizdoom: VizDoomEnv
 
@@ -40,5 +41,6 @@ _wrappers_to_register = [
     VizDoom_RewardShaper,
     RetroSuperMarioBros_RewardShaper,
     PixelObservationWrapper,
+    ALEActionMaskingWrapper,
 ]
 EnvWrapperRegistry.register(_wrappers_to_register)

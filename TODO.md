@@ -2,12 +2,12 @@
 
 # NEXT
 
-- FEAT: in atari start using full action spaces and then use action masking as appropriate, unify with vizdoom, make discrete action space remappeer obsolete
+- BUG: runs executed through modal dont seem to have same wandb run id
+- ~~FEAT: in atari start using full action spaces and then use action masking as appropriate, unify with vizdoom, make discrete action space remappeer obsolete~~ ✓ DONE
 - BUG: clean exit run_play on ctrl+c
 - BUG: remote runs get killed if I close terminal?
 - TODO: measure epochs/s
 
-- TODO: add decent names to modal runs
 - BUG: remote runs are still creating local run folder (empty)
 - BUG: cant train VizDoom-Basic-v0 when frame_stack is 1
 - TODO: progress bar for rollout collection
@@ -15,7 +15,6 @@
 
 - THINK: how to audit reward structure / mean, std, outliers, and histogram
 - FEAT: add sweep.py with --backend modal support
-- BUG: runs executed through modal dont seem to have same wandb run id
 - FEAT: sweep from run/checkpoint/
 - BUG: run_play.py user input not working for Atari envs
 - TEST: CleanRL's envpool implementation

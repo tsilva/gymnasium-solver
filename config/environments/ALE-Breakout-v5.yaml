@@ -11,10 +11,28 @@ spec: &spec
   render_fps: 60
 
   action_space:
-    discrete: 4
-    labels: {0: NOOP, 1: FIRE, 2: RIGHT, 3: LEFT}
-    full_space: {count: 18, enable_with: full_action_space=True}
-
+    discrete: 18
+    labels:
+      0: NOOP
+      1: FIRE
+      2: UP
+      3: RIGHT
+      4: LEFT
+      5: DOWN
+      6: UPRIGHT
+      7: UPLEFT
+      8: DOWNRIGHT
+      9: DOWNLEFT
+      10: UPFIRE
+      11: RIGHTFIRE
+      12: LEFTFIRE
+      13: DOWNFIRE
+      14: UPRIGHTFIRE
+      15: UPLEFTFIRE
+      16: DOWNRIGHTFIRE
+      17: DOWNLEFTFIRE
+    valid: [0, 1, 3, 4]  # NOOP, FIRE, RIGHT, LEFT
+ 
   observation_space:
     default: rgb
     variants:
@@ -64,6 +82,29 @@ spec: &spec
 # RGB spec
 _spec_rgb: &spec_rgb
   <<: *spec
+  action_space:
+    discrete: 18
+    valid: [0, 1, 3, 4]  # NOOP, FIRE, RIGHT, LEFT
+    labels:
+      0: NOOP
+      1: FIRE
+      2: UP
+      3: RIGHT
+      4: LEFT
+      5: DOWN
+      6: UPRIGHT
+      7: UPLEFT
+      8: DOWNRIGHT
+      9: DOWNLEFT
+      10: UPFIRE
+      11: RIGHTFIRE
+      12: LEFTFIRE
+      13: DOWNFIRE
+      14: UPRIGHTFIRE
+      15: UPLEFTFIRE
+      16: DOWNRIGHTFIRE
+      17: DOWNLEFTFIRE
+    note: "Uses full ALE action space (18 actions) with masking. Only 4 actions are meaningful for Breakout."
   observation_space:
     default: rgb
     variants:

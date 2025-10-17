@@ -12,9 +12,28 @@ spec: &spec
   render_fps: 60
 
   action_space:
-    discrete: 6
-    labels: {0: NOOP, 1: FIRE, 2: RIGHT, 3: LEFT, 4: RIGHTFIRE, 5: LEFTFIRE}
-    full_space: {count: 18, enable_with: full_action_space=True}
+    discrete: 18
+    valid: [0, 1, 3, 4, 11, 12]  # NOOP, FIRE, RIGHT, LEFT, RIGHTFIRE, LEFTFIRE
+    labels:
+      0: NOOP
+      1: FIRE
+      2: UP
+      3: RIGHT
+      4: LEFT
+      5: DOWN
+      6: UPRIGHT
+      7: UPLEFT
+      8: DOWNRIGHT
+      9: DOWNLEFT
+      10: UPFIRE
+      11: RIGHTFIRE
+      12: LEFTFIRE
+      13: DOWNFIRE
+      14: UPRIGHTFIRE
+      15: UPLEFTFIRE
+      16: DOWNRIGHTFIRE
+      17: DOWNLEFTFIRE
+    note: "Uses full ALE action space (18 actions) with masking. Only 6 actions are meaningful for Pong."
 
   observation_space:
     default: state
@@ -59,6 +78,28 @@ spec: &spec
 # RGB spec
 _spec_rgb: &spec_rgb
   <<: *spec
+  action_space:
+    discrete: 18
+    labels:
+      0: NOOP
+      1: FIRE
+      2: UP
+      3: RIGHT
+      4: LEFT
+      5: DOWN
+      6: UPRIGHT
+      7: UPLEFT
+      8: DOWNRIGHT
+      9: DOWNLEFT
+      10: UPFIRE
+      11: RIGHTFIRE
+      12: LEFTFIRE
+      13: DOWNFIRE
+      14: UPRIGHTFIRE
+      15: UPLEFTFIRE
+      16: DOWNRIGHTFIRE
+      17: DOWNLEFTFIRE
+    valid: [0, 3, 4]  # NOOP, RIGHT, LEFT
   observation_space:
     default: rgb
     variants:
@@ -71,9 +112,28 @@ _spec_rgb: &spec_rgb
 _spec_objects: &spec_objects
   <<: *spec
   action_space:
-    discrete: 3
-    labels: {0: NOOP, 1: RIGHT, 2: LEFT}
-    note: Subset via DiscreteActionSpaceRemapperWrapper mapping [0, 2, 3]
+    discrete: 18
+    valid: [0, 3, 4]  # NOOP, RIGHT, LEFT (simplified for object-based learning)
+    labels:
+      0: NOOP
+      1: FIRE
+      2: UP
+      3: RIGHT
+      4: LEFT
+      5: DOWN
+      6: UPRIGHT
+      7: UPLEFT
+      8: DOWNRIGHT
+      9: DOWNLEFT
+      10: UPFIRE
+      11: RIGHTFIRE
+      12: LEFTFIRE
+      13: DOWNFIRE
+      14: UPRIGHTFIRE
+      15: UPLEFTFIRE
+      16: DOWNRIGHTFIRE
+      17: DOWNLEFTFIRE
+    note: "Uses full ALE action space (18 actions) with masking. Only 3 actions used for object-based learning."
   observation_space:
     default: state
     variants:
@@ -93,6 +153,7 @@ _spec_objects: &spec_objects
           - {name: LastAction.NOOP, range: [0.0, 1.0]}
           - {name: LastAction.RIGHT, range: [0.0, 1.0]}
           - {name: LastAction.LEFT, range: [0.0, 1.0]}
+        note: "Action indices updated for full action space: NOOP=0, RIGHT=3, LEFT=4"
 
 # =====================
 # env variants
@@ -109,17 +170,11 @@ _env_deterministic: &env_deterministic
   env_kwargs:
     repeat_action_probability: 0.0
 
-_env_wrapper_restricted_actions: &env_wrapper_restricted_actions
-  id: DiscreteActionSpaceRemapperWrapper
-  mapping: [0, 2, 3]
-  
 # RGB env
 _env_rgb: &env_rgb
   <<: *env
   spec: *spec_rgb
   obs_type: "rgb"
-  env_wrappers:
-    - *env_wrapper_restricted_actions
 
 # Objects env
 _env_objects: &env_objects
@@ -128,8 +183,7 @@ _env_objects: &env_objects
   obs_type: "objects"
   accelerator: "cpu"
   env_wrappers:
-    - *env_wrapper_restricted_actions
-    - { id: PongV5_FeatureExtractor, action_ids: [0, 2, 3] } # TODO: softcode action_ids based on remapper
+    - { id: PongV5_FeatureExtractor, action_ids: [0, 3, 4] }  # Updated for full action space indices
 
 ###########################
 # CONFIGS: obs_type = objects

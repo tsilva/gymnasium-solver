@@ -37,6 +37,7 @@ dependencies = [
     # NOTE: stable-retro 0.9.5 is BROKEN on M1 Mac (arm64 wheel contains x86_64 binary)
     # Building from source also fails. Use with Rosetta or wait for upstream fix.
     "stable-retro>=0.9.5",
+    "pyqtgraph>=0.13.7",
 ]
 
 [tool.setuptools.packages.find]

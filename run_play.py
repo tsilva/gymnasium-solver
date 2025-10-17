@@ -14,6 +14,325 @@ from utils.rollouts import RolloutCollector
 from utils.run import Run
 
 
+class RewardPlotter:
+    """Real-time reward plotter for visualizing rewards during playback."""
+
+    def __init__(self, update_interval: float = 0.2):
+        """Initialize the plotter with two subplots for episode and step rewards.
+
+        Args:
+            update_interval: Minimum time (in seconds) between plot updates to throttle rendering
+        """
+        try:
+            import pyqtgraph as pg
+            from pyqtgraph.Qt import QtCore
+            import time
+
+            self.pg = pg
+            self.time = time
+
+            # Set background to white for better visibility
+            pg.setConfigOption('background', 'w')
+            pg.setConfigOption('foreground', 'k')
+
+            # Create window with two plots
+            self.win = pg.GraphicsLayoutWidget(show=True, title="Real-time Reward Visualization")
+            self.win.resize(1000, 800)
+            self.win.setWindowTitle('Real-time Reward Visualization')
+
+            # Position window on the right side of the screen to not overlap with game
+            # Game window is typically on the left, so position plot on the right
+            self.win.move(1050, 50)  # x=1050 (right side), y=50 (near top)
+
+            # Episode reward plot (accumulated reward over steps)
+            self.plot_episode = self.win.addPlot(title="Accumulated Reward per Episode")
+            self.plot_episode.setLabel('left', 'Accumulated Episode Reward')
+            self.plot_episode.setLabel('bottom', 'Step')
+            self.plot_episode.showGrid(x=True, y=True, alpha=0.3)
+            self.plot_episode.addLegend()
+
+            # Move to next row
+            self.win.nextRow()
+
+            # Step reward plot (individual step rewards)
+            self.plot_step = self.win.addPlot(title="Individual Step Rewards")
+            self.plot_step.setLabel('left', 'Step Reward')
+            self.plot_step.setLabel('bottom', 'Step')
+            self.plot_step.showGrid(x=True, y=True, alpha=0.3)
+
+            # Add zero line
+            self.plot_step.addLine(y=0, pen=pg.mkPen('k', width=1, style=QtCore.Qt.PenStyle.DashLine))
+
+            # Data storage
+            self.episode_data = []  # List of (steps, rewards, curve) for each episode
+            self.current_episode_steps = []
+            self.current_episode_rewards = []
+            self.current_step_rewards = []
+            self.global_step = 0
+            self.episode_num = 0
+            self.current_curve = None
+
+            # Step reward bars
+            self.step_bars = None
+
+            # Color palette for different episodes (RGB tuples)
+            self.colors = [
+                (31, 119, 180), (255, 127, 14), (44, 160, 44), (214, 39, 40), (148, 103, 189),
+                (140, 86, 75), (227, 119, 194), (127, 127, 127), (188, 189, 34), (23, 190, 207)
+            ]
+
+            # Track if window is still open
+            self.is_open = True
+
+            # Throttling: only update plot at fixed intervals
+            self.update_interval = update_interval
+            self.last_update_time = time.time()
+            self.needs_update = False
+
+            self.use_pyqtgraph = True
+
+        except ImportError:
+            # Fallback to matplotlib if pyqtgraph is not available
+            import matplotlib.pyplot as plt
+            import time
+
+            self.plt = plt
+            self.time = time
+            self.plt.ion()
+
+            self.fig, (self.ax_episode, self.ax_step) = self.plt.subplots(2, 1, figsize=(10, 8))
+            self.fig.suptitle('Real-time Reward Visualization', fontsize=14, fontweight='bold')
+
+            self.ax_episode.set_xlabel('Step')
+            self.ax_episode.set_ylabel('Accumulated Episode Reward')
+            self.ax_episode.set_title('Accumulated Reward per Episode')
+            self.ax_episode.grid(True, alpha=0.3)
+
+            self.ax_step.set_xlabel('Step')
+            self.ax_step.set_ylabel('Step Reward')
+            self.ax_step.set_title('Individual Step Rewards')
+            self.ax_step.grid(True, alpha=0.3)
+            self.ax_step.axhline(y=0, color='k', linestyle='-', linewidth=0.5, alpha=0.3)
+
+            self.episode_data = []
+            self.current_episode_steps = []
+            self.current_episode_rewards = []
+            self.current_step_rewards = []
+            self.global_step = 0
+            self.episode_num = 0
+
+            self.colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+                           '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+
+            self.is_open = True
+            self.fig.canvas.mpl_connect('close_event', self._on_close)
+
+            self.update_interval = update_interval
+            self.last_update_time = time.time()
+            self.needs_update = False
+
+            self.plt.tight_layout()
+            self.plt.show(block=False)
+            self.fig.canvas.draw()
+            self.fig.canvas.flush_events()
+
+            self.use_pyqtgraph = False
+
+    def _on_close(self, event):
+        """Handle window close event."""
+        self.is_open = False
+
+    def add_step(self, step_reward: float):
+        """Add a step reward and update the plots (throttled).
+
+        Args:
+            step_reward: Reward received at this step
+        """
+        if not self.is_open:
+            return
+
+        # Update current episode data
+        self.current_episode_steps.append(self.global_step)
+        accumulated_reward = (self.current_episode_rewards[-1] if self.current_episode_rewards else 0) + step_reward
+        self.current_episode_rewards.append(accumulated_reward)
+        self.current_step_rewards.append(step_reward)
+        self.global_step += 1
+
+        # Mark that we need an update
+        self.needs_update = True
+
+        # Only update plots if enough time has passed (throttling)
+        current_time = self.time.time()
+        if current_time - self.last_update_time >= self.update_interval:
+            self._update_plots()
+            self.last_update_time = current_time
+            self.needs_update = False
+
+            # Process events for pyqtgraph
+            if self.use_pyqtgraph:
+                from pyqtgraph.Qt import QtWidgets
+                QtWidgets.QApplication.processEvents()
+
+    def reset_episode(self):
+        """Reset for a new episode and force a plot update."""
+        if not self.is_open:
+            return
+
+        # Store completed episode data
+        if self.current_episode_steps:
+            if self.use_pyqtgraph:
+                # Store the curve reference for pyqtgraph
+                self.episode_data.append((
+                    self.current_episode_steps.copy(),
+                    self.current_episode_rewards.copy(),
+                    self.current_curve
+                ))
+            else:
+                self.episode_data.append((self.current_episode_steps.copy(), self.current_episode_rewards.copy()))
+
+        # Reset for next episode
+        self.current_episode_steps = []
+        self.current_episode_rewards = []
+        self.current_curve = None
+        self.episode_num += 1
+
+        # Force an update at episode boundaries
+        if self.needs_update:
+            self._update_plots()
+            self.last_update_time = self.time.time()
+            self.needs_update = False
+
+            # Process events for pyqtgraph
+            if self.use_pyqtgraph:
+                from pyqtgraph.Qt import QtWidgets
+                QtWidgets.QApplication.processEvents()
+
+    def _update_plots(self):
+        """Update both subplots with current data."""
+        if not self.is_open:
+            return
+
+        try:
+            if self.use_pyqtgraph:
+                # PyQtGraph (fast) implementation
+                import numpy as np
+
+                # Update current episode curve
+                if self.current_episode_steps:
+                    color = self.colors[self.episode_num % len(self.colors)]
+                    if self.current_curve is None:
+                        # Create new curve for this episode
+                        self.current_curve = self.plot_episode.plot(
+                            self.current_episode_steps,
+                            self.current_episode_rewards,
+                            pen=self.pg.mkPen(color=color, width=2),
+                            name=f'Episode {self.episode_num+1}'
+                        )
+                    else:
+                        # Update existing curve (much faster than recreating)
+                        self.current_curve.setData(self.current_episode_steps, self.current_episode_rewards)
+
+                # Update step rewards (use bar graph for better performance)
+                if self.current_step_rewards:
+                    x = np.array(self.current_episode_steps)
+                    y = np.array(self.current_step_rewards)
+
+                    # Clear previous bars if needed
+                    if self.step_bars is not None:
+                        self.plot_step.removeItem(self.step_bars)
+
+                    # Create bar graph item
+                    self.step_bars = self.pg.BarGraphItem(
+                        x=x, height=y, width=0.8,
+                        brush=self.pg.mkBrush(70, 130, 180, 150)
+                    )
+                    self.plot_step.addItem(self.step_bars)
+
+            else:
+                # Matplotlib (fallback) implementation
+                # Clear plots
+                self.ax_episode.clear()
+                self.ax_step.clear()
+
+                # Reapply labels and formatting
+                self.ax_episode.set_xlabel('Step')
+                self.ax_episode.set_ylabel('Accumulated Episode Reward')
+                self.ax_episode.set_title('Accumulated Reward per Episode')
+                self.ax_episode.grid(True, alpha=0.3)
+
+                self.ax_step.set_xlabel('Step')
+                self.ax_step.set_ylabel('Step Reward')
+                self.ax_step.set_title('Individual Step Rewards')
+                self.ax_step.grid(True, alpha=0.3)
+                self.ax_step.axhline(y=0, color='k', linestyle='-', linewidth=0.5, alpha=0.3)
+
+                # Plot completed episodes
+                for i, (steps, rewards) in enumerate(self.episode_data):
+                    color = self.colors[i % len(self.colors)]
+                    self.ax_episode.plot(steps, rewards, color=color, linewidth=2, alpha=0.7, label=f'Episode {i+1}')
+
+                # Plot current episode
+                if self.current_episode_steps:
+                    color = self.colors[self.episode_num % len(self.colors)]
+                    self.ax_episode.plot(self.current_episode_steps, self.current_episode_rewards,
+                                        color=color, linewidth=2, label=f'Episode {self.episode_num+1} (current)')
+
+                # Plot step rewards
+                all_steps = []
+                all_step_rewards = []
+                episode_boundaries = []
+
+                # Collect all step data
+                for episode_steps, _ in self.episode_data:
+                    if episode_steps:
+                        episode_boundaries.append(episode_steps[-1])
+
+                # Add current episode step rewards
+                if self.current_step_rewards:
+                    all_steps.extend(self.current_episode_steps)
+                    all_step_rewards.extend(self.current_step_rewards)
+
+                if all_steps:
+                    self.ax_step.bar(all_steps, all_step_rewards, width=1.0, alpha=0.6, color='steelblue')
+
+                # Add episode boundary lines
+                for boundary in episode_boundaries:
+                    self.ax_episode.axvline(x=boundary, color='red', linestyle='--', linewidth=1, alpha=0.5)
+                    self.ax_step.axvline(x=boundary, color='red', linestyle='--', linewidth=1, alpha=0.5)
+
+                # Add legends
+                if len(self.episode_data) + (1 if self.current_episode_steps else 0) > 0:
+                    self.ax_episode.legend(loc='best', fontsize=8)
+
+                self.plt.tight_layout()
+                # Draw the canvas and flush events without blocking
+                self.fig.canvas.draw()
+                self.fig.canvas.flush_events()
+
+        except Exception:
+            # Ignore plot update errors (e.g., if window was closed)
+            self.is_open = False
+
+    def close(self):
+        """Close the plot window, flushing any pending updates first."""
+        if self.is_open:
+            # Flush any pending updates before closing
+            if self.needs_update:
+                try:
+                    self._update_plots()
+                except Exception:
+                    pass
+
+            try:
+                if self.use_pyqtgraph:
+                    self.win.close()
+                else:
+                    self.plt.close(self.fig)
+            except Exception:
+                pass
+            self.is_open = False
+
+
 def extract_action_labels_from_config(config) -> dict[int, str] | None:
     """Extract and remap action labels from config spec.
 
@@ -58,7 +377,7 @@ def extract_action_labels_from_config(config) -> dict[int, str] | None:
         return original_labels
 
 
-def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: bool = False, fps: int | None = None, action_labels: dict[int, str] | None = None):
+def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: bool = False, fps: int | None = None, action_labels: dict[int, str] | None = None, plotter: RewardPlotter | None = None):
     """Play episodes with random actions or user input."""
     import numpy as np
     import gymnasium as gym
@@ -296,8 +615,13 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
             action_batch = np.array([action])
 
         obs, reward, terminated, truncated, info = env.step(action_batch)
-        episode_reward += reward[0]
+        step_reward = reward[0]
+        episode_reward += step_reward
         episode_length += 1
+
+        # Update plotter with step reward
+        if plotter and plotter.is_open:
+            plotter.add_step(step_reward)
 
         # Apply FPS limiting if specified
         if frame_delay > 0:
@@ -319,6 +643,10 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
                 f"[episodes {reported_episodes}/{target_episodes}] last_rew={episode_reward:.2f} last_len={episode_length} "
                 f"mean_rew={mean_reward:.2f} mean_len={int(mean_length)}"
             )
+
+            # Reset plotter for next episode
+            if plotter and plotter.is_open:
+                plotter.reset_episode()
 
             # Reset for next episode
             obs = env.reset()
@@ -355,6 +683,9 @@ def main():
     )
     p.add_argument("--seed", type=str, default=None, help="Random seed for environment (int, 'train', 'val', 'test', or None for test seed)")
     p.add_argument("--fps", type=int, default=None, help="Limit playback to target FPS (frames per second)")
+    p.add_argument("--plot-rewards", dest="plot_rewards", action="store_true", default=True, help="Show real-time reward plot (default: True)")
+    p.add_argument("--no-plot-rewards", dest="plot_rewards", action="store_false", help="Disable real-time reward plot")
+    p.add_argument("--plot-update-interval", type=float, default=0.2, help="Minimum time (seconds) between plot updates (default: 0.2, lower=smoother but slower game)")
     args = p.parse_args()
     target_episodes = max(1, int(args.episodes))
 
@@ -377,6 +708,11 @@ def main():
     # Best-effort: prefer software renderer on WSL to avoid GLX issues
     is_wsl = ("microsoft" in platform.release().lower()) or ("WSL_INTEROP" in os.environ)
     if is_wsl: os.environ.setdefault("SDL_RENDER_DRIVER", "software")
+
+    # Position game window on the left side to not overlap with plot window
+    # SDL_VIDEO_WINDOW_POS sets the initial window position
+    if not args.headless:
+        os.environ.setdefault("SDL_VIDEO_WINDOW_POS", "50,50")  # x=50 (left side), y=50 (near top)
 
     # Branch: config-id mode or run-id mode
     if args.config_id is not None:
@@ -469,10 +805,26 @@ def main():
     # Extract action labels from config
     action_labels = extract_action_labels_from_config(config)
 
+    # Initialize reward plotter if enabled and not headless
+    plotter = None
+    if args.plot_rewards and not args.headless:
+        try:
+            plotter = RewardPlotter(update_interval=args.plot_update_interval)
+            backend = "PyQtGraph (fast)" if plotter.use_pyqtgraph else "Matplotlib"
+            print(f"Real-time reward plot enabled using {backend} (update interval: {args.plot_update_interval}s).")
+            print("Close the plot window to disable plotting.")
+        except Exception as e:
+            print(f"Warning: Could not initialize reward plotter: {e}")
+            plotter = None
+
     # Handle different modes
     if args.mode in ["random", "user"]:
         # Manual control modes don't need policy
-        play_episodes_manual(env, target_episodes, args.mode, args.step_by_step, args.fps, action_labels)
+        try:
+            play_episodes_manual(env, target_episodes, args.mode, args.step_by_step, args.fps, action_labels, plotter)
+        finally:
+            if plotter:
+                plotter.close()
         print("Done.")
         return
 
@@ -481,11 +833,11 @@ def main():
     # TODO: we should be loading the agent and having it run the episode
     policy_model, _ = load_policy_model_from_checkpoint(run.best_checkpoint_path, env, config)
 
-    # Initialize rollout collector; step-by-step mode or FPS limiting uses single-step rollouts
+    # Initialize rollout collector; step-by-step mode, FPS limiting, or plotting uses single-step rollouts
     collector = RolloutCollector(
         env=env,
         policy_model=policy_model,
-        n_steps=1 if (args.step_by_step or args.fps) else config.n_steps,
+        n_steps=1 if (args.step_by_step or args.fps or plotter) else config.n_steps,
         **config.rollout_collector_hyperparams(),
     )
 
@@ -498,42 +850,57 @@ def main():
     # Collect episodes until target episodes reached
     reported_episodes = 0
     frame_delay = 1.0 / args.fps if args.fps else 0
-    while reported_episodes < target_episodes:
-        if args.step_by_step:
-            try:
-                user = input("")
-            except EOFError:
-                user = ""
-            if isinstance(user, str) and user.strip().lower() in {"q", "quit", "exit"}:
-                break
+    try:
+        while reported_episodes < target_episodes:
+            if args.step_by_step:
+                try:
+                    user = input("")
+                except EOFError:
+                    user = ""
+                if isinstance(user, str) and user.strip().lower() in {"q", "quit", "exit"}:
+                    break
 
-        step_start = time.perf_counter()
-        _ = collector.collect(deterministic=args.deterministic)
+            step_start = time.perf_counter()
+            _ = collector.collect(deterministic=args.deterministic)
 
-        # Apply FPS limiting if specified
-        if frame_delay > 0:
-            elapsed = time.perf_counter() - step_start
-            sleep_time = max(0, frame_delay - elapsed)
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-        finished_eps = collector.pop_recent_episodes()
-        if not finished_eps:
-            continue  # Keep collecting until we finish a full episode
+            # Update plotter with step reward if plotting is enabled
+            if plotter and plotter.is_open and collector.n_steps == 1:
+                # When n_steps=1, buffer has exactly one step at the most recent position
+                # Access the buffer's rewards_buf directly (shape: [n_steps, n_envs])
+                step_reward = collector._buffer.rewards_buf[collector._buffer.pos - 1, 0]
+                plotter.add_step(float(step_reward))
 
-        for _env_idx, ep_rew, _ep_len, _was_timeout in finished_eps:
-            if reported_episodes >= target_episodes:
-                break
+            # Apply FPS limiting if specified
+            if frame_delay > 0:
+                elapsed = time.perf_counter() - step_start
+                sleep_time = max(0, frame_delay - elapsed)
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+            finished_eps = collector.pop_recent_episodes()
+            if not finished_eps:
+                continue  # Keep collecting until we finish a full episode
 
-            reported_episodes += 1
-            metrics = collector.get_metrics()
-            mean_rew = metrics.get('roll/ep_rew/mean', 0)
-            last_len = int(_ep_len)
-            mean_len = metrics.get('roll/ep_len/mean', 0)
-            fps = metrics.get('roll/fps', 0)
-            print(
-                f"[episodes {reported_episodes}/{target_episodes}] last_rew={ep_rew:.2f} last_len={last_len} "
-                f"mean_rew={mean_rew:.2f} mean_len={int(mean_len)} fps={fps:.1f}"
-            )
+            for _env_idx, ep_rew, _ep_len, _was_timeout in finished_eps:
+                if reported_episodes >= target_episodes:
+                    break
+
+                reported_episodes += 1
+                metrics = collector.get_metrics()
+                mean_rew = metrics.get('roll/ep_rew/mean', 0)
+                last_len = int(_ep_len)
+                mean_len = metrics.get('roll/ep_len/mean', 0)
+                fps = metrics.get('roll/fps', 0)
+                print(
+                    f"[episodes {reported_episodes}/{target_episodes}] last_rew={ep_rew:.2f} last_len={last_len} "
+                    f"mean_rew={mean_rew:.2f} mean_len={int(mean_len)} fps={fps:.1f}"
+                )
+
+                # Reset plotter for next episode
+                if plotter and plotter.is_open:
+                    plotter.reset_episode()
+    finally:
+        if plotter:
+            plotter.close()
 
     print("Done.")
 

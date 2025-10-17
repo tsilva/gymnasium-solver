@@ -934,7 +934,7 @@ wheels = [
 [[package]]
 name = "gymnasium-solver-env"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "ale-py" },
     { name = "gradio" },
@@ -943,28 +943,26 @@ dependencies = [
     { name = "huggingface-hub" },
     { name = "ipykernel" },
     { name = "jupyter" },
+    { name = "matplotlib" },
     { name = "mcp" },
     { name = "minari", extra = ["hdf5"] },
     { name = "modal" },
     { name = "numpy" },
     { name = "ocatari" },
+    { name = "pyqtgraph" },
     { name = "pytest" },
     { name = "python-dotenv" },
     { name = "pytorch-lightning" },
     { name = "pyyaml" },
     { name = "ruamel-yaml" },
     { name = "setuptools" },
+    { name = "stable-retro" },
     { name = "torch" },
     { name = "torchvision" },
     { name = "vizdoom" },
     { name = "wandb" },
     { name = "wandb-workspaces" },
     { name = "watchdog" },
-]
-
-[package.optional-dependencies]
-retro = [
-    { name = "stable-retro" },
 ]
 
 [package.metadata]
@@ -976,18 +974,20 @@ requires-dist = [
     { name = "huggingface-hub", specifier = ">=0.22.0" },
     { name = "ipykernel" },
     { name = "jupyter" },
+    { name = "matplotlib" },
     { name = "mcp" },
     { name = "minari", extras = ["hdf5"] },
     { name = "modal", specifier = ">=0.64.0" },
     { name = "numpy" },
     { name = "ocatari", specifier = ">=2.2.1" },
+    { name = "pyqtgraph", specifier = ">=0.13.7" },
     { name = "pytest" },
     { name = "python-dotenv" },
     { name = "pytorch-lightning" },
     { name = "pyyaml" },
     { name = "ruamel-yaml" },
     { name = "setuptools", specifier = "<80" },
-    { name = "stable-retro", marker = "extra == 'retro'", specifier = ">=0.9.5" },
+    { name = "stable-retro", specifier = ">=0.9.5" },
     { name = "torch" },
     { name = "torchvision" },
     { name = "vizdoom" },
@@ -995,7 +995,6 @@ requires-dist = [
     { name = "wandb-workspaces" },
     { name = "watchdog" },
 ]
-provides-extras = ["retro"]
 
 [[package]]
 name = "h11"
@@ -5397,6 +5396,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/bb/22/f1129e69d94ffff626bdb5c835506b3a5b4f3d070f17ea295e12c2c6f60f/pyparsing-3.2.3.tar.gz", hash = "sha256:b9c13f1ab8b3b542f72e28f634bad4de758ab3ce4546e4301970ad6fa77c38be", size = 1088608, upload-time = "2025-03-25T05:01:28.114Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/05/e7/df2285f3d08fee213f2d041540fa4fc9ca6c2d44cf36d3a035bf2a8d2bcc/pyparsing-3.2.3-py3-none-any.whl", hash = "sha256:a749938e02d6fd0b59b356ca504a24982314bb090c383e3cf201c95ef7e2bfcf", size = 111120, upload-time = "2025-03-25T05:01:24.908Z" },
+]
+
+[[package]]
+name = "pyqtgraph"
+version = "0.13.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/33/d9/b62d5cddb3caa6e5145664bee5ed90223dee23ca887ed3ee479f2609e40a/pyqtgraph-0.13.7.tar.gz", hash = "sha256:64f84f1935c6996d0e09b1ee66fe478a7771e3ca6f3aaa05f00f6e068321d9e3", size = 2343380, upload-time = "2024-04-29T02:18:58.467Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7b/34/5702b3b7cafe99be1d94b42f100e8cc5e6957b761fcb1cf5f72d492851da/pyqtgraph-0.13.7-py3-none-any.whl", hash = "sha256:7754edbefb6c367fa0dfb176e2d0610da3ada20aa7a5318516c74af5fb72bf7a", size = 1925473, upload-time = "2024-04-29T02:18:56.206Z" },
 ]
 
 [[package]]

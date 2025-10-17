@@ -35,7 +35,6 @@
 - TODO: add support for logging info vars in run_inspect.py
 - UX: color terminated state
 - UX: make table lighter
-- FEAT: show real time reward plot to be easier to understand if rewards are being applied (plot in run_play?)
 
 - FEAT: resize to preserve aspect ratio (to avoid distortions)
 - FEAT: crop mario frames
@@ -49,9 +48,9 @@
 - LEARN: reward standardization - Use automatic weighting (e.g., Pop-Art normalization or reward standardization) to balance magnitudes
 - TEST: try lowering vf_coef to stabilize VF clipping
 - TUNE: test giving huge reward when level is completed successfully
+- TUNE: ensure level 1-1 can be completed with a ~100% win rate
 - RUNE: train on level 2 after mastering level 1, check if it forgets level 1
 - TUNE: can I train faster with more n_envs?
-- TUNE: ensure level 1-1 can be completed with a ~100% win rate
 - FEAT: figure out how to consider training finished when level changes
 - FEAT: train next levels using starting point of previous levels, create master checkpoint for each level
 - FEAT: distil policy that plays all levels

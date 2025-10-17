@@ -27,6 +27,16 @@ Resource Allocation:
     - GPU: Automatically allocated for image-based envs (T4 or A10G)
     - Timeout: Estimated based on max_env_steps (10 min - 4 hours)
 
+Preemption Handling:
+    - Modal Functions are subject to preemption (rare but possible)
+    - When preempted, SIGTERM is sent to allow graceful shutdown
+    - Training process saves checkpoint and uploads to W&B before exit
+    - On restart (after preemption), training automatically resumes from last checkpoint
+    - Implementation:
+        1. Signal handler forwards SIGTERM to training subprocess
+        2. Before training starts, checks W&B for existing checkpoints
+        3. If found, automatically converts to resume mode
+
 Examples:
     - CartPole (vector): 4 CPUs, 6GB RAM, no GPU
     - Pong (image, 5M steps): 8 CPUs, 22GB RAM, T4 GPU
@@ -35,7 +45,7 @@ Examples:
 Requirements:
     - Modal account (modal.com)
     - Modal token configured: `modal token new`
-    - WANDB_API_KEY set as Modal secret (optional, for W&B logging)
+    - WANDB_API_KEY and WANDB_ENTITY set as Modal secret (for W&B logging and preemption recovery)
 """
 
 import os
@@ -111,11 +121,11 @@ def estimate_resources_from_config(config_id: str, variant_id: str, max_env_step
             gpu_type = "T4"
 
     # Estimate CPU requirements based on n_envs
-    # Rule of thumb: 1 CPU per 2-4 parallel environments, minimum 2, maximum 16
+    # Rule of thumb: 1 CPU per 2 parallel environments, minimum 2, maximum 16
     n_envs = config.n_envs
     if needs_gpu:
         # With GPU, CPU is mainly for data loading and env stepping
-        cpu = max(2.0, min(8.0, n_envs / 4.0))
+        cpu = max(2.0, min(16.0, n_envs / 2.0))
     else:
         # Without GPU, CPU does everything
         cpu = max(2.0, min(16.0, n_envs / 2.0))
@@ -217,7 +227,70 @@ image = (
         "libglib2.0-0",  # Required by some Gym environments
     )
     .pip_install(*get_training_dependencies())
+    .env({"PYTHONPATH": "/root/gymnasium-solver"})  # Make local modules importable during deserialization
+    .add_local_dir(
+        PROJECT_ROOT,
+        remote_path="/root/gymnasium-solver",
+        # Exclude unnecessary directories and files to reduce image size and avoid build conflicts
+        ignore=[
+            ".git",
+            "__pycache__",
+            ".pytest_cache",
+            "runs",
+            ".venv",
+            "venv",
+            "node_modules",
+            "TODO.md",  # Exclude TODO to avoid conflicts during build
+            "*.log",  # Exclude log files
+            ".DS_Store",  # Exclude macOS system files
+        ],
+    )
 )
+
+
+def _check_run_has_checkpoints_in_wandb(run_id: str, project_id: str) -> bool:
+    """Check if a run exists in W&B with checkpoints.
+
+    Args:
+        run_id: Run ID to check
+        project_id: W&B project ID
+
+    Returns:
+        True if run exists with checkpoints in W&B, False otherwise
+    """
+    try:
+        import wandb
+
+        # Get W&B entity from environment (set in Modal secrets)
+        entity = os.environ.get("WANDB_ENTITY")
+        if not entity:
+            return False
+
+        # Initialize W&B API
+        api = wandb.Api()
+
+        # Check if run exists
+        try:
+            run = api.run(f"{entity}/{project_id}/{run_id}")
+        except wandb.errors.CommError:
+            return False
+
+        # Check for run-archive artifact
+        artifact_name = f"run-{run_id}"
+        try:
+            # List artifacts for this run
+            artifacts = list(run.logged_artifacts())
+            for artifact in artifacts:
+                if artifact.name.startswith(artifact_name) and artifact.type == "run-archive":
+                    # Found the run archive, assume it has checkpoints
+                    return True
+        except:
+            pass
+
+        return False
+    except Exception:
+        # If any error occurs, assume no checkpoints (fail safe)
+        return False
 
 
 def create_training_function(resources: ResourceRequirements, detached: bool = False):
@@ -261,111 +334,123 @@ def create_training_function(resources: ResourceRequirements, detached: bool = F
             Returns:
                 Exit code (0 for success, non-zero for failure)
             """
+            import signal
             import subprocess
-            import tempfile
 
-            # Get repository URL from environment or use default
-            repo_url = os.environ.get(
-                "REPO_URL", "https://github.com/tsilva/gymnasium-solver.git"
+            # Change to mounted code directory
+            code_dir = "/root/gymnasium-solver"
+            os.chdir(code_dir)
+            print(f"Working directory: {os.getcwd()}", flush=True)
+
+            # Set environment variables for quiet operation
+            os.environ["VIBES_QUIET"] = "1"
+            os.environ["VIBES_DISABLE_SESSION_LOGS"] = "1"
+
+            # Suppress warnings in all subprocesses (env stepping, multiprocessing)
+            # This catches warnings that happen in forked/spawned worker processes
+            os.environ["PYTHONWARNINGS"] = "ignore::UserWarning:pydantic._internal._generate_schema,ignore::UserWarning:torch"
+
+            # If project_id was provided, set it as environment variable
+            # This is needed for W&B artifact downloads during --init-from-run
+            if project_id:
+                os.environ["WANDB_PROJECT"] = project_id
+                print(f"Using W&B project: {project_id}", flush=True)
+
+            # If run_id was provided, set it as environment variable
+            # so train.py will use it for W&B initialization
+            if run_id:
+                os.environ["WANDB_RUN_ID"] = run_id
+                print(f"Using pre-generated run ID: {run_id}", flush=True)
+
+            # Preemption handling: Check if this is a resumed run
+            # If run_id exists in W&B with checkpoints, auto-resume instead of starting fresh
+            is_resuming = "--resume" in train_args
+            if run_id and project_id and not is_resuming:
+                print(f"Checking W&B for existing checkpoints...", flush=True)
+                has_checkpoints = _check_run_has_checkpoints_in_wandb(run_id, project_id)
+                if has_checkpoints:
+                    print(f"⚠ Detected preemption restart: run {run_id} has existing checkpoints in W&B", flush=True)
+                    print(f"Automatically resuming from last checkpoint...", flush=True)
+                    # Convert to resume mode
+                    train_args = ["--resume", run_id] + [arg for arg in train_args if not arg.startswith("--")]
+                    is_resuming = True
+                else:
+                    print(f"No existing checkpoints found, starting fresh training", flush=True)
+
+            # Check if this is a Retro environment and import ROM if needed
+            config_spec = None
+            for i, arg in enumerate(train_args):
+                if not arg.startswith("--") and ":" in arg:
+                    config_spec = arg
+                    break
+                elif arg == "--config_id" and i + 1 < len(train_args):
+                    config_spec = train_args[i + 1]
+                    break
+
+            if config_spec and config_spec.startswith("Retro"):
+                # Extract game ID from config spec (e.g., "Retro-SuperMarioBros-Nes:ppo" -> "SuperMarioBros-Nes")
+                env_id = config_spec.split(":")[0]  # Get env part before variant
+                rom_game_id = env_id.replace("Retro-", "")  # Remove "Retro-" prefix
+
+                print(f"Detected Retro environment: {rom_game_id}", flush=True)
+                print(f"Importing ROM from volume...", flush=True)
+
+                rom_path = Path(f"/roms/retro-roms/{rom_game_id}")
+                if not rom_path.exists():
+                    raise RuntimeError(
+                        f"ROM directory not found in volume at {rom_path}. "
+                        f"Upload ROM with: python scripts/upload_rom_to_modal.py {rom_game_id}"
+                    )
+
+                # Import the ROM using retro.import
+                import_cmd = ["python", "-m", "retro.import", str(rom_path)]
+                print(f"Running: {' '.join(import_cmd)}", flush=True)
+                result = subprocess.run(import_cmd, capture_output=True, text=True)
+
+                if result.returncode != 0:
+                    print(f"ROM import failed:", flush=True)
+                    print(f"STDOUT: {result.stdout}", flush=True)
+                    print(f"STDERR: {result.stderr}", flush=True)
+                    raise RuntimeError(f"ROM import failed with return code {result.returncode}")
+
+                print(f"ROM imported successfully\n", flush=True)
+
+            # Build command
+            cmd = ["python", "-u", "train.py"] + train_args  # -u for unbuffered output
+            print(f"Running: {' '.join(cmd)}\n", flush=True)
+
+            # Run training with stdout/stderr capture for streaming
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,  # Line buffered
             )
 
-            # Clone repository to temporary directory
-            with tempfile.TemporaryDirectory() as tmpdir:
-                print(f"Cloning repository to {tmpdir}...", flush=True)
-                subprocess.run(
-                    ["git", "clone", "--depth", "1", repo_url, tmpdir],
-                    check=True,
-                    capture_output=True,
-                )
+            # Signal handler to forward signals to subprocess (for preemption handling)
+            def forward_signal(signum, frame):
+                print(f"\n⚠ Received signal {signum}, forwarding to training process...", flush=True)
+                if process.poll() is None:  # Process still running
+                    process.send_signal(signum)
 
-                # Change to repo directory
-                os.chdir(tmpdir)
-                print(f"Working directory: {os.getcwd()}", flush=True)
+            # Register signal handlers for graceful shutdown on preemption
+            signal.signal(signal.SIGTERM, forward_signal)
+            signal.signal(signal.SIGINT, forward_signal)
 
-                # Set environment variables for quiet operation
-                os.environ["VIBES_QUIET"] = "1"
-                os.environ["VIBES_DISABLE_SESSION_LOGS"] = "1"
+            # Stream output line by line
+            for line in process.stdout:
+                print(line, end="", flush=True)
 
-                # Suppress warnings in all subprocesses (env stepping, multiprocessing)
-                # This catches warnings that happen in forked/spawned worker processes
-                os.environ["PYTHONWARNINGS"] = "ignore::UserWarning:pydantic._internal._generate_schema,ignore::UserWarning:torch"
+            # Wait for process to complete
+            returncode = process.wait()
 
-                # If project_id was provided, set it as environment variable
-                # This is needed for W&B artifact downloads during --init-from-run
-                if project_id:
-                    os.environ["WANDB_PROJECT"] = project_id
-                    print(f"Using W&B project: {project_id}", flush=True)
+            if returncode != 0:
+                print(f"\nTraining failed with return code {returncode}", flush=True)
+                raise RuntimeError("Training execution failed")
 
-                # If run_id was provided, set it as environment variable
-                # so train.py will use it for W&B initialization
-                if run_id:
-                    os.environ["WANDB_RUN_ID"] = run_id
-                    print(f"Using pre-generated run ID: {run_id}", flush=True)
-
-                # Check if this is a Retro environment and import ROM if needed
-                config_spec = None
-                for i, arg in enumerate(train_args):
-                    if not arg.startswith("--") and ":" in arg:
-                        config_spec = arg
-                        break
-                    elif arg == "--config_id" and i + 1 < len(train_args):
-                        config_spec = train_args[i + 1]
-                        break
-
-                if config_spec and config_spec.startswith("Retro"):
-                    # Extract game ID from config spec (e.g., "Retro-SuperMarioBros-Nes:ppo" -> "SuperMarioBros-Nes")
-                    env_id = config_spec.split(":")[0]  # Get env part before variant
-                    rom_game_id = env_id.replace("Retro-", "")  # Remove "Retro-" prefix
-
-                    print(f"Detected Retro environment: {rom_game_id}", flush=True)
-                    print(f"Importing ROM from volume...", flush=True)
-
-                    rom_path = Path(f"/roms/retro-roms/{rom_game_id}")
-                    if not rom_path.exists():
-                        raise RuntimeError(
-                            f"ROM directory not found in volume at {rom_path}. "
-                            f"Upload ROM with: python scripts/upload_rom_to_modal.py {rom_game_id}"
-                        )
-
-                    # Import the ROM using retro.import
-                    import_cmd = ["python", "-m", "retro.import", str(rom_path)]
-                    print(f"Running: {' '.join(import_cmd)}", flush=True)
-                    result = subprocess.run(import_cmd, capture_output=True, text=True)
-
-                    if result.returncode != 0:
-                        print(f"ROM import failed:", flush=True)
-                        print(f"STDOUT: {result.stdout}", flush=True)
-                        print(f"STDERR: {result.stderr}", flush=True)
-                        raise RuntimeError(f"ROM import failed with return code {result.returncode}")
-
-                    print(f"ROM imported successfully\n", flush=True)
-
-                # Build command
-                cmd = ["python", "-u", "train.py"] + train_args  # -u for unbuffered output
-                print(f"Running: {' '.join(cmd)}\n", flush=True)
-
-                # Run training with stdout/stderr capture for streaming
-                process = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    bufsize=1,  # Line buffered
-                )
-
-                # Stream output line by line
-                for line in process.stdout:
-                    print(line, end="", flush=True)
-
-                # Wait for process to complete
-                returncode = process.wait()
-
-                if returncode != 0:
-                    print(f"\nTraining failed with return code {returncode}", flush=True)
-                    raise RuntimeError("Training execution failed")
-
-                print("\nTraining completed successfully", flush=True)
-                return returncode
+            print("\nTraining completed successfully", flush=True)
+            return returncode
     else:
         # Generator version for streaming execution via remote_gen()
         @app.function(serialized=True, **function_kwargs)
@@ -380,30 +465,17 @@ def create_training_function(resources: ResourceRequirements, detached: bool = F
             Yields:
                 Log lines from training process
             """
-        import subprocess
-        import tempfile
+            import signal
+            import subprocess
 
-        def log_and_yield(msg: str):
-            """Print to Modal container stdout and yield to local client."""
-            print(msg, end="", flush=True)
-            yield msg
+            def log_and_yield(msg: str):
+                """Print to Modal container stdout and yield to local client."""
+                print(msg, end="", flush=True)
+                yield msg
 
-        # Get repository URL from environment or use default
-        repo_url = os.environ.get(
-            "REPO_URL", "https://github.com/tsilva/gymnasium-solver.git"
-        )
-
-        # Clone repository to temporary directory
-        with tempfile.TemporaryDirectory() as tmpdir:
-            yield from log_and_yield(f"Cloning repository to {tmpdir}...\n")
-            subprocess.run(
-                ["git", "clone", "--depth", "1", repo_url, tmpdir],
-                check=True,
-                capture_output=True,
-            )
-
-            # Change to repo directory
-            os.chdir(tmpdir)
+            # Change to mounted code directory
+            code_dir = "/root/gymnasium-solver"
+            os.chdir(code_dir)
             yield from log_and_yield(f"Working directory: {os.getcwd()}\n")
 
             # Set environment variables for quiet operation
@@ -425,6 +497,21 @@ def create_training_function(resources: ResourceRequirements, detached: bool = F
             if run_id:
                 os.environ["WANDB_RUN_ID"] = run_id
                 yield from log_and_yield(f"Using pre-generated run ID: {run_id}\n")
+
+            # Preemption handling: Check if this is a resumed run
+            # If run_id exists in W&B with checkpoints, auto-resume instead of starting fresh
+            is_resuming = "--resume" in train_args
+            if run_id and project_id and not is_resuming:
+                yield from log_and_yield(f"Checking W&B for existing checkpoints...\n")
+                has_checkpoints = _check_run_has_checkpoints_in_wandb(run_id, project_id)
+                if has_checkpoints:
+                    yield from log_and_yield(f"⚠ Detected preemption restart: run {run_id} has existing checkpoints in W&B\n")
+                    yield from log_and_yield(f"Automatically resuming from last checkpoint...\n")
+                    # Convert to resume mode
+                    train_args = ["--resume", run_id] + [arg for arg in train_args if not arg.startswith("--")]
+                    is_resuming = True
+                else:
+                    yield from log_and_yield(f"No existing checkpoints found, starting fresh training\n")
 
             # Check if this is a Retro environment and import ROM if needed
             config_spec = None
@@ -476,6 +563,17 @@ def create_training_function(resources: ResourceRequirements, detached: bool = F
                 text=True,
                 bufsize=1,  # Line buffered
             )
+
+            # Signal handler to forward signals to subprocess (for preemption handling)
+            def forward_signal(signum, frame):
+                msg = f"\n⚠ Received signal {signum}, forwarding to training process...\n"
+                print(msg, end="", flush=True)
+                if process.poll() is None:  # Process still running
+                    process.send_signal(signum)
+
+            # Register signal handlers for graceful shutdown on preemption
+            signal.signal(signal.SIGTERM, forward_signal)
+            signal.signal(signal.SIGINT, forward_signal)
 
             # Stream output line by line
             for line in process.stdout:

@@ -1,19 +1,13 @@
 # TODO
 
-## Remote training loop
-
-- BUG: modal is not reserving the number of cores defined in n_envs
-- TEST: run completes
-- TEST: can check locally
-- TEST: compare FPS against local
-
 # NEXT
 
-
-- TODO: run stable-retro manually, why is windows not working?
-
+- BUG: clean exit run_play on ctrl+c
 - BUG: remote runs get killed if I close terminal?
+- TODO: run stable-retro manually, why is windows not working?
 - TODO: measure epochs/s
+
+- TODO: add decent names to modal runs
 - BUG: remote runs are still creating local run folder (empty)
 - BUG: cant train VizDoom-Basic-v0 when frame_stack is 1
 - TODO: progress bar for rollout collection

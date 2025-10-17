@@ -442,6 +442,280 @@ class RewardPlotter:
             self.is_open = False
 
 
+class PreprocessedObservationViewer:
+    """Real-time preprocessed observation viewer for visualizing what the agent sees."""
+
+    def __init__(self, update_interval: float = 0.05):
+        """Initialize the viewer for displaying preprocessed observations.
+
+        Args:
+            update_interval: Minimum time (in seconds) between updates to throttle rendering
+        """
+        try:
+            import pyqtgraph as pg
+            from pyqtgraph.Qt import QtWidgets
+            import time
+
+            self.pg = pg
+            self.time = time
+            self.update_interval = update_interval
+            self.last_update_time = time.time()
+            self.needs_update = False
+
+            # Create window
+            self.win = pg.GraphicsLayoutWidget(show=True, title="Preprocessed Observations")
+            self.win.resize(800, 600)
+            self.win.setWindowTitle('Preprocessed Observations (Agent View)')
+
+            # Position window below the reward plot window to avoid overlap
+            self.win.move(1050, 500)  # x=1050 (right side), y=500 (below reward plot)
+
+            # Create image display widget
+            self.view = self.win.addViewBox()
+            self.view.setAspectLocked(True)
+            self.view.invertY(True)  # Invert Y axis so origin is at top-left (image convention)
+            # Remove all padding/margins around the image
+            self.view.setContentsMargins(0, 0, 0, 0)
+            self.view.setMenuEnabled(False)  # Disable right-click menu and border
+            self.view.setMouseEnabled(x=False, y=False)  # Disable panning
+            self.view.enableAutoRange(enable=False)  # Disable auto-range
+            self.win.ci.layout.setContentsMargins(0, 0, 0, 0)
+            self.win.ci.layout.setSpacing(0)
+            self.img_item = pg.ImageItem()
+            self.view.addItem(self.img_item)
+
+            # Track if window is still open
+            self.is_open = True
+            self.use_pyqtgraph = True
+
+            # Store last observation for rendering
+            self.last_obs = None
+            self._window_sized = False  # Track if we've sized the window to match image
+
+        except ImportError:
+            # Fallback to matplotlib if pyqtgraph is not available
+            import matplotlib.pyplot as plt
+            import time
+
+            self.plt = plt
+            self.time = time
+            self.update_interval = update_interval
+            self.last_update_time = time.time()
+            self.needs_update = False
+
+            self.plt.ion()
+            # Create figure with minimal padding
+            self.fig, self.ax = self.plt.subplots(1, 1, figsize=(8, 6))
+            self.fig.suptitle('Preprocessed Observations (Agent View)', fontsize=14, fontweight='bold')
+            # Remove all whitespace around the image
+            self.fig.subplots_adjust(left=0, right=1, top=0.95, bottom=0, wspace=0, hspace=0)
+
+            self.ax.set_xticks([])
+            self.ax.set_yticks([])
+            self.ax.set_frame_on(False)  # Remove the axes frame
+
+            self.is_open = True
+            self.fig.canvas.mpl_connect('close_event', self._on_close)
+
+            self.plt.tight_layout()
+            self.plt.show(block=False)
+            self.fig.canvas.draw()
+            self.fig.canvas.flush_events()
+
+            self.use_pyqtgraph = False
+            self.last_obs = None
+            self._window_sized = False  # Track if we've sized the window to match image
+
+    def _on_close(self, event):
+        """Handle window close event."""
+        self.is_open = False
+
+    def update(self, obs):
+        """Update the viewer with a new observation (throttled).
+
+        Args:
+            obs: Observation array from environment (single env, shape varies)
+        """
+        if not self.is_open:
+            return
+
+        import numpy as np
+
+        # Skip if obs is None or empty
+        if obs is None or (isinstance(obs, np.ndarray) and obs.size == 0):
+            return
+
+        # Store observation
+        self.last_obs = np.array(obs)
+        self.needs_update = True
+
+        # Only update display if enough time has passed (throttling)
+        current_time = self.time.time()
+        if current_time - self.last_update_time >= self.update_interval:
+            self._update_display()
+            self.last_update_time = current_time
+            self.needs_update = False
+
+            # Process events for pyqtgraph
+            if self.use_pyqtgraph:
+                from pyqtgraph.Qt import QtWidgets
+                QtWidgets.QApplication.processEvents()
+
+    def _update_display(self):
+        """Update the display with the current observation."""
+        if not self.is_open or self.last_obs is None:
+            return
+
+        import numpy as np
+
+        try:
+            obs = self.last_obs
+
+            # Determine observation shape and type
+            # Expected shapes:
+            # - Vector: (D,)
+            # - Single frame grayscale: (H, W) or (1, H, W)
+            # - Single frame RGB: (3, H, W)
+            # - Framestack grayscale: (N, H, W) where N is stack size
+            # - Framestack RGB: (N*3, H, W) where N is stack size
+
+            # Skip vector observations (already handled by VecObsBarPrinter)
+            if obs.ndim == 1:
+                return
+
+            # Handle image observations
+            if obs.ndim == 2:
+                # Single grayscale frame (H, W)
+                display_img = obs
+            elif obs.ndim == 3:
+                # Could be (C, H, W) format
+                C, H, W = obs.shape
+
+                if C == 1:
+                    # Single grayscale frame with channel dim
+                    display_img = obs[0]
+                elif C == 3:
+                    # Single RGB frame - convert to HWC for display
+                    display_img = np.transpose(obs, (1, 2, 0))
+                else:
+                    # Framestack: C is the number of stacked frames
+                    # Display frames in a grid
+                    n_frames = C
+                    frames = []
+                    for i in range(n_frames):
+                        frames.append(obs[i])
+
+                    # Arrange frames in a grid (prefer horizontal layout for small stacks)
+                    if n_frames <= 4:
+                        # Horizontal layout
+                        display_img = np.concatenate(frames, axis=1)
+                    else:
+                        # Grid layout
+                        grid_cols = int(np.ceil(np.sqrt(n_frames)))
+                        grid_rows = int(np.ceil(n_frames / grid_cols))
+
+                        # Pad to fill grid
+                        while len(frames) < grid_rows * grid_cols:
+                            frames.append(np.zeros_like(frames[0]))
+
+                        # Build grid
+                        rows = []
+                        for r in range(grid_rows):
+                            row_frames = frames[r * grid_cols:(r + 1) * grid_cols]
+                            rows.append(np.concatenate(row_frames, axis=1))
+                        display_img = np.concatenate(rows, axis=0)
+            else:
+                # Unsupported shape
+                return
+
+            # Normalize to 0-255 range for display
+            if display_img.dtype == np.float32 or display_img.dtype == np.float64:
+                # Assume normalized to [0, 1] or [-1, 1]
+                img_min, img_max = display_img.min(), display_img.max()
+                if img_min < 0:
+                    # Assume [-1, 1] range
+                    display_img = ((display_img + 1) * 127.5).astype(np.uint8)
+                else:
+                    # Assume [0, 1] range
+                    display_img = (display_img * 255).astype(np.uint8)
+            else:
+                # Already uint8
+                display_img = display_img.astype(np.uint8)
+
+            # Update display
+            if self.use_pyqtgraph:
+                # PyQtGraph expects transposed image
+                self.img_item.setImage(display_img.T, levels=(0, 255))
+
+                # Resize window and set view range to match image size on first display
+                if not self._window_sized:
+                    # Get image dimensions (after transpose for PyQtGraph)
+                    img_height, img_width = display_img.shape[:2]
+                    # Set view range to exactly match the image dimensions (no padding)
+                    # PyQtGraph uses transposed coordinates
+                    self.view.setRange(xRange=(0, img_width), yRange=(0, img_height), padding=0)
+                    # Scale up small images for better visibility (2x or 3x max)
+                    scale = 1
+                    if img_width < 150 or img_height < 150:
+                        # Use smaller scale factor
+                        scale = 2 if max(img_width, img_height) < 100 else 1
+                    # Window size should exactly match the scaled image to avoid padding
+                    # Account for title bar and borders
+                    window_width = img_width * scale
+                    window_height = img_height * scale + 20  # Minimal adjustment for title bar
+                    self.win.resize(int(window_width), int(window_height))
+                    self._window_sized = True
+            else:
+                # Matplotlib
+                self.ax.clear()
+                self.ax.imshow(display_img, cmap='gray' if display_img.ndim == 2 else None, vmin=0, vmax=255, aspect='auto')
+                self.ax.set_title(f'Shape: {obs.shape}')
+                self.ax.set_xticks([])
+                self.ax.set_yticks([])
+                self.ax.set_frame_on(False)  # Remove the axes frame
+                self.ax.axis('off')  # Turn off axis completely
+
+                # Resize figure to match image aspect ratio on first display
+                if not self._window_sized:
+                    img_height, img_width = display_img.shape[:2]
+                    # Calculate figure size to match image aspect ratio
+                    # Use a base width and calculate height to maintain aspect ratio
+                    base_width = 8
+                    aspect_ratio = img_height / img_width if img_width > 0 else 1
+                    fig_height = base_width * aspect_ratio
+                    self.fig.set_size_inches(base_width, fig_height)
+                    self._window_sized = True
+
+                self.plt.tight_layout(pad=0)
+                self.fig.canvas.draw()
+                self.fig.canvas.flush_events()
+
+        except Exception as e:
+            # Log error and mark viewer as closed to prevent further crashes
+            import sys
+            print(f"Error updating preprocessed observation viewer: {e}", file=sys.stderr)
+            self.is_open = False
+
+    def close(self):
+        """Close the viewer window, flushing any pending updates first."""
+        if self.is_open:
+            # Flush any pending updates before closing
+            if self.needs_update:
+                try:
+                    self._update_display()
+                except Exception:
+                    pass
+
+            try:
+                if self.use_pyqtgraph:
+                    self.win.close()
+                else:
+                    self.plt.close(self.fig)
+            except Exception:
+                pass
+            self.is_open = False
+
+
 def extract_action_labels_from_config(config) -> dict[int, str] | None:
     """Extract and remap action labels from config spec.
 
@@ -486,7 +760,7 @@ def extract_action_labels_from_config(config) -> dict[int, str] | None:
         return original_labels
 
 
-def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: bool = False, fps: int | None = None, action_labels: dict[int, str] | None = None, plotter: RewardPlotter | None = None):
+def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: bool = False, fps: int | None = None, action_labels: dict[int, str] | None = None, plotter: RewardPlotter | None = None, obs_viewer: PreprocessedObservationViewer | None = None):
     """Play episodes with random actions or user input."""
     import numpy as np
     import gymnasium as gym
@@ -732,6 +1006,10 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
         if plotter and plotter.is_open:
             plotter.add_step(step_reward)
 
+        # Update observation viewer
+        if obs_viewer and obs_viewer.is_open:
+            obs_viewer.update(obs[0])
+
         # Apply FPS limiting if specified
         if frame_delay > 0:
             elapsed = time.perf_counter() - step_start
@@ -796,6 +1074,7 @@ def main():
     p.add_argument("--no-plot-rewards", dest="plot_rewards", action="store_false", help="Disable real-time reward plot")
     p.add_argument("--plot-update-interval", type=float, default=0.2, help="Minimum time (seconds) between plot updates (default: 0.2, lower=smoother but slower game)")
     p.add_argument("--plot-window-size", type=int, default=100, help="Number of steps to show in sliding window (default: 100)")
+    p.add_argument("--show-preprocessed-obs", dest="show_preprocessed_obs", action="store_true", default=False, help="Show preprocessed observations in separate window (what agent sees)")
     p.add_argument(
         "--env-kwargs",
         action="append",
@@ -948,14 +1227,28 @@ def main():
             print(f"Warning: Could not initialize reward plotter: {e}")
             plotter = None
 
+    # Initialize preprocessed observation viewer if enabled and not headless
+    obs_viewer = None
+    if args.show_preprocessed_obs and not args.headless:
+        try:
+            obs_viewer = PreprocessedObservationViewer(update_interval=0.05)
+            backend = "PyQtGraph (fast)" if obs_viewer.use_pyqtgraph else "Matplotlib"
+            print(f"Preprocessed observation viewer enabled using {backend}")
+            print("Close the viewer window to disable it.")
+        except Exception as e:
+            print(f"Warning: Could not initialize preprocessed observation viewer: {e}")
+            obs_viewer = None
+
     # Handle different modes
     if args.mode in ["random", "user"]:
         # Manual control modes don't need policy
         try:
-            play_episodes_manual(env, target_episodes, args.mode, args.step_by_step, args.fps, action_labels, plotter)
+            play_episodes_manual(env, target_episodes, args.mode, args.step_by_step, args.fps, action_labels, plotter, obs_viewer)
         finally:
             if plotter:
                 plotter.close()
+            if obs_viewer:
+                obs_viewer.close()
         print("Done.")
         return
 
@@ -964,11 +1257,11 @@ def main():
     # TODO: we should be loading the agent and having it run the episode
     policy_model, _ = load_policy_model_from_checkpoint(run.best_checkpoint_path, env, config)
 
-    # Initialize rollout collector; step-by-step mode, FPS limiting, or plotting uses single-step rollouts
+    # Initialize rollout collector; step-by-step mode, FPS limiting, plotting, or obs viewer uses single-step rollouts
     collector = RolloutCollector(
         env=env,
         policy_model=policy_model,
-        n_steps=1 if (args.step_by_step or args.fps or plotter) else config.n_steps,
+        n_steps=1 if (args.step_by_step or args.fps or plotter or obs_viewer) else config.n_steps,
         **config.rollout_collector_hyperparams(),
     )
 
@@ -992,7 +1285,7 @@ def main():
                     break
 
             step_start = time.perf_counter()
-            _ = collector.collect(deterministic=args.deterministic)
+            rollout = collector.collect(deterministic=args.deterministic)
 
             # Update plotter with step reward if plotting is enabled
             if plotter and plotter.is_open and collector.n_steps == 1:
@@ -1000,6 +1293,12 @@ def main():
                 # Access the buffer's rewards_buf directly (shape: [n_steps, n_envs])
                 step_reward = collector._buffer.rewards_buf[collector._buffer.pos - 1, 0]
                 plotter.add_step(float(step_reward))
+
+            # Update observation viewer if enabled
+            if obs_viewer and obs_viewer.is_open and collector.n_steps == 1:
+                # Access the most recent observation from the buffer
+                obs = collector._buffer.obs_buf[collector._buffer.pos - 1, 0]
+                obs_viewer.update(obs)
 
             # Apply FPS limiting if specified
             if frame_delay > 0:
@@ -1032,6 +1331,8 @@ def main():
     finally:
         if plotter:
             plotter.close()
+        if obs_viewer:
+            obs_viewer.close()
 
     print("Done.")
 

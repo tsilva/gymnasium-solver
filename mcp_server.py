@@ -315,6 +315,97 @@ async def handle_list_tools() -> list[types.Tool]:
                 "required": ["run_id", "metric_names"],
             },
         ),
+        types.Tool(
+            name="list_available_metrics",
+            description="List all metric column names available in a run's metrics.csv",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "run_id": {
+                        "type": "string",
+                        "description": "Run ID or '@last' for most recent run"
+                    },
+                    "filter": {
+                        "type": "string",
+                        "description": "Optional filter to match metric names (e.g., 'loss', 'entropy')"
+                    }
+                },
+                "required": ["run_id"],
+            },
+        ),
+        types.Tool(
+            name="get_metric_alerts",
+            description="Extract metric alerts/warnings from training run logs",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "run_id": {
+                        "type": "string",
+                        "description": "Run ID or '@last' for most recent run"
+                    }
+                },
+                "required": ["run_id"],
+            },
+        ),
+        types.Tool(
+            name="get_metrics_range",
+            description="Get metrics for a specific epoch range (useful for comparing early vs late training)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "run_id": {
+                        "type": "string",
+                        "description": "Run ID or '@last' for most recent run"
+                    },
+                    "start_epoch": {
+                        "type": "integer",
+                        "description": "Starting epoch (inclusive)"
+                    },
+                    "end_epoch": {
+                        "type": "integer",
+                        "description": "Ending epoch (inclusive)"
+                    },
+                    "metric_names": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional list of specific metrics to retrieve"
+                    }
+                },
+                "required": ["run_id", "start_epoch", "end_epoch"],
+            },
+        ),
+        types.Tool(
+            name="get_metrics_summary",
+            description="Get statistical summary of a metric across training (min, max, mean, std, trend)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "run_id": {
+                        "type": "string",
+                        "description": "Run ID or '@last' for most recent run"
+                    },
+                    "metric_name": {
+                        "type": "string",
+                        "description": "Metric to summarize (e.g., 'train/opt/loss/policy')"
+                    }
+                },
+                "required": ["run_id", "metric_name"],
+            },
+        ),
+        types.Tool(
+            name="get_training_progress",
+            description="Get quick snapshot of training progress and health",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "run_id": {
+                        "type": "string",
+                        "description": "Run ID or '@last' for most recent run"
+                    }
+                },
+                "required": ["run_id"],
+            },
+        ),
     ]
 
 
@@ -386,6 +477,27 @@ async def handle_call_tool(
                 args.get("width", 800),
                 args.get("height", 600)
             )
+        elif name == "list_available_metrics":
+            result = await list_available_metrics(
+                args["run_id"],
+                args.get("filter")
+            )
+        elif name == "get_metric_alerts":
+            result = await get_metric_alerts(args["run_id"])
+        elif name == "get_metrics_range":
+            result = await get_metrics_range(
+                args["run_id"],
+                args["start_epoch"],
+                args["end_epoch"],
+                args.get("metric_names")
+            )
+        elif name == "get_metrics_summary":
+            result = await get_metrics_summary(
+                args["run_id"],
+                args["metric_name"]
+            )
+        elif name == "get_training_progress":
+            result = await get_training_progress(args["run_id"])
         else:
             raise ValueError(f"Unknown tool: {name}")
 
@@ -954,6 +1066,313 @@ async def plot_run_metric(
         data=img_base64,
         mimeType="image/png"
     )]
+
+
+async def list_available_metrics(
+    run_id: str,
+    filter_str: Optional[str] = None
+) -> Dict[str, Any]:
+    """List all metric columns available in metrics.csv."""
+    run = Run.load(run_id)
+    metrics_file = Path(run.run_dir) / "metrics.csv"
+
+    if not metrics_file.exists():
+        return {"error": f"No metrics file found for run {run_id}"}
+
+    with open(metrics_file) as f:
+        reader = csv.DictReader(f)
+        all_columns = reader.fieldnames
+
+    if not all_columns:
+        return {"error": "No columns found in metrics file"}
+
+    # Apply filter
+    if filter_str:
+        filtered = [col for col in all_columns if filter_str.lower() in col.lower()]
+    else:
+        filtered = all_columns
+
+    # Group by namespace
+    grouped = {}
+    for col in filtered:
+        if "/" in col:
+            namespace = col.split("/")[0]
+            if namespace not in grouped:
+                grouped[namespace] = []
+            grouped[namespace].append(col)
+        else:
+            if "other" not in grouped:
+                grouped["other"] = []
+            grouped["other"].append(col)
+
+    return {
+        "run_id": run_id,
+        "total_metrics": len(all_columns),
+        "filtered_metrics": len(filtered),
+        "metrics": filtered,
+        "grouped": grouped
+    }
+
+
+async def get_metric_alerts(run_id: str) -> Dict[str, Any]:
+    """Extract and parse metric alerts from training logs."""
+    run = Run.load(run_id)
+    log_file = Path(run.run_dir) / "run.log"
+
+    if not log_file.exists():
+        return {"error": f"No log file found for run {run_id}"}
+
+    # Read log file and find alerts section
+    with open(log_file) as f:
+        log_content = f.read()
+
+    # Look for METRIC ALERTS section
+    alerts_start = log_content.find("METRIC ALERTS")
+    if alerts_start == -1:
+        return {
+            "run_id": run_id,
+            "alerts": [],
+            "message": "No metric alerts section found in logs"
+        }
+
+    # Extract alerts section
+    alerts_section = log_content[alerts_start:]
+    alerts_end = alerts_section.find("\n" + "═" * 48 + "\n")
+    if alerts_end != -1:
+        alerts_section = alerts_section[:alerts_end]
+
+    # Parse individual alerts
+    alerts = []
+    lines = alerts_section.split("\n")
+    current_alert = None
+
+    for line in lines:
+        line = line.strip()
+        if not line or "METRIC ALERTS" in line or "═" in line:
+            continue
+
+        # New alert starts with "- `"
+        if line.startswith("- `"):
+            if current_alert:
+                alerts.append(current_alert)
+
+            # Parse alert header
+            # Format: - `metric_name/alert_type` triggered in `X/Y (Z%)` epochs of training:
+            parts = line.split("` triggered in `")
+            if len(parts) == 2:
+                metric_alert = parts[0].replace("- `", "")
+                frequency_part = parts[1].split("` epochs")[0]
+
+                current_alert = {
+                    "metric_alert": metric_alert,
+                    "frequency": frequency_part,
+                    "message": "",
+                    "tip": ""
+                }
+        elif current_alert:
+            # Parse message and tip
+            if "- message:" in line:
+                current_alert["message"] = line.replace("- message:", "").strip()
+            elif "- tip:" in line:
+                current_alert["tip"] = line.replace("- tip:", "").strip()
+
+    # Add last alert
+    if current_alert:
+        alerts.append(current_alert)
+
+    return {
+        "run_id": run_id,
+        "alert_count": len(alerts),
+        "alerts": alerts
+    }
+
+
+async def get_metrics_range(
+    run_id: str,
+    start_epoch: int,
+    end_epoch: int,
+    metric_names: Optional[List[str]] = None
+) -> Dict[str, Any]:
+    """Get metrics for a specific epoch range."""
+    run = Run.load(run_id)
+    metrics_file = Path(run.run_dir) / "metrics.csv"
+
+    if not metrics_file.exists():
+        return {"error": f"No metrics file found for run {run_id}"}
+
+    with open(metrics_file) as f:
+        reader = csv.DictReader(f)
+        all_rows = list(reader)
+
+    # Filter by epoch range
+    filtered_rows = []
+    for row in all_rows:
+        if "epoch" in row and row["epoch"]:
+            try:
+                epoch = float(row["epoch"])
+                if start_epoch <= epoch <= end_epoch:
+                    filtered_rows.append(row)
+            except (ValueError, TypeError):
+                continue
+
+    if not filtered_rows:
+        return {
+            "error": f"No data found for epoch range {start_epoch}-{end_epoch}"
+        }
+
+    # Filter columns if specified
+    if metric_names:
+        result_rows = []
+        for row in filtered_rows:
+            filtered_row = {k: v for k, v in row.items()
+                          if k in metric_names or k == "epoch"}
+            result_rows.append(filtered_row)
+    else:
+        result_rows = filtered_rows
+
+    return {
+        "run_id": run_id,
+        "start_epoch": start_epoch,
+        "end_epoch": end_epoch,
+        "rows": len(result_rows),
+        "metrics": result_rows
+    }
+
+
+async def get_metrics_summary(
+    run_id: str,
+    metric_name: str
+) -> Dict[str, Any]:
+    """Get statistical summary of a metric."""
+    import statistics
+
+    run = Run.load(run_id)
+    metrics_file = Path(run.run_dir) / "metrics.csv"
+
+    if not metrics_file.exists():
+        return {"error": f"No metrics file found for run {run_id}"}
+
+    with open(metrics_file) as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+
+    if metric_name not in rows[0]:
+        return {"error": f"Metric '{metric_name}' not found in metrics file"}
+
+    # Extract values
+    values = []
+    epochs = []
+    for row in rows:
+        if metric_name in row and row[metric_name]:
+            try:
+                val = float(row[metric_name])
+                values.append(val)
+                if "epoch" in row and row["epoch"]:
+                    epochs.append(float(row["epoch"]))
+            except (ValueError, TypeError):
+                continue
+
+    if not values:
+        return {"error": f"No valid data for metric '{metric_name}'"}
+
+    # Calculate statistics
+    min_val = min(values)
+    max_val = max(values)
+    mean_val = statistics.mean(values)
+
+    if len(values) > 1:
+        std_val = statistics.stdev(values)
+
+        # Simple trend: compare first 10% to last 10%
+        window = max(1, len(values) // 10)
+        early_mean = statistics.mean(values[:window])
+        late_mean = statistics.mean(values[-window:])
+        trend = "improving" if late_mean > early_mean else "declining" if late_mean < early_mean else "stable"
+        trend_delta = late_mean - early_mean
+    else:
+        std_val = 0.0
+        trend = "insufficient_data"
+        trend_delta = 0.0
+
+    return {
+        "run_id": run_id,
+        "metric": metric_name,
+        "count": len(values),
+        "min": min_val,
+        "max": max_val,
+        "mean": mean_val,
+        "std": std_val,
+        "first": values[0],
+        "last": values[-1],
+        "trend": trend,
+        "trend_delta": trend_delta,
+        "epoch_range": [epochs[0], epochs[-1]] if epochs else None
+    }
+
+
+async def get_training_progress(run_id: str) -> Dict[str, Any]:
+    """Get snapshot of training progress and health."""
+    run = Run.load(run_id)
+    config = run.load_config()
+    metrics_file = Path(run.run_dir) / "metrics.csv"
+
+    if not metrics_file.exists():
+        return {"error": f"No metrics file found for run {run_id}"}
+
+    with open(metrics_file) as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+
+    if not rows:
+        return {"error": "No metrics data available"}
+
+    last_row = rows[-1]
+
+    # Calculate progress
+    total_timesteps = float(last_row.get("total_timesteps", 0))
+    max_env_steps = getattr(config, "max_env_steps", None)
+
+    if max_env_steps:
+        progress_pct = (total_timesteps / max_env_steps) * 100
+    else:
+        progress_pct = None
+
+    # Get current performance
+    train_reward = last_row.get("train/roll/ep_rew/mean", "")
+    val_reward = last_row.get("val/roll/ep_rew/mean", "")
+    best_reward = last_row.get("train/roll/ep_rew/best", "")
+
+    # Check if solved
+    reward_threshold = getattr(config, "reward_threshold", None)
+    is_solved = False
+    if reward_threshold and train_reward:
+        try:
+            is_solved = float(train_reward) >= reward_threshold
+        except (ValueError, TypeError):
+            pass
+
+    return {
+        "run_id": run_id,
+        "progress": {
+            "total_timesteps": total_timesteps,
+            "max_env_steps": max_env_steps,
+            "progress_pct": progress_pct,
+            "current_epoch": last_row.get("epoch", "")
+        },
+        "performance": {
+            "train_reward_mean": train_reward,
+            "val_reward_mean": val_reward,
+            "best_reward": best_reward,
+            "reward_threshold": reward_threshold,
+            "is_solved": is_solved
+        },
+        "config_summary": {
+            "env_id": config.env_id,
+            "n_envs": config.n_envs,
+            "policy_lr": config.policy_lr,
+            "batch_size": config.batch_size
+        }
+    }
 
 
 # ============================================================================

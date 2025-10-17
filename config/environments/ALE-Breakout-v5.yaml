@@ -138,6 +138,8 @@ _env_rgb: &env_rgb
   <<: *env
   spec: *spec_rgb
   obs_type: "rgb"
+  accelerator: "gpu"
+  model_id: cnn_nature
 
 # Objects env
 _env_objects: &env_objects
@@ -160,11 +162,16 @@ rgb_ppo: &rgb_ppo
   <<: *env_rgb
   project_id: ALE-Breakout-v5_rgb
   algo_id: ppo
-  model_id: cnn_nature
   description: "PPO with 4-frame grayscale stacks (84x84) via ALE atari vectorization"
-  accelerator: "gpu"
-  eval_warmup_epochs: 100
-  eval_freq_epochs: 5
+  # TODO: test async vectorization, if faster apply by default to all atari envs if n_envs > 1
+  n_envs: 32
+  n_steps: 256
+  policy_lr: 3e-3
+  batch_size: 1024
+  ent_coef: 0.03
+  n_epochs: 10 
+  eval_warmup_epochs: 10
+  eval_freq_epochs: 10
   eval_episodes: 10
 
 rgb_deterministic_ppo:

@@ -59,6 +59,12 @@ class EarlyStoppingCallback(pl.Callback):
         # Threshold reached, signal Trainer to stop
         trainer.should_stop = True
 
+        # Log "solved" metric to metrics recorder
+        # Extract stage (train/val/test) from metric_key
+        stage = self.metric_key.split("/")[0] if "/" in self.metric_key else "train"
+        if hasattr(pl_module, 'metrics_recorder'):
+            pl_module.metrics_recorder.record(stage, {"solved": 1})
+
         # Print reason with metrics.yaml-based formatting
         comp_op = ">=" if self.mode == "max" else "<="
         value_s = format_metric_value(self.metric_key, float(value))

@@ -12,16 +12,10 @@
 - THINK: how to audit reward structure / mean, std, outliers, and histogram
 - BUG: remote runs get killed if I close terminal?
 - dump functional run
-- mark solve with metric
 - TODO: measure epochs/s
-- TODO: consider terminating episodes (mark as done) when levels end
-- TODO: when an environment is solved a "solved" metric must be logged and set to 1 (this way I will be able to filter in wandb for runs that solved env)
-- TODO: how to fix
-- python scripts/render_checkpoint_progression.py nh6utowp (make cooler video)
 - BUG: remote runs are still creating local run folder (empty)
 - BUG: cant train VizDoom-Basic-v0 when frame_stack is 1
 - FEAT: add sweep.py with --backend modal support
-- FEAT: add support for adding shared configs between envs (eg: atari defaults, vizdoom defaults)
 - BUG: runs executed through modal dont seem to have same wandb run id
 - FEAT: sweep from run/checkpoint/
 - TODO: progress bar for rollout collection
@@ -38,18 +32,19 @@
 
 ## SuperMarioBros-Nes
 
-- BUG: fix reward function until life lost reward is spotted N times (including termination life loss)
-- FEAT: show real time reward plot to be easier to understand if rewards are being applied (plot in run_play?)
-- TEST: quantize image (before or after downscaling)
-- TEST: crop around mario
-- FEAT: resize to preserve aspect ratio (to avoid distortions)
-- FEAT: crop mario frames
-- If VF stabilized try increasing LR
-- mario: make policy more robust to timing differences by finetuning with variable frameskip
-- TODO: Huber Loss for VF; value normalization/PopArt
 - TODO: add support for logging info vars in run_inspect.py
 - UX: color terminated state
 - UX: make table lighter
+- FEAT: show real time reward plot to be easier to understand if rewards are being applied (plot in run_play?)
+
+- FEAT: resize to preserve aspect ratio (to avoid distortions)
+- FEAT: crop mario frames
+
+- TEST: quantize image (before or after downscaling)
+- TEST: crop around mario
+- If VF stabilized try increasing LR
+- mario: make policy more robust to timing differences by finetuning with variable frameskip
+- TODO: Huber Loss for VF; value normalization/PopArt
 - TEST: how mario behaves if reward is just curiosity
 - LEARN: reward standardization - Use automatic weighting (e.g., Pop-Art normalization or reward standardization) to balance magnitudes
 - TEST: try lowering vf_coef to stabilize VF clipping

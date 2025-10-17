@@ -21,6 +21,11 @@ Execution Modes:
     - Detached (--detach): Spawns job and returns immediately. Job continues running even if terminal is closed.
       Monitor via Modal dashboard at https://modal.com/apps or W&B.
 
+Modal App Naming:
+    - Apps are named with the pattern: gymnasium-solver-{project_id}-{run_id}
+    - Example: gymnasium-solver-CartPole-v1-abc123xyz
+    - For resume mode: gymnasium-solver-unknown-resume (until run ID is determined from checkpoint)
+
 Resource Allocation:
     - CPU: Scaled based on n_envs (2-16 cores)
     - Memory: Scaled based on env type and n_envs (4-32GB)
@@ -55,9 +60,6 @@ from pathlib import Path
 from typing import Optional
 
 import modal
-
-# Define Modal app
-app = modal.App("gymnasium-solver-train")
 
 # Volume for Retro ROMs
 roms_volume = modal.Volume.from_name("roms", create_if_missing=True)
@@ -293,10 +295,11 @@ def _check_run_has_checkpoints_in_wandb(run_id: str, project_id: str) -> bool:
         return False
 
 
-def create_training_function(resources: ResourceRequirements, detached: bool = False):
+def create_training_function(app: modal.App, resources: ResourceRequirements, detached: bool = False):
     """Create a Modal function with specified resource requirements.
 
     Args:
+        app: Modal app to attach the function to
         resources: ResourceRequirements specifying CPU, memory, GPU, and timeout
         detached: If True, create non-generator function for spawn(). If False, create generator for remote_gen()
 
@@ -622,7 +625,7 @@ def launch_modal_training(args):
             timeout=7200,
         )
         run_id = None  # Resume mode will use existing run ID
-        project_id = None  # Will be determined from checkpoint
+        project_id = "unknown"  # Will be determined from checkpoint
     else:
         # Parse env:variant format
         if ":" in config_spec:
@@ -653,6 +656,11 @@ def launch_modal_training(args):
         # Create local run directory with the generated ID
         print(f"Creating local run directory: runs/{run_id}")
         Run.create(run_id=run_id, config=config)
+
+    # Create Modal app with dynamic name
+    app_name = f"gymnasium-solver-{project_id}-{run_id or 'resume'}"
+    print(f"Modal app name: {app_name}")
+    app = modal.App(app_name)
 
     # Build CLI arguments list (exclude --backend and --detach flags)
     train_args = []
@@ -690,7 +698,7 @@ def launch_modal_training(args):
     print("\nView dashboard: https://modal.com/apps")
 
     # Create Modal function with dynamic resources
-    run_training_fn = create_training_function(resources, detached=detached)
+    run_training_fn = create_training_function(app, resources, detached=detached)
 
     if detached:
         # Detached mode: spawn the function and return immediately

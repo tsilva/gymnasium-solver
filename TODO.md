@@ -2,9 +2,9 @@
 
 # NEXT
 
+- FEAT: in atari start using full action spaces and then use action masking as appropriate, unify with vizdoom, make discrete action space remappeer obsolete
 - BUG: clean exit run_play on ctrl+c
 - BUG: remote runs get killed if I close terminal?
-- TODO: run stable-retro manually, why is windows not working?
 - TODO: measure epochs/s
 
 - TODO: add decent names to modal runs

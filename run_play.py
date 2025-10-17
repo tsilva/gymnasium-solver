@@ -615,31 +615,15 @@ class PreprocessedObservationViewer:
                     display_img = np.transpose(obs, (1, 2, 0))
                 else:
                     # Framestack: C is the number of stacked frames
-                    # Display frames in a grid
+                    # Display frames vertically with frame 0 (oldest) at top
                     n_frames = C
                     frames = []
                     for i in range(n_frames):
                         frames.append(obs[i])
 
-                    # Arrange frames in a grid (prefer horizontal layout for small stacks)
-                    if n_frames <= 4:
-                        # Horizontal layout
-                        display_img = np.concatenate(frames, axis=1)
-                    else:
-                        # Grid layout
-                        grid_cols = int(np.ceil(np.sqrt(n_frames)))
-                        grid_rows = int(np.ceil(n_frames / grid_cols))
-
-                        # Pad to fill grid
-                        while len(frames) < grid_rows * grid_cols:
-                            frames.append(np.zeros_like(frames[0]))
-
-                        # Build grid
-                        rows = []
-                        for r in range(grid_rows):
-                            row_frames = frames[r * grid_cols:(r + 1) * grid_cols]
-                            rows.append(np.concatenate(row_frames, axis=1))
-                        display_img = np.concatenate(rows, axis=0)
+                    # Vertical layout: stack frames top to bottom
+                    # Frame 0 (oldest) at top, Frame N-1 (newest) at bottom
+                    display_img = np.concatenate(frames, axis=0)
             else:
                 # Unsupported shape
                 return
@@ -877,130 +861,131 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
     else:
         action = 0  # Default discrete action
 
-    while reported_episodes < target_episodes:
-        # Choose action based on mode
-        if mode == "random":
-            action = action_space.sample()
-            if step_by_step:
-                print(f"Random action: {action}")
-        else:  # user mode
-            if step_by_step:
-                try:
-                    user_input = input(f"[step {episode_length}] Action (0-{n_actions-1}): ")
-                except EOFError:
-                    user_input = ""
+    try:
+        while reported_episodes < target_episodes:
+            # Choose action based on mode
+            if mode == "random":
+                action = action_space.sample()
+                if step_by_step:
+                    print(f"Random action: {action}")
+            else:  # user mode
+                if step_by_step:
+                    try:
+                        user_input = input(f"[step {episode_length}] Action (0-{n_actions-1}): ")
+                    except EOFError:
+                        user_input = ""
 
-                if user_input.strip().lower() in {"q", "quit", "exit"}:
-                    break
+                    if user_input.strip().lower() in {"q", "quit", "exit"}:
+                        break
 
-                try:
-                    action = int(user_input.strip())
-                    assert 0 <= action < n_actions, f"Action must be 0-{n_actions-1}"
-                except (ValueError, AssertionError) as e:
-                    print(f"Invalid action: {e}. Using action 0.")
-                    action = 0
-            elif pygame_available:
-                # Process events and manually track key state to avoid stuck keys
-                # This is more reliable than pygame.key.get_pressed() which can hold stale state
-                for event in pygame.event.get():
-                    if event.type == pygame.QUIT:
-                        if pygame_screen:
-                            pygame.quit()
-                        return
-                    elif event.type == pygame.KEYDOWN:
-                        if event.key == pygame.K_q:
+                    try:
+                        action = int(user_input.strip())
+                        assert 0 <= action < n_actions, f"Action must be 0-{n_actions-1}"
+                    except (ValueError, AssertionError) as e:
+                        print(f"Invalid action: {e}. Using action 0.")
+                        action = 0
+                elif pygame_available:
+                    # Process events and manually track key state to avoid stuck keys
+                    # This is more reliable than pygame.key.get_pressed() which can hold stale state
+                    for event in pygame.event.get():
+                        if event.type == pygame.QUIT:
                             if pygame_screen:
                                 pygame.quit()
                             return
-                        # Track key presses manually
-                        pressed_keys.add(event.key)
-                    elif event.type == pygame.KEYUP:
-                        # Remove key from pressed set when released
-                        pressed_keys.discard(event.key)
-                    # Clear all keys on focus loss to prevent stuck keys
-                    elif hasattr(pygame, 'WINDOWFOCUSLOST') and event.type == pygame.WINDOWFOCUSLOST:
-                        pressed_keys.clear()
-                    elif event.type == pygame.ACTIVEEVENT:
-                        if hasattr(event, 'state') and event.state == 1 and hasattr(event, 'gain') and not event.gain:
+                        elif event.type == pygame.KEYDOWN:
+                            if event.key == pygame.K_q:
+                                if pygame_screen:
+                                    pygame.quit()
+                                return
+                            # Track key presses manually
+                            pressed_keys.add(event.key)
+                        elif event.type == pygame.KEYUP:
+                            # Remove key from pressed set when released
+                            pressed_keys.discard(event.key)
+                        # Clear all keys on focus loss to prevent stuck keys
+                        elif hasattr(pygame, 'WINDOWFOCUSLOST') and event.type == pygame.WINDOWFOCUSLOST:
                             pressed_keys.clear()
+                        elif event.type == pygame.ACTIVEEVENT:
+                            if hasattr(event, 'state') and event.state == 1 and hasattr(event, 'gain') and not event.gain:
+                                pressed_keys.clear()
 
-                if is_multibinary:
-                    # MultiBinary: check all buttons simultaneously
-                    action = np.zeros(n_actions, dtype=np.int8)
-                    for i in range(min(10, n_actions)):
-                        # Check main keyboard keys
-                        if (pygame.K_0 + i) in pressed_keys:
-                            action[i] = 1
-                        # Check numpad keys
-                        elif (pygame.K_KP0 + i) in pressed_keys:
-                            action[i] = 1
-
-                    # Update control window display to show active buttons
-                    if pygame_screen:
-                        font = pygame.font.Font(None, 24)
-                        pygame_screen.fill((40, 40, 40))
-                        text1 = font.render(f"Press keys 0-{n_actions-1} (hold multiple)", True, (255, 255, 255))
-                        text2 = font.render("Press Q to quit", True, (255, 255, 255))
-
-                        active_buttons = [str(i) for i in range(n_actions) if action[i]]
-                        if active_buttons:
-                            text3 = font.render(f"Active buttons: {','.join(active_buttons)}", True, (100, 255, 100))
-                        else:
-                            text3 = font.render("No buttons pressed", True, (180, 180, 180))
-
-                        pygame_screen.blit(text1, (10, 15))
-                        pygame_screen.blit(text2, (10, 45))
-                        pygame_screen.blit(text3, (10, 75))
-                        pygame.display.flip()
-                else:
-                    # Discrete: single action at a time
-                    action_detected = None
-
-                    # Check number keys (main keyboard)
-                    for i in range(min(10, n_actions)):
-                        if (pygame.K_0 + i) in pressed_keys:
-                            action_detected = i
-                            break
-
-                    # Check numpad keys if no main key pressed
-                    if action_detected is None:
+                    if is_multibinary:
+                        # MultiBinary: check all buttons simultaneously
+                        action = np.zeros(n_actions, dtype=np.int8)
                         for i in range(min(10, n_actions)):
-                            if (pygame.K_KP0 + i) in pressed_keys:
+                            # Check main keyboard keys
+                            if (pygame.K_0 + i) in pressed_keys:
+                                action[i] = 1
+                            # Check numpad keys
+                            elif (pygame.K_KP0 + i) in pressed_keys:
+                                action[i] = 1
+
+                        # Update control window display to show active buttons
+                        if pygame_screen:
+                            font = pygame.font.Font(None, 24)
+                            pygame_screen.fill((40, 40, 40))
+                            text1 = font.render(f"Press keys 0-{n_actions-1} (hold multiple)", True, (255, 255, 255))
+                            text2 = font.render("Press Q to quit", True, (255, 255, 255))
+
+                            active_buttons = [str(i) for i in range(n_actions) if action[i]]
+                            if active_buttons:
+                                text3 = font.render(f"Active buttons: {','.join(active_buttons)}", True, (100, 255, 100))
+                            else:
+                                text3 = font.render("No buttons pressed", True, (180, 180, 180))
+
+                            pygame_screen.blit(text1, (10, 15))
+                            pygame_screen.blit(text2, (10, 45))
+                            pygame_screen.blit(text3, (10, 75))
+                            pygame.display.flip()
+                    else:
+                        # Discrete: single action at a time
+                        action_detected = None
+
+                        # Check number keys (main keyboard)
+                        for i in range(min(10, n_actions)):
+                            if (pygame.K_0 + i) in pressed_keys:
                                 action_detected = i
                                 break
 
-                    # Use detected action, or default to 0 (NOOP-like)
-                    action = action_detected if action_detected is not None else 0
+                        # Check numpad keys if no main key pressed
+                        if action_detected is None:
+                            for i in range(min(10, n_actions)):
+                                if (pygame.K_KP0 + i) in pressed_keys:
+                                    action_detected = i
+                                    break
 
-                    # Update control window display to show current action
-                    if pygame_screen:
-                        font = pygame.font.Font(None, 24)
-                        pygame_screen.fill((40, 40, 40))
-                        text1 = font.render(f"Press keys 0-{n_actions-1} to select action", True, (255, 255, 255))
-                        text2 = font.render("Press Q to quit", True, (255, 255, 255))
-                        if action_detected is not None:
-                            text3 = font.render(f"Current action: {action} (ACTIVE)", True, (100, 255, 100))
-                        else:
-                            text3 = font.render(f"Current action: {action} (default)", True, (180, 180, 180))
-                        pygame_screen.blit(text1, (10, 15))
-                        pygame_screen.blit(text2, (10, 45))
-                        pygame_screen.blit(text3, (10, 75))
-                        pygame.display.flip()
-            else:
-                # Fallback: blocking terminal input
-                try:
-                    user_input = input()
-                except EOFError:
-                    user_input = ""
+                        # Use detected action, or default to 0 (NOOP-like)
+                        action = action_detected if action_detected is not None else 0
 
-                if user_input.strip().lower() in {"q", "quit", "exit"}:
-                    break
+                        # Update control window display to show current action
+                        if pygame_screen:
+                            font = pygame.font.Font(None, 24)
+                            pygame_screen.fill((40, 40, 40))
+                            text1 = font.render(f"Press keys 0-{n_actions-1} to select action", True, (255, 255, 255))
+                            text2 = font.render("Press Q to quit", True, (255, 255, 255))
+                            if action_detected is not None:
+                                text3 = font.render(f"Current action: {action} (ACTIVE)", True, (100, 255, 100))
+                            else:
+                                text3 = font.render(f"Current action: {action} (default)", True, (180, 180, 180))
+                            pygame_screen.blit(text1, (10, 15))
+                            pygame_screen.blit(text2, (10, 45))
+                            pygame_screen.blit(text3, (10, 75))
+                            pygame.display.flip()
+                else:
+                    # Fallback: blocking terminal input
+                    try:
+                        user_input = input()
+                    except EOFError:
+                        user_input = ""
 
-                try:
-                    action = int(user_input.strip()[0]) if user_input.strip() else 0
-                    action = max(0, min(action, n_actions - 1))
-                except (ValueError, IndexError):
-                    action = 0
+                    if user_input.strip().lower() in {"q", "quit", "exit"}:
+                        break
+
+                    try:
+                        action = int(user_input.strip()[0]) if user_input.strip() else 0
+                        action = max(0, min(action, n_actions - 1))
+                    except (ValueError, IndexError):
+                        action = 0
 
         # Execute action
         step_start = time.perf_counter()
@@ -1055,6 +1040,8 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
             obs = env.reset()
             episode_reward = 0.0
             episode_length = 0
+    except KeyboardInterrupt:
+        print("\nInterrupted by user")
 
     # Cleanup pygame if it was initialized
     if pygame_available and pygame_screen:
@@ -1344,6 +1331,8 @@ def main():
                 # Reset plotter for next episode
                 if plotter and plotter.is_open:
                     plotter.reset_episode()
+    except KeyboardInterrupt:
+        print("\nInterrupted by user")
     finally:
         if plotter:
             plotter.close()

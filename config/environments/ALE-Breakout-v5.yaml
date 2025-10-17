@@ -61,6 +61,17 @@ spec: &spec
 # environment specs
 # =====================
 
+# RGB spec
+_spec_rgb: &spec_rgb
+  <<: *spec
+  observation_space:
+    default: rgb
+    variants:
+      rgb:
+        shape: [3, 210, 160]
+        dtype: uint8
+        note: RGB frames from ALE (channel-first format)
+
 # Objects spec
 _spec_objects: &spec_objects
   <<: *spec
@@ -74,6 +85,18 @@ _env: &env
   spec: *spec
   env_id: ALE/Breakout-v5
 
+# Deterministic env
+_env_deterministic: &env_deterministic
+  <<: *env
+  env_kwargs:
+    repeat_action_probability: 0.0
+
+# RGB env
+_env_rgb: &env_rgb
+  <<: *env
+  spec: *spec_rgb
+  obs_type: "rgb"
+
 # Objects env
 _env_objects: &env_objects
   <<: *env
@@ -83,16 +106,34 @@ _env_objects: &env_objects
   env_wrappers:
     - { id: BreakoutV5_FeatureExtractor }
 
-# Deterministic env
-_env_deterministic: &env_deterministic
-  <<: *env
-  project_id: ALE-Breakout-v5_objects_deterministic
-  env_kwargs:
-    repeat_action_probability: 0.0
-
 # =====================
 # configs
 # =====================
+
+###########################
+# CONFIGS: obs_type = rgb
+###########################
+
+rgb_ppo: &rgb_ppo
+  <<: *env_rgb
+  project_id: ALE-Breakout-v5_rgb
+  algo_id: ppo
+  model_id: cnn_nature
+  description: "PPO with 4-frame grayscale stacks (84x84) via ALE atari vectorization"
+  accelerator: "gpu"
+  eval_warmup_epochs: 100
+  eval_freq_epochs: 5
+  eval_episodes: 10
+
+rgb_deterministic_ppo:
+  <<: *rgb_ppo
+  <<: *env_deterministic
+  project_id: ALE-Breakout-v5_rgb_deterministic
+  description: "PPO with RGB observations - deterministic version with ALE atari vectorization"
+
+###########################
+# CONFIGS: obs_type = objects
+###########################
 
 objects_ppo: &objects_ppo
   <<: *env_objects
@@ -106,4 +147,6 @@ objects_ppo: &objects_ppo
 objects_deterministic_ppo:
   <<: *objects_ppo
   <<: *env_deterministic
+  project_id: ALE-Breakout-v5_objects_deterministic
+  spec: *spec_objects  # Override to use objects spec instead of base spec
   description: "PPO object features without sticky actions"

@@ -9,19 +9,23 @@
 
 # NEXT
 
-- THINK: how to audit reward structure / mean, std, outliers, and histogram
+
+- Need way to override env_kwargs keys through command line, both for train and for run_play and run_inspect. For example I want to be able to specify state=Level2-1 for run_play. (eg:for SuperMarioBros-Nes)
+
+- FEAT: add way to specify level for run-play
 - BUG: remote runs get killed if I close terminal?
-- dump functional run
 - TODO: measure epochs/s
 - BUG: remote runs are still creating local run folder (empty)
 - BUG: cant train VizDoom-Basic-v0 when frame_stack is 1
+- TODO: progress bar for rollout collection
+- FEAT: run_inspect.py add support for monitoring rollouts with different hyperparams
+
+- THINK: how to audit reward structure / mean, std, outliers, and histogram
 - FEAT: add sweep.py with --backend modal support
 - BUG: runs executed through modal dont seem to have same wandb run id
 - FEAT: sweep from run/checkpoint/
-- TODO: progress bar for rollout collection
 - BUG: run_play.py user input not working for Atari envs
 - TEST: CleanRL's envpool implementation
-- FEAT: run_inspect.py add support for monitoring rollouts with different hyperparams
 - FEAT: train from previous run, use that to do multiple runs until convergence (new run loads param); should we restore optimizer? confirm new run starts with same performance, check if it evolves better with same or dfiferent optimizer
 - TEST: ensure evaluation is ran exactly same way as train (eg: alevecenv)
 - TODO: add env normalization support, make sure normalization is saved

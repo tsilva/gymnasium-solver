@@ -222,6 +222,8 @@ def create_training_function(resources: ResourceRequirements):
         Modal function configured with the specified resources
     """
     # Build function kwargs
+    # Note: wandb-secret should contain WANDB_API_KEY and optionally WANDB_ENTITY
+    # WANDB_ENTITY is used for cross-project artifact downloads during transfer learning
     function_kwargs = {
         "image": image,
         "secrets": [modal.Secret.from_name("wandb-secret")],
@@ -237,12 +239,13 @@ def create_training_function(resources: ResourceRequirements):
         function_kwargs["gpu"] = resources.gpu
 
     @app.function(serialized=True, **function_kwargs)
-    def run_training(train_args: list[str], run_id: str = None):
+    def run_training(train_args: list[str], run_id: str = None, project_id: str = None):
         """Run training with given CLI arguments on Modal.
 
         Args:
             train_args: List of CLI arguments to pass to train.py (excluding --modal)
             run_id: Pre-generated run ID to use for W&B and local run directory
+            project_id: W&B project ID from config (used to set WANDB_PROJECT env var)
 
         Yields:
             Log lines from training process
@@ -271,6 +274,12 @@ def create_training_function(resources: ResourceRequirements):
             # Set environment variables for quiet operation
             os.environ["VIBES_QUIET"] = "1"
             os.environ["VIBES_DISABLE_SESSION_LOGS"] = "1"
+
+            # If project_id was provided, set it as environment variable
+            # This is needed for W&B artifact downloads during --init-from-run
+            if project_id:
+                os.environ["WANDB_PROJECT"] = project_id
+                yield f"Using W&B project: {project_id}\n"
 
             # If run_id was provided, set it as environment variable
             # so train.py will use it for W&B initialization
@@ -373,6 +382,7 @@ def launch_modal_training(args):
             timeout=7200,
         )
         run_id = None  # Resume mode will use existing run ID
+        project_id = None  # Will be determined from checkpoint
     else:
         # Parse env:variant format
         if ":" in config_spec:
@@ -395,6 +405,10 @@ def launch_modal_training(args):
         # This ensures W&B run name matches local run directory
         run_id = wandb.util.generate_id()
         config = load_config(config_id, variant_id)
+
+        # Extract project_id from config to set WANDB_PROJECT in Modal
+        # This is needed for W&B artifact downloads (e.g., --init-from-run)
+        project_id = config.project_id
 
         # Create local run directory with the generated ID
         print(f"Creating local run directory: runs/{run_id}")
@@ -442,7 +456,7 @@ def launch_modal_training(args):
     # Run on Modal and stream logs via generator
     try:
         with app.run():
-            for log_line in run_training_fn.remote_gen(train_args, run_id):
+            for log_line in run_training_fn.remote_gen(train_args, run_id, project_id):
                 print(log_line, end="", flush=True)
         print("-" * 80)
         print("\n✓ Modal training completed!")

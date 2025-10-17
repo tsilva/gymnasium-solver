@@ -17,11 +17,12 @@ from utils.run import Run
 class RewardPlotter:
     """Real-time reward plotter for visualizing rewards during playback."""
 
-    def __init__(self, update_interval: float = 0.2):
+    def __init__(self, update_interval: float = 0.2, max_steps_shown: int = 100):
         """Initialize the plotter with two subplots for episode and step rewards.
 
         Args:
             update_interval: Minimum time (in seconds) between plot updates to throttle rendering
+            max_steps_shown: Maximum number of steps to show in sliding window (default: 100)
         """
         try:
             import pyqtgraph as pg
@@ -30,6 +31,7 @@ class RewardPlotter:
 
             self.pg = pg
             self.time = time
+            self.max_steps_shown = max_steps_shown
 
             # Set background to white for better visibility
             pg.setConfigOption('background', 'w')
@@ -50,6 +52,11 @@ class RewardPlotter:
             self.plot_episode.setLabel('bottom', 'Step')
             self.plot_episode.showGrid(x=True, y=True, alpha=0.3)
             self.plot_episode.addLegend()
+            # Disable auto-range on x-axis to maintain sliding window
+            self.plot_episode.enableAutoRange(axis='x', enable=False)
+            self.plot_episode.enableAutoRange(axis='y', enable=True)
+            # Set initial x-range
+            self.plot_episode.setXRange(0, max_steps_shown, padding=0)
 
             # Move to next row
             self.win.nextRow()
@@ -59,6 +66,11 @@ class RewardPlotter:
             self.plot_step.setLabel('left', 'Step Reward')
             self.plot_step.setLabel('bottom', 'Step')
             self.plot_step.showGrid(x=True, y=True, alpha=0.3)
+            # Disable auto-range on x-axis to maintain sliding window
+            self.plot_step.enableAutoRange(axis='x', enable=False)
+            self.plot_step.enableAutoRange(axis='y', enable=True)
+            # Set initial x-range
+            self.plot_step.setXRange(0, max_steps_shown, padding=0)
 
             # Add zero line
             self.plot_step.addLine(y=0, pen=pg.mkPen('k', width=1, style=QtCore.Qt.PenStyle.DashLine))
@@ -98,6 +110,7 @@ class RewardPlotter:
 
             self.plt = plt
             self.time = time
+            self.max_steps_shown = max_steps_shown
             self.plt.ion()
 
             self.fig, (self.ax_episode, self.ax_step) = self.plt.subplots(2, 1, figsize=(10, 8))
@@ -158,6 +171,26 @@ class RewardPlotter:
         self.current_step_rewards.append(step_reward)
         self.global_step += 1
 
+        # Cleanup old data that's outside the window to prevent memory bloat
+        # Keep a buffer of 500 steps before the window to handle edge cases
+        if self.global_step > self.max_steps_shown + 500:
+            window_start = self.global_step - self.max_steps_shown - 500
+
+            # Trim current episode data if it's getting too long
+            if len(self.current_episode_steps) > self.max_steps_shown + 500:
+                # Find index where steps >= window_start
+                trim_idx = 0
+                for i, step in enumerate(self.current_episode_steps):
+                    if step >= window_start:
+                        trim_idx = i
+                        break
+
+                if trim_idx > 0:
+                    # Trim the lists
+                    self.current_episode_steps = self.current_episode_steps[trim_idx:]
+                    self.current_episode_rewards = self.current_episode_rewards[trim_idx:]
+                    self.current_step_rewards = self.current_step_rewards[trim_idx:]
+
         # Mark that we need an update
         self.needs_update = True
 
@@ -190,6 +223,16 @@ class RewardPlotter:
             else:
                 self.episode_data.append((self.current_episode_steps.copy(), self.current_episode_rewards.copy()))
 
+        # Cleanup old episodes that are completely outside the sliding window
+        # Keep episodes that have any steps >= (current_step - window_size - buffer)
+        if self.global_step > self.max_steps_shown + 500:
+            window_start = self.global_step - self.max_steps_shown - 500
+            # Filter out episodes where the last step is before the window
+            self.episode_data = [
+                ep for ep in self.episode_data
+                if ep[0] and ep[0][-1] >= window_start
+            ]
+
         # Reset for next episode
         self.current_episode_steps = []
         self.current_episode_rewards = []
@@ -217,39 +260,91 @@ class RewardPlotter:
                 # PyQtGraph (fast) implementation
                 import numpy as np
 
-                # Update current episode curve
+                # Calculate sliding window range (fixed width)
+                # Keep window width constant even at the start
+                if self.global_step < self.max_steps_shown:
+                    window_start = 0
+                    window_end = self.max_steps_shown
+                else:
+                    window_start = self.global_step - self.max_steps_shown
+                    window_end = self.global_step
+
+                # Clear both plots completely
+                self.plot_episode.clear()
+                self.plot_step.clear()
+
+                # Re-add zero line to step plot
+                self.plot_step.addLine(y=0, pen=self.pg.mkPen('k', width=1, style=self.pg.QtCore.Qt.PenStyle.DashLine))
+
+                # Plot completed episodes (only visible portion)
+                for i, episode_tuple in enumerate(self.episode_data):
+                    steps = episode_tuple[0]
+                    rewards = episode_tuple[1]
+
+                    # Check if episode overlaps with window
+                    if steps and steps[-1] >= window_start:
+                        # Filter episode data to window (both start AND end bounds)
+                        steps_array = np.array(steps)
+                        rewards_array = np.array(rewards)
+                        mask = (steps_array >= window_start) & (steps_array < window_end)
+                        visible_steps = steps_array[mask]
+                        visible_rewards = rewards_array[mask]
+
+                        if len(visible_steps) > 0:
+                            color = self.colors[i % len(self.colors)]
+                            self.plot_episode.plot(
+                                visible_steps, visible_rewards,
+                                pen=self.pg.mkPen(color=color, width=2, style=self.pg.QtCore.Qt.PenStyle.DashLine),
+                                name=f'Episode {i+1}'
+                            )
+
+                # Plot current episode (only visible portion)
                 if self.current_episode_steps:
-                    color = self.colors[self.episode_num % len(self.colors)]
-                    if self.current_curve is None:
-                        # Create new curve for this episode
-                        self.current_curve = self.plot_episode.plot(
-                            self.current_episode_steps,
-                            self.current_episode_rewards,
+                    steps_array = np.array(self.current_episode_steps)
+                    rewards_array = np.array(self.current_episode_rewards)
+                    step_rewards_array = np.array(self.current_step_rewards)
+
+                    # Filter to window (both start AND end bounds)
+                    mask = (steps_array >= window_start) & (steps_array < window_end)
+                    visible_steps = steps_array[mask]
+                    visible_rewards = rewards_array[mask]
+                    visible_step_rewards = step_rewards_array[mask]
+
+                    if len(visible_steps) > 0:
+                        # Plot episode reward curve
+                        color = self.colors[self.episode_num % len(self.colors)]
+                        self.plot_episode.plot(
+                            visible_steps,
+                            visible_rewards,
                             pen=self.pg.mkPen(color=color, width=2),
                             name=f'Episode {self.episode_num+1}'
                         )
-                    else:
-                        # Update existing curve (much faster than recreating)
-                        self.current_curve.setData(self.current_episode_steps, self.current_episode_rewards)
 
-                # Update step rewards (use bar graph for better performance)
-                if self.current_step_rewards:
-                    x = np.array(self.current_episode_steps)
-                    y = np.array(self.current_step_rewards)
+                        # Plot step rewards as bars
+                        if len(visible_step_rewards) > 0:
+                            bars = self.pg.BarGraphItem(
+                                x=visible_steps, height=visible_step_rewards, width=0.8,
+                                brush=self.pg.mkBrush(70, 130, 180, 150)
+                            )
+                            self.plot_step.addItem(bars)
 
-                    # Clear previous bars if needed
-                    if self.step_bars is not None:
-                        self.plot_step.removeItem(self.step_bars)
-
-                    # Create bar graph item
-                    self.step_bars = self.pg.BarGraphItem(
-                        x=x, height=y, width=0.8,
-                        brush=self.pg.mkBrush(70, 130, 180, 150)
-                    )
-                    self.plot_step.addItem(self.step_bars)
+                # Set x-axis range to the sliding window (padding=0 to avoid auto-scaling)
+                self.plot_episode.setXRange(window_start, window_end, padding=0)
+                self.plot_step.setXRange(window_start, window_end, padding=0)
 
             else:
-                # Matplotlib (fallback) implementation
+                # Matplotlib (fallback) implementation with sliding window
+                import numpy as np
+
+                # Calculate sliding window range (fixed width)
+                # Keep window width constant even at the start
+                if self.global_step < self.max_steps_shown:
+                    window_start = 0
+                    window_end = self.max_steps_shown
+                else:
+                    window_start = self.global_step - self.max_steps_shown
+                    window_end = self.global_step
+
                 # Clear plots
                 self.ax_episode.clear()
                 self.ax_step.clear()
@@ -266,39 +361,51 @@ class RewardPlotter:
                 self.ax_step.grid(True, alpha=0.3)
                 self.ax_step.axhline(y=0, color='k', linestyle='-', linewidth=0.5, alpha=0.3)
 
-                # Plot completed episodes
-                for i, (steps, rewards) in enumerate(self.episode_data):
-                    color = self.colors[i % len(self.colors)]
-                    self.ax_episode.plot(steps, rewards, color=color, linewidth=2, alpha=0.7, label=f'Episode {i+1}')
+                # Plot completed episodes (filtered to window)
+                for i, episode_tuple in enumerate(self.episode_data):
+                    steps = episode_tuple[0]
+                    rewards = episode_tuple[1]
 
-                # Plot current episode
+                    # Check if episode overlaps with window
+                    if steps and steps[-1] >= window_start:
+                        steps_array = np.array(steps)
+                        rewards_array = np.array(rewards)
+                        mask = (steps_array >= window_start) & (steps_array < window_end)
+                        visible_steps = steps_array[mask]
+                        visible_rewards = rewards_array[mask]
+
+                        if len(visible_steps) > 0:
+                            color = self.colors[i % len(self.colors)]
+                            self.ax_episode.plot(visible_steps, visible_rewards, color=color,
+                                               linewidth=2, alpha=0.7, label=f'Episode {i+1}')
+
+                # Plot current episode (filtered to window)
                 if self.current_episode_steps:
-                    color = self.colors[self.episode_num % len(self.colors)]
-                    self.ax_episode.plot(self.current_episode_steps, self.current_episode_rewards,
-                                        color=color, linewidth=2, label=f'Episode {self.episode_num+1} (current)')
+                    steps_array = np.array(self.current_episode_steps)
+                    rewards_array = np.array(self.current_episode_rewards)
+                    mask = (steps_array >= window_start) & (steps_array < window_end)
+                    visible_steps = steps_array[mask]
+                    visible_rewards = rewards_array[mask]
 
-                # Plot step rewards
-                all_steps = []
-                all_step_rewards = []
-                episode_boundaries = []
+                    if len(visible_steps) > 0:
+                        color = self.colors[self.episode_num % len(self.colors)]
+                        self.ax_episode.plot(visible_steps, visible_rewards,
+                                            color=color, linewidth=2, label=f'Episode {self.episode_num+1} (current)')
 
-                # Collect all step data
-                for episode_steps, _ in self.episode_data:
-                    if episode_steps:
-                        episode_boundaries.append(episode_steps[-1])
-
-                # Add current episode step rewards
+                # Plot step rewards (filtered to window)
                 if self.current_step_rewards:
-                    all_steps.extend(self.current_episode_steps)
-                    all_step_rewards.extend(self.current_step_rewards)
+                    steps_array = np.array(self.current_episode_steps)
+                    rewards_array = np.array(self.current_step_rewards)
+                    mask = (steps_array >= window_start) & (steps_array < window_end)
+                    visible_steps = steps_array[mask]
+                    visible_step_rewards = rewards_array[mask]
 
-                if all_steps:
-                    self.ax_step.bar(all_steps, all_step_rewards, width=1.0, alpha=0.6, color='steelblue')
+                    if len(visible_steps) > 0:
+                        self.ax_step.bar(visible_steps, visible_step_rewards, width=1.0, alpha=0.6, color='steelblue')
 
-                # Add episode boundary lines
-                for boundary in episode_boundaries:
-                    self.ax_episode.axvline(x=boundary, color='red', linestyle='--', linewidth=1, alpha=0.5)
-                    self.ax_step.axvline(x=boundary, color='red', linestyle='--', linewidth=1, alpha=0.5)
+                # Set x-axis limits to sliding window
+                self.ax_episode.set_xlim(window_start, window_end)
+                self.ax_step.set_xlim(window_start, window_end)
 
                 # Add legends
                 if len(self.episode_data) + (1 if self.current_episode_steps else 0) > 0:
@@ -309,8 +416,10 @@ class RewardPlotter:
                 self.fig.canvas.draw()
                 self.fig.canvas.flush_events()
 
-        except Exception:
-            # Ignore plot update errors (e.g., if window was closed)
+        except Exception as e:
+            # Log error and mark plotter as closed to prevent further crashes
+            import sys
+            print(f"Error updating reward plot: {e}", file=sys.stderr)
             self.is_open = False
 
     def close(self):
@@ -686,6 +795,7 @@ def main():
     p.add_argument("--plot-rewards", dest="plot_rewards", action="store_true", default=True, help="Show real-time reward plot (default: True)")
     p.add_argument("--no-plot-rewards", dest="plot_rewards", action="store_false", help="Disable real-time reward plot")
     p.add_argument("--plot-update-interval", type=float, default=0.2, help="Minimum time (seconds) between plot updates (default: 0.2, lower=smoother but slower game)")
+    p.add_argument("--plot-window-size", type=int, default=100, help="Number of steps to show in sliding window (default: 100)")
     args = p.parse_args()
     target_episodes = max(1, int(args.episodes))
 
@@ -809,9 +919,13 @@ def main():
     plotter = None
     if args.plot_rewards and not args.headless:
         try:
-            plotter = RewardPlotter(update_interval=args.plot_update_interval)
+            plotter = RewardPlotter(
+                update_interval=args.plot_update_interval,
+                max_steps_shown=args.plot_window_size
+            )
             backend = "PyQtGraph (fast)" if plotter.use_pyqtgraph else "Matplotlib"
-            print(f"Real-time reward plot enabled using {backend} (update interval: {args.plot_update_interval}s).")
+            print(f"Real-time reward plot enabled using {backend}")
+            print(f"  Update interval: {args.plot_update_interval}s | Window size: {args.plot_window_size} steps")
             print("Close the plot window to disable plotting.")
         except Exception as e:
             print(f"Warning: Could not initialize reward plotter: {e}")

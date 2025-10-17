@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -97,7 +98,9 @@ def build_policy_from_env_and_config(env, config):
 
     # Auto-select CNN policy for multi-dimensional observations (images)
     policy_type = config.policy
-    is_image_obs = len(input_shape) > 1
+    # Handle both int (discrete obs with embedding) and tuple (continuous obs)
+    is_int = type(input_shape) in [int, np.int32, np.int64]
+    is_image_obs = not is_int and len(input_shape) > 1
     if is_image_obs:
         if policy_type == "mlp":
             policy_type = "cnn"

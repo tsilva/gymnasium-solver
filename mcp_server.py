@@ -14,8 +14,9 @@ import json
 import os
 import subprocess
 import sys
+from difflib import get_close_matches
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import mcp.server.stdio
 import mcp.types as types
@@ -35,6 +36,35 @@ from utils.run import Run, RUNS_DIR
 _running_processes: Dict[str, subprocess.Popen] = {}
 
 server = Server("gymnasium-solver")
+
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+def fuzzy_match_metrics(
+    requested_metrics: List[str],
+    available_metrics: List[str],
+    cutoff: float = 0.6
+) -> Tuple[List[str], List[Tuple[str, List[str]]]]:
+    """Fuzzy match requested metrics to available metrics.
+
+    Returns:
+        (matched_metrics, suggestions) where suggestions is [(bad_metric, [similar_metrics])]
+    """
+    matched = []
+    suggestions = []
+
+    for metric in requested_metrics:
+        if metric in available_metrics:
+            matched.append(metric)
+        else:
+            # Try fuzzy matching
+            similar = get_close_matches(metric, available_metrics, n=5, cutoff=cutoff)
+            if similar:
+                suggestions.append((metric, similar))
+
+    return matched, suggestions
 
 
 # ============================================================================
@@ -406,6 +436,142 @@ async def handle_list_tools() -> list[types.Tool]:
                 "required": ["run_id"],
             },
         ),
+        types.Tool(
+            name="correlate_metrics",
+            description="Calculate correlation between pairs of metrics to identify relationships",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "run_id": {
+                        "type": "string",
+                        "description": "Run ID or '@last' for most recent run"
+                    },
+                    "metric_pairs": {
+                        "type": "array",
+                        "items": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "minItems": 2,
+                            "maxItems": 2
+                        },
+                        "description": "List of metric pairs to correlate, e.g., [['metric1', 'metric2'], ...]"
+                    }
+                },
+                "required": ["run_id", "metric_pairs"],
+            },
+        ),
+        types.Tool(
+            name="get_metric_trend",
+            description="Analyze trend direction and magnitude for a metric over a window",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "run_id": {
+                        "type": "string",
+                        "description": "Run ID or '@last' for most recent run"
+                    },
+                    "metric": {
+                        "type": "string",
+                        "description": "Metric to analyze trend for"
+                    },
+                    "window": {
+                        "type": "string",
+                        "description": "Window to analyze: 'all', 'last_N_epochs', 'first_N_epochs', e.g., 'last_20_epochs'"
+                    }
+                },
+                "required": ["run_id", "metric"],
+            },
+        ),
+        types.Tool(
+            name="compare_to_baseline",
+            description="Compare a run's performance to a baseline (best run or specific run)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "run_id": {
+                        "type": "string",
+                        "description": "Run ID to compare"
+                    },
+                    "baseline": {
+                        "type": "string",
+                        "description": "Baseline to compare against: 'best_for_env' or a specific run_id"
+                    },
+                    "metric": {
+                        "type": "string",
+                        "description": "Metric to compare (default: 'train/roll/ep_rew/mean')"
+                    }
+                },
+                "required": ["run_id", "baseline"],
+            },
+        ),
+        types.Tool(
+            name="health_check",
+            description="Quick health check identifying top anomalies ranked by severity",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "run_id": {
+                        "type": "string",
+                        "description": "Run ID or '@last' for most recent run"
+                    }
+                },
+                "required": ["run_id"],
+            },
+        ),
+        types.Tool(
+            name="plot_compare_runs",
+            description="Plot the same metric across multiple runs for comparison",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "run_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of run IDs to compare"
+                    },
+                    "metric": {
+                        "type": "string",
+                        "description": "Metric to plot across all runs"
+                    },
+                    "x_axis": {
+                        "type": "string",
+                        "description": "X-axis column (default: 'epoch')"
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Optional plot title"
+                    },
+                    "width": {
+                        "type": "integer",
+                        "description": "Plot width in pixels (default: 800)"
+                    },
+                    "height": {
+                        "type": "integer",
+                        "description": "Plot height in pixels (default: 600)"
+                    }
+                },
+                "required": ["run_ids", "metric"],
+            },
+        ),
+        types.Tool(
+            name="get_hyperparam_history",
+            description="Track hyperparameter values across training (for scheduled hyperparams)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "run_id": {
+                        "type": "string",
+                        "description": "Run ID or '@last' for most recent run"
+                    },
+                    "params": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of hyperparameters to track (e.g., ['policy_lr', 'ent_coef'])"
+                    }
+                },
+                "required": ["run_id"],
+            },
+        ),
     ]
 
 
@@ -498,6 +664,39 @@ async def handle_call_tool(
             )
         elif name == "get_training_progress":
             result = await get_training_progress(args["run_id"])
+        elif name == "correlate_metrics":
+            result = await correlate_metrics(
+                args["run_id"],
+                args["metric_pairs"]
+            )
+        elif name == "get_metric_trend":
+            result = await get_metric_trend(
+                args["run_id"],
+                args["metric"],
+                args.get("window", "all")
+            )
+        elif name == "compare_to_baseline":
+            result = await compare_to_baseline(
+                args["run_id"],
+                args["baseline"],
+                args.get("metric", "train/roll/ep_rew/mean")
+            )
+        elif name == "health_check":
+            result = await health_check(args["run_id"])
+        elif name == "plot_compare_runs":
+            return await plot_compare_runs(
+                args["run_ids"],
+                args["metric"],
+                args.get("x_axis", "epoch"),
+                args.get("title"),
+                args.get("width", 800),
+                args.get("height", 600)
+            )
+        elif name == "get_hyperparam_history":
+            result = await get_hyperparam_history(
+                args["run_id"],
+                args.get("params")
+            )
         else:
             raise ValueError(f"Unknown tool: {name}")
 
@@ -800,28 +999,63 @@ async def stop_training(run_id: str) -> Dict[str, Any]:
 
 async def get_training_status(run_id: str) -> Dict[str, Any]:
     """Check if a training process is still running."""
-    if run_id not in _running_processes:
-        return {
-            "run_id": run_id,
-            "running": False,
-            "message": "No tracked process found"
-        }
+    # First check tracked processes
+    if run_id in _running_processes:
+        process = _running_processes[run_id]
+        poll_result = process.poll()
 
-    process = _running_processes[run_id]
-    poll_result = process.poll()
+        if poll_result is None:
+            return {
+                "run_id": run_id,
+                "running": True,
+                "pid": process.pid,
+                "source": "tracked"
+            }
+        else:
+            # Process finished, remove from tracking
+            del _running_processes[run_id]
 
-    if poll_result is None:
-        return {
-            "run_id": run_id,
-            "running": True,
-            "pid": process.pid
-        }
-    else:
-        return {
-            "run_id": run_id,
-            "running": False,
-            "exit_code": poll_result
-        }
+    # Fall back to system-wide process check
+    # Check if run directory has a lock file or recent activity
+    try:
+        run = Run.load(run_id)
+        run_dir = run.run_dir
+
+        # Method 1: Check for processes with CWD in the run directory
+        # Method 2: Check all train.py processes and see if any writes to this run dir
+        # Method 3: Check metrics.csv timestamp to see if recently updated
+
+        # Use method 3: check if metrics.csv was updated in last 60 seconds
+        metrics_file = Path(run_dir) / "metrics.csv"
+        if metrics_file.exists():
+            import time
+            mtime = metrics_file.stat().st_mtime
+            age = time.time() - mtime
+            if age < 60:  # Updated in last minute
+                # Find any train.py process
+                result = subprocess.run(
+                    ["pgrep", "-f", "python.*train.py"],
+                    capture_output=True,
+                    text=True
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    pids = [int(pid) for pid in result.stdout.strip().split('\n') if pid]
+                    return {
+                        "run_id": run_id,
+                        "running": True,
+                        "pid": pids[0] if len(pids) == 1 else pids,
+                        "source": "system",
+                        "note": f"Inferred from recent metrics.csv activity ({age:.1f}s ago)"
+                    }
+    except Exception:
+        pass
+
+    # No running process found
+    return {
+        "run_id": run_id,
+        "running": False,
+        "message": "No running process found"
+    }
 
 
 async def list_checkpoints(run_id: str) -> Dict[str, Any]:
@@ -1006,12 +1240,25 @@ async def plot_run_metric(
             text=json.dumps({"error": f"X-axis column '{x_axis}' not found in metrics"})
         )]
 
-    # Check if all metrics exist
-    missing_metrics = [m for m in metric_names if m not in rows[0]]
-    if missing_metrics:
+    # Check if all metrics exist (with fuzzy matching)
+    available_metrics = list(rows[0].keys())
+    matched_metrics, suggestions = fuzzy_match_metrics(metric_names, available_metrics)
+
+    if suggestions:
+        error_msg = {"error": "Some metrics not found", "suggestions": {}}
+        for bad_metric, similar in suggestions:
+            error_msg["suggestions"][bad_metric] = similar
         return [types.TextContent(
             type="text",
-            text=json.dumps({"error": f"Metrics not found: {missing_metrics}"})
+            text=json.dumps(error_msg, indent=2)
+        )]
+
+    # Use matched metrics (may be a subset if some failed fuzzy match)
+    metric_names = matched_metrics
+    if not metric_names:
+        return [types.TextContent(
+            type="text",
+            text=json.dumps({"error": "No valid metrics to plot"})
         )]
 
     # Extract data
@@ -1371,6 +1618,569 @@ async def get_training_progress(run_id: str) -> Dict[str, Any]:
             "n_envs": config.n_envs,
             "policy_lr": config.policy_lr,
             "batch_size": config.batch_size
+        }
+    }
+
+
+async def correlate_metrics(
+    run_id: str,
+    metric_pairs: List[List[str]]
+) -> Dict[str, Any]:
+    """Calculate correlation between pairs of metrics."""
+    import statistics
+
+    run = Run.load(run_id)
+    metrics_file = Path(run.run_dir) / "metrics.csv"
+
+    if not metrics_file.exists():
+        return {"error": f"No metrics file found for run {run_id}"}
+
+    with open(metrics_file) as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+
+    if not rows:
+        return {"error": "No metrics data available"}
+
+    correlations = []
+
+    for pair in metric_pairs:
+        if len(pair) != 2:
+            correlations.append({
+                "metrics": pair,
+                "error": "Pair must contain exactly 2 metrics"
+            })
+            continue
+
+        metric1, metric2 = pair
+
+        # Check metrics exist
+        if metric1 not in rows[0] or metric2 not in rows[0]:
+            missing = []
+            if metric1 not in rows[0]:
+                missing.append(metric1)
+            if metric2 not in rows[0]:
+                missing.append(metric2)
+            correlations.append({
+                "metrics": pair,
+                "error": f"Metrics not found: {missing}"
+            })
+            continue
+
+        # Extract paired values
+        values1 = []
+        values2 = []
+        for row in rows:
+            if metric1 in row and metric2 in row and row[metric1] and row[metric2]:
+                try:
+                    v1 = float(row[metric1])
+                    v2 = float(row[metric2])
+                    values1.append(v1)
+                    values2.append(v2)
+                except (ValueError, TypeError):
+                    continue
+
+        if len(values1) < 2:
+            correlations.append({
+                "metrics": pair,
+                "error": "Insufficient data points"
+            })
+            continue
+
+        # Calculate Pearson correlation
+        n = len(values1)
+        mean1 = statistics.mean(values1)
+        mean2 = statistics.mean(values2)
+
+        numerator = sum((values1[i] - mean1) * (values2[i] - mean2) for i in range(n))
+        denom1 = sum((v - mean1) ** 2 for v in values1) ** 0.5
+        denom2 = sum((v - mean2) ** 2 for v in values2) ** 0.5
+
+        if denom1 == 0 or denom2 == 0:
+            correlation = 0.0
+        else:
+            correlation = numerator / (denom1 * denom2)
+
+        # Classify strength
+        abs_corr = abs(correlation)
+        if abs_corr > 0.7:
+            strength = "strong"
+        elif abs_corr > 0.4:
+            strength = "moderate"
+        elif abs_corr > 0.2:
+            strength = "weak"
+        else:
+            strength = "negligible"
+
+        correlations.append({
+            "metrics": pair,
+            "correlation": round(correlation, 3),
+            "strength": strength,
+            "n_samples": n
+        })
+
+    return {
+        "run_id": run_id,
+        "correlations": correlations
+    }
+
+
+async def get_metric_trend(
+    run_id: str,
+    metric: str,
+    window: str = "all"
+) -> Dict[str, Any]:
+    """Analyze trend for a metric over a specified window."""
+    import statistics
+
+    run = Run.load(run_id)
+    metrics_file = Path(run.run_dir) / "metrics.csv"
+
+    if not metrics_file.exists():
+        return {"error": f"No metrics file found for run {run_id}"}
+
+    with open(metrics_file) as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+
+    if not rows or metric not in rows[0]:
+        return {"error": f"Metric '{metric}' not found"}
+
+    # Extract all values first
+    all_values = []
+    all_epochs = []
+    for row in rows:
+        if metric in row and row[metric]:
+            try:
+                val = float(row[metric])
+                all_values.append(val)
+                if "epoch" in row and row["epoch"]:
+                    all_epochs.append(float(row["epoch"]))
+            except (ValueError, TypeError):
+                continue
+
+    if not all_values:
+        return {"error": f"No valid data for metric '{metric}'"}
+
+    # Apply window filter
+    if window == "all":
+        values = all_values
+        epochs = all_epochs
+        window_desc = "entire training"
+    elif window.startswith("last_") and window.endswith("_epochs"):
+        try:
+            n = int(window.replace("last_", "").replace("_epochs", ""))
+            values = all_values[-n:]
+            epochs = all_epochs[-n:] if all_epochs else []
+            window_desc = f"last {n} epochs"
+        except ValueError:
+            return {"error": f"Invalid window format: {window}"}
+    elif window.startswith("first_") and window.endswith("_epochs"):
+        try:
+            n = int(window.replace("first_", "").replace("_epochs", ""))
+            values = all_values[:n]
+            epochs = all_epochs[:n] if all_epochs else []
+            window_desc = f"first {n} epochs"
+        except ValueError:
+            return {"error": f"Invalid window format: {window}"}
+    else:
+        return {"error": f"Invalid window format: {window}. Use 'all', 'last_N_epochs', or 'first_N_epochs'"}
+
+    if len(values) < 2:
+        return {"error": "Insufficient data in window"}
+
+    # Calculate linear regression slope
+    n = len(values)
+    x = list(range(n))
+    mean_x = statistics.mean(x)
+    mean_y = statistics.mean(values)
+    numerator = sum((x[i] - mean_x) * (values[i] - mean_y) for i in range(n))
+    denominator = sum((xi - mean_x) ** 2 for xi in x)
+
+    if denominator == 0:
+        slope = 0.0
+    else:
+        slope = numerator / denominator
+
+    # Determine direction and significance
+    if abs(slope) < 0.01:
+        direction = "stable"
+        significance = "low"
+    elif slope > 0:
+        direction = "improving"
+        significance = "high" if slope > 0.1 else "moderate"
+    else:
+        direction = "declining"
+        significance = "high" if slope < -0.1 else "moderate"
+
+    # Calculate change
+    change = values[-1] - values[0]
+    change_pct = (change / abs(values[0]) * 100) if values[0] != 0 else 0.0
+
+    return {
+        "run_id": run_id,
+        "metric": metric,
+        "window": window_desc,
+        "n_samples": n,
+        "first_value": round(values[0], 4),
+        "last_value": round(values[-1], 4),
+        "change": round(change, 4),
+        "change_pct": round(change_pct, 2),
+        "slope": round(slope, 6),
+        "direction": direction,
+        "significance": significance,
+        "epoch_range": [epochs[0], epochs[-1]] if epochs else None
+    }
+
+
+async def compare_to_baseline(
+    run_id: str,
+    baseline: str,
+    metric: str = "train/roll/ep_rew/mean"
+) -> Dict[str, Any]:
+    """Compare a run's performance to a baseline."""
+
+    # Load target run
+    run = Run.load(run_id)
+    run_config = run.load_config()
+    metrics_file = Path(run.run_dir) / "metrics.csv"
+
+    if not metrics_file.exists():
+        return {"error": f"No metrics file found for run {run_id}"}
+
+    with open(metrics_file) as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+
+    if not rows or metric not in rows[-1]:
+        return {"error": f"Metric '{metric}' not found in run {run_id}"}
+
+    try:
+        target_value = float(rows[-1][metric])
+        target_epoch = float(rows[-1].get("epoch", 0))
+    except (ValueError, TypeError):
+        return {"error": f"Invalid metric value in run {run_id}"}
+
+    # Get baseline run
+    if baseline == "best_for_env":
+        best_result = await get_best_run(run_config.env_id, metric, minimize=False)
+        if "error" in best_result:
+            return {"error": f"Could not find best run: {best_result['error']}"}
+        baseline_id = best_result["best_run"]["run_id"]
+        baseline_value = best_result["best_value"]
+        baseline_epoch = None
+    else:
+        # Specific run ID
+        baseline_id = baseline
+        try:
+            baseline_run = Run.load(baseline_id)
+            baseline_metrics = Path(baseline_run.run_dir) / "metrics.csv"
+
+            if not baseline_metrics.exists():
+                return {"error": f"No metrics for baseline run {baseline_id}"}
+
+            with open(baseline_metrics) as f:
+                reader = csv.DictReader(f)
+                baseline_rows = list(reader)
+
+            if not baseline_rows or metric not in baseline_rows[-1]:
+                return {"error": f"Metric '{metric}' not found in baseline"}
+
+            baseline_value = float(baseline_rows[-1][metric])
+            baseline_epoch = float(baseline_rows[-1].get("epoch", 0))
+        except Exception as e:
+            return {"error": f"Failed to load baseline: {str(e)}"}
+
+    # Calculate comparison
+    difference = target_value - baseline_value
+    if baseline_value != 0:
+        pct_difference = (difference / abs(baseline_value)) * 100
+    else:
+        pct_difference = 0.0
+
+    comparison = {
+        "run_id": run_id,
+        "baseline_id": baseline_id,
+        "metric": metric,
+        "target": {
+            "value": round(target_value, 4),
+            "epoch": target_epoch
+        },
+        "baseline": {
+            "value": round(baseline_value, 4),
+            "epoch": baseline_epoch
+        },
+        "difference": round(difference, 4),
+        "pct_difference": round(pct_difference, 2),
+        "status": "better" if difference > 0 else "worse" if difference < 0 else "equal"
+    }
+
+    return comparison
+
+
+async def health_check(run_id: str) -> Dict[str, Any]:
+    """Quick health check identifying top anomalies."""
+
+    # Get run info
+    run_info = await get_run_info(run_id)
+    if "error" in run_info:
+        return run_info
+
+    config = Run.load(run_id).load_config()
+
+    # Get alerts
+    alerts_result = await get_metric_alerts(run_id)
+
+    # Get key metric trends
+    key_metrics = [
+        "train/roll/ep_rew/mean",
+        "train/opt/policy/entropy",
+        "train/opt/value/explained_var"
+    ]
+
+    anomalies = []
+
+    # Check alerts first
+    if "alerts" in alerts_result and alerts_result["alerts"]:
+        for alert in alerts_result["alerts"]:
+            anomalies.append({
+                "severity": "WARNING",
+                "type": "metric_alert",
+                "message": f"{alert['metric_alert']}: {alert['message']}",
+                "tip": alert.get("tip", "")
+            })
+
+    # Check reward trend
+    reward_trend = await get_metric_trend(run_id, "train/roll/ep_rew/mean", "last_20_epochs")
+    if "direction" in reward_trend and reward_trend["direction"] == "declining":
+        anomalies.append({
+            "severity": "CRITICAL",
+            "type": "reward_decline",
+            "message": f"Rewards declining: {reward_trend['change_pct']:.1f}% over last 20 epochs",
+            "tip": "Check if entropy is collapsing or learning rate is too high"
+        })
+
+    # Check entropy trend (should decrease)
+    entropy_trend = await get_metric_trend(run_id, "train/opt/policy/entropy", "all")
+    if "direction" in entropy_trend and entropy_trend["direction"] == "improving":
+        anomalies.append({
+            "severity": "CRITICAL",
+            "type": "entropy_collapse",
+            "message": f"Entropy increasing instead of decreasing: {entropy_trend['change_pct']:.1f}% change",
+            "tip": "Reduce ent_coef significantly (try 10x reduction)"
+        })
+
+    # Check explained variance
+    expl_var_summary = await get_metrics_summary(run_id, "train/opt/value/explained_var")
+    if "last" in expl_var_summary:
+        if expl_var_summary["last"] < 0.5:
+            anomalies.append({
+                "severity": "WARNING",
+                "type": "poor_value_fit",
+                "message": f"Explained variance low: {expl_var_summary['last']:.2f}",
+                "tip": "Value function not learning well; check value_lr and architecture"
+            })
+        elif expl_var_summary["last"] > 0.98:
+            anomalies.append({
+                "severity": "INFO",
+                "type": "potential_overfit",
+                "message": f"Explained variance very high: {expl_var_summary['last']:.3f}",
+                "tip": "May indicate value function overfitting"
+            })
+
+    # Check if solved
+    reward_threshold = getattr(config, "reward_threshold", None)
+    progress = await get_training_progress(run_id)
+    is_solved = progress.get("performance", {}).get("is_solved", False)
+
+    if not is_solved and reward_threshold:
+        current = float(progress["performance"]["train_reward_mean"] or 0)
+        gap = reward_threshold - current
+        pct_gap = (gap / reward_threshold) * 100
+        anomalies.append({
+            "severity": "INFO",
+            "type": "not_solved",
+            "message": f"Not yet solved: {current:.1f}/{reward_threshold:.1f} ({pct_gap:.1f}% gap)",
+            "tip": "Continue training or adjust hyperparameters"
+        })
+
+    # Sort by severity
+    severity_order = {"CRITICAL": 0, "WARNING": 1, "INFO": 2}
+    anomalies.sort(key=lambda x: severity_order.get(x["severity"], 3))
+
+    return {
+        "run_id": run_id,
+        "anomaly_count": len(anomalies),
+        "top_anomalies": anomalies[:5],  # Top 5
+        "is_healthy": len([a for a in anomalies if a["severity"] == "CRITICAL"]) == 0
+    }
+
+
+async def plot_compare_runs(
+    run_ids: List[str],
+    metric: str,
+    x_axis: str = "epoch",
+    title: Optional[str] = None,
+    width: int = 800,
+    height: int = 600
+) -> list[types.ImageContent]:
+    """Plot the same metric across multiple runs for comparison."""
+    import base64
+    import io
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+
+    # Collect data from all runs
+    run_data = {}
+
+    for run_id in run_ids:
+        try:
+            run = Run.load(run_id)
+            metrics_file = Path(run.run_dir) / "metrics.csv"
+
+            if not metrics_file.exists():
+                continue
+
+            with open(metrics_file) as f:
+                reader = csv.DictReader(f)
+                rows = list(reader)
+
+            if not rows or metric not in rows[0] or x_axis not in rows[0]:
+                continue
+
+            # Extract data
+            x_data = []
+            y_data = []
+
+            for row in rows:
+                if x_axis in row and metric in row and row[x_axis] and row[metric]:
+                    try:
+                        x_val = float(row[x_axis])
+                        y_val = float(row[metric])
+                        x_data.append(x_val)
+                        y_data.append(y_val)
+                    except (ValueError, TypeError):
+                        continue
+
+            if x_data and y_data:
+                run_data[run_id] = (x_data, y_data)
+
+        except Exception:
+            continue
+
+    if not run_data:
+        return [types.TextContent(
+            type="text",
+            text=json.dumps({"error": "No valid data found for any run"})
+        )]
+
+    # Create plot
+    fig, ax = plt.subplots(figsize=(width/100, height/100), dpi=100)
+
+    for run_id, (x_data, y_data) in run_data.items():
+        ax.plot(x_data, y_data, label=run_id, marker='o', markersize=2, alpha=0.8)
+
+    ax.set_xlabel(x_axis)
+    ax.set_ylabel(metric)
+    ax.set_title(title or f"{metric} comparison")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    # Save to buffer
+    buf = io.BytesIO()
+    plt.tight_layout()
+    plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+    buf.seek(0)
+    plt.close(fig)
+
+    # Encode as base64
+    img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+
+    return [types.ImageContent(
+        type="image",
+        data=img_base64,
+        mimeType="image/png"
+    )]
+
+
+async def get_hyperparam_history(
+    run_id: str,
+    params: Optional[List[str]] = None
+) -> Dict[str, Any]:
+    """Track hyperparameter values across training."""
+
+    run = Run.load(run_id)
+    metrics_file = Path(run.run_dir) / "metrics.csv"
+
+    if not metrics_file.exists():
+        return {"error": f"No metrics file found for run {run_id}"}
+
+    with open(metrics_file) as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+
+    if not rows:
+        return {"error": "No metrics data available"}
+
+    # Auto-detect hyperparameter columns if not specified
+    if params is None:
+        # Look for common hyperparameter patterns in column names
+        all_cols = list(rows[0].keys())
+        hyperparam_patterns = ["_lr", "ent_coef", "clip_range", "gamma", "lam"]
+        params = [col for col in all_cols if any(pattern in col for pattern in hyperparam_patterns)]
+
+    if not params:
+        return {"error": "No hyperparameters found or specified"}
+
+    # Extract history
+    history = {param: [] for param in params}
+    epochs = []
+
+    for row in rows:
+        if "epoch" in row and row["epoch"]:
+            try:
+                epochs.append(float(row["epoch"]))
+            except (ValueError, TypeError):
+                epochs.append(None)
+
+        for param in params:
+            if param in row and row[param]:
+                try:
+                    history[param].append(float(row[param]))
+                except (ValueError, TypeError):
+                    history[param].append(None)
+            else:
+                history[param].append(None)
+
+    # Check which params are scheduled (changing)
+    scheduled = {}
+    for param, values in history.items():
+        valid_values = [v for v in values if v is not None]
+        if len(valid_values) > 1:
+            is_changing = len(set(valid_values)) > 1
+            scheduled[param] = {
+                "is_scheduled": is_changing,
+                "first": valid_values[0] if valid_values else None,
+                "last": valid_values[-1] if valid_values else None,
+                "min": min(valid_values) if valid_values else None,
+                "max": max(valid_values) if valid_values else None
+            }
+        else:
+            scheduled[param] = {
+                "is_scheduled": False,
+                "value": valid_values[0] if valid_values else None
+            }
+
+    return {
+        "run_id": run_id,
+        "params": params,
+        "scheduled_params": [p for p, info in scheduled.items() if info.get("is_scheduled", False)],
+        "constant_params": [p for p, info in scheduled.items() if not info.get("is_scheduled", False)],
+        "summary": scheduled,
+        "history": {
+            "epochs": epochs,
+            "values": history
         }
     }
 

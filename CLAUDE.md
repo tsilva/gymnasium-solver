@@ -165,6 +165,27 @@ The codebase provides MCP (Model Context Protocol) tools for programmatic intera
 
 These tools are particularly useful for automated workflows, hyperparameter tuning agents, and programmatic training management.
 
+## Run Debugging and Analysis
+
+**When the user asks to analyze, debug, or investigate a training run, ALWAYS use the `rl-run-debugger` specialized agent via the Task tool.** This agent has expert knowledge of RL training dynamics and will provide comprehensive diagnostics.
+
+Use the `rl-run-debugger` agent for:
+- Analyzing completed runs that failed to reach reward thresholds
+- Debugging runs with plateaued learning, instability, or anomalous metrics
+- Investigating why training is not progressing as expected
+- Comparing runs to identify optimal configurations
+- Checking if an active run is on track or should be stopped
+- Diagnosing entropy collapse, KL divergence issues, or value function problems
+
+**Examples triggering the agent**:
+- "analyze run abc123"
+- "debug run @last"
+- "why didn't my Breakout run solve the environment?"
+- "is my current training stuck?"
+- "what's wrong with this run's metrics?"
+
+The agent will systematically gather run info, metrics, logs, and provide root cause analysis with actionable recommendations.
+
 ## Architecture Overview
 
 ### Entry Point & Training Flow

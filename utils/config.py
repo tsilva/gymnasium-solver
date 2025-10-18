@@ -716,6 +716,15 @@ class Config:
         data.pop('_activation', None)
         data.pop('_policy_kwargs', None)
         data["algo_id"] = self.algo_id # TODO: do this in serializer method instead
+
+        # Include schedule metadata (set via setattr, not in dataclass fields)
+        # Preserve schedule information so config can be fully reconstructed
+        for attr_name in dir(self):
+            if '_schedule' in attr_name and not attr_name.startswith('_'):
+                value = getattr(self, attr_name, None)
+                if value is not None:
+                    data[attr_name] = value
+
         write_json(path, data, indent=2, ensure_ascii=False, default=str)
     
     # TODO: figure out a way to softcode this

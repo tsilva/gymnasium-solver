@@ -186,6 +186,17 @@ Use the `rl-run-debugger` agent for:
 
 The agent will systematically gather run info, metrics, logs, and provide root cause analysis with actionable recommendations.
 
+**CRITICAL: Agent must follow these steps to avoid config mismatches**:
+1. **First**, get the run's actual config using `mcp__gymnasium-solver__get_run_info`
+2. **Then**, read the current YAML config file for the same env:variant
+3. **Compare** the two configs and **explicitly flag any discrepancies** (especially: max_env_steps, learning rates, schedules, batch_size, ent_coef, clip_range)
+4. **If configs differ**, prominently state: "⚠️ Run was started with an older config. Current YAML has been updated since this run started."
+5. **Base ALL analysis and recommendations on the run's actual config**, NOT the current YAML file
+6. When recommending changes, specify whether they apply to:
+   - "This run" (impossible - run already started with its config snapshot)
+   - "Next run" (changes to current YAML that will affect future runs)
+7. Never recommend changes to hyperparameters that are already set correctly in the run's actual config
+
 ## Architecture Overview
 
 ### Entry Point & Training Flow

@@ -314,6 +314,9 @@ class MetricsTableLogger(LightningLoggerBase):
         if (sys_fps := metrics.get("train/sys/timing/fps")) is not None:
             parts.append(f"sys/fps: {number_to_string(sys_fps, precision=0, humanize=True)}")
 
+        if (eps := metrics.get("train/sys/timing/eps")) is not None:
+            parts.append(f"epochs/s: {number_to_string(eps, precision=2, humanize=False)}")
+
         if (time_elapsed := metrics.get("train/sys/timing/time_elapsed")) is not None:
             elapsed = int(time_elapsed)
             parts.append(f"elapsed: {elapsed // 3600:02d}:{(elapsed % 3600) // 60:02d}:{elapsed % 60:02d}")
@@ -502,6 +505,7 @@ class MetricsTableLogger(LightningLoggerBase):
         header_metrics = {
             "train/roll/fps",
             "train/sys/timing/fps",
+            "train/sys/timing/eps",
             "train/sys/timing/time_elapsed",
         }
 

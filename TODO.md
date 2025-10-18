@@ -35,7 +35,7 @@
 - FEAT: crop mario frames
 
 - TEST: quantize image (before or after downscaling)
-- TEST: crop around mario
+- TEST: instead of cropping HUDS just mask them with black so that we can keep a constant image size between envs
 - If VF stabilized try increasing LR
 - mario: make policy more robust to timing differences by finetuning with variable frameskip
 - TODO: Huber Loss for VF; value normalization/PopArt

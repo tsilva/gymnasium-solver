@@ -351,7 +351,8 @@ class Config:
         }[algo_id]
 
         # Filter out unknown fields to handle config schema evolution
-        valid_fields = set(config_cls.__dataclass_fields__.keys())
+        # Only include fields that can be passed to __init__ (init=True)
+        valid_fields = {k for k, f in config_cls.__dataclass_fields__.items() if f.init}
         filtered_dict = {k: v for k, v in _config_dict.items() if k in valid_fields}
 
         config = config_cls(**filtered_dict)

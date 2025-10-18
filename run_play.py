@@ -253,6 +253,7 @@ class RewardPlotter:
         # Reset for next episode
         self.current_episode_steps = []
         self.current_episode_rewards = []
+        self.current_step_rewards = []
         self.current_curve = None
         self.episode_num += 1
 

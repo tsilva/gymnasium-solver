@@ -212,6 +212,18 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         return self._rollout_collectors[stage]
 
     def on_fit_start(self):
+        # Restore deferred optimizer state if resuming from checkpoint
+        if hasattr(self, '_deferred_optimizer_states'):
+            optimizer_states = self._deferred_optimizer_states
+            optimizers = self.optimizers()
+            if not isinstance(optimizers, (list, tuple)):
+                optimizers = [optimizers]
+
+            for opt, opt_state in zip(optimizers, optimizer_states):
+                opt.load_state_dict(opt_state)
+            print("Optimizer state restored from checkpoint")
+            delattr(self, '_deferred_optimizer_states')
+
         # Start the timing tracker for the entire training run
         train_collector = self.get_rollout_collector("train")
         train_metrics = train_collector.get_metrics()
@@ -759,7 +771,7 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
 
         # If resuming training, restore optimizer and RNG states
         if resume_training and state:
-            # Load optimizer state(s) - only works if trainer is attached
+            # Load optimizer state(s) - defer restoration until after optimizer is created
             optimizer_path = checkpoint_dir / "optimizer.pt"
             if optimizer_path.exists():
                 try:
@@ -773,10 +785,11 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
 
                     for opt, opt_state in zip(optimizers, optimizer_states):
                         opt.load_state_dict(opt_state)
+                    print("Optimizer state restored")
                 except RuntimeError:
-                    # Trainer not attached yet, optimizer will be initialized fresh
-                    print("Note: Optimizer will be initialized fresh (trainer not attached yet)")
-                    pass
+                    # Trainer not attached yet, defer restoration until on_fit_start
+                    self._deferred_optimizer_states = optimizer_states
+                    print("Note: Optimizer state will be restored after trainer initialization")
 
             # Restore RNG states
             if state and "rng_states" in state:
@@ -802,10 +815,15 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
                 # Convert list back to proper tuple structure
                 random.setstate((random_state[0], tuple(random_state[1]), random_state[2]))
 
-            # Restore best episode rewards in collectors
+            # Restore best episode rewards and step counters in collectors
+            train_collector = self.get_rollout_collector("train")
             if state and "best_train_reward" in state and state["best_train_reward"] is not None:
-                train_collector = self.get_rollout_collector("train")
                 train_collector._best_episode_reward = float(state["best_train_reward"])
+            if state and "total_timesteps" in state:
+                train_collector.total_steps = int(state["total_timesteps"])
+            if state and "total_vec_steps" in state:
+                train_collector.total_vec_steps = int(state["total_vec_steps"])
+
             if state and "best_val_reward" in state and state["best_val_reward"] is not None:
                 val_collector = self.get_rollout_collector("val")
                 val_collector._best_episode_reward = float(state["best_val_reward"])

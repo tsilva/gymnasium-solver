@@ -34,6 +34,7 @@ _global:
       
       - "roll/fps"
       - "sys/timing/fps"
+      - "sys/timing/eps"
 
       - "roll/reward/mean"
       - "roll/reward/std"
@@ -192,6 +193,12 @@ sys/timing/eta_s:
 sys/timing/fps_instant:
   description: "Instant training throughput in frames per second measured within the current epoch"
   precision: 0
+  min: 0.0
+
+sys/timing/eps:
+  show_in_table: true
+  description: "Training update rate in epochs per second (reflects optimization throughput)"
+  precision: 2
   min: 0.0
 
 # Loss metrics

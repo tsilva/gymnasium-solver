@@ -572,6 +572,28 @@ async def handle_list_tools() -> list[types.Tool]:
                 "required": ["run_id"],
             },
         ),
+        types.Tool(
+            name="comprehensive_diagnostic",
+            description="Single comprehensive diagnostic call that returns all essential run information for analysis. This is the PREFERRED tool for run debugging - it consolidates status, config, progress, key metrics, health checks, and trend analysis into one efficient call. Use this instead of calling multiple individual tools.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "run_id": {
+                        "type": "string",
+                        "description": "Run ID or '@last' for most recent run"
+                    },
+                    "include_recent_metrics": {
+                        "type": "boolean",
+                        "description": "Include last 20 epochs of key metrics for trend analysis (default: true)"
+                    },
+                    "include_full_config": {
+                        "type": "boolean",
+                        "description": "Include full config details vs summary (default: false)"
+                    }
+                },
+                "required": ["run_id"],
+            },
+        ),
     ]
 
 
@@ -696,6 +718,12 @@ async def handle_call_tool(
             result = await get_hyperparam_history(
                 args["run_id"],
                 args.get("params")
+            )
+        elif name == "comprehensive_diagnostic":
+            result = await comprehensive_diagnostic(
+                args["run_id"],
+                args.get("include_recent_metrics", True),
+                args.get("include_full_config", False)
             )
         else:
             raise ValueError(f"Unknown tool: {name}")
@@ -2203,6 +2231,213 @@ async def get_hyperparam_history(
         "scheduled_params": [p for p, info in scheduled.items() if info.get("is_scheduled", False)],
         "constant_params": [p for p, info in scheduled.items() if not info.get("is_scheduled", False)],
         "summary": scheduled
+    }
+
+
+async def comprehensive_diagnostic(
+    run_id: str,
+    include_recent_metrics: bool = True,
+    include_full_config: bool = False
+) -> Dict[str, Any]:
+    """Comprehensive single-call diagnostic for run debugging.
+
+    Consolidates status, config, progress, key metrics, health, and trends.
+    Designed to minimize token usage while providing complete diagnostic picture.
+    """
+    # Resolve @last if needed
+    if run_id == "@last":
+        runs_result = await list_runs(limit=1)
+        if "error" in runs_result or not runs_result.get("runs"):
+            return {"error": "No runs found"}
+        run_id = runs_result["runs"][0]["run_id"]
+
+    run = Run.load(run_id)
+    config = run.load_config()
+    metrics_file = Path(run.run_dir) / "metrics.csv"
+
+    if not metrics_file.exists():
+        return {"error": f"No metrics file found for run {run_id}"}
+
+    # Read metrics once
+    with open(metrics_file) as f:
+        reader = csv.DictReader(f)
+        all_rows = list(reader)
+
+    if not all_rows:
+        return {"error": "No metrics data available"}
+
+    # Get training status
+    status = await get_training_status(run_id)
+    is_active = status.get("running", False)
+
+    # Get first and last rows for analysis
+    first_row = all_rows[0]
+    last_row = all_rows[-1]
+
+    # Recent metrics for trend analysis (last 20 epochs or less)
+    recent_rows = all_rows[-20:] if include_recent_metrics else []
+
+    # === PROGRESS ===
+    total_env_steps = float(last_row.get("train/cnt/total_env_steps", 0))
+    max_env_steps = getattr(config, "max_env_steps", None)
+    progress_pct = (total_env_steps / max_env_steps * 100) if max_env_steps else None
+    current_epoch = int(last_row.get("epoch", 0))
+
+    # === PERFORMANCE ===
+    train_reward = float(last_row.get("train/roll/ep_rew/mean", 0))
+    val_reward = last_row.get("val/roll/ep_rew/mean", "")
+    val_reward = float(val_reward) if val_reward else None
+    best_reward = float(last_row.get("train/roll/ep_rew/best", 0))
+    ep_len_mean = float(last_row.get("train/roll/ep_len/mean", 0))
+
+    reward_threshold = getattr(config, "reward_threshold", None)
+    is_solved = train_reward >= reward_threshold if reward_threshold else False
+    gap_to_threshold = (reward_threshold - train_reward) if reward_threshold else None
+    gap_pct = (gap_to_threshold / reward_threshold * 100) if reward_threshold else None
+
+    # === KEY METRICS (current values) ===
+    key_metrics = {
+        "entropy": float(last_row.get("train/opt/policy/entropy", 0)),
+        "approx_kl": float(last_row.get("train/opt/policy/approx_kl", 0)),
+        "clip_frac": float(last_row.get("train/opt/policy/clip_frac", 0)),
+        "explained_var": float(last_row.get("train/opt/value/explained_var", 0)),
+        "policy_loss": float(last_row.get("train/opt/loss/policy", 0)),
+        "value_loss": float(last_row.get("train/opt/loss/value", 0)),
+        "value_clip_frac": float(last_row.get("train/opt/value/clip_frac", 0)),
+        "grad_norm": float(last_row.get("train/opt/grad/norm", 0)),
+    }
+
+    # === TREND ANALYSIS (if recent metrics available) ===
+    trends = {}
+    if recent_rows and len(recent_rows) > 1:
+        # Reward trend
+        reward_values = [float(r.get("train/roll/ep_rew/mean", 0)) for r in recent_rows if r.get("train/roll/ep_rew/mean")]
+        if len(reward_values) >= 2:
+            reward_change = reward_values[-1] - reward_values[0]
+            reward_change_pct = (reward_change / abs(reward_values[0]) * 100) if reward_values[0] != 0 else 0
+            trends["reward"] = {
+                "direction": "improving" if reward_change > 0 else "declining" if reward_change < 0 else "flat",
+                "change": reward_change,
+                "change_pct": reward_change_pct,
+                "slope": reward_change / len(reward_values)
+            }
+
+        # Entropy trend
+        entropy_values = [float(r.get("train/opt/policy/entropy", 0)) for r in recent_rows if r.get("train/opt/policy/entropy")]
+        if len(entropy_values) >= 2:
+            entropy_change = entropy_values[-1] - entropy_values[0]
+            entropy_change_pct = (entropy_change / abs(entropy_values[0]) * 100) if entropy_values[0] != 0 else 0
+            trends["entropy"] = {
+                "direction": "increasing" if entropy_change > 0 else "decreasing" if entropy_change < 0 else "flat",
+                "change": entropy_change,
+                "change_pct": entropy_change_pct
+            }
+
+    # === HEALTH CHECK ===
+    anomalies = []
+
+    # Check KL divergence
+    if key_metrics["approx_kl"] > 0.02:
+        anomalies.append({
+            "severity": "WARNING",
+            "metric": "approx_kl",
+            "value": key_metrics["approx_kl"],
+            "message": f"KL divergence high: {key_metrics['approx_kl']:.4f} (threshold: 0.02)"
+        })
+
+    # Check explained variance
+    if key_metrics["explained_var"] < 0.5:
+        anomalies.append({
+            "severity": "WARNING",
+            "metric": "explained_var",
+            "value": key_metrics["explained_var"],
+            "message": f"Explained variance low: {key_metrics['explained_var']:.2f}"
+        })
+
+    # Check value clip fraction
+    if key_metrics["value_clip_frac"] < 0.05:
+        anomalies.append({
+            "severity": "INFO",
+            "metric": "value_clip_frac",
+            "value": key_metrics["value_clip_frac"],
+            "message": f"Value clip fraction low: {key_metrics['value_clip_frac']:.3f}"
+        })
+
+    # Check for reward decline
+    if trends.get("reward", {}).get("direction") == "declining":
+        anomalies.append({
+            "severity": "CRITICAL",
+            "metric": "reward_trend",
+            "value": trends["reward"]["change"],
+            "message": f"Rewards declining: {trends['reward']['change_pct']:.1f}% over recent epochs"
+        })
+
+    # === CONFIG SUMMARY ===
+    if include_full_config:
+        config_summary = config.__dict__
+    else:
+        config_summary = {
+            "env_id": config.env_id,
+            "algo": getattr(config, "algo", "unknown"),
+            "n_envs": config.n_envs,
+            "n_steps": getattr(config, "n_steps", None),
+            "policy_lr": config.policy_lr,
+            "batch_size": config.batch_size,
+            "ent_coef": getattr(config, "ent_coef", None),
+            "clip_range": getattr(config, "clip_range", None),
+            "max_env_steps": max_env_steps,
+        }
+
+    # === TRAINING SPEED ===
+    rollout_fps = float(last_row.get("train/time/rollout_fps", 0))
+    system_fps = float(last_row.get("train/time/system_fps", 0))
+
+    # === TIME ESTIMATES ===
+    elapsed_time = None
+    remaining_time_estimate = None
+    if system_fps > 0 and max_env_steps:
+        remaining_steps = max_env_steps - total_env_steps
+        remaining_time_estimate = remaining_steps / system_fps  # seconds
+
+        # Try to get elapsed time from run info
+        run_info = await get_run_info(run_id)
+        if "timestamp" in run_info:
+            from datetime import datetime
+            start_time = datetime.fromisoformat(run_info["timestamp"])
+            elapsed_time = (datetime.now() - start_time).total_seconds()
+
+    return {
+        "run_id": run_id,
+        "status": {
+            "is_active": is_active,
+            "is_solved": is_solved,
+            "health": "healthy" if len([a for a in anomalies if a["severity"] == "CRITICAL"]) == 0 else "issues_detected"
+        },
+        "progress": {
+            "total_env_steps": int(total_env_steps),
+            "max_env_steps": max_env_steps,
+            "progress_pct": round(progress_pct, 2) if progress_pct else None,
+            "current_epoch": current_epoch,
+            "elapsed_seconds": round(elapsed_time) if elapsed_time else None,
+            "remaining_seconds_estimate": round(remaining_time_estimate) if remaining_time_estimate else None
+        },
+        "performance": {
+            "train_reward_mean": round(train_reward, 2),
+            "val_reward_mean": round(val_reward, 2) if val_reward else None,
+            "best_reward": round(best_reward, 2),
+            "ep_len_mean": round(ep_len_mean, 1),
+            "reward_threshold": reward_threshold,
+            "gap_to_threshold": round(gap_to_threshold, 2) if gap_to_threshold else None,
+            "gap_pct": round(gap_pct, 2) if gap_pct else None
+        },
+        "key_metrics": {k: round(v, 4) for k, v in key_metrics.items()},
+        "trends": {k: {**v, "change": round(v["change"], 4), "change_pct": round(v["change_pct"], 2)} for k, v in trends.items()} if trends else None,
+        "anomalies": anomalies,
+        "config": config_summary,
+        "training_speed": {
+            "rollout_fps": round(rollout_fps, 1),
+            "system_fps": round(system_fps, 1)
+        }
     }
 
 

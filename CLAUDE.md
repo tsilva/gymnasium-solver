@@ -167,35 +167,7 @@ These tools are particularly useful for automated workflows, hyperparameter tuni
 
 ## Run Debugging and Analysis
 
-**When the user asks to analyze, debug, or investigate a training run, ALWAYS use the `rl-run-debugger` specialized agent via the Task tool.** This agent has expert knowledge of RL training dynamics and will provide comprehensive diagnostics.
-
-Use the `rl-run-debugger` agent for:
-- Analyzing completed runs that failed to reach reward thresholds
-- Debugging runs with plateaued learning, instability, or anomalous metrics
-- Investigating why training is not progressing as expected
-- Comparing runs to identify optimal configurations
-- Checking if an active run is on track or should be stopped
-- Diagnosing entropy collapse, KL divergence issues, or value function problems
-
-**Examples triggering the agent**:
-- "analyze run abc123"
-- "debug run @last"
-- "why didn't my Breakout run solve the environment?"
-- "is my current training stuck?"
-- "what's wrong with this run's metrics?"
-
-The agent will systematically gather run info, metrics, logs, and provide root cause analysis with actionable recommendations.
-
-**CRITICAL: Agent must follow these steps to avoid config mismatches**:
-1. **First**, get the run's actual config using `mcp__gymnasium-solver__get_run_info`
-2. **Then**, read the current YAML config file for the same env:variant
-3. **Compare** the two configs and **explicitly flag any discrepancies** (especially: max_env_steps, learning rates, schedules, batch_size, ent_coef, clip_range)
-4. **If configs differ**, prominently state: "⚠️ Run was started with an older config. Current YAML has been updated since this run started."
-5. **Base ALL analysis and recommendations on the run's actual config**, NOT the current YAML file
-6. When recommending changes, specify whether they apply to:
-   - "This run" (impossible - run already started with its config snapshot)
-   - "Next run" (changes to current YAML that will affect future runs)
-7. Never recommend changes to hyperparameters that are already set correctly in the run's actual config
+**When the user asks to analyze, debug, or investigate a training run, ALWAYS use the `rl-run-debugger` specialized agent via the Task tool.** This agent has expert knowledge of RL training dynamics and will provide comprehensive diagnostics. See `.claude/agents/rl-run-debugger.md` for detailed agent instructions.
 
 ## Architecture Overview
 
@@ -357,47 +329,13 @@ The agent will systematically gather run info, metrics, logs, and provide root c
 - **`config/metrics.yaml`**: Metric precision/highlight rules.
 - **`config/sweeps/`**: W&B sweep specs (grid, Bayesian).
 - **`runs/`**: Training outputs (config, checkpoints, videos, logs, metrics).
-- **`VIBES/`**: Agent helper docs (Architecture Guide, Coding Principles, task playbooks).
-- **`VIBES/ARCHITECTURE_GUIDE.md`**: Detailed architecture documentation.
-- **`VIBES/CODING_PRINCIPLES.md`**: Coding style and principles (fail-fast, no defensive programming, assert aggressively).
-- **`AGENTS.md`**: Workspace rules for autonomous agents.
-
-## Agent Task System
-
-The codebase includes task playbooks under `VIBES/tasks/` for common maintenance operations:
-- `!TASK: audit_bugs` - Find and document functional defects
-- `!TASK: audit_static_analysis` - Identify latent defects
-- `!TASK: cleanup_dead_code` - Remove unused code
-- `!TASK: cleanup_dry_file` - Reduce duplication within modules
-- `!TASK: audit_dryness` - Identify copy-paste logic
-- `!TASK: audit_encapsulation` - Find shared behavior that can be encapsulated
-- `!TASK: audit_concerns` - Find separation of concerns issues
-- `!TASK: audit_config_consistency` - Validate config inconsistencies
-- `!TASK: audit_dependency_health` - Assess dependency state
-- `!TASK: tune_hyperparams` - Iteratively adjust hyperparameters
-- `!TASK: update_docs_architecture` - Keep Architecture Guide accurate
-- `!TASK: update_docs_coding_from_diff` - Infer coding preferences from changes
-- `!TASK: update_docs_readme` - Keep README concise and accurate
-- `!TASK: audit_tests` - Exercise test suites and document failures
-- `!TASK: test_upgrade` - Strengthen test suite for high-risk modules
-- `!TASK: cleanup_imports` - Streamline imports
-
-**Usage**: `run task: <name>` maps to `VIBES/tasks/<name>.md`. Follow instructions in AGENTS.md when executing tasks.
 
 ## Important Principles
 
-### Fail-Fast Philosophy (from CODING_PRINCIPLES.md)
+### Fail-Fast Philosophy
 - **Never preserve backwards compatibility**: Make breaking changes and force users to adapt.
 - **No defensive programming**: Don't add safety checks, validation layers, or compatibility layers. Let the system fail if used incorrectly.
 - **Assert aggressively**: Use assertions for all assumptions, preconditions, and invariants. Let the program crash if anything is unexpected.
 - **No exception handling**: Never catch exceptions unless absolutely required by the API. Let errors propagate up and crash the program.
 - **Explicit error propagation**: Never use broad exception handlers (`except Exception:`) or bare `except:`. Catch only specific, expected exceptions and re-raise with context.
 - **No graceful degradation**: If something can't work correctly, fail immediately rather than falling back to partial functionality.
-
-### Agent Working Guidelines (from AGENTS.md)
-- **Read first**: Read `VIBES/ARCHITECTURE_GUIDE.md`, `VIBES/CODING_PRINCIPLES.md`, and `README.md` before making changes.
-- **Minimal diffs**: Change only what's necessary; avoid drive-by refactors.
-- **Root-cause-first**: Trace failures to true cause, plan minimal fix, avoid symptom patches.
-- **Preserve formatting**: Keep indentation style and width; don't reflow unrelated lines.
-- **Tests**: Add or update tests when behavior changes or is newly added.
-- **After editing**: Validate imports/types, run tests/build if feasible, summarize changes concisely.

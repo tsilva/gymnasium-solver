@@ -882,10 +882,11 @@ async def get_run_metrics(
             "total_timesteps"
         ]
 
-    # Filter columns
+    # Filter columns and remove null/empty values to save tokens
     filtered_rows = []
     for row in rows:
-        filtered_row = {k: v for k, v in row.items() if k in metric_names}
+        filtered_row = {k: v for k, v in row.items()
+                       if k in metric_names and v not in (None, "", "null")}
         filtered_rows.append(filtered_row)
 
     return {
@@ -1467,15 +1468,23 @@ async def get_metrics_range(
             "error": f"No data found for epoch range {start_epoch}-{end_epoch}"
         }
 
-    # Filter columns if specified
-    if metric_names:
-        result_rows = []
-        for row in filtered_rows:
-            filtered_row = {k: v for k, v in row.items()
-                          if k in metric_names or k == "epoch"}
-            result_rows.append(filtered_row)
-    else:
-        result_rows = filtered_rows
+    # Default to key metrics if not specified to avoid huge responses
+    if not metric_names:
+        metric_names = [
+            "epoch",
+            "train/roll/ep_rew/mean",
+            "train/roll/ep_rew/best",
+            "val/roll/ep_rew/mean",
+            "val/roll/ep_rew/best",
+            "total_timesteps"
+        ]
+
+    # Filter columns and remove null/empty values to save tokens
+    result_rows = []
+    for row in filtered_rows:
+        filtered_row = {k: v for k, v in row.items()
+                      if k in metric_names and v not in (None, "", "null")}
+        result_rows.append(filtered_row)
 
     return {
         "run_id": run_id,
@@ -1950,29 +1959,31 @@ async def health_check(run_id: str) -> Dict[str, Any]:
                 "tip": alert.get("tip", "")
             })
 
-    # Check reward trend
+    # Check reward trend (handle missing metric gracefully)
     reward_trend = await get_metric_trend(run_id, "train/roll/ep_rew/mean", "last_20_epochs")
-    if "direction" in reward_trend and reward_trend["direction"] == "declining":
-        anomalies.append({
-            "severity": "CRITICAL",
-            "type": "reward_decline",
-            "message": f"Rewards declining: {reward_trend['change_pct']:.1f}% over last 20 epochs",
-            "tip": "Check if entropy is collapsing or learning rate is too high"
-        })
+    if "error" not in reward_trend:
+        if "direction" in reward_trend and reward_trend["direction"] == "declining":
+            anomalies.append({
+                "severity": "CRITICAL",
+                "type": "reward_decline",
+                "message": f"Rewards declining: {reward_trend['change_pct']:.1f}% over last 20 epochs",
+                "tip": "Check if entropy is collapsing or learning rate is too high"
+            })
 
     # Check entropy trend (should decrease)
     entropy_trend = await get_metric_trend(run_id, "train/opt/policy/entropy", "all")
-    if "direction" in entropy_trend and entropy_trend["direction"] == "improving":
-        anomalies.append({
-            "severity": "CRITICAL",
-            "type": "entropy_collapse",
-            "message": f"Entropy increasing instead of decreasing: {entropy_trend['change_pct']:.1f}% change",
-            "tip": "Reduce ent_coef significantly (try 10x reduction)"
-        })
+    if "error" not in entropy_trend:
+        if "direction" in entropy_trend and entropy_trend["direction"] == "improving":
+            anomalies.append({
+                "severity": "CRITICAL",
+                "type": "entropy_collapse",
+                "message": f"Entropy increasing instead of decreasing: {entropy_trend['change_pct']:.1f}% change",
+                "tip": "Reduce ent_coef significantly (try 10x reduction)"
+            })
 
     # Check explained variance
     expl_var_summary = await get_metrics_summary(run_id, "train/opt/value/explained_var")
-    if "last" in expl_var_summary:
+    if "error" not in expl_var_summary and "last" in expl_var_summary:
         if expl_var_summary["last"] < 0.5:
             anomalies.append({
                 "severity": "WARNING",
@@ -2108,7 +2119,11 @@ async def get_hyperparam_history(
     run_id: str,
     params: Optional[List[str]] = None
 ) -> Dict[str, Any]:
-    """Track hyperparameter values across training."""
+    """Track hyperparameter values across training.
+
+    Returns summary only (first/last/min/max) to save tokens.
+    Full history arrays are not included by default.
+    """
 
     run = Run.load(run_id)
     metrics_file = Path(run.run_dir) / "metrics.csv"
@@ -2133,55 +2148,61 @@ async def get_hyperparam_history(
     if not params:
         return {"error": "No hyperparameters found or specified"}
 
-    # Extract history
+    # Extract history (but only keep for analysis, don't return full arrays)
     history = {param: [] for param in params}
-    epochs = []
+    first_epoch = None
+    last_epoch = None
 
     for row in rows:
         if "epoch" in row and row["epoch"]:
             try:
-                epochs.append(float(row["epoch"]))
+                epoch = float(row["epoch"])
+                if first_epoch is None:
+                    first_epoch = epoch
+                last_epoch = epoch
             except (ValueError, TypeError):
-                epochs.append(None)
+                pass
 
         for param in params:
             if param in row and row[param]:
                 try:
                     history[param].append(float(row[param]))
                 except (ValueError, TypeError):
-                    history[param].append(None)
-            else:
-                history[param].append(None)
+                    pass
 
     # Check which params are scheduled (changing)
     scheduled = {}
     for param, values in history.items():
-        valid_values = [v for v in values if v is not None]
-        if len(valid_values) > 1:
-            is_changing = len(set(valid_values)) > 1
+        if len(values) > 1:
+            is_changing = len(set(values)) > 1
             scheduled[param] = {
                 "is_scheduled": is_changing,
-                "first": valid_values[0] if valid_values else None,
-                "last": valid_values[-1] if valid_values else None,
-                "min": min(valid_values) if valid_values else None,
-                "max": max(valid_values) if valid_values else None
+                "first": values[0],
+                "last": values[-1],
+                "min": min(values),
+                "max": max(values),
+                "n_samples": len(values)
+            }
+        elif len(values) == 1:
+            scheduled[param] = {
+                "is_scheduled": False,
+                "value": values[0],
+                "n_samples": 1
             }
         else:
             scheduled[param] = {
                 "is_scheduled": False,
-                "value": valid_values[0] if valid_values else None
+                "value": None,
+                "n_samples": 0
             }
 
     return {
         "run_id": run_id,
+        "epoch_range": [first_epoch, last_epoch] if first_epoch is not None else None,
         "params": params,
         "scheduled_params": [p for p, info in scheduled.items() if info.get("is_scheduled", False)],
         "constant_params": [p for p, info in scheduled.items() if not info.get("is_scheduled", False)],
-        "summary": scheduled,
-        "history": {
-            "epochs": epochs,
-            "values": history
-        }
+        "summary": scheduled
     }
 
 

@@ -90,6 +90,7 @@ def main():
     )
     parser.add_argument(
         "--init-from-run",
+        dest="init_from_run",
         type=str,
         default=None,
         metavar="RUN_SPEC",

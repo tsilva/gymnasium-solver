@@ -162,23 +162,27 @@ rgb_ppo: &rgb_ppo
   project_id: ALE-Breakout-v5_rgb
   algo_id: ppo
   description: "PPO with 4-frame grayscale stacks (84x84) via ALE atari vectorization"
+  
+  max_env_steps: 20e6
+
   # TODO: test async vectorization, if faster apply by default to all atari envs if n_envs > 1
   n_envs: 32
-  n_steps: 512
-  #policy_lr: 2.5e-4
-  # TODO: learned fine with policy_lr fixed + max_env_steps = 10e6
-  policy_lr: {start: 5e-3, end: 1e-4, from: 0.5, to: 1.0}
-  batch_size: 4096 #256
-  ent_coef: {start: 0.1, end: 0.01, from: 0, to: 0.8}
-  n_epochs: 4 
+  n_steps: 256
+  policy_lr: 0.00025
+  ent_coef: 0.0
+  n_epochs: 3 
   clip_range: 0.1
-  max_env_steps: 20e6
+  batch_size: 512
+  eval_warmup_epochs: 100
+  eval_freq_epochs: 100
+  eval_episodes: 10
 
 rgb_deterministic_ppo:
   <<: *rgb_ppo
   <<: *env_deterministic
   project_id: ALE-Breakout-v5_rgb_deterministic
   description: "PPO with RGB observations - deterministic version with ALE atari vectorization"
+  
 
 ###########################
 # CONFIGS: obs_type = objects

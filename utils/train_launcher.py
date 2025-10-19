@@ -334,7 +334,7 @@ def _launch_training_resume(args) -> None:
     print(f"Training completed in {human}. Reason: {reason}")
 
 
-def _load_pretrained_weights(agent, run_spec: str) -> None:
+def _load_pretrained_weights(agent, run_spec: str, load_optimizer: bool = True) -> None:
     """Load pretrained weights from another run's checkpoint.
 
     Args:
@@ -347,6 +347,9 @@ def _load_pretrained_weights(agent, run_spec: str) -> None:
                  - "abc123/epoch=13" -> use epoch 13
                  - "@last" -> most recent run, @best if available else @last
                  - "@last/@best" -> most recent run, @best checkpoint
+        load_optimizer: If True, also load optimizer state (momentum, adaptive LR, etc.).
+                       Recommended for continuing training on same environment.
+                       Set to False for transfer learning to different tasks.
     """
     from utils.run import Run, LAST_RUN_DIR
 
@@ -379,10 +382,15 @@ def _load_pretrained_weights(agent, run_spec: str) -> None:
     checkpoint_desc = checkpoint_spec if checkpoint_spec else "(@best if available, else @last)"
     print(f"Loading weights from: {checkpoint_dir} {checkpoint_desc}")
 
-    # Load only model weights (not optimizer/RNG states)
+    # Load model weights and optionally optimizer state
     # Use strict=False to allow partial loading for transfer learning across different architectures
-    agent.load_checkpoint(checkpoint_dir, resume_training=False, strict=False)
-    print(f"Pretrained weights loaded successfully from {run_id}")
+    # Use load_optimizer_only=True to skip RNG states and step counters (fresh training progress)
+    agent.load_checkpoint(checkpoint_dir, resume_training=load_optimizer, strict=False, load_optimizer_only=load_optimizer)
+    if load_optimizer:
+        print(f"Pretrained weights and optimizer state loaded from {run_id}")
+        print("Note: Starting fresh training progress (epoch 0, timestep 0) with warm optimizer")
+    else:
+        print(f"Pretrained weights loaded from {run_id} (optimizer state not loaded)")
 
 
 def _resolve_checkpoint_dir(run, epoch_spec: Optional[str]) -> Path:
@@ -513,7 +521,8 @@ def launch_training_from_args(args) -> None:
     agent = build_agent(config)
 
     # Load pretrained weights if requested (CLI arg takes precedence over config)
-    init_from_run = (hasattr(args, 'init_from_run') and args.init_from_run) or config.init_from_run
+    cli_init_from_run = getattr(args, 'init_from_run', None)
+    init_from_run = cli_init_from_run if cli_init_from_run is not None else config.init_from_run
     if init_from_run:
         _load_pretrained_weights(agent, init_from_run)
 

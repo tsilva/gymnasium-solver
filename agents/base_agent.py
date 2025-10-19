@@ -695,13 +695,14 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         from utils.io import write_json
         write_json(state_path, state)
 
-    def load_checkpoint(self, checkpoint_dir: Path, resume_training: bool = True, strict: bool = True) -> None:
+    def load_checkpoint(self, checkpoint_dir: Path, resume_training: bool = True, strict: bool = True, load_optimizer_only: bool = False) -> None:
         """Restore complete training state from directory.
 
         Args:
             checkpoint_dir: Directory containing checkpoint files
             resume_training: If True, restore optimizer and RNG states for exact resumption
             strict: If True, require exact match of model state dict keys. If False, allow partial loading (useful for transfer learning)
+            load_optimizer_only: If True, only load optimizer state (not RNG or step counters). Useful for transfer learning where you want optimizer warmstart but fresh training progress.
         """
         import random
         import numpy as np
@@ -791,42 +792,44 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
                     self._deferred_optimizer_states = optimizer_states
                     print("Note: Optimizer state will be restored after trainer initialization")
 
-            # Restore RNG states
-            if state and "rng_states" in state:
-                rng_states = state["rng_states"]
-                torch.set_rng_state(torch.ByteTensor(rng_states["torch"]))
-                if rng_states.get("torch_cuda") and torch.cuda.is_available():
-                    torch.cuda.set_rng_state_all([torch.ByteTensor(s) for s in rng_states["torch_cuda"]])
+            # Only restore RNG and counters if doing full resume (not optimizer-only transfer learning)
+            if not load_optimizer_only:
+                # Restore RNG states
+                if state and "rng_states" in state:
+                    rng_states = state["rng_states"]
+                    torch.set_rng_state(torch.ByteTensor(rng_states["torch"]))
+                    if rng_states.get("torch_cuda") and torch.cuda.is_available():
+                        torch.cuda.set_rng_state_all([torch.ByteTensor(s) for s in rng_states["torch_cuda"]])
 
-                # Restore numpy RNG state
-                numpy_state = rng_states["numpy"]
-                np_state_tuple = (
-                    numpy_state["state_type"],
-                    np.array(numpy_state["state_keys"], dtype=np.uint32),
-                    numpy_state["state_pos"],
-                    numpy_state["state_has_gauss"],
-                    numpy_state["state_cached_gaussian"],
-                )
-                np.random.set_state(np_state_tuple)
+                    # Restore numpy RNG state
+                    numpy_state = rng_states["numpy"]
+                    np_state_tuple = (
+                        numpy_state["state_type"],
+                        np.array(numpy_state["state_keys"], dtype=np.uint32),
+                        numpy_state["state_pos"],
+                        numpy_state["state_has_gauss"],
+                        numpy_state["state_cached_gaussian"],
+                    )
+                    np.random.set_state(np_state_tuple)
 
-                # Restore random module state
-                # random.getstate() returns a tuple that we need to reconstruct
-                random_state = rng_states["random"]
-                # Convert list back to proper tuple structure
-                random.setstate((random_state[0], tuple(random_state[1]), random_state[2]))
+                    # Restore random module state
+                    # random.getstate() returns a tuple that we need to reconstruct
+                    random_state = rng_states["random"]
+                    # Convert list back to proper tuple structure
+                    random.setstate((random_state[0], tuple(random_state[1]), random_state[2]))
 
-            # Restore best episode rewards and step counters in collectors
-            train_collector = self.get_rollout_collector("train")
-            if state and "best_train_reward" in state and state["best_train_reward"] is not None:
-                train_collector._best_episode_reward = float(state["best_train_reward"])
-            if state and "total_timesteps" in state:
-                train_collector.total_steps = int(state["total_timesteps"])
-            if state and "total_vec_steps" in state:
-                train_collector.total_vec_steps = int(state["total_vec_steps"])
+                # Restore best episode rewards and step counters in collectors
+                train_collector = self.get_rollout_collector("train")
+                if state and "best_train_reward" in state and state["best_train_reward"] is not None:
+                    train_collector._best_episode_reward = float(state["best_train_reward"])
+                if state and "total_timesteps" in state:
+                    train_collector.total_steps = int(state["total_timesteps"])
+                if state and "total_vec_steps" in state:
+                    train_collector.total_vec_steps = int(state["total_vec_steps"])
 
-            if state and "best_val_reward" in state and state["best_val_reward"] is not None:
-                val_collector = self.get_rollout_collector("val")
-                val_collector._best_episode_reward = float(state["best_val_reward"])
+                if state and "best_val_reward" in state and state["best_val_reward"] is not None:
+                    val_collector = self.get_rollout_collector("val")
+                    val_collector._best_episode_reward = float(state["best_val_reward"])
 
         # Print checkpoint info
         if state:

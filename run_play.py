@@ -581,6 +581,177 @@ class RewardPlotter:
             self.is_open = False
 
 
+class CNNFilterActivationDetailViewer:
+    """Detail viewer for a single filter/activation pair."""
+
+    def __init__(self, layer_idx, filter_idx, filter_data, activation_data=None):
+        """Initialize detail viewer for a single filter/activation.
+
+        Args:
+            layer_idx: Layer index
+            filter_idx: Filter index within the layer
+            filter_data: Filter kernel data (2D numpy array)
+            activation_data: Activation map data (2D numpy array, optional)
+        """
+        try:
+            import pyqtgraph as pg
+            import numpy as np
+
+            self.pg = pg
+            self.np = np
+            self.layer_idx = layer_idx
+            self.filter_idx = filter_idx
+
+            # Set background to black
+            pg.setConfigOption('background', 'k')
+            pg.setConfigOption('foreground', 'w')
+
+            # Create window
+            title = f"Layer {layer_idx} Filter {filter_idx}"
+            self.win = pg.GraphicsLayoutWidget(show=False, title=title)
+            self.win.setWindowTitle(title)
+
+            # Set window flags
+            try:
+                from pyqtgraph.Qt import QtCore
+                self.win.setWindowFlags(self.win.windowFlags() | QtCore.Qt.WindowType.WindowStaysOnTopHint)
+            except Exception:
+                pass
+
+            # Remove spacing
+            self.win.ci.layout.setSpacing(0)
+            self.win.ci.layout.setContentsMargins(0, 0, 0, 0)
+
+            # Create views for filter and activation
+            # Filter view
+            filter_view = self.win.addViewBox()
+            filter_view.setAspectLocked(True)
+            filter_view.invertY(True)
+            filter_view.setContentsMargins(0, 0, 0, 0)
+            filter_view.setMenuEnabled(False)
+            filter_view.setMouseEnabled(x=False, y=False)
+            filter_view.enableAutoRange(enable=False)
+            filter_item = pg.ImageItem()
+            filter_view.addItem(filter_item)
+
+            # Activation view (if activation data provided)
+            if activation_data is not None:
+                act_view = self.win.addViewBox()
+                act_view.setAspectLocked(True)
+                act_view.invertY(True)
+                act_view.setContentsMargins(0, 0, 0, 0)
+                act_view.setMenuEnabled(False)
+                act_view.setMouseEnabled(x=False, y=False)
+                act_view.enableAutoRange(enable=False)
+                act_item = pg.ImageItem()
+                act_view.addItem(act_item)
+            else:
+                act_view = None
+                act_item = None
+
+            self.filter_view = filter_view
+            self.filter_item = filter_item
+            self.act_view = act_view
+            self.act_item = act_item
+
+            # Render the data
+            self._render(filter_data, activation_data)
+
+            self.is_open = True
+            self.win.closeEvent = lambda event: setattr(self, 'is_open', False)
+
+            # Show window
+            self.win.show()
+            self.win.raise_()
+
+        except ImportError:
+            raise ImportError("PyQtGraph is required for detail viewer")
+
+    def _render(self, filter_data, activation_data):
+        """Render filter and activation data."""
+        # Normalize filter to 0-255
+        f_min, f_max = filter_data.min(), filter_data.max()
+        if f_max > f_min:
+            filter_norm = ((filter_data - f_min) / (f_max - f_min) * 255).astype(self.np.uint8)
+        else:
+            filter_norm = self.np.zeros_like(filter_data, dtype=self.np.uint8)
+
+        # Create RGB image for filter (grayscale)
+        fh, fw = filter_data.shape
+        filter_rgb = self.np.zeros((fh, fw, 3), dtype=self.np.uint8)
+        filter_rgb[:, :, 0] = filter_norm
+        filter_rgb[:, :, 1] = filter_norm
+        filter_rgb[:, :, 2] = filter_norm
+
+        # Transpose for PyQtGraph
+        filter_rgb_t = self.np.transpose(filter_rgb, (1, 0, 2))
+        self.filter_item.setImage(filter_rgb_t)
+        self.filter_view.setRange(xRange=(0, fh), yRange=(0, fw), padding=0)
+
+        # Size window based on filter size (scale up small filters)
+        scale = max(1, 200 // max(fh, fw))
+        window_width = fh * scale
+        window_height = fw * scale
+
+        # Render activation if provided
+        if activation_data is not None and self.act_item is not None:
+            # Normalize activation to 0-255
+            a_min, a_max = activation_data.min(), activation_data.max()
+            if a_max > a_min:
+                act_norm = ((activation_data - a_min) / (a_max - a_min) * 255).astype(self.np.uint8)
+            else:
+                act_norm = self.np.zeros_like(activation_data, dtype=self.np.uint8)
+
+            # Create RGB image for activation (grayscale)
+            ah, aw = activation_data.shape
+            act_rgb = self.np.zeros((ah, aw, 3), dtype=self.np.uint8)
+            act_rgb[:, :, 0] = act_norm
+            act_rgb[:, :, 1] = act_norm
+            act_rgb[:, :, 2] = act_norm
+
+            # Transpose for PyQtGraph
+            act_rgb_t = self.np.transpose(act_rgb, (1, 0, 2))
+            self.act_item.setImage(act_rgb_t)
+            self.act_view.setRange(xRange=(0, ah), yRange=(0, aw), padding=0)
+
+            # Add activation width to window
+            window_width += ah * scale
+
+        self.win.resize(int(window_width), int(window_height) + 30)
+
+    def update_activation(self, activation_data):
+        """Update the activation display with new data."""
+        if not self.is_open or self.act_item is None or activation_data is None:
+            return
+
+        # Normalize activation to 0-255
+        a_min, a_max = activation_data.min(), activation_data.max()
+        if a_max > a_min:
+            act_norm = ((activation_data - a_min) / (a_max - a_min) * 255).astype(self.np.uint8)
+        else:
+            act_norm = self.np.zeros_like(activation_data, dtype=self.np.uint8)
+
+        # Create RGB image for activation (grayscale)
+        ah, aw = activation_data.shape
+        act_rgb = self.np.zeros((ah, aw, 3), dtype=self.np.uint8)
+        act_rgb[:, :, 0] = act_norm
+        act_rgb[:, :, 1] = act_norm
+        act_rgb[:, :, 2] = act_norm
+
+        # Transpose for PyQtGraph
+        act_rgb_t = self.np.transpose(act_rgb, (1, 0, 2))
+        self.act_item.setImage(act_rgb_t)
+
+    def close(self):
+        """Close the detail viewer."""
+        if self.is_open:
+            try:
+                self.win.close()
+            except Exception:
+                pass
+            self.is_open = False
+
+
 class CNNFilterActivationViewer:
     """Real-time CNN filter and activation visualizer."""
 
@@ -598,6 +769,9 @@ class CNNFilterActivationViewer:
         self.update_interval = update_interval
         self.last_update_time = time.time()
         self.needs_update = False
+        self.is_open = False  # Initialize early, before hooks
+        self.use_pyqtgraph = False  # Initialize early
+        self._window_sized = False  # Initialize early
 
         # Extract Conv2d layers from the CNN
         if not hasattr(policy_model, 'cnn'):
@@ -613,17 +787,28 @@ class CNNFilterActivationViewer:
                     'in_channels': module.in_channels,
                     'out_channels': module.out_channels,
                     'kernel_size': module.kernel_size,
-                    'activation': None  # Will be populated by hooks
+                    'activation': None,  # Will be populated by hooks
+                    'filter_weights': None,  # Will store weights for click handling
+                    'grid_layout': None,  # Will store grid layout info for click detection
                 })
 
         if not self.conv_layers:
             raise ValueError("No Conv2d layers found in policy model")
+
+        # Track detail viewers
+        self.detail_viewers = []
 
         # Register forward hooks to capture activations
         self.activation_handles = []
         for idx, layer in enumerate(self.conv_layers):
             handle = layer.register_forward_hook(self._make_activation_hook(idx))
             self.activation_handles.append(handle)
+
+        # Store filter weights for click handling
+        import torch
+        for idx, layer in enumerate(self.conv_layers):
+            with torch.no_grad():
+                self.conv_info[idx]['filter_weights'] = layer.weight.detach().cpu().numpy()
 
         try:
             import pyqtgraph as pg
@@ -683,6 +868,8 @@ class CNNFilterActivationViewer:
                 filter_view.setMouseEnabled(x=False, y=False)
                 filter_view.enableAutoRange(enable=False)
                 filter_item = pg.ImageItem()
+                filter_item.setMouseEnabled(True)
+                filter_item.mouseClickEvent = self._make_filter_click_handler(idx)
                 filter_view.addItem(filter_item)
                 self.filter_items.append(filter_item)
                 self.filter_views.append(filter_view)
@@ -696,6 +883,8 @@ class CNNFilterActivationViewer:
                 act_view.setMouseEnabled(x=False, y=False)
                 act_view.enableAutoRange(enable=False)
                 act_item = pg.ImageItem()
+                act_item.setMouseEnabled(True)
+                act_item.mouseClickEvent = self._make_activation_click_handler(idx)
                 act_view.addItem(act_item)
                 self.activation_items.append(act_item)
                 self.activation_views.append(act_view)
@@ -771,6 +960,190 @@ class CNNFilterActivationViewer:
             self.needs_update = True
         return hook
 
+    def _make_filter_click_handler(self, layer_idx):
+        """Create a click handler for filter images."""
+        def handler(event):
+            if not event.button() == 1:  # Left click only
+                return
+            pos = event.pos()
+            filter_idx = self._detect_filter_from_click(layer_idx, pos.x(), pos.y())
+            if filter_idx is not None:
+                self._open_detail_viewer(layer_idx, filter_idx)
+        return handler
+
+    def _make_activation_click_handler(self, layer_idx):
+        """Create a click handler for activation images."""
+        def handler(event):
+            if not event.button() == 1:  # Left click only
+                return
+            pos = event.pos()
+            filter_idx = self._detect_activation_from_click(layer_idx, pos.x(), pos.y())
+            if filter_idx is not None:
+                self._open_detail_viewer(layer_idx, filter_idx)
+        return handler
+
+    def _detect_filter_from_click(self, layer_idx, x, y):
+        """Detect which filter was clicked based on coordinates.
+
+        Note: x, y are in transposed coordinate system (W, H) due to PyQtGraph transpose.
+        """
+        info = self.conv_info[layer_idx]
+        layout = info.get('grid_layout')
+        if layout is None:
+            return None
+
+        # Swap x, y back to (H, W) coordinate system
+        y, x = x, y
+
+        grid_rows = layout['grid_rows']
+        grid_cols = layout['grid_cols']
+        kH = layout['kH']
+        kW = layout['kW']
+        padding = layout['padding']
+
+        # Calculate which grid cell was clicked
+        # Account for padding borders
+        if x < padding or y < padding:
+            return None
+
+        # Remove the initial padding offset
+        x_in_grid = x - padding
+        y_in_grid = y - padding
+
+        # Calculate cell position
+        cell_width = kW + padding
+        cell_height = kH + padding
+
+        col = int(x_in_grid / cell_width)
+        row = int(y_in_grid / cell_height)
+
+        # Check if click is within valid grid bounds
+        if row >= grid_rows or col >= grid_cols:
+            return None
+
+        # Check if click is on border (padding area within cell)
+        x_in_cell = x_in_grid % cell_width
+        y_in_cell = y_in_grid % cell_height
+
+        # If click is on the right or bottom border of the cell, ignore
+        if x_in_cell >= kW or y_in_cell >= kH:
+            return None
+
+        # Calculate filter index
+        filter_idx = row * grid_cols + col
+
+        # Check if filter index is valid
+        if filter_idx >= info['out_channels']:
+            return None
+
+        return filter_idx
+
+    def _detect_activation_from_click(self, layer_idx, x, y):
+        """Detect which activation was clicked based on coordinates.
+
+        Note: x, y are in transposed coordinate system (W, H) due to PyQtGraph transpose.
+        """
+        info = self.conv_info[layer_idx]
+        layout = info.get('activation_layout')
+        if layout is None:
+            return None
+
+        # Swap x, y back to (H, W) coordinate system
+        y, x = x, y
+
+        grid_rows = layout['grid_rows']
+        grid_cols = layout['grid_cols']
+        H = layout['H']
+        W = layout['W']
+        padding = layout['padding']
+
+        # Calculate which grid cell was clicked
+        # Account for padding borders
+        if x < padding or y < padding:
+            return None
+
+        # Remove the initial padding offset
+        x_in_grid = x - padding
+        y_in_grid = y - padding
+
+        # Calculate cell position
+        cell_width = W + padding
+        cell_height = H + padding
+
+        col = int(x_in_grid / cell_width)
+        row = int(y_in_grid / cell_height)
+
+        # Check if click is within valid grid bounds
+        if row >= grid_rows or col >= grid_cols:
+            return None
+
+        # Check if click is on border (padding area within cell)
+        x_in_cell = x_in_grid % cell_width
+        y_in_cell = y_in_grid % cell_height
+
+        # If click is on the right or bottom border of the cell, ignore
+        if x_in_cell >= W or y_in_cell >= H:
+            return None
+
+        # Calculate activation index
+        act_idx = row * grid_cols + col
+
+        # Check if activation index is valid
+        n_channels = layout['n_channels']
+        if act_idx >= n_channels:
+            return None
+
+        return act_idx
+
+    def _open_detail_viewer(self, layer_idx, filter_idx):
+        """Open a detail viewer for the specified filter/activation pair."""
+        info = self.conv_info[layer_idx]
+
+        # Get filter data
+        weights = info['filter_weights']
+        out_ch, in_ch, kH, kW = weights.shape
+
+        # Extract and process filter for this channel
+        if in_ch == 1:
+            filter_2d = weights[filter_idx, 0, :, :]
+        elif in_ch == 3:
+            # Convert RGB to grayscale
+            filter_2d = (0.299 * weights[filter_idx, 0, :, :] +
+                        0.587 * weights[filter_idx, 1, :, :] +
+                        0.114 * weights[filter_idx, 2, :, :])
+        else:
+            # Average over input channels
+            filter_2d = weights[filter_idx].mean(axis=0)
+
+        # Get activation data if available
+        activation = info.get('activation')
+        activation_2d = None
+        if activation is not None:
+            # activation shape: (batch, channels, H, W)
+            if activation.dim() == 4:
+                activation = activation[0]  # Take first batch
+            if filter_idx < activation.shape[0]:
+                activation_2d = activation[filter_idx].cpu().numpy()
+
+        # Clean up closed detail viewers
+        self.detail_viewers = [v for v in self.detail_viewers if v.is_open]
+
+        # Create and track detail viewer
+        try:
+            detail_viewer = CNNFilterActivationDetailViewer(
+                layer_idx, filter_idx, filter_2d, activation_2d
+            )
+            self.detail_viewers.append(detail_viewer)
+
+            # Position window with cascade offset
+            offset = len(self.detail_viewers) * 30
+            detail_viewer.win.move(800 + offset, 100 + offset)
+
+            print(f"Opened detail viewer: Layer {layer_idx} Filter {filter_idx}")
+        except Exception as e:
+            import sys
+            print(f"Error opening detail viewer: {e}", file=sys.stderr)
+
     def _render_filters(self):
         """Render filter kernels for all Conv2d layers."""
         import torch
@@ -781,7 +1154,7 @@ class CNNFilterActivationViewer:
                 weights = layer.weight.detach().cpu().numpy()
 
             # Create a grid visualization of filters (now returns RGB)
-            filter_grid = self._create_filter_grid(weights)
+            filter_grid = self._create_filter_grid(weights, store_layout_idx=idx)
 
             # Store filter grid dimensions for window sizing (H, W, 3)
             info['filter_grid_shape'] = filter_grid.shape[:2]  # (H, W)
@@ -806,11 +1179,12 @@ class CNNFilterActivationViewer:
                 self.axes[idx, 0].set_title(f"Layer {idx} Filters ({info['out_channels']} × {info['kernel_size']})", fontsize=9)
                 self.axes[idx, 0].axis('off')
 
-    def _create_filter_grid(self, weights):
+    def _create_filter_grid(self, weights, store_layout_idx=None):
         """Create a grid visualization of filter kernels.
 
         Args:
             weights: numpy array of shape (out_channels, in_channels, kH, kW)
+            store_layout_idx: If provided, store grid layout in conv_info[store_layout_idx]
 
         Returns:
             RGB numpy array (H, W, 3) representing the grid of filters with black borders
@@ -839,6 +1213,16 @@ class CNNFilterActivationViewer:
         grid_h = grid_rows * kH + (grid_rows + 1) * padding  # +1 for borders on all sides
         grid_w = grid_cols * kW + (grid_cols + 1) * padding  # +1 for borders on all sides
 
+        # Store layout info for click detection
+        if store_layout_idx is not None:
+            self.conv_info[store_layout_idx]['grid_layout'] = {
+                'grid_rows': grid_rows,
+                'grid_cols': grid_cols,
+                'kH': kH,
+                'kW': kW,
+                'padding': padding,
+            }
+
         # Create RGB grid (start with black border color: R=0, G=0, B=0)
         grid = self.np.zeros((grid_h, grid_w, 3), dtype=self.np.float32)
         # All channels stay 0 for black
@@ -866,11 +1250,12 @@ class CNNFilterActivationViewer:
 
         return grid
 
-    def _create_activation_grid(self, activations):
+    def _create_activation_grid(self, activations, store_layout_idx=None):
         """Create a grid visualization of activation maps.
 
         Args:
             activations: tensor of shape (batch, channels, H, W)
+            store_layout_idx: If provided, store grid layout in conv_info[store_layout_idx]
 
         Returns:
             RGB numpy array (H, W, 3) representing the grid of activation maps with black borders
@@ -899,6 +1284,17 @@ class CNNFilterActivationViewer:
         padding = 1
         grid_h = grid_rows * H + (grid_rows + 1) * padding  # +1 for borders on all sides
         grid_w = grid_cols * W + (grid_cols + 1) * padding  # +1 for borders on all sides
+
+        # Store layout info for click detection
+        if store_layout_idx is not None:
+            self.conv_info[store_layout_idx]['activation_layout'] = {
+                'grid_rows': grid_rows,
+                'grid_cols': grid_cols,
+                'H': H,
+                'W': W,
+                'padding': padding,
+                'n_channels': n_channels,
+            }
 
         # Create RGB grid (start with black border color: R=0, G=0, B=0)
         grid = self.np.zeros((grid_h, grid_w, 3), dtype=self.np.float32)
@@ -957,7 +1353,7 @@ class CNNFilterActivationViewer:
                     continue
 
                 # Create activation grid (now returns RGB)
-                act_grid = self._create_activation_grid(activation)
+                act_grid = self._create_activation_grid(activation, store_layout_idx=idx)
 
                 # Store activation grid dimensions for window sizing (H, W, 3)
                 info['activation_grid_shape'] = act_grid.shape[:2]  # (H, W)
@@ -991,6 +1387,20 @@ class CNNFilterActivationViewer:
                 # Keep tight layout
                 self.fig.canvas.draw()
                 self.fig.canvas.flush_events()
+
+            # Update detail viewers with new activation data
+            for viewer in self.detail_viewers:
+                if viewer.is_open:
+                    # Get activation for this layer and filter
+                    info = self.conv_info[viewer.layer_idx]
+                    activation = info.get('activation')
+                    if activation is not None:
+                        # activation shape: (batch, channels, H, W) or (channels, H, W)
+                        if activation.dim() == 4:
+                            activation = activation[0]  # Take first batch
+                        if viewer.filter_idx < activation.shape[0]:
+                            activation_2d = activation[viewer.filter_idx].cpu().numpy()
+                            viewer.update_activation(activation_2d)
 
         except Exception as e:
             import sys
@@ -1035,6 +1445,11 @@ class CNNFilterActivationViewer:
         for handle in self.activation_handles:
             handle.remove()
         self.activation_handles.clear()
+
+        # Close all detail viewers
+        for viewer in self.detail_viewers:
+            viewer.close()
+        self.detail_viewers.clear()
 
         if self.is_open:
             # Flush any pending updates

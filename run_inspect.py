@@ -559,6 +559,7 @@ def run_episode(
                 "step": t,
                 "action": action_value,
                 "action_label": action_label_value,
+                "action_labels": action_labels,  # All action labels for formatting
                 "reward": reward,
                 "cum_reward": total_reward,
                 "value": float(val) if val is not None else None,
@@ -854,6 +855,7 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
             # Show ALL actions with ALL probabilities, mark executed ones with ►
             action_val = step_dict.get("action")
             action_label = step_dict.get("action_label")
+            action_labels_all = step_dict.get("action_labels")  # All action labels
             probs = step_dict.get("probs")
             greedy_match = step_dict.get("greedy_match")
 
@@ -861,14 +863,12 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
             if isinstance(action_val, list) and isinstance(probs, list):
                 # MultiBinary case: show ALL buttons with probabilities, mark pressed ones with ►
                 parts = []
-                label_idx = 0  # Track position in action_label list (only pressed buttons)
                 for i, pressed in enumerate(action_val):
                     if i < len(probs):
                         prob_val = float(probs[i])
-                        # Get label for this button (fallback to index if not available)
-                        if pressed and isinstance(action_label, list) and label_idx < len(action_label):
-                            label = action_label[label_idx]
-                            label_idx += 1
+                        # Get label for this button
+                        if isinstance(action_labels_all, list) and i < len(action_labels_all):
+                            label = action_labels_all[i]
                         else:
                             label = f"{i}"
 
@@ -883,9 +883,9 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                 # Discrete case: show ALL actions with probabilities, mark selected one with ►
                 parts = []
                 for i, prob_val in enumerate(probs):
-                    # Get label for this action
-                    if i == action_val and action_label is not None:
-                        label = action_label
+                    # Get label for this action from the full labels list
+                    if isinstance(action_labels_all, list) and i < len(action_labels_all):
+                        label = action_labels_all[i]
                     else:
                         label = f"{i}"
 
@@ -950,6 +950,7 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
             # Show ALL actions with ALL probabilities, mark executed ones with ►
             action_val = s["action"]
             action_label = s.get("action_label")
+            action_labels_all = s.get("action_labels")  # All action labels
             probs = s.get("probs")
             greedy_match = s.get("greedy_match")
 
@@ -957,14 +958,12 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
             if isinstance(action_val, list) and isinstance(probs, list):
                 # MultiBinary case: show ALL buttons with probabilities, mark pressed ones with ►
                 parts = []
-                label_idx = 0  # Track position in action_label list (only pressed buttons)
                 for i, pressed in enumerate(action_val):
                     if i < len(probs):
                         prob_val = float(probs[i])
-                        # Get label for this button (fallback to index if not available)
-                        if pressed and isinstance(action_label, list) and label_idx < len(action_label):
-                            label = action_label[label_idx]
-                            label_idx += 1
+                        # Get label for this button
+                        if isinstance(action_labels_all, list) and i < len(action_labels_all):
+                            label = action_labels_all[i]
                         else:
                             label = f"{i}"
 
@@ -979,9 +978,9 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                 # Discrete case: show ALL actions with probabilities, mark selected one with ►
                 parts = []
                 for i, prob_val in enumerate(probs):
-                    # Get label for this action
-                    if i == action_val and action_label is not None:
-                        label = action_label
+                    # Get label for this action from the full labels list
+                    if isinstance(action_labels_all, list) and i < len(action_labels_all):
+                        label = action_labels_all[i]
                     else:
                         label = f"{i}"
 

@@ -859,14 +859,18 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
             probs = step_dict.get("probs")
             greedy_match = step_dict.get("greedy_match")
 
-            # Format action as HTML table
+            # Format action as HTML table (excluding masked/zero-prob actions)
             if isinstance(action_val, list) and isinstance(probs, list):
-                # MultiBinary case: table with all buttons
+                # MultiBinary case: table with all non-masked buttons
                 headers = []
                 values = []
                 for i, pressed in enumerate(action_val):
                     if i < len(probs):
                         prob_val = float(probs[i])
+                        # Skip masked actions (probability == 0)
+                        if prob_val == 0.0:
+                            continue
+
                         # Get label for this button
                         if isinstance(action_labels_all, list) and i < len(action_labels_all):
                             label = action_labels_all[i]
@@ -882,14 +886,21 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                             values.append(f"{prob_val:.2f}")
 
                 # Build HTML table
-                header_row = "".join(f"<th style='padding:2px 6px; border:1px solid #ddd; font-size:0.85em;'>{h}</th>" for h in headers)
-                value_row = "".join(f"<td style='padding:2px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em;'>{v}</td>" for v in values)
-                action_str = f"<table style='border-collapse:collapse; font-size:0.9em; margin:0;'><tr>{header_row}</tr><tr>{value_row}</tr></table>"
+                if headers:
+                    header_row = "".join(f"<th style='padding:2px 6px; border:1px solid #ddd; font-size:0.85em;'>{h}</th>" for h in headers)
+                    value_row = "".join(f"<td style='padding:2px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em;'>{v}</td>" for v in values)
+                    action_str = f"<table style='border-collapse:collapse; font-size:0.9em; margin:0;'><tr>{header_row}</tr><tr>{value_row}</tr></table>"
+                else:
+                    action_str = "NOOP"
             elif isinstance(probs, list) and isinstance(action_val, int):
-                # Discrete case: table with all actions
+                # Discrete case: table with non-masked actions only
                 headers = []
                 values = []
                 for i, prob_val in enumerate(probs):
+                    # Skip masked actions (probability == 0)
+                    if float(prob_val) == 0.0:
+                        continue
+
                     # Get label for this action from the full labels list
                     if isinstance(action_labels_all, list) and i < len(action_labels_all):
                         label = action_labels_all[i]
@@ -905,9 +916,12 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                         values.append(f"{float(prob_val):.2f}")
 
                 # Build HTML table
-                header_row = "".join(f"<th style='padding:2px 6px; border:1px solid #ddd; font-size:0.85em;'>{h}</th>" for h in headers)
-                value_row = "".join(f"<td style='padding:2px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em;'>{v}</td>" for v in values)
-                action_str = f"<table style='border-collapse:collapse; font-size:0.9em; margin:0;'><tr>{header_row}</tr><tr>{value_row}</tr></table>"
+                if headers:
+                    header_row = "".join(f"<th style='padding:2px 6px; border:1px solid #ddd; font-size:0.85em;'>{h}</th>" for h in headers)
+                    value_row = "".join(f"<td style='padding:2px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em;'>{v}</td>" for v in values)
+                    action_str = f"<table style='border-collapse:collapse; font-size:0.9em; margin:0;'><tr>{header_row}</tr><tr>{value_row}</tr></table>"
+                else:
+                    action_str = f"►{action_val}"
             else:
                 # Fallback: no probs available, just show action
                 if action_label is not None:
@@ -966,14 +980,18 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
             probs = s.get("probs")
             greedy_match = s.get("greedy_match")
 
-            # Format action as HTML table
+            # Format action as HTML table (excluding masked/zero-prob actions)
             if isinstance(action_val, list) and isinstance(probs, list):
-                # MultiBinary case: table with all buttons
+                # MultiBinary case: table with all non-masked buttons
                 headers = []
                 values = []
                 for i, pressed in enumerate(action_val):
                     if i < len(probs):
                         prob_val = float(probs[i])
+                        # Skip masked actions (probability == 0)
+                        if prob_val == 0.0:
+                            continue
+
                         # Get label for this button
                         if isinstance(action_labels_all, list) and i < len(action_labels_all):
                             label = action_labels_all[i]
@@ -989,14 +1007,21 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                             values.append(f"{prob_val:.2f}")
 
                 # Build HTML table
-                header_row = "".join(f"<th style='padding:2px 6px; border:1px solid #ddd; font-size:0.85em;'>{h}</th>" for h in headers)
-                value_row = "".join(f"<td style='padding:2px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em;'>{v}</td>" for v in values)
-                action_str = f"<table style='border-collapse:collapse; font-size:0.9em; margin:0;'><tr>{header_row}</tr><tr>{value_row}</tr></table>"
+                if headers:
+                    header_row = "".join(f"<th style='padding:2px 6px; border:1px solid #ddd; font-size:0.85em;'>{h}</th>" for h in headers)
+                    value_row = "".join(f"<td style='padding:2px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em;'>{v}</td>" for v in values)
+                    action_str = f"<table style='border-collapse:collapse; font-size:0.9em; margin:0;'><tr>{header_row}</tr><tr>{value_row}</tr></table>"
+                else:
+                    action_str = "NOOP"
             elif isinstance(probs, list) and isinstance(action_val, int):
-                # Discrete case: table with all actions
+                # Discrete case: table with non-masked actions only
                 headers = []
                 values = []
                 for i, prob_val in enumerate(probs):
+                    # Skip masked actions (probability == 0)
+                    if float(prob_val) == 0.0:
+                        continue
+
                     # Get label for this action from the full labels list
                     if isinstance(action_labels_all, list) and i < len(action_labels_all):
                         label = action_labels_all[i]
@@ -1012,9 +1037,12 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                         values.append(f"{float(prob_val):.2f}")
 
                 # Build HTML table
-                header_row = "".join(f"<th style='padding:2px 6px; border:1px solid #ddd; font-size:0.85em;'>{h}</th>" for h in headers)
-                value_row = "".join(f"<td style='padding:2px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em;'>{v}</td>" for v in values)
-                action_str = f"<table style='border-collapse:collapse; font-size:0.9em; margin:0;'><tr>{header_row}</tr><tr>{value_row}</tr></table>"
+                if headers:
+                    header_row = "".join(f"<th style='padding:2px 6px; border:1px solid #ddd; font-size:0.85em;'>{h}</th>" for h in headers)
+                    value_row = "".join(f"<td style='padding:2px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em;'>{v}</td>" for v in values)
+                    action_str = f"<table style='border-collapse:collapse; font-size:0.9em; margin:0;'><tr>{header_row}</tr><tr>{value_row}</tr></table>"
+                else:
+                    action_str = f"►{action_val}"
             else:
                 # Fallback: no probs available, just show action
                 if action_label is not None:

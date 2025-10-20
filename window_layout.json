@@ -14,7 +14,13 @@
   "cnn_filter_viewer": {
     "x": 610,
     "y": 389,
-    "width": 178,
-    "height": 288
+    "width": 192,
+    "height": 313
+  },
+  "cnn_detail_viewer": {
+    "x": 646,
+    "y": 780,
+    "width": 650,
+    "height": 230
   }
 }

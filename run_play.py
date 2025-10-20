@@ -22,7 +22,8 @@ WINDOW_LAYOUT_FILE = Path(__file__).parent / "window_layout.json"
 _active_viewers = {
     'reward_plotter': None,
     'observation_viewer': None,
-    'cnn_filter_viewer': None
+    'cnn_filter_viewer': None,
+    'cnn_detail_viewer': None
 }
 
 
@@ -658,7 +659,16 @@ class CNNFilterActivationDetailViewer:
             self._render(filter_data, activation_data)
 
             self.is_open = True
-            self.win.closeEvent = lambda event: setattr(self, 'is_open', False)
+
+            # Set up close event handler
+            def on_close(event):
+                self.is_open = False
+                # Unregister from global viewers
+                if _active_viewers.get('cnn_detail_viewer') is self:
+                    _active_viewers['cnn_detail_viewer'] = None
+                event.accept()
+
+            self.win.closeEvent = on_close
 
             # Show window
             self.win.show()
@@ -764,6 +774,10 @@ class CNNFilterActivationDetailViewer:
             except Exception:
                 pass
             self.is_open = False
+
+            # Unregister from global viewers
+            if _active_viewers.get('cnn_detail_viewer') is self:
+                _active_viewers['cnn_detail_viewer'] = None
 
 
 class CNNFilterActivationViewer:
@@ -1156,7 +1170,24 @@ class CNNFilterActivationViewer:
                 self.detail_viewer = CNNFilterActivationDetailViewer(
                     layer_idx, filter_idx, filter_2d, activation_2d
                 )
-                self.detail_viewer.win.move(800, 100)
+
+                # Register in global viewers for F9 hotkey
+                _active_viewers['cnn_detail_viewer'] = self.detail_viewer
+
+                # Position window (use saved layout if available)
+                layout = load_window_layout()
+                if 'cnn_detail_viewer' in layout:
+                    pos = layout['cnn_detail_viewer']
+                    self.detail_viewer.win.move(pos['x'], pos['y'])
+                    if pos['width'] and pos['height']:
+                        self.detail_viewer.win.resize(pos['width'], pos['height'])
+                else:
+                    # Default position
+                    self.detail_viewer.win.move(800, 100)
+
+                # Install keyboard shortcuts on detail viewer
+                install_keyboard_shortcuts(self.detail_viewer.win)
+
                 print(f"Opened detail viewer: Layer {layer_idx} Filter {filter_idx}")
             else:
                 # Update existing viewer with new filter/activation

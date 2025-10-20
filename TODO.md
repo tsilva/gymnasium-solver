@@ -9,13 +9,13 @@
 
 # NEXT
 
+- FEAT: make deterministic sampling vs stochastic a dropdown
 - BUG: cant train VizDoom-Basic-v0 when frame_stack is 1
 - FEAT: run_inspect.py add support for monitoring rollouts with different hyperparams
 - THINK: how to audit reward structure / mean, std, outliers, and histogram
 - FEAT: add sweep.py with --backend modal support
 - FEAT: sweep from run/checkpoint/
 - BUG: run_play.py user input not working for Atari envs
-- TEST: CleanRL's envpool implementation
 - BUG: why cant I resume run from exactly same perf location
 - TEST: ensure evaluation is ran exactly same way as train (eg: alevecenv)
 - TODO: add env normalization support, make sure normalization is saved
@@ -26,6 +26,7 @@
 
 ## SuperMarioBros-Nes
 
+- THINK: how do CNN filters deal with the frame stack
 - GOAL: ensure level-1-1 can be completed with ~100% win rate
 - EXP: train on level 2 after mastering level 1, check if it forgets level 1
 

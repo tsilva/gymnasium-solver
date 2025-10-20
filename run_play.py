@@ -3,15 +3,102 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import platform
 import time
+from pathlib import Path
 
 from utils.environment import build_env_from_config
 from utils.policy_factory import load_policy_model_from_checkpoint
 from utils.random import set_random_seed
 from utils.rollouts import RolloutCollector
 from utils.run import Run
+
+# Global window layout file
+WINDOW_LAYOUT_FILE = Path(__file__).parent / "window_layout.json"
+
+# Global registry of active viewers for hotkey access
+_active_viewers = {
+    'reward_plotter': None,
+    'observation_viewer': None,
+    'cnn_filter_viewer': None
+}
+
+
+def save_window_layout():
+    """Save current window positions to JSON file."""
+    layout = {}
+
+    for name, viewer in _active_viewers.items():
+        if viewer is None:
+            continue
+
+        try:
+            if hasattr(viewer, 'win') and hasattr(viewer.win, 'pos') and hasattr(viewer.win, 'size'):
+                pos = viewer.win.pos()
+                size = viewer.win.size()
+                layout[name] = {
+                    'x': pos.x(),
+                    'y': pos.y(),
+                    'width': size.width(),
+                    'height': size.height()
+                }
+        except Exception:
+            pass
+
+    if layout:
+        with open(WINDOW_LAYOUT_FILE, 'w') as f:
+            json.dump(layout, f, indent=2)
+        print(f"\n✓ Window layout saved to {WINDOW_LAYOUT_FILE}")
+        print("  Positions:")
+        for name, pos in layout.items():
+            print(f"    {name}: ({pos['x']}, {pos['y']}) - {pos['width']}x{pos['height']}")
+    else:
+        print("\n✗ No windows to save")
+
+
+def load_window_layout():
+    """Load window positions from JSON file."""
+    if not WINDOW_LAYOUT_FILE.exists():
+        return {}
+
+    try:
+        with open(WINDOW_LAYOUT_FILE, 'r') as f:
+            layout = json.load(f)
+        # Filter out the 'note' field if present
+        return {k: v for k, v in layout.items() if isinstance(v, dict) and 'x' in v}
+    except Exception as e:
+        print(f"Warning: Could not load window layout: {e}")
+        return {}
+
+
+def install_keyboard_shortcuts(win):
+    """Install keyboard shortcuts on a PyQtGraph window."""
+    try:
+        from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
+
+        class KeyPressFilter(QtCore.QObject):
+            def eventFilter(self, obj, event):
+                if event.type() == QtCore.QEvent.Type.KeyPress:
+                    # Check for F9 key (less likely to conflict)
+                    if event.key() == QtCore.Qt.Key.Key_F9:
+                        try:
+                            # Use QTimer to defer save to avoid blocking the event loop
+                            QtCore.QTimer.singleShot(0, save_window_layout)
+                        except Exception as e:
+                            print(f"Error in hotkey handler: {e}")
+                        return False  # Don't consume the event to prevent freezing
+                return False  # Don't consume other events
+
+        # Create and install event filter
+        key_filter = KeyPressFilter(win)
+        win.installEventFilter(key_filter)
+        # Store reference to prevent garbage collection
+        win._key_filter = key_filter
+
+    except Exception as e:
+        print(f"Warning: Could not install keyboard shortcuts: {e}")
 
 
 class RewardPlotter:
@@ -49,9 +136,16 @@ class RewardPlotter:
             except Exception:
                 pass
 
-            # Position window to the right of the game window
-            # Game window is at (50, 50) and typically ~640px wide
-            self.win.move(750, 50)
+            # Position window (use saved layout if available)
+            layout = load_window_layout()
+            if 'reward_plotter' in layout:
+                pos = layout['reward_plotter']
+                self.win.move(pos['x'], pos['y'])
+                if pos['width'] and pos['height']:
+                    self.win.resize(pos['width'], pos['height'])
+            else:
+                # Default position: right of the game window
+                self.win.move(750, 50)
 
             # Episode reward plot (accumulated reward over steps)
             self.plot_episode = self.win.addPlot(title="<span style='font-size: 9pt'>Accumulated Reward per Episode</span>")
@@ -124,6 +218,9 @@ class RewardPlotter:
             self.needs_update = False
 
             self.use_pyqtgraph = True
+
+            # Install keyboard shortcuts (Ctrl+S to save layout)
+            install_keyboard_shortcuts(self.win)
 
             # Show window after all setup is complete
             self.win.show()
@@ -553,9 +650,15 @@ class CNNFilterActivationViewer:
             except Exception:
                 pass
 
-            # Position window below the reward plot
-            # Reward plot is at (750, 50) and is 400px tall
-            self.win.move(750, 500)
+            # Position window (use saved layout if available)
+            layout = load_window_layout()
+            if 'cnn_filter_viewer' in layout:
+                pos = layout['cnn_filter_viewer']
+                self.win.move(pos['x'], pos['y'])
+                # Don't apply width/height here as it will be auto-sized
+            else:
+                # Default position: below the reward plot
+                self.win.move(750, 500)
 
             # Remove all spacing and margins for tight layout
             self.win.ci.layout.setSpacing(0)
@@ -606,6 +709,9 @@ class CNNFilterActivationViewer:
 
             # Render filters once (they don't change)
             self._render_filters()
+
+            # Install keyboard shortcuts (Ctrl+S to save layout)
+            install_keyboard_shortcuts(self.win)
 
             # Show window after all setup is complete
             self.win.show()
@@ -950,9 +1056,16 @@ class PreprocessedObservationViewer:
             except Exception:
                 pass
 
-            # Position window to the right of the reward plot
-            # Reward plot is at (750, 50) and is 500px wide
-            self.win.move(1300, 50)
+            # Position window (use saved layout if available)
+            layout = load_window_layout()
+            if 'observation_viewer' in layout:
+                pos = layout['observation_viewer']
+                self.win.move(pos['x'], pos['y'])
+                if pos['width'] and pos['height']:
+                    self.win.resize(pos['width'], pos['height'])
+            else:
+                # Default position: right of the reward plot
+                self.win.move(1300, 50)
 
             # Create image display widget
             self.view = self.win.addViewBox()
@@ -975,6 +1088,9 @@ class PreprocessedObservationViewer:
             # Store last observation for rendering
             self.last_obs = None
             self._window_sized = False  # Track if we've sized the window to match image
+
+            # Install keyboard shortcuts (Ctrl+S to save layout)
+            install_keyboard_shortcuts(self.win)
 
             # Show window after all setup is complete
             self.win.show()
@@ -1705,6 +1821,7 @@ def main():
                 update_interval=args.plot_update_interval,
                 max_steps_shown=args.plot_window_size
             )
+            _active_viewers['reward_plotter'] = plotter
             backend = "PyQtGraph (fast)" if plotter.use_pyqtgraph else "Matplotlib"
             print(f"Real-time reward plot enabled using {backend}")
             print(f"  Update interval: {args.plot_update_interval}s | Window size: {args.plot_window_size} steps")
@@ -1718,6 +1835,7 @@ def main():
     if args.show_preprocessing and not args.headless:
         try:
             obs_viewer = PreprocessedObservationViewer(update_interval=0.05)
+            _active_viewers['observation_viewer'] = obs_viewer
             backend = "PyQtGraph (fast)" if obs_viewer.use_pyqtgraph else "Matplotlib"
             print(f"Preprocessed observation viewer enabled using {backend}")
             print("Close the viewer window to disable it.")
@@ -1748,6 +1866,7 @@ def main():
     if args.show_cnn_filters and not args.headless:
         try:
             cnn_viewer = CNNFilterActivationViewer(policy_model, update_interval=0.1)
+            _active_viewers['cnn_filter_viewer'] = cnn_viewer
             backend = "PyQtGraph (fast)" if cnn_viewer.use_pyqtgraph else "Matplotlib"
             print(f"CNN filter/activation viewer enabled using {backend}")
             print("Close the viewer window to disable it.")
@@ -1765,6 +1884,13 @@ def main():
         n_steps=1 if (args.step_by_step or args.fps or plotter or obs_viewer or cnn_viewer) else config.n_steps,
         **config.rollout_collector_hyperparams(),
     )
+
+    # Print hotkey instructions if any viewers are active
+    if plotter or obs_viewer or cnn_viewer:
+        print("\n" + "="*60)
+        print("💡 TIP: Press F9 in any visualization window to save")
+        print("   the current window layout to window_layout.json")
+        print("="*60 + "\n")
 
     if args.step_by_step:
         print(f"Playing {target_episodes} episode(s) step-by-step with render_mode='human'...")

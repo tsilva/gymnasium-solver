@@ -1,0 +1,20 @@
+{
+  "reward_plotter": {
+    "x": 1121,
+    "y": 316,
+    "width": 500,
+    "height": 400
+  },
+  "observation_viewer": {
+    "x": 434,
+    "y": 345,
+    "width": 84,
+    "height": 356
+  },
+  "cnn_filter_viewer": {
+    "x": 610,
+    "y": 389,
+    "width": 178,
+    "height": 288
+  }
+}

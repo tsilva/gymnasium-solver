@@ -464,6 +464,357 @@ class RewardPlotter:
             self.is_open = False
 
 
+class CNNFilterActivationViewer:
+    """Real-time CNN filter and activation visualizer."""
+
+    def __init__(self, policy_model, update_interval: float = 0.1):
+        """Initialize the viewer for CNN filters and activations.
+
+        Args:
+            policy_model: The policy model (must have a 'cnn' attribute)
+            update_interval: Minimum time (in seconds) between updates to throttle rendering
+        """
+        import torch.nn as nn
+        import time
+
+        self.time = time
+        self.update_interval = update_interval
+        self.last_update_time = time.time()
+        self.needs_update = False
+
+        # Extract Conv2d layers from the CNN
+        if not hasattr(policy_model, 'cnn'):
+            raise ValueError("Policy model must have a 'cnn' attribute for filter visualization")
+
+        self.conv_layers = []
+        self.conv_info = []
+        for i, module in enumerate(policy_model.cnn):
+            if isinstance(module, nn.Conv2d):
+                self.conv_layers.append(module)
+                self.conv_info.append({
+                    'index': i,
+                    'in_channels': module.in_channels,
+                    'out_channels': module.out_channels,
+                    'kernel_size': module.kernel_size,
+                    'activation': None  # Will be populated by hooks
+                })
+
+        if not self.conv_layers:
+            raise ValueError("No Conv2d layers found in policy model")
+
+        # Register forward hooks to capture activations
+        self.activation_handles = []
+        for idx, layer in enumerate(self.conv_layers):
+            handle = layer.register_forward_hook(self._make_activation_hook(idx))
+            self.activation_handles.append(handle)
+
+        try:
+            import pyqtgraph as pg
+            from pyqtgraph.Qt import QtWidgets
+            import numpy as np
+
+            self.pg = pg
+            self.np = np
+
+            # Set background to white for better visibility
+            pg.setConfigOption('background', 'w')
+            pg.setConfigOption('foreground', 'k')
+
+            # Create window with grid layout
+            self.win = pg.GraphicsLayoutWidget(show=True, title="CNN Filters & Activations")
+            self.win.resize(1200, 800)
+            self.win.setWindowTitle('CNN Filters & Activations')
+            self.win.move(50, 550)  # Position below observation viewer
+
+            # Remove all spacing and margins for tight layout
+            self.win.ci.layout.setSpacing(0)
+            self.win.ci.layout.setContentsMargins(0, 0, 0, 0)
+
+            # Create image items for each layer (filters + activations)
+            self.filter_items = []
+            self.activation_items = []
+
+            for idx, info in enumerate(self.conv_info):
+                # Add row for this layer
+                label = f"Layer {idx} ({info['out_channels']} filters, {info['kernel_size']}x{info['kernel_size']})"
+
+                # Filters column
+                filter_view = self.win.addViewBox()
+                filter_view.setAspectLocked(True)
+                filter_view.invertY(True)
+                filter_view.setContentsMargins(0, 0, 0, 0)
+                filter_view.setMenuEnabled(False)
+                filter_view.setMouseEnabled(x=False, y=False)
+                filter_item = pg.ImageItem()
+                filter_view.addItem(filter_item)
+                self.filter_items.append(filter_item)
+
+                # Activations column
+                act_view = self.win.addViewBox()
+                act_view.setAspectLocked(True)
+                act_view.invertY(True)
+                act_view.setContentsMargins(0, 0, 0, 0)
+                act_view.setMenuEnabled(False)
+                act_view.setMouseEnabled(x=False, y=False)
+                act_item = pg.ImageItem()
+                act_view.addItem(act_item)
+                self.activation_items.append(act_item)
+
+                # Move to next row
+                self.win.nextRow()
+
+            self.is_open = True
+            self.use_pyqtgraph = True
+
+            # Render filters once (they don't change)
+            self._render_filters()
+
+        except ImportError:
+            # Fallback to matplotlib
+            import matplotlib.pyplot as plt
+            import numpy as np
+
+            self.plt = plt
+            self.np = np
+
+            self.plt.ion()
+            n_layers = len(self.conv_layers)
+            self.fig, self.axes = self.plt.subplots(n_layers, 2, figsize=(12, 4 * n_layers))
+            if n_layers == 1:
+                self.axes = self.axes.reshape(1, -1)
+
+            self.fig.suptitle('CNN Filters & Activations', fontsize=14, fontweight='bold')
+
+            for idx, info in enumerate(self.conv_info):
+                self.axes[idx, 0].set_title(f"Layer {idx} Filters", fontsize=10)
+                self.axes[idx, 1].set_title(f"Layer {idx} Activations", fontsize=10)
+                self.axes[idx, 0].axis('off')
+                self.axes[idx, 1].axis('off')
+
+            self.is_open = True
+            self.use_pyqtgraph = False
+
+            self.plt.tight_layout()
+            self.plt.show(block=False)
+            self.fig.canvas.draw()
+            self.fig.canvas.flush_events()
+
+            # Render filters once
+            self._render_filters()
+
+    def _make_activation_hook(self, layer_idx):
+        """Create a forward hook to capture activations."""
+        def hook(module, input, output):
+            if not self.is_open:
+                return
+            # Store activation (detach and move to CPU)
+            import torch
+            self.conv_info[layer_idx]['activation'] = output.detach().cpu()
+            self.needs_update = True
+        return hook
+
+    def _render_filters(self):
+        """Render filter kernels for all Conv2d layers."""
+        import torch
+
+        for idx, (layer, info) in enumerate(zip(self.conv_layers, self.conv_info)):
+            # Get filter weights: shape (out_channels, in_channels, kH, kW)
+            with torch.no_grad():
+                weights = layer.weight.detach().cpu().numpy()
+
+            # Create a grid visualization of filters
+            filter_grid = self._create_filter_grid(weights)
+
+            # Display based on backend
+            if self.use_pyqtgraph:
+                # Normalize to 0-255 for display
+                w_min, w_max = filter_grid.min(), filter_grid.max()
+                if w_max > w_min:
+                    filter_grid_norm = ((filter_grid - w_min) / (w_max - w_min) * 255).astype(self.np.uint8)
+                else:
+                    filter_grid_norm = self.np.zeros_like(filter_grid, dtype=self.np.uint8)
+                self.filter_items[idx].setImage(filter_grid_norm.T, levels=(0, 255))
+            else:
+                self.axes[idx, 0].clear()
+                self.axes[idx, 0].imshow(filter_grid, cmap='gray')
+                self.axes[idx, 0].set_title(f"Layer {idx} Filters ({info['out_channels']} × {info['kernel_size']})", fontsize=9)
+                self.axes[idx, 0].axis('off')
+
+    def _create_filter_grid(self, weights):
+        """Create a grid visualization of filter kernels.
+
+        Args:
+            weights: numpy array of shape (out_channels, in_channels, kH, kW)
+
+        Returns:
+            2D numpy array representing the grid of filters
+        """
+        out_ch, in_ch, kH, kW = weights.shape
+
+        # For visualization, average over input channels or take first channel
+        if in_ch == 1:
+            filters_2d = weights[:, 0, :, :]  # (out_ch, kH, kW)
+        elif in_ch == 3:
+            # For RGB input, convert to grayscale using standard weights
+            filters_2d = (0.299 * weights[:, 0, :, :] +
+                         0.587 * weights[:, 1, :, :] +
+                         0.114 * weights[:, 2, :, :])  # (out_ch, kH, kW)
+        else:
+            # Average over input channels
+            filters_2d = weights.mean(axis=1)  # (out_ch, kH, kW)
+
+        # Arrange filters in a grid (roughly square)
+        import math
+        grid_cols = int(math.ceil(math.sqrt(out_ch)))
+        grid_rows = int(math.ceil(out_ch / grid_cols))
+
+        # No padding for tight layout
+        padding = 0
+        grid_h = grid_rows * kH + (grid_rows - 1) * padding
+        grid_w = grid_cols * kW + (grid_cols - 1) * padding
+
+        grid = self.np.zeros((grid_h, grid_w), dtype=self.np.float32)
+
+        for i in range(out_ch):
+            row = i // grid_cols
+            col = i % grid_cols
+
+            y_start = row * (kH + padding)
+            x_start = col * (kW + padding)
+
+            grid[y_start:y_start + kH, x_start:x_start + kW] = filters_2d[i]
+
+        return grid
+
+    def _create_activation_grid(self, activations):
+        """Create a grid visualization of activation maps.
+
+        Args:
+            activations: tensor of shape (batch, channels, H, W)
+
+        Returns:
+            2D numpy array representing the grid of activation maps
+        """
+        # Take first batch element
+        if activations.dim() == 4:
+            activations = activations[0]  # (channels, H, W)
+
+        act_np = activations.cpu().numpy()
+        n_channels, H, W = act_np.shape
+
+        # Show a subset of channels if too many (max 64)
+        max_channels = 64
+        if n_channels > max_channels:
+            # Sample evenly spaced channels
+            indices = self.np.linspace(0, n_channels - 1, max_channels, dtype=int)
+            act_np = act_np[indices]
+            n_channels = max_channels
+
+        # Arrange activation maps in a grid
+        import math
+        grid_cols = int(math.ceil(math.sqrt(n_channels)))
+        grid_rows = int(math.ceil(n_channels / grid_cols))
+
+        # Add padding between maps
+        padding = 2
+        grid_h = grid_rows * (H + padding) - padding
+        grid_w = grid_cols * (W + padding) - padding
+
+        grid = self.np.zeros((grid_h, grid_w), dtype=self.np.float32)
+
+        for i in range(n_channels):
+            row = i // grid_cols
+            col = i % grid_cols
+
+            y_start = row * (H + padding)
+            x_start = col * (W + padding)
+
+            grid[y_start:y_start + H, x_start:x_start + W] = act_np[i]
+
+        return grid
+
+    def update(self):
+        """Update activation visualizations (throttled)."""
+        if not self.is_open:
+            return
+
+        # Only update if enough time has passed
+        current_time = self.time.time()
+        if current_time - self.last_update_time >= self.update_interval:
+            if self.needs_update:
+                self._update_activations()
+                self.last_update_time = current_time
+                self.needs_update = False
+
+            # Process events for pyqtgraph
+            if self.use_pyqtgraph:
+                from pyqtgraph.Qt import QtWidgets
+                QtWidgets.QApplication.processEvents()
+
+    def _update_activations(self):
+        """Render activation maps for all layers."""
+        if not self.is_open:
+            return
+
+        try:
+            for idx, info in enumerate(self.conv_info):
+                activation = info.get('activation')
+                if activation is None:
+                    continue
+
+                # Create activation grid
+                act_grid = self._create_activation_grid(activation)
+
+                # Display based on backend
+                if self.use_pyqtgraph:
+                    # Normalize to 0-255 for display
+                    a_min, a_max = act_grid.min(), act_grid.max()
+                    if a_max > a_min:
+                        act_grid_norm = ((act_grid - a_min) / (a_max - a_min) * 255).astype(self.np.uint8)
+                    else:
+                        act_grid_norm = self.np.zeros_like(act_grid, dtype=self.np.uint8)
+                    self.activation_items[idx].setImage(act_grid_norm.T, levels=(0, 255))
+                else:
+                    self.axes[idx, 1].clear()
+                    self.axes[idx, 1].imshow(act_grid, cmap='viridis')
+                    self.axes[idx, 1].set_title(f"Layer {idx} Activations", fontsize=9)
+                    self.axes[idx, 1].axis('off')
+
+            if not self.use_pyqtgraph:
+                self.plt.tight_layout()
+                self.fig.canvas.draw()
+                self.fig.canvas.flush_events()
+
+        except Exception as e:
+            import sys
+            print(f"Error updating CNN filter/activation viewer: {e}", file=sys.stderr)
+            self.is_open = False
+
+    def close(self):
+        """Close the viewer and remove hooks."""
+        # Remove forward hooks
+        for handle in self.activation_handles:
+            handle.remove()
+        self.activation_handles.clear()
+
+        if self.is_open:
+            # Flush any pending updates
+            if self.needs_update:
+                try:
+                    self._update_activations()
+                except Exception:
+                    pass
+
+            try:
+                if self.use_pyqtgraph:
+                    self.win.close()
+                else:
+                    self.plt.close(self.fig)
+            except Exception:
+                pass
+            self.is_open = False
+
+
 class PreprocessedObservationViewer:
     """Real-time preprocessed observation viewer for visualizing what the agent sees."""
 
@@ -1084,6 +1435,7 @@ def main():
     p.add_argument("--plot-update-interval", type=float, default=0.2, help="Minimum time (seconds) between plot updates (default: 0.2, lower=smoother but slower game)")
     p.add_argument("--plot-window-size", type=int, default=100, help="Number of steps to show in sliding window (default: 100)")
     p.add_argument("--show-preprocessing", dest="show_preprocessing", action="store_true", default=False, help="Show preprocessed observations in separate window (what agent sees)")
+    p.add_argument("--show-cnn-filters", dest="show_cnn_filters", action="store_true", default=False, help="Show CNN filters and activations in separate window (requires CNN policy)")
     p.add_argument(
         "--env-kwargs",
         action="append",
@@ -1266,11 +1618,26 @@ def main():
     # TODO: we should be loading the agent and having it run the episode
     policy_model, _ = load_policy_model_from_checkpoint(run.best_checkpoint_path, env, config)
 
+    # Initialize CNN filter/activation viewer if enabled and not headless
+    cnn_viewer = None
+    if args.show_cnn_filters and not args.headless:
+        try:
+            cnn_viewer = CNNFilterActivationViewer(policy_model, update_interval=0.1)
+            backend = "PyQtGraph (fast)" if cnn_viewer.use_pyqtgraph else "Matplotlib"
+            print(f"CNN filter/activation viewer enabled using {backend}")
+            print("Close the viewer window to disable it.")
+        except ValueError as e:
+            print(f"Warning: {e}")
+            cnn_viewer = None
+        except Exception as e:
+            print(f"Warning: Could not initialize CNN filter/activation viewer: {e}")
+            cnn_viewer = None
+
     # Initialize rollout collector; step-by-step mode, FPS limiting, plotting, or obs viewer uses single-step rollouts
     collector = RolloutCollector(
         env=env,
         policy_model=policy_model,
-        n_steps=1 if (args.step_by_step or args.fps or plotter or obs_viewer) else config.n_steps,
+        n_steps=1 if (args.step_by_step or args.fps or plotter or obs_viewer or cnn_viewer) else config.n_steps,
         **config.rollout_collector_hyperparams(),
     )
 
@@ -1309,6 +1676,10 @@ def main():
                 obs = collector._buffer.obs_buf[collector._buffer.pos - 1, 0]
                 obs_viewer.update(obs)
 
+            # Update CNN filter/activation viewer if enabled
+            if cnn_viewer and cnn_viewer.is_open:
+                cnn_viewer.update()
+
             # Apply FPS limiting if specified
             if frame_delay > 0:
                 elapsed = time.perf_counter() - step_start
@@ -1344,6 +1715,8 @@ def main():
             plotter.close()
         if obs_viewer:
             obs_viewer.close()
+        if cnn_viewer:
+            cnn_viewer.close()
 
     print("Done.")
 

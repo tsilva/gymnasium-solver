@@ -524,7 +524,7 @@ def run_episode(
                 greedy_flags = None
                 if probs is not None:
                     greedy_flags = [1 if float(p) >= 0.5 else 0 for p in probs]
-                matches_greedy = bool(
+                greedy_match = bool(
                     greedy_flags is not None
                     and np.array_equal(
                         np.asarray(action_display, dtype=np.int8),
@@ -542,12 +542,12 @@ def run_episode(
                     action_label_value = None
                 action_value = action_display
             elif is_multidiscrete_action_space:
-                matches_greedy = None
+                greedy_match = None
                 action_label_value = None
                 action_value = action_display
             else:
                 action_idx = int(action_display)
-                matches_greedy = bool(action_idx == int(np.argmax(probs))) if probs is not None else None
+                greedy_match = bool(action_idx == int(np.argmax(probs))) if probs is not None else None
                 action_label_value = (
                     action_labels[action_idx]
                     if action_labels is not None and 0 <= action_idx < len(action_labels)
@@ -566,7 +566,7 @@ def run_episode(
                 "terminated": terminated,
                 "truncated": truncated,
                 "probs": probs,
-                "matches_greedy": matches_greedy,
+                "greedy_match": greedy_match,
             })
 
             t += 1
@@ -692,7 +692,7 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
             )
             deterministic = gr.Checkbox(label="Deterministic policy", value=False)
             max_steps = gr.Slider(label="Max env steps", minimum=10, maximum=5000, value=default_max_steps, step=10)
-            run_btn = gr.Button("Inspect")
+            run_btn = gr.Button("Rollout")
 
         # Display the current frame with a per-step stats table on the right
         with gr.Row():
@@ -755,14 +755,13 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
             timer = TimerCls(1/30.0)  # default to 30 FPS
         # Table headers are reused for CSV export and for the current-step vertical view
         table_headers = [
-            "done",
             "terminated",
             "truncated",
             "step",
             "action",
             "action_label",
             "probs",
-            "matches_greedy",
+            "greedy_match",
             "reward",
             "cum_reward",
             "mc_return",
@@ -774,14 +773,13 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
             step_table = gr.Dataframe(
                 headers=table_headers,
                 datatype=[
-                    "bool",   # done
                     "bool",   # terminated
                     "bool",   # truncated
                     "number", # step
                     "number", # action
                     "str",    # action_label
                     "str",    # probs (formatted string)
-                    "bool",   # matches_greedy
+                    "bool",   # greedy_match
                     "number", # reward
                     "number", # cum_reward
                     "number", # mc_return
@@ -789,8 +787,8 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                     "number", # gae_adv
                 ],
                 row_count=(0, "dynamic"),
-                col_count=(13, "fixed"),
-                label="Per-step details",
+                col_count=(12, "fixed"),
+                label="",
                 interactive=False,
             )
         with gr.Row():
@@ -811,12 +809,31 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
 
         run_id.change(_on_run_change, inputs=run_id, outputs=checkpoint)
 
-        def _format_stat_value(v: Any) -> str:
+        def _format_stat_value(v: Any, metric_name: str = "") -> str:
+            """Format value with highlighting for noteworthy metrics."""
+            # Base formatting
             if isinstance(v, float):
-                return f"{v:.3f}"
-            if isinstance(v, (list, tuple)):
-                return "[" + ", ".join(_format_stat_value(x) for x in v) + "]"
-            return str(v) if v is not None else ""
+                base_str = f"{v:.3f}"
+            elif isinstance(v, (list, tuple)):
+                base_str = "[" + ", ".join(_format_stat_value(x, "") for x in v) + "]"
+            else:
+                base_str = str(v) if v is not None else ""
+
+            # Apply highlighting based on metric name and value
+            if metric_name == "terminated" and v is True:
+                return f"🔴 {base_str}"
+            elif metric_name == "truncated" and v is True:
+                return f"🟡 {base_str}"
+            elif metric_name == "greedy_match" and v is False:
+                return f"🔵 {base_str}"
+            elif metric_name == "reward":
+                if isinstance(v, (int, float)):
+                    if float(v) > 0:
+                        return f"🟢 {base_str}"
+                    elif float(v) < 0:
+                        return f"🔴 {base_str}"
+
+            return base_str
 
         def _round3(x):
             return round(float(x), 3)
@@ -829,7 +846,7 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
         def _verticalize_row(row: List[Any]) -> List[List[str]]:
             pairs: List[List[str]] = []
             for name, val in zip(table_headers, row):
-                pairs.append([name, _format_stat_value(val)])
+                pairs.append([name, _format_stat_value(val, metric_name=name)])
             return pairs
 
         # DRY helpers: build consistent row values and vertical pairs from a step dict
@@ -837,14 +854,13 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
             if not isinstance(step_dict, dict):
                 return []
             return [
-                bool(step_dict.get("done")),
                 bool(step_dict.get("terminated")),
                 bool(step_dict.get("truncated")),
                 int(step_dict.get("step", 0)),
                 step_dict.get("action"),
                 step_dict.get("action_label"),
                 step_dict.get("probs"),
-                step_dict.get("matches_greedy"),
+                step_dict.get("greedy_match"),
                 step_dict.get("reward"),
                 step_dict.get("cum_reward"),
                 step_dict.get("mc_return"),
@@ -873,14 +889,13 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
 
         def _table_row_from_step(s: Dict[str, Any]) -> List[Any]:
             return [
-                s["done"],
                 s.get("terminated", False),
                 s.get("truncated", False),
                 s["step"],
                 s["action"],
                 s.get("action_label"),
                 _format_probs(s.get("probs")),
-                s.get("matches_greedy"),
+                s.get("greedy_match"),
                 _round3(s["reward"]),
                 _round3(s["cum_reward"]),
                 _round3(s.get("mc_return", None)),

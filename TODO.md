@@ -13,12 +13,18 @@
 - FEAT: add sweep.py with --backend modal support
 - FEAT: sweep from run/checkpoint/
 
-# NEXT
+# RUN_PLAY
 
 - FEAT: activation heatmap?
 - FEAT: run_play controls? eg: heatmap vs other
 - FEAT: single window workspace for run_play.py
+
+# RUN_INSPECT
+
 - FEAT: make deterministic sampling vs stochastic a dropdown
+
+# NEXT
+
 - BUG: why cant I resume run from exactly same perf location
 - BUG: cant train VizDoom-Basic-v0 when frame_stack is 1
 

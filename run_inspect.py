@@ -758,8 +758,6 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
             "done",
             "step",
             "action",
-            "probs",
-            "greedy_match",
             "reward",
             "cum_reward",
             "mc_return",
@@ -773,9 +771,7 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                 datatype=[
                     "str",    # done (merged terminated/truncated)
                     "number", # step
-                    "str",    # action (merged action/action_label)
-                    "str",    # probs (formatted string)
-                    "bool",   # greedy_match
+                    "str",    # action (merged action/label/probs/greedy)
                     "number", # reward
                     "number", # cum_reward
                     "number", # mc_return
@@ -783,7 +779,7 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                     "number", # gae_adv
                 ],
                 row_count=(0, "dynamic"),
-                col_count=(10, "fixed"),
+                col_count=(8, "fixed"),
                 label="",
                 interactive=False,
             )
@@ -831,11 +827,6 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
         def _round3(x):
             return round(float(x), 3)
 
-        def _format_probs(probs: Any) -> str | None:
-            if isinstance(probs, list):
-                return "[" + ", ".join(f"{float(p):.3f}" for p in probs) + "]"
-            return str(probs) if probs is not None else None
-
         def _verticalize_row(row: List[Any]) -> List[List[str]]:
             pairs: List[List[str]] = []
             for name, val in zip(table_headers, row):
@@ -859,24 +850,63 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
             else:
                 done_str = ""
 
-            # Merge action/action_label into "action" column
+            # Merge action/action_label/probs/greedy_match into "action" column
+            # Show ALL actions with ALL probabilities, mark executed ones with ►
             action_val = step_dict.get("action")
             action_label = step_dict.get("action_label")
-            if action_label is not None:
-                if isinstance(action_label, list):
-                    # MultiBinary case: show active labels
-                    action_str = ", ".join(action_label) if action_label else str(action_val)
-                else:
-                    action_str = f"{action_label} ({action_val})"
+            probs = step_dict.get("probs")
+            greedy_match = step_dict.get("greedy_match")
+
+            # Format action string showing all actions with their probabilities
+            if isinstance(action_val, list) and isinstance(probs, list):
+                # MultiBinary case: show ALL buttons with probabilities, mark pressed ones with ►
+                parts = []
+                label_idx = 0  # Track position in action_label list (only pressed buttons)
+                for i, pressed in enumerate(action_val):
+                    if i < len(probs):
+                        prob_val = float(probs[i])
+                        # Get label for this button (fallback to index if not available)
+                        if pressed and isinstance(action_label, list) and label_idx < len(action_label):
+                            label = action_label[label_idx]
+                            label_idx += 1
+                        else:
+                            label = f"{i}"
+
+                        # Mark pressed buttons with ► and add ⚡ for exploratory (prob < 0.5)
+                        if pressed:
+                            indicator = "⚡" if prob_val < 0.5 else ""
+                            parts.append(f"►{label} {prob_val:.2f}{indicator}")
+                        else:
+                            parts.append(f"{label} {prob_val:.2f}")
+                action_str = "  ".join(parts) if parts else "NOOP"
+            elif isinstance(probs, list) and isinstance(action_val, int):
+                # Discrete case: show ALL actions with probabilities, mark selected one with ►
+                parts = []
+                for i, prob_val in enumerate(probs):
+                    # Get label for this action
+                    if i == action_val and action_label is not None:
+                        label = action_label
+                    else:
+                        label = f"{i}"
+
+                    # Mark selected action with ► and add ⚡ if exploratory
+                    if i == action_val:
+                        indicator = " ⚡" if greedy_match is False else ""
+                        parts.append(f"►{label} {float(prob_val):.2f}{indicator}")
+                    else:
+                        parts.append(f"{label} {float(prob_val):.2f}")
+                action_str = "  ".join(parts)
             else:
-                action_str = str(action_val)
+                # Fallback: no probs available, just show action
+                if action_label is not None:
+                    action_str = f"►{action_label}"
+                else:
+                    action_str = f"►{action_val}"
 
             return [
                 done_str,
                 int(step_dict.get("step", 0)),
                 action_str,
-                step_dict.get("probs"),
-                step_dict.get("greedy_match"),
                 step_dict.get("reward"),
                 step_dict.get("cum_reward"),
                 step_dict.get("mc_return"),
@@ -916,24 +946,63 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
             else:
                 done_str = ""
 
-            # Merge action/action_label into "action" column
+            # Merge action/action_label/probs/greedy_match into "action" column
+            # Show ALL actions with ALL probabilities, mark executed ones with ►
             action_val = s["action"]
             action_label = s.get("action_label")
-            if action_label is not None:
-                if isinstance(action_label, list):
-                    # MultiBinary case: show active labels
-                    action_str = ", ".join(action_label) if action_label else str(action_val)
-                else:
-                    action_str = f"{action_label} ({action_val})"
+            probs = s.get("probs")
+            greedy_match = s.get("greedy_match")
+
+            # Format action string showing all actions with their probabilities
+            if isinstance(action_val, list) and isinstance(probs, list):
+                # MultiBinary case: show ALL buttons with probabilities, mark pressed ones with ►
+                parts = []
+                label_idx = 0  # Track position in action_label list (only pressed buttons)
+                for i, pressed in enumerate(action_val):
+                    if i < len(probs):
+                        prob_val = float(probs[i])
+                        # Get label for this button (fallback to index if not available)
+                        if pressed and isinstance(action_label, list) and label_idx < len(action_label):
+                            label = action_label[label_idx]
+                            label_idx += 1
+                        else:
+                            label = f"{i}"
+
+                        # Mark pressed buttons with ► and add ⚡ for exploratory (prob < 0.5)
+                        if pressed:
+                            indicator = "⚡" if prob_val < 0.5 else ""
+                            parts.append(f"►{label} {prob_val:.2f}{indicator}")
+                        else:
+                            parts.append(f"{label} {prob_val:.2f}")
+                action_str = "  ".join(parts) if parts else "NOOP"
+            elif isinstance(probs, list) and isinstance(action_val, int):
+                # Discrete case: show ALL actions with probabilities, mark selected one with ►
+                parts = []
+                for i, prob_val in enumerate(probs):
+                    # Get label for this action
+                    if i == action_val and action_label is not None:
+                        label = action_label
+                    else:
+                        label = f"{i}"
+
+                    # Mark selected action with ► and add ⚡ if exploratory
+                    if i == action_val:
+                        indicator = " ⚡" if greedy_match is False else ""
+                        parts.append(f"►{label} {float(prob_val):.2f}{indicator}")
+                    else:
+                        parts.append(f"{label} {float(prob_val):.2f}")
+                action_str = "  ".join(parts)
             else:
-                action_str = str(action_val)
+                # Fallback: no probs available, just show action
+                if action_label is not None:
+                    action_str = f"►{action_label}"
+                else:
+                    action_str = f"►{action_val}"
 
             return [
                 done_str,
                 s["step"],
                 action_str,
-                _format_probs(s.get("probs")),
-                s.get("greedy_match"),
                 _round3(s["reward"]),
                 _round3(s["cum_reward"]),
                 _round3(s.get("mc_return", None)),

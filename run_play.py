@@ -633,9 +633,9 @@ class CNNFilterActivationViewer:
             self.pg = pg
             self.np = np
 
-            # Set background to white for better visibility
-            pg.setConfigOption('background', 'w')
-            pg.setConfigOption('foreground', 'k')
+            # Set background to black
+            pg.setConfigOption('background', 'k')
+            pg.setConfigOption('foreground', 'w')
 
             # Create window with grid layout (don't show yet)
             self.win = pg.GraphicsLayoutWidget(show=False, title="CNN Filters & Activations")
@@ -790,13 +790,14 @@ class CNNFilterActivationViewer:
             if self.use_pyqtgraph:
                 # Filter grid is already 0-255 RGB, just convert to uint8
                 filter_grid_norm = filter_grid.astype(self.np.uint8)
-                # PyQtGraph ImageItem handles RGB images in (H, W, 3) format
-                # No transpose needed for RGB - transpose was only for grayscale (H, W) -> (W, H)
-                self.filter_items[idx].setImage(filter_grid_norm)
+                # PyQtGraph expects (W, H, 3) format for RGB images, but numpy creates (H, W, 3)
+                # Transpose spatial dimensions: (H, W, 3) -> (W, H, 3)
+                filter_grid_transposed = self.np.transpose(filter_grid_norm, (1, 0, 2))
+                self.filter_items[idx].setImage(filter_grid_transposed)
 
-                # Set view range to exactly match image dimensions
+                # Set view range to match transposed dimensions
                 h, w = filter_grid.shape[:2]
-                self.filter_views[idx].setRange(xRange=(0, w), yRange=(0, h), padding=0)
+                self.filter_views[idx].setRange(xRange=(0, h), yRange=(0, w), padding=0)
             else:
                 self.axes[idx, 0].clear()
                 # Display RGB image (no colormap)
@@ -812,7 +813,7 @@ class CNNFilterActivationViewer:
             weights: numpy array of shape (out_channels, in_channels, kH, kW)
 
         Returns:
-            RGB numpy array (H, W, 3) representing the grid of filters with colored borders
+            RGB numpy array (H, W, 3) representing the grid of filters with black borders
         """
         out_ch, in_ch, kH, kW = weights.shape
 
@@ -838,11 +839,9 @@ class CNNFilterActivationViewer:
         grid_h = grid_rows * kH + (grid_rows + 1) * padding  # +1 for borders on all sides
         grid_w = grid_cols * kW + (grid_cols + 1) * padding  # +1 for borders on all sides
 
-        # Create RGB grid (start with cyan border color: R=0, G=255, B=255)
+        # Create RGB grid (start with black border color: R=0, G=0, B=0)
         grid = self.np.zeros((grid_h, grid_w, 3), dtype=self.np.float32)
-        grid[:, :, 1] = 255  # Green channel
-        grid[:, :, 2] = 255  # Blue channel
-        # Red channel stays 0
+        # All channels stay 0 for black
 
         for i in range(out_ch):
             row = i // grid_cols
@@ -874,7 +873,7 @@ class CNNFilterActivationViewer:
             activations: tensor of shape (batch, channels, H, W)
 
         Returns:
-            RGB numpy array (H, W, 3) representing the grid of activation maps with colored borders
+            RGB numpy array (H, W, 3) representing the grid of activation maps with black borders
         """
         # Take first batch element
         if activations.dim() == 4:
@@ -901,11 +900,9 @@ class CNNFilterActivationViewer:
         grid_h = grid_rows * H + (grid_rows + 1) * padding  # +1 for borders on all sides
         grid_w = grid_cols * W + (grid_cols + 1) * padding  # +1 for borders on all sides
 
-        # Create RGB grid (start with cyan border color: R=0, G=255, B=255)
+        # Create RGB grid (start with black border color: R=0, G=0, B=0)
         grid = self.np.zeros((grid_h, grid_w, 3), dtype=self.np.float32)
-        grid[:, :, 1] = 255  # Green channel
-        grid[:, :, 2] = 255  # Blue channel
-        # Red channel stays 0
+        # All channels stay 0 for black
 
         for i in range(n_channels):
             row = i // grid_cols
@@ -969,13 +966,14 @@ class CNNFilterActivationViewer:
                 if self.use_pyqtgraph:
                     # Activation grid is already 0-255 RGB, just convert to uint8
                     act_grid_norm = act_grid.astype(self.np.uint8)
-                    # PyQtGraph ImageItem handles RGB images in (H, W, 3) format
-                    # No transpose needed for RGB - transpose was only for grayscale (H, W) -> (W, H)
-                    self.activation_items[idx].setImage(act_grid_norm)
+                    # PyQtGraph expects (W, H, 3) format for RGB images, but numpy creates (H, W, 3)
+                    # Transpose spatial dimensions: (H, W, 3) -> (W, H, 3)
+                    act_grid_transposed = self.np.transpose(act_grid_norm, (1, 0, 2))
+                    self.activation_items[idx].setImage(act_grid_transposed)
 
-                    # Set view range to exactly match image dimensions
+                    # Set view range to match transposed dimensions
                     h, w = act_grid.shape[:2]
-                    self.activation_views[idx].setRange(xRange=(0, w), yRange=(0, h), padding=0)
+                    self.activation_views[idx].setRange(xRange=(0, h), yRange=(0, w), padding=0)
                 else:
                     self.axes[idx, 1].clear()
                     # Display RGB image (no colormap)

@@ -752,7 +752,7 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
         timer = None
         TimerCls = getattr(gr, "Timer", None)
         if TimerCls is not None:
-            timer = TimerCls(1/30.0)  # default to 30 FPS
+            timer = TimerCls(1/30.0, active=False)  # default to 30 FPS, initially inactive
         # Table headers are reused for CSV export and for the current-step vertical view
         table_headers = [
             "terminated",
@@ -967,20 +967,30 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
             # Update the displayed image and slider; also pause playback and sync index state
             img = frames[row_idx] if (isinstance(frames, list) and 0 <= row_idx < len(frames)) else None
             row_val = _vertical_from_steps_index(steps, row_idx)
-            return (
+            outputs = [
                 gr.update(value=img),               # frame_image
                 gr.update(value=row_idx),           # frame_slider
                 gr.update(value=row_val),           # current_step_table
                 row_idx,                            # index_state
                 False,                              # playing_state
                 gr.update(value=PLAY_ICON),         # play_pause_btn label
-            )
-        step_table.select(_on_step_select, inputs=[frames_state, steps_state], outputs=[frame_image, frame_slider, current_step_table, index_state, playing_state, play_pause_btn])
+            ]
+            if timer is not None:
+                outputs.append(gr.update(active=False))  # deactivate timer when jumping to a step
+            return tuple(outputs)
+
+        step_select_outputs = [frame_image, frame_slider, current_step_table, index_state, playing_state, play_pause_btn]
+        if timer is not None:
+            step_select_outputs.append(timer)
+        step_table.select(_on_step_select, inputs=[frames_state, steps_state], outputs=step_select_outputs)
 
         # Play/Pause handler
         def _on_play_pause(playing: bool):
             new_playing = not bool(playing)
-            return new_playing, gr.update(value=(PAUSE_ICON if new_playing else PLAY_ICON))
+            outputs = [new_playing, gr.update(value=(PAUSE_ICON if new_playing else PLAY_ICON))]
+            if timer is not None:
+                outputs.append(gr.update(active=new_playing))
+            return tuple(outputs)
 
         # Core helper to build current-frame UI updates from frames/index/steps
         def _current_view_updates(frames: List[np.ndarray], idx: int | float | None, steps: List[Dict[str, Any]] | None):
@@ -991,39 +1001,56 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
 
         def _build_slider_output(img, row_val, i, playing: bool):
             """Build standard tuple for slider change handlers."""
-            return gr.update(value=img), gr.update(value=row_val), i, playing, gr.update(value=(PAUSE_ICON if playing else PLAY_ICON))
+            outputs = [gr.update(value=img), gr.update(value=row_val), i, playing, gr.update(value=(PAUSE_ICON if playing else PLAY_ICON))]
+            if timer is not None:
+                outputs.append(gr.update(active=playing))  # sync timer active state with playing state
+            return tuple(outputs)
 
         def _on_slider_change(frames: List[np.ndarray], val: int, playing: bool, steps: List[Dict[str, Any]] | None):
             """Update current frame when user releases the slider, preserving play state."""
             img, row_val, i = _current_view_updates(frames, val, steps)
             return _build_slider_output(img, row_val, i, playing)
-        play_pause_btn.click(_on_play_pause, inputs=[playing_state], outputs=[playing_state, play_pause_btn])
+        play_pause_outputs = [playing_state, play_pause_btn]
+        if timer is not None:
+            play_pause_outputs.append(timer)
+        play_pause_btn.click(_on_play_pause, inputs=[playing_state], outputs=play_pause_outputs)
         # While dragging, update the frame live for fast visual scanning (and pause playback)
         def _on_slider_input(frames: List[np.ndarray], val: int | float | None, steps: List[Dict[str, Any]] | None):
             # Pause while scrubbing for smoother UX and to avoid race with autoplay
             img, row_val, i = _current_view_updates(frames, val, steps)
             return _build_slider_output(img, row_val, i, False)
 
+        slider_outputs = [frame_image, current_step_table, index_state, playing_state, play_pause_btn]
+        if timer is not None:
+            slider_outputs.append(timer)
+
         frame_slider.input(
             _on_slider_input,
             inputs=[frames_state, frame_slider, steps_state],
-            outputs=[frame_image, current_step_table, index_state, playing_state, play_pause_btn],
+            outputs=slider_outputs,
         )
 
         # Use release instead of change to avoid triggering on programmatic updates from the timer
-        frame_slider.release(_on_slider_change, inputs=[frames_state, frame_slider, playing_state, steps_state], outputs=[frame_image, current_step_table, index_state, playing_state, play_pause_btn])
+        frame_slider.release(_on_slider_change, inputs=[frames_state, frame_slider, playing_state, steps_state], outputs=slider_outputs)
 
         # Autoplay tick handler (only if timer available)
         def _on_tick(frames: List[np.ndarray], idx: int, playing: bool, steps: List[Dict[str, Any]] | None):
             if not playing or not frames:
-                return gr.update(), gr.update(), gr.update(), idx, playing, gr.update()
+                outputs = [gr.update(), gr.update(), gr.update(), idx, playing, gr.update()]
+                if timer is not None:
+                    outputs.append(gr.update(active=False))  # deactivate timer
+                return tuple(outputs)
             new_idx = int(idx) + 1 if int(idx) < len(frames) - 1 else len(frames) - 1
             img, row_val, _ = _current_view_updates(frames, new_idx, steps)
             still_playing = int(idx) < len(frames) - 1
-            return gr.update(value=img), gr.update(value=new_idx), gr.update(value=row_val), new_idx, still_playing, gr.update(value=(PAUSE_ICON if still_playing else PLAY_ICON))
+            outputs = [gr.update(value=img), gr.update(value=new_idx), gr.update(value=row_val), new_idx, still_playing, gr.update(value=(PAUSE_ICON if still_playing else PLAY_ICON))]
+            if timer is not None:
+                outputs.append(gr.update(active=still_playing))  # keep timer active only if still playing
+            return tuple(outputs)
 
         if timer is not None:
-            timer.tick(_on_tick, inputs=[frames_state, index_state, playing_state, steps_state], outputs=[frame_image, frame_slider, current_step_table, index_state, playing_state, play_pause_btn])
+            tick_outputs = [frame_image, frame_slider, current_step_table, index_state, playing_state, play_pause_btn, timer]
+            timer.tick(_on_tick, inputs=[frames_state, index_state, playing_state, steps_state], outputs=tick_outputs)
 
         # Display mode switcher
         def _on_display_mode(mode: str, raw: List[np.ndarray], stack: List[np.ndarray], steps: List[Dict[str, Any]] | None):

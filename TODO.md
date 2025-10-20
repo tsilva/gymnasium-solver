@@ -26,10 +26,13 @@
 
 ## SuperMarioBros-Nes
 
+- GOAL: ensure level-1-1 can be completed with ~100% win rate
+- EXP: train on level 2 after mastering level 1, check if it forgets level 1
+
 - TODO: add support for logging info vars in run_inspect.py
-- UX: color terminated state
 - UX: make table lighter
 
+- FEAT: stack action just as frames 
 - FEAT: resize to preserve aspect ratio (to avoid distortions)
 - FEAT: crop mario frames
 
@@ -41,20 +44,12 @@
 - TEST: how mario behaves if reward is just curiosity
 - LEARN: reward standardization - Use automatic weighting (e.g., Pop-Art normalization or reward standardization) to balance magnitudes
 - TEST: try lowering vf_coef to stabilize VF clipping
-- TUNE: ensure level 1-1 can be completed with a ~100% win rate
-- RUNE: train on level 2 after mastering level 1, check if it forgets level 1
 - TUNE: can I train faster with more n_envs? (launch multiple and check FPS plots)
 - FEAT: figure out how to consider training finished when level changes
 - FEAT: train next levels using starting point of previous levels, create master checkpoint for each level
 - FEAT: distil policy that plays all levels
 - FEAT: try training directly on a different level per env?
 - https://github.com/nemanja-m/super-mario-agent - implement architecture; implement stochastic frame skip wrapper
-- don't use sticky actions wrapper during eval
-- TODO: confirm that sticky actions wrapper guarantees that policy performs those actions after training
-- TODO: use action combo instead of multibinary
-- Penalize time spent more?
-- REWARD: instead of measuring velocity can we just use time passed to deduct movement reward?
-- REWARD: abort when no reward increased for N steps?
 - TODO: try with variable frame skip including no frame skip (eg: starting in 1)
 - Should we remove frame skip in evaluation?
 

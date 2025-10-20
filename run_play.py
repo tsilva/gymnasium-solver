@@ -37,14 +37,21 @@ class RewardPlotter:
             pg.setConfigOption('background', 'w')
             pg.setConfigOption('foreground', 'k')
 
-            # Create window with two plots
-            self.win = pg.GraphicsLayoutWidget(show=True, title="Real-time Reward Visualization")
+            # Create window with two plots (don't show yet)
+            self.win = pg.GraphicsLayoutWidget(show=False, title="Real-time Reward Visualization")
             self.win.resize(500, 400)
             self.win.setWindowTitle('Real-time Reward Visualization')
 
-            # Position window on the right side of the screen to not overlap with game
-            # Game window is typically on the left, so position plot on the right
-            self.win.move(1050, 50)  # x=1050 (right side), y=50 (near top)
+            # Set window flags before showing
+            try:
+                from pyqtgraph.Qt import QtCore
+                self.win.setWindowFlags(self.win.windowFlags() | QtCore.Qt.WindowType.WindowStaysOnTopHint)
+            except Exception:
+                pass
+
+            # Position window to the right of the game window
+            # Game window is at (50, 50) and typically ~640px wide
+            self.win.move(750, 50)
 
             # Episode reward plot (accumulated reward over steps)
             self.plot_episode = self.win.addPlot(title="<span style='font-size: 9pt'>Accumulated Reward per Episode</span>")
@@ -118,6 +125,10 @@ class RewardPlotter:
 
             self.use_pyqtgraph = True
 
+            # Show window after all setup is complete
+            self.win.show()
+            self.win.raise_()
+
         except ImportError:
             # Fallback to matplotlib if pyqtgraph is not available
             import matplotlib.pyplot as plt
@@ -130,6 +141,15 @@ class RewardPlotter:
 
             self.fig, (self.ax_episode, self.ax_step) = self.plt.subplots(2, 1, figsize=(5, 4))
             self.fig.suptitle('Real-time Reward Visualization', fontsize=9, fontweight='bold')
+
+            # Position window to the right of the game window
+            try:
+                manager = self.plt.get_current_fig_manager()
+                if hasattr(manager, 'window'):
+                    # Try to set position (works with TkAgg backend)
+                    manager.window.wm_geometry("+750+50")
+            except Exception:
+                pass  # If positioning fails, continue anyway
 
             self.ax_episode.set_xlabel('Step', fontsize=7)
             self.ax_episode.set_ylabel('Accumulated Episode Reward', fontsize=7)
@@ -520,11 +540,22 @@ class CNNFilterActivationViewer:
             pg.setConfigOption('background', 'w')
             pg.setConfigOption('foreground', 'k')
 
-            # Create window with grid layout
-            self.win = pg.GraphicsLayoutWidget(show=True, title="CNN Filters & Activations")
-            self.win.resize(1200, 800)
+            # Create window with grid layout (don't show yet)
+            self.win = pg.GraphicsLayoutWidget(show=False, title="CNN Filters & Activations")
+            # Start with small size, will resize after content is rendered
+            self.win.resize(400, 200)
             self.win.setWindowTitle('CNN Filters & Activations')
-            self.win.move(50, 550)  # Position below observation viewer
+
+            # Set window flags before showing
+            try:
+                from pyqtgraph.Qt import QtCore
+                self.win.setWindowFlags(self.win.windowFlags() | QtCore.Qt.WindowType.WindowStaysOnTopHint)
+            except Exception:
+                pass
+
+            # Position window below the reward plot
+            # Reward plot is at (750, 50) and is 400px tall
+            self.win.move(750, 500)
 
             # Remove all spacing and margins for tight layout
             self.win.ci.layout.setSpacing(0)
@@ -533,6 +564,8 @@ class CNNFilterActivationViewer:
             # Create image items for each layer (filters + activations)
             self.filter_items = []
             self.activation_items = []
+            self.filter_views = []
+            self.activation_views = []
 
             for idx, info in enumerate(self.conv_info):
                 # Add row for this layer
@@ -545,9 +578,11 @@ class CNNFilterActivationViewer:
                 filter_view.setContentsMargins(0, 0, 0, 0)
                 filter_view.setMenuEnabled(False)
                 filter_view.setMouseEnabled(x=False, y=False)
+                filter_view.enableAutoRange(enable=False)
                 filter_item = pg.ImageItem()
                 filter_view.addItem(filter_item)
                 self.filter_items.append(filter_item)
+                self.filter_views.append(filter_view)
 
                 # Activations column
                 act_view = self.win.addViewBox()
@@ -556,18 +591,25 @@ class CNNFilterActivationViewer:
                 act_view.setContentsMargins(0, 0, 0, 0)
                 act_view.setMenuEnabled(False)
                 act_view.setMouseEnabled(x=False, y=False)
+                act_view.enableAutoRange(enable=False)
                 act_item = pg.ImageItem()
                 act_view.addItem(act_item)
                 self.activation_items.append(act_item)
+                self.activation_views.append(act_view)
 
                 # Move to next row
                 self.win.nextRow()
 
             self.is_open = True
             self.use_pyqtgraph = True
+            self._window_sized = False
 
             # Render filters once (they don't change)
             self._render_filters()
+
+            # Show window after all setup is complete
+            self.win.show()
+            self.win.raise_()
 
         except ImportError:
             # Fallback to matplotlib
@@ -585,6 +627,15 @@ class CNNFilterActivationViewer:
 
             self.fig.suptitle('CNN Filters & Activations', fontsize=14, fontweight='bold')
 
+            # Position window below the reward plot
+            try:
+                manager = self.plt.get_current_fig_manager()
+                if hasattr(manager, 'window'):
+                    # Try to set position (works with TkAgg backend)
+                    manager.window.wm_geometry("+750+500")
+            except Exception:
+                pass  # If positioning fails, continue anyway
+
             for idx, info in enumerate(self.conv_info):
                 self.axes[idx, 0].set_title(f"Layer {idx} Filters", fontsize=10)
                 self.axes[idx, 1].set_title(f"Layer {idx} Activations", fontsize=10)
@@ -594,7 +645,8 @@ class CNNFilterActivationViewer:
             self.is_open = True
             self.use_pyqtgraph = False
 
-            self.plt.tight_layout()
+            # Tight layout with minimal spacing
+            self.plt.subplots_adjust(left=0.02, right=0.98, top=0.95, bottom=0.02, wspace=0.05, hspace=0.1)
             self.plt.show(block=False)
             self.fig.canvas.draw()
             self.fig.canvas.flush_events()
@@ -625,6 +677,9 @@ class CNNFilterActivationViewer:
             # Create a grid visualization of filters
             filter_grid = self._create_filter_grid(weights)
 
+            # Store filter grid dimensions for window sizing
+            info['filter_grid_shape'] = filter_grid.shape  # (H, W)
+
             # Display based on backend
             if self.use_pyqtgraph:
                 # Normalize to 0-255 for display
@@ -634,6 +689,10 @@ class CNNFilterActivationViewer:
                 else:
                     filter_grid_norm = self.np.zeros_like(filter_grid, dtype=self.np.uint8)
                 self.filter_items[idx].setImage(filter_grid_norm.T, levels=(0, 255))
+
+                # Set view range to exactly match image dimensions
+                h, w = filter_grid.shape
+                self.filter_views[idx].setRange(xRange=(0, w), yRange=(0, h), padding=0)
             else:
                 self.axes[idx, 0].clear()
                 self.axes[idx, 0].imshow(filter_grid, cmap='gray')
@@ -715,10 +774,10 @@ class CNNFilterActivationViewer:
         grid_cols = int(math.ceil(math.sqrt(n_channels)))
         grid_rows = int(math.ceil(n_channels / grid_cols))
 
-        # Add padding between maps
-        padding = 2
-        grid_h = grid_rows * (H + padding) - padding
-        grid_w = grid_cols * (W + padding) - padding
+        # No padding for tight layout
+        padding = 0
+        grid_h = grid_rows * H + (grid_rows - 1) * padding
+        grid_w = grid_cols * W + (grid_cols - 1) * padding
 
         grid = self.np.zeros((grid_h, grid_w), dtype=self.np.float32)
 
@@ -765,6 +824,9 @@ class CNNFilterActivationViewer:
                 # Create activation grid
                 act_grid = self._create_activation_grid(activation)
 
+                # Store activation grid dimensions for window sizing
+                info['activation_grid_shape'] = act_grid.shape  # (H, W)
+
                 # Display based on backend
                 if self.use_pyqtgraph:
                     # Normalize to 0-255 for display
@@ -774,14 +836,23 @@ class CNNFilterActivationViewer:
                     else:
                         act_grid_norm = self.np.zeros_like(act_grid, dtype=self.np.uint8)
                     self.activation_items[idx].setImage(act_grid_norm.T, levels=(0, 255))
+
+                    # Set view range to exactly match image dimensions
+                    h, w = act_grid.shape
+                    self.activation_views[idx].setRange(xRange=(0, w), yRange=(0, h), padding=0)
                 else:
                     self.axes[idx, 1].clear()
                     self.axes[idx, 1].imshow(act_grid, cmap='viridis')
                     self.axes[idx, 1].set_title(f"Layer {idx} Activations", fontsize=9)
                     self.axes[idx, 1].axis('off')
 
+            # Auto-size window on first update (after we have both filters and activations)
+            if self.use_pyqtgraph and not self._window_sized:
+                self._autosize_window()
+                self._window_sized = True
+
             if not self.use_pyqtgraph:
-                self.plt.tight_layout()
+                # Keep tight layout
                 self.fig.canvas.draw()
                 self.fig.canvas.flush_events()
 
@@ -789,6 +860,38 @@ class CNNFilterActivationViewer:
             import sys
             print(f"Error updating CNN filter/activation viewer: {e}", file=sys.stderr)
             self.is_open = False
+
+    def _autosize_window(self):
+        """Automatically resize window to fit content exactly."""
+        if not self.use_pyqtgraph:
+            return
+
+        # Calculate required dimensions
+        max_row_height = 0
+        total_height = 0
+        max_width = 0
+
+        for info in self.conv_info:
+            filter_shape = info.get('filter_grid_shape')
+            act_shape = info.get('activation_grid_shape')
+
+            if filter_shape and act_shape:
+                # Height is the max of filter and activation for this row
+                row_height = max(filter_shape[0], act_shape[0])
+                total_height += row_height
+
+                # Width is sum of filter and activation
+                row_width = filter_shape[1] + act_shape[1]
+                max_width = max(max_width, row_width)
+
+        if max_width > 0 and total_height > 0:
+            # Add small buffer for title bar (30px) and borders
+            window_width = int(max_width + 10)
+            window_height = int(total_height + 40)
+
+            # Resize window to exactly fit content
+            self.win.resize(window_width, window_height)
+            print(f"  Auto-sized window to {window_width}x{window_height} pixels")
 
     def close(self):
         """Close the viewer and remove hooks."""
@@ -835,13 +938,21 @@ class PreprocessedObservationViewer:
             self.last_update_time = time.time()
             self.needs_update = False
 
-            # Create window
-            self.win = pg.GraphicsLayoutWidget(show=True, title="Preprocessed Observations")
+            # Create window (don't show yet)
+            self.win = pg.GraphicsLayoutWidget(show=False, title="Preprocessed Observations")
             self.win.resize(800, 600)
             self.win.setWindowTitle('Preprocessed Observations (Agent View)')
 
-            # Position window below the reward plot window to avoid overlap
-            self.win.move(1050, 500)  # x=1050 (right side), y=500 (below reward plot)
+            # Set window flags before showing
+            try:
+                from pyqtgraph.Qt import QtCore
+                self.win.setWindowFlags(self.win.windowFlags() | QtCore.Qt.WindowType.WindowStaysOnTopHint)
+            except Exception:
+                pass
+
+            # Position window to the right of the reward plot
+            # Reward plot is at (750, 50) and is 500px wide
+            self.win.move(1300, 50)
 
             # Create image display widget
             self.view = self.win.addViewBox()
@@ -865,6 +976,10 @@ class PreprocessedObservationViewer:
             self.last_obs = None
             self._window_sized = False  # Track if we've sized the window to match image
 
+            # Show window after all setup is complete
+            self.win.show()
+            self.win.raise_()
+
         except ImportError:
             # Fallback to matplotlib if pyqtgraph is not available
             import matplotlib.pyplot as plt
@@ -880,6 +995,16 @@ class PreprocessedObservationViewer:
             # Create figure with minimal padding
             self.fig, self.ax = self.plt.subplots(1, 1, figsize=(8, 6))
             self.fig.suptitle('Preprocessed Observations (Agent View)', fontsize=14, fontweight='bold')
+
+            # Position window to the right of the reward plot
+            try:
+                manager = self.plt.get_current_fig_manager()
+                if hasattr(manager, 'window'):
+                    # Try to set position (works with TkAgg backend)
+                    manager.window.wm_geometry("+1300+50")
+            except Exception:
+                pass  # If positioning fails, continue anyway
+
             # Remove all whitespace around the image
             self.fig.subplots_adjust(left=0, right=1, top=0.95, bottom=0, wspace=0, hspace=0)
 

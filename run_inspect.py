@@ -772,7 +772,7 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                 datatype=[
                     "str",    # done (merged terminated/truncated)
                     "number", # step
-                    "str",    # action (merged action/label/probs/greedy)
+                    "html",   # action (HTML table with labels/probs)
                     "number", # reward
                     "number", # cum_reward
                     "number", # mc_return
@@ -852,17 +852,18 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                 done_str = ""
 
             # Merge action/action_label/probs/greedy_match into "action" column
-            # Show ALL actions with ALL probabilities, mark executed ones with ►
+            # Create HTML table with action labels as headers and probs as values
             action_val = step_dict.get("action")
             action_label = step_dict.get("action_label")
             action_labels_all = step_dict.get("action_labels")  # All action labels
             probs = step_dict.get("probs")
             greedy_match = step_dict.get("greedy_match")
 
-            # Format action string showing all actions with their probabilities
+            # Format action as HTML table
             if isinstance(action_val, list) and isinstance(probs, list):
-                # MultiBinary case: show ALL buttons with probabilities, mark pressed ones with ►
-                parts = []
+                # MultiBinary case: table with all buttons
+                headers = []
+                values = []
                 for i, pressed in enumerate(action_val):
                     if i < len(probs):
                         prob_val = float(probs[i])
@@ -872,16 +873,22 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                         else:
                             label = f"{i}"
 
+                        headers.append(label)
                         # Mark pressed buttons with ► and add ⚡ for exploratory (prob < 0.5)
                         if pressed:
                             indicator = "⚡" if prob_val < 0.5 else ""
-                            parts.append(f"►{label} {prob_val:.2f}{indicator}")
+                            values.append(f"►{prob_val:.2f}{indicator}")
                         else:
-                            parts.append(f"{label} {prob_val:.2f}")
-                action_str = "  ".join(parts) if parts else "NOOP"
+                            values.append(f"{prob_val:.2f}")
+
+                # Build HTML table
+                header_row = "".join(f"<th style='padding:2px 6px; border:1px solid #ddd; font-size:0.85em;'>{h}</th>" for h in headers)
+                value_row = "".join(f"<td style='padding:2px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em;'>{v}</td>" for v in values)
+                action_str = f"<table style='border-collapse:collapse; font-size:0.9em; margin:0;'><tr>{header_row}</tr><tr>{value_row}</tr></table>"
             elif isinstance(probs, list) and isinstance(action_val, int):
-                # Discrete case: show ALL actions with probabilities, mark selected one with ►
-                parts = []
+                # Discrete case: table with all actions
+                headers = []
+                values = []
                 for i, prob_val in enumerate(probs):
                     # Get label for this action from the full labels list
                     if isinstance(action_labels_all, list) and i < len(action_labels_all):
@@ -889,13 +896,18 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                     else:
                         label = f"{i}"
 
+                    headers.append(label)
                     # Mark selected action with ► and add ⚡ if exploratory
                     if i == action_val:
                         indicator = " ⚡" if greedy_match is False else ""
-                        parts.append(f"►{label} {float(prob_val):.2f}{indicator}")
+                        values.append(f"►{float(prob_val):.2f}{indicator}")
                     else:
-                        parts.append(f"{label} {float(prob_val):.2f}")
-                action_str = "  ".join(parts)
+                        values.append(f"{float(prob_val):.2f}")
+
+                # Build HTML table
+                header_row = "".join(f"<th style='padding:2px 6px; border:1px solid #ddd; font-size:0.85em;'>{h}</th>" for h in headers)
+                value_row = "".join(f"<td style='padding:2px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em;'>{v}</td>" for v in values)
+                action_str = f"<table style='border-collapse:collapse; font-size:0.9em; margin:0;'><tr>{header_row}</tr><tr>{value_row}</tr></table>"
             else:
                 # Fallback: no probs available, just show action
                 if action_label is not None:
@@ -947,17 +959,18 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                 done_str = ""
 
             # Merge action/action_label/probs/greedy_match into "action" column
-            # Show ALL actions with ALL probabilities, mark executed ones with ►
+            # Create HTML table with action labels as headers and probs as values
             action_val = s["action"]
             action_label = s.get("action_label")
             action_labels_all = s.get("action_labels")  # All action labels
             probs = s.get("probs")
             greedy_match = s.get("greedy_match")
 
-            # Format action string showing all actions with their probabilities
+            # Format action as HTML table
             if isinstance(action_val, list) and isinstance(probs, list):
-                # MultiBinary case: show ALL buttons with probabilities, mark pressed ones with ►
-                parts = []
+                # MultiBinary case: table with all buttons
+                headers = []
+                values = []
                 for i, pressed in enumerate(action_val):
                     if i < len(probs):
                         prob_val = float(probs[i])
@@ -967,16 +980,22 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                         else:
                             label = f"{i}"
 
+                        headers.append(label)
                         # Mark pressed buttons with ► and add ⚡ for exploratory (prob < 0.5)
                         if pressed:
                             indicator = "⚡" if prob_val < 0.5 else ""
-                            parts.append(f"►{label} {prob_val:.2f}{indicator}")
+                            values.append(f"►{prob_val:.2f}{indicator}")
                         else:
-                            parts.append(f"{label} {prob_val:.2f}")
-                action_str = "  ".join(parts) if parts else "NOOP"
+                            values.append(f"{prob_val:.2f}")
+
+                # Build HTML table
+                header_row = "".join(f"<th style='padding:2px 6px; border:1px solid #ddd; font-size:0.85em;'>{h}</th>" for h in headers)
+                value_row = "".join(f"<td style='padding:2px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em;'>{v}</td>" for v in values)
+                action_str = f"<table style='border-collapse:collapse; font-size:0.9em; margin:0;'><tr>{header_row}</tr><tr>{value_row}</tr></table>"
             elif isinstance(probs, list) and isinstance(action_val, int):
-                # Discrete case: show ALL actions with probabilities, mark selected one with ►
-                parts = []
+                # Discrete case: table with all actions
+                headers = []
+                values = []
                 for i, prob_val in enumerate(probs):
                     # Get label for this action from the full labels list
                     if isinstance(action_labels_all, list) and i < len(action_labels_all):
@@ -984,13 +1003,18 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                     else:
                         label = f"{i}"
 
+                    headers.append(label)
                     # Mark selected action with ► and add ⚡ if exploratory
                     if i == action_val:
                         indicator = " ⚡" if greedy_match is False else ""
-                        parts.append(f"►{label} {float(prob_val):.2f}{indicator}")
+                        values.append(f"►{float(prob_val):.2f}{indicator}")
                     else:
-                        parts.append(f"{label} {float(prob_val):.2f}")
-                action_str = "  ".join(parts)
+                        values.append(f"{float(prob_val):.2f}")
+
+                # Build HTML table
+                header_row = "".join(f"<th style='padding:2px 6px; border:1px solid #ddd; font-size:0.85em;'>{h}</th>" for h in headers)
+                value_row = "".join(f"<td style='padding:2px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em;'>{v}</td>" for v in values)
+                action_str = f"<table style='border-collapse:collapse; font-size:0.9em; margin:0;'><tr>{header_row}</tr><tr>{value_row}</tr></table>"
             else:
                 # Fallback: no probs available, just show action
                 if action_label is not None:

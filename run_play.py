@@ -719,6 +719,20 @@ class CNNFilterActivationDetailViewer:
 
         self.win.resize(int(window_width), int(window_height) + 30)
 
+    def update_filter(self, layer_idx, filter_idx, filter_data, activation_data=None):
+        """Update the viewer with a new filter/activation pair."""
+        if not self.is_open:
+            return
+
+        self.layer_idx = layer_idx
+        self.filter_idx = filter_idx
+
+        # Update window title
+        self.win.setWindowTitle(f"Layer {layer_idx} Filter {filter_idx}")
+
+        # Re-render with new data
+        self._render(filter_data, activation_data)
+
     def update_activation(self, activation_data):
         """Update the activation display with new data."""
         if not self.is_open or self.act_item is None or activation_data is None:
@@ -795,8 +809,8 @@ class CNNFilterActivationViewer:
         if not self.conv_layers:
             raise ValueError("No Conv2d layers found in policy model")
 
-        # Track detail viewers
-        self.detail_viewers = []
+        # Track single detail viewer (reused for all clicks)
+        self.detail_viewer = None
 
         # Register forward hooks to capture activations
         self.activation_handles = []
@@ -868,9 +882,11 @@ class CNNFilterActivationViewer:
                 filter_view.setMouseEnabled(x=False, y=False)
                 filter_view.enableAutoRange(enable=False)
                 filter_item = pg.ImageItem()
-                filter_item.setMouseEnabled(True)
-                filter_item.mouseClickEvent = self._make_filter_click_handler(idx)
                 filter_view.addItem(filter_item)
+
+                # Connect click handler to the scene
+                filter_view.scene().sigMouseClicked.connect(self._make_filter_scene_click_handler(idx, filter_view))
+
                 self.filter_items.append(filter_item)
                 self.filter_views.append(filter_view)
 
@@ -883,9 +899,11 @@ class CNNFilterActivationViewer:
                 act_view.setMouseEnabled(x=False, y=False)
                 act_view.enableAutoRange(enable=False)
                 act_item = pg.ImageItem()
-                act_item.setMouseEnabled(True)
-                act_item.mouseClickEvent = self._make_activation_click_handler(idx)
                 act_view.addItem(act_item)
+
+                # Connect click handler to the scene
+                act_view.scene().sigMouseClicked.connect(self._make_activation_scene_click_handler(idx, act_view))
+
                 self.activation_items.append(act_item)
                 self.activation_views.append(act_view)
 
@@ -960,26 +978,32 @@ class CNNFilterActivationViewer:
             self.needs_update = True
         return hook
 
-    def _make_filter_click_handler(self, layer_idx):
-        """Create a click handler for filter images."""
+    def _make_filter_scene_click_handler(self, layer_idx, view_box):
+        """Create a scene click handler for filter images."""
         def handler(event):
-            if not event.button() == 1:  # Left click only
-                return
-            pos = event.pos()
-            filter_idx = self._detect_filter_from_click(layer_idx, pos.x(), pos.y())
-            if filter_idx is not None:
-                self._open_detail_viewer(layer_idx, filter_idx)
+            # Check if click is on this specific ViewBox
+            scene_pos = event.scenePos()
+            if view_box.sceneBoundingRect().contains(scene_pos):
+                # Map scene coordinates to view coordinates
+                view_pos = view_box.mapSceneToView(scene_pos)
+                filter_idx = self._detect_filter_from_click(layer_idx, view_pos.x(), view_pos.y())
+                if filter_idx is not None:
+                    self._open_detail_viewer(layer_idx, filter_idx)
+                    event.accept()
         return handler
 
-    def _make_activation_click_handler(self, layer_idx):
-        """Create a click handler for activation images."""
+    def _make_activation_scene_click_handler(self, layer_idx, view_box):
+        """Create a scene click handler for activation images."""
         def handler(event):
-            if not event.button() == 1:  # Left click only
-                return
-            pos = event.pos()
-            filter_idx = self._detect_activation_from_click(layer_idx, pos.x(), pos.y())
-            if filter_idx is not None:
-                self._open_detail_viewer(layer_idx, filter_idx)
+            # Check if click is on this specific ViewBox
+            scene_pos = event.scenePos()
+            if view_box.sceneBoundingRect().contains(scene_pos):
+                # Map scene coordinates to view coordinates
+                view_pos = view_box.mapSceneToView(scene_pos)
+                filter_idx = self._detect_activation_from_click(layer_idx, view_pos.x(), view_pos.y())
+                if filter_idx is not None:
+                    self._open_detail_viewer(layer_idx, filter_idx)
+                    event.accept()
         return handler
 
     def _detect_filter_from_click(self, layer_idx, x, y):
@@ -1096,7 +1120,7 @@ class CNNFilterActivationViewer:
         return act_idx
 
     def _open_detail_viewer(self, layer_idx, filter_idx):
-        """Open a detail viewer for the specified filter/activation pair."""
+        """Open or update the detail viewer for the specified filter/activation pair."""
         info = self.conv_info[layer_idx]
 
         # Get filter data
@@ -1125,24 +1149,23 @@ class CNNFilterActivationViewer:
             if filter_idx < activation.shape[0]:
                 activation_2d = activation[filter_idx].cpu().numpy()
 
-        # Clean up closed detail viewers
-        self.detail_viewers = [v for v in self.detail_viewers if v.is_open]
-
-        # Create and track detail viewer
+        # Create or update the detail viewer
         try:
-            detail_viewer = CNNFilterActivationDetailViewer(
-                layer_idx, filter_idx, filter_2d, activation_2d
-            )
-            self.detail_viewers.append(detail_viewer)
-
-            # Position window with cascade offset
-            offset = len(self.detail_viewers) * 30
-            detail_viewer.win.move(800 + offset, 100 + offset)
-
-            print(f"Opened detail viewer: Layer {layer_idx} Filter {filter_idx}")
+            if self.detail_viewer is None or not self.detail_viewer.is_open:
+                # Create new viewer on first click or if closed
+                self.detail_viewer = CNNFilterActivationDetailViewer(
+                    layer_idx, filter_idx, filter_2d, activation_2d
+                )
+                self.detail_viewer.win.move(800, 100)
+                print(f"Opened detail viewer: Layer {layer_idx} Filter {filter_idx}")
+            else:
+                # Update existing viewer with new filter/activation
+                self.detail_viewer.update_filter(layer_idx, filter_idx, filter_2d, activation_2d)
+                self.detail_viewer.win.raise_()  # Bring to front
+                print(f"Updated detail viewer: Layer {layer_idx} Filter {filter_idx}")
         except Exception as e:
             import sys
-            print(f"Error opening detail viewer: {e}", file=sys.stderr)
+            print(f"Error with detail viewer: {e}", file=sys.stderr)
 
     def _render_filters(self):
         """Render filter kernels for all Conv2d layers."""
@@ -1388,19 +1411,18 @@ class CNNFilterActivationViewer:
                 self.fig.canvas.draw()
                 self.fig.canvas.flush_events()
 
-            # Update detail viewers with new activation data
-            for viewer in self.detail_viewers:
-                if viewer.is_open:
-                    # Get activation for this layer and filter
-                    info = self.conv_info[viewer.layer_idx]
-                    activation = info.get('activation')
-                    if activation is not None:
-                        # activation shape: (batch, channels, H, W) or (channels, H, W)
-                        if activation.dim() == 4:
-                            activation = activation[0]  # Take first batch
-                        if viewer.filter_idx < activation.shape[0]:
-                            activation_2d = activation[viewer.filter_idx].cpu().numpy()
-                            viewer.update_activation(activation_2d)
+            # Update detail viewer with new activation data
+            if self.detail_viewer is not None and self.detail_viewer.is_open:
+                # Get activation for the currently displayed layer and filter
+                info = self.conv_info[self.detail_viewer.layer_idx]
+                activation = info.get('activation')
+                if activation is not None:
+                    # activation shape: (batch, channels, H, W) or (channels, H, W)
+                    if activation.dim() == 4:
+                        activation = activation[0]  # Take first batch
+                    if self.detail_viewer.filter_idx < activation.shape[0]:
+                        activation_2d = activation[self.detail_viewer.filter_idx].cpu().numpy()
+                        self.detail_viewer.update_activation(activation_2d)
 
         except Exception as e:
             import sys
@@ -1446,10 +1468,10 @@ class CNNFilterActivationViewer:
             handle.remove()
         self.activation_handles.clear()
 
-        # Close all detail viewers
-        for viewer in self.detail_viewers:
-            viewer.close()
-        self.detail_viewers.clear()
+        # Close detail viewer if open
+        if self.detail_viewer is not None:
+            self.detail_viewer.close()
+            self.detail_viewer = None
 
         if self.is_open:
             # Flush any pending updates

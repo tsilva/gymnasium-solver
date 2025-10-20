@@ -42,6 +42,65 @@ server = Server("gymnasium-solver")
 # Helper Functions
 # ============================================================================
 
+def _parse_stopping_reason_from_logs(run_dir: Path) -> Dict[str, Any]:
+    """Extract early stopping reason from run logs.
+
+    Returns:
+        Dict with 'reason' (str) and 'message' (str or None)
+    """
+    import re
+
+    log_file = run_dir / "run.log"
+    if not log_file.exists():
+        return {"reason": "unknown", "message": None}
+
+    # Search for early stopping patterns in reverse (most recent first)
+    try:
+        with open(log_file) as f:
+            lines = f.readlines()
+
+        # Search from end of file backwards for efficiency
+        for line in reversed(lines):
+            # Early stopping due to threshold
+            if "Early stopping!" in line:
+                # Extract the full reason: "Early stopping! 'metric': value >= threshold."
+                match = re.search(r"Early stopping! (.+)$", line)
+                if match:
+                    return {
+                        "reason": "early_stop_threshold",
+                        "message": match.group(1).strip()
+                    }
+
+            # Max epochs reached
+            if "Max epochs reached" in line or "max_epochs" in line.lower():
+                return {
+                    "reason": "max_epochs_reached",
+                    "message": "Training completed max epochs"
+                }
+
+            # Interrupted
+            if "KeyboardInterrupt" in line or "SIGTERM" in line:
+                return {
+                    "reason": "interrupted",
+                    "message": "Training interrupted by user or system"
+                }
+
+            # Error/exception
+            if "Error" in line or "Exception" in line or "Traceback" in line:
+                return {
+                    "reason": "error",
+                    "message": "Training stopped due to error"
+                }
+    except Exception:
+        pass
+
+    # Default: completed normally (reached max_env_steps)
+    return {
+        "reason": "completed_normally",
+        "message": "Training completed all configured steps"
+    }
+
+
 def fuzzy_match_metrics(
     requested_metrics: List[str],
     available_metrics: List[str],
@@ -1062,11 +1121,23 @@ async def get_run_info(run_id: str) -> Dict[str, Any]:
             rows = list(reader)
             if rows:
                 last_row = rows[-1]
-                # Include key metrics
-                for key in ["train/roll/ep_rew/mean", "val/roll/ep_rew/mean",
-                           "train/roll/ep_len/mean", "total_timesteps"]:
-                    if key in last_row:
+
+                # For train metrics, use last row
+                for key in ["train/roll/ep_rew/mean", "train/roll/ep_len/mean",
+                           "train/roll/ep_rew/best", "total_timesteps"]:
+                    if key in last_row and last_row[key]:
                         metrics_summary[key] = last_row[key]
+
+                # For validation metrics, search backwards to find most recent non-empty
+                val_keys = ["val/roll/ep_rew/mean", "val/roll/ep_len/mean", "val/roll/ep_rew/best"]
+                for key in val_keys:
+                    for row in reversed(rows):
+                        if key in row and row[key]:
+                            metrics_summary[key] = row[key]
+                            break
+
+    # Parse stopping reason from logs
+    stopping_info = _parse_stopping_reason_from_logs(Path(run.run_dir))
 
     from dataclasses import asdict
     return {
@@ -1074,7 +1145,9 @@ async def get_run_info(run_id: str) -> Dict[str, Any]:
         "run_dir": str(run.run_dir),
         "config": asdict(config),
         "checkpoints": checkpoints,
-        "metrics_summary": metrics_summary
+        "metrics_summary": metrics_summary,
+        "stopping_reason": stopping_info["reason"],
+        "stopping_message": stopping_info["message"]
     }
 
 
@@ -1172,18 +1245,24 @@ async def start_training(
     env["VIBES_QUIET"] = "1"
 
     # Start process in new session to fully detach from terminal
-    # Redirect stdout/stderr to a temp log file (will be in run directory anyway)
-    # Using a file instead of DEVNULL to avoid potential multiprocessing issues
-    log_file = open("/tmp/mcp_training.log", "a")
-    process = subprocess.Popen(
-        cmd,
-        stdin=subprocess.DEVNULL,
-        stdout=log_file,
-        stderr=subprocess.STDOUT,  # Merge stderr into stdout
-        env=env,
-        text=True,
-        start_new_session=True  # Detach from controlling terminal
-    )
+    # Open log file for process output (will be closed when process exits)
+    log_file_path = f"/tmp/mcp_training_{config_id.replace(':', '_').replace('/', '_')}.log"
+    log_file = open(log_file_path, "a")
+
+    try:
+        process = subprocess.Popen(
+            cmd,
+            stdin=subprocess.DEVNULL,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,  # Merge stderr into stdout
+            env=env,
+            text=True,
+            start_new_session=True,  # Detach from controlling terminal
+            close_fds=True  # Close all file descriptors except stdin/stdout/stderr
+        )
+    finally:
+        # Close log file in parent process (child has its own copy)
+        log_file.close()
 
     # Wait a moment to check if it started successfully
     await asyncio.sleep(2)
@@ -1345,28 +1424,12 @@ async def wait_for_training_completion(
             try:
                 run_info = await get_run_info(run_id)
 
-                # Get last few log lines to check completion reason
-                logs_result = await get_run_logs(run_id, lines=50)
-                logs = logs_result.get("log", "")
-
-                # Parse completion reason from logs
-                completion_reason = "unknown"
-                if "Training completed" in logs:
-                    # Extract reason from log line like: "Training completed in X seconds. Reason: ..."
-                    import re
-                    match = re.search(r"Reason: (.+?)(?:\.|$)", logs)
-                    if match:
-                        completion_reason = match.group(1)
-                elif "KeyboardInterrupt" in logs or "SIGTERM" in logs:
-                    completion_reason = "interrupted"
-                elif "error" in logs.lower() or "exception" in logs.lower():
-                    completion_reason = "error"
-
                 return {
                     "success": True,
                     "run_id": run_id,
                     "status": "completed",
-                    "completion_reason": completion_reason,
+                    "completion_reason": run_info.get("stopping_reason", "unknown"),
+                    "stopping_message": run_info.get("stopping_message"),
                     "elapsed_time": time.time() - start_time,
                     "final_metrics": run_info.get("metrics_summary", {}),
                     "config_summary": run_info.get("config", {})
@@ -2637,7 +2700,7 @@ async def comprehensive_diagnostic(
     total_env_steps = float(last_row.get("train/cnt/total_env_steps", 0))
     max_env_steps = getattr(config, "max_env_steps", None)
     progress_pct = (total_env_steps / max_env_steps * 100) if max_env_steps else None
-    current_epoch = int(last_row.get("epoch", 0))
+    current_epoch = int(float(last_row.get("epoch", 0)))
 
     # === PERFORMANCE ===
     train_reward = float(last_row.get("train/roll/ep_rew/mean", 0))

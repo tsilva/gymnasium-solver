@@ -215,6 +215,80 @@ def print_terminal_ascii_alerts(
         else:
             frequency_repr = str(epoch_count)
         print(f"\n- `{alert._id}` triggered in `{frequency_repr}` epochs of training:")
-        print(f"  - message: {alert.message}") 
+        print(f"  - message: {alert.message}")
         print(f"  - tip: {alert.tip}")
     print(format_section_footer(width=width))
+
+
+def print_training_completion_status(
+    train_reward: Optional[float],
+    val_reward: Optional[float],
+    reward_threshold: Optional[float],
+    early_stop_reason: Optional[str] = None,
+    width: int = 66,
+) -> None:
+    """Print a clear training completion status box.
+
+    Args:
+        train_reward: Final training episode reward mean
+        val_reward: Final validation episode reward mean (if available)
+        reward_threshold: Threshold for environment to be considered "solved"
+        early_stop_reason: Early stopping message if applicable
+        width: Width of the status box
+    """
+    from utils.logging import ansi
+
+    # Determine which reward to use for checking threshold
+    check_reward = val_reward if val_reward is not None else train_reward
+
+    # Determine if solved
+    is_solved = False
+    if check_reward is not None and reward_threshold is not None:
+        is_solved = check_reward >= reward_threshold
+
+    # Build status message
+    if is_solved:
+        status_symbol = "✓"
+        status_text = "SOLVED"
+        status_color = "green"
+    else:
+        status_symbol = "✗"
+        status_text = "NOT SOLVED"
+        status_color = "red"
+
+    # Print header
+    print("\n" + "═" * width)
+    status_line = f"{status_symbol} {status_text}"
+    colored_status = ansi(status_line, status_color, "bold")
+    padding = (width - len(status_line)) // 2
+    print(f"{' ' * padding}{colored_status}")
+    print("─" * width)
+
+    # Print metrics
+    if train_reward is not None:
+        print(f"  Train Reward:    {train_reward:>8.2f}")
+
+    if val_reward is not None:
+        marker = " (checked)" if reward_threshold else ""
+        print(f"  Val Reward:      {val_reward:>8.2f}{marker}")
+
+    if reward_threshold is not None:
+        print(f"  Threshold:       {reward_threshold:>8.2f}")
+
+        # Show gap to threshold
+        if check_reward is not None:
+            gap = check_reward - reward_threshold
+            if is_solved:
+                gap_text = f"+{gap:.2f} above threshold"
+                gap_colored = ansi(gap_text, "green")
+            else:
+                gap_text = f"{gap:.2f} below threshold"
+                gap_colored = ansi(gap_text, "red")
+            print(f"  Gap:             {gap_colored}")
+
+    # Print stopping reason if available
+    if early_stop_reason:
+        print("─" * width)
+        print(f"  Reason: {early_stop_reason}")
+
+    print("═" * width)

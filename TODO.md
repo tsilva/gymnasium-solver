@@ -2,7 +2,6 @@
 
 # MODAL
 
-- ✅ FEAT: use MCP to control things (added run_play, run_inspect, run_publish tools)
 - BUG: cant seem to detach modal runs
 - BUG: runs executed through modal dont seem to have same wandb run id
 - BUG: clean exit run_play on ctrl+c
@@ -16,13 +15,11 @@
 # RUN_PLAY
 
 - Ensure random mode uses random policy instead of random sampling (init new model and just use that)
-- Add action activation heatmap to run_play.py
 - Add window layout snapshot button
 - BUG: run_play.py user input not working for Atari envs
 
 # NEXT
 
-- FEAT: show max filter activation locations in frame
 - BUG: why cant I resume run from exactly same perf location
 - BUG: cant train VizDoom-Basic-v0 when frame_stack is 1
 - FEAT: run_inspect.py add support for monitoring rollouts with different hyperparams

@@ -2190,7 +2190,45 @@ class CNNFilterActivationDetailViewer:
             self.act_view = act_view
             self.act_item = act_item
 
-            # Add click handler to activation view for RF exploration
+            # Selection state for activation pixel
+            self.selected_pos = None  # (act_y, act_x) or None
+            self.selection_marker = None  # Visual marker for selected pixel
+
+            # RF overlay view (only created if we have RF info and input)
+            self.rf_view = None
+            self.rf_obs_item = None
+            self.rf_box = None
+            self.rf_info = None
+            if activation_data is not None and parent_viewer is not None:
+                # Get RF info for this layer from conv_info
+                if (hasattr(parent_viewer, 'conv_info') and
+                    parent_viewer.conv_info and
+                    layer_idx < len(parent_viewer.conv_info) and
+                    'rf_info' in parent_viewer.conv_info[layer_idx]):
+                    self.rf_info = parent_viewer.conv_info[layer_idx]['rf_info']
+
+                    # Add RF view to the right
+                    rf_view = self.win.addViewBox()
+                    rf_view.setAspectLocked(True)
+                    rf_view.invertY(True)
+                    rf_view.setContentsMargins(0, 0, 0, 0)
+                    rf_view.setMenuEnabled(False)
+                    rf_view.setMouseEnabled(x=False, y=False)
+                    rf_view.enableAutoRange(enable=False)
+                    rf_obs_item = pg.ImageItem()
+                    rf_view.addItem(rf_obs_item)
+
+                    # Add RF box (initially hidden)
+                    rf_box = pg.ROI([0, 0], [1, 1], pen=pg.mkPen(color='cyan', width=3),
+                                   movable=False, resizable=False)
+                    rf_view.addItem(rf_box)
+                    rf_box.hide()
+
+                    self.rf_view = rf_view
+                    self.rf_obs_item = rf_obs_item
+                    self.rf_box = rf_box
+
+            # Add click handler to activation view for pixel selection
             if self.act_view is not None:
                 self.act_view.scene().sigMouseClicked.connect(self._on_activation_clicked)
 
@@ -2242,6 +2280,13 @@ class CNNFilterActivationDetailViewer:
             ah, aw = activation_data.shape
             act_rgb = self._apply_viridis_colormap(activation_data)
 
+            # Highlight selected pixel if any
+            if self.selected_pos is not None:
+                act_y, act_x = self.selected_pos
+                if 0 <= act_y < ah and 0 <= act_x < aw:
+                    # Use white to mark selection
+                    act_rgb[act_y, act_x] = [255, 255, 255]  # White
+
             # Transpose for PyQtGraph
             act_rgb_t = self.np.transpose(act_rgb, (1, 0, 2))
             self.act_item.setImage(act_rgb_t)
@@ -2250,7 +2295,79 @@ class CNNFilterActivationDetailViewer:
             # Add activation width to window
             window_width += ah * scale
 
+        # Render RF overlay if view exists and we have input
+        if self.rf_view is not None and self.parent_viewer and hasattr(self.parent_viewer, 'current_input'):
+            input_obs = self.parent_viewer.current_input
+            if input_obs is not None:
+                # Render input observation
+                obs_rgb = self._render_input_obs(input_obs)
+                if obs_rgb is not None:
+                    # Transpose for PyQtGraph
+                    if len(obs_rgb.shape) == 3:
+                        obs_rgb_t = self.np.transpose(obs_rgb, (1, 0, 2))
+                    else:
+                        obs_rgb_t = self.np.transpose(obs_rgb, (1, 0))
+                    self.rf_obs_item.setImage(obs_rgb_t)
+
+                    # Get input shape
+                    if len(input_obs.shape) == 3:
+                        input_h, input_w = input_obs.shape[1], input_obs.shape[2]
+                    else:
+                        input_h, input_w = input_obs.shape
+
+                    self.rf_view.setRange(xRange=(0, input_h), yRange=(0, input_w), padding=0)
+
+                    # Update RF box if pixel is selected
+                    if self.selected_pos is not None:
+                        act_y, act_x = self.selected_pos
+                        rf_box_coords = get_receptive_field_box(self.rf_info, act_y, act_x, (input_h, input_w))
+                        if rf_box_coords:
+                            x_min = rf_box_coords['x_min']
+                            y_min = rf_box_coords['y_min']
+                            width = rf_box_coords['x_max'] - rf_box_coords['x_min']
+                            height = rf_box_coords['y_max'] - rf_box_coords['y_min']
+                            self.rf_box.setPos([y_min, x_min])
+                            self.rf_box.setSize([height, width])
+                            self.rf_box.show()
+                    else:
+                        self.rf_box.hide()
+
+                    # Add RF view width to window - use fixed reasonable size
+                    # RF input is typically 84x84, much larger than filter/activation
+                    # Use a fixed scale that keeps it visible but not overwhelming
+                    rf_display_width = 150  # Fixed reasonable width
+                    window_width += rf_display_width
+
         self.win.resize(int(window_width), int(window_height) + 30)
+
+    def _render_input_obs(self, obs):
+        """Render input observation as RGB for display."""
+        # Handle different observation formats
+        if len(obs.shape) == 3:  # CHW image
+            c, h, w = obs.shape
+            if c == 1:  # Grayscale
+                obs_2d = obs[0]
+                obs_rgb = self.np.stack([obs_2d, obs_2d, obs_2d], axis=-1)
+            elif c == 3:  # RGB
+                obs_rgb = self.np.transpose(obs, (1, 2, 0))  # CHW -> HWC
+            elif c == 4:  # Frame stacking - take most recent frame
+                obs_2d = obs[-1]  # Most recent frame
+                obs_rgb = self.np.stack([obs_2d, obs_2d, obs_2d], axis=-1)
+            else:
+                return None
+        elif len(obs.shape) == 2:  # HW grayscale
+            obs_rgb = self.np.stack([obs, obs, obs], axis=-1)
+        else:
+            return None
+
+        # Normalize to 0-255 uint8
+        obs_min, obs_max = obs_rgb.min(), obs_rgb.max()
+        if obs_max > obs_min:
+            obs_rgb = ((obs_rgb - obs_min) / (obs_max - obs_min) * 255).astype(self.np.uint8)
+        else:
+            obs_rgb = self.np.zeros_like(obs_rgb, dtype=self.np.uint8)
+
+        return obs_rgb
 
     def _apply_diverging_colormap(self, data):
         """Apply diverging colormap to data (for filters).
@@ -2351,16 +2468,13 @@ class CNNFilterActivationDetailViewer:
         if not self.is_open or self.act_item is None or activation_data is None:
             return
 
-        # Apply viridis colormap to activation
-        act_rgb = self._apply_viridis_colormap(activation_data)
-
-        # Transpose for PyQtGraph
-        act_rgb_t = self.np.transpose(act_rgb, (1, 0, 2))
-        self.act_item.setImage(act_rgb_t)
+        # Store new activation data and re-render (preserves selection highlight and RF)
+        self.activation_data = activation_data
+        self._render(self.filter_data, activation_data)
 
     def _on_activation_clicked(self, event):
-        """Handle clicks on activation map to show corresponding receptive field."""
-        if not self.act_view or not self.parent_viewer:
+        """Handle clicks on activation map to toggle pixel selection."""
+        if not self.act_view:
             return
 
         # Check if click is on activation view
@@ -2371,10 +2485,14 @@ class CNNFilterActivationDetailViewer:
         # Map scene coordinates to view coordinates
         view_pos = self.act_view.mapSceneToView(scene_pos)
 
-        # Convert to activation map coordinates (swap x/y due to PyQtGraph transpose)
-        # PyQtGraph displays images transposed, so x in view is y in data
-        act_y = int(view_pos.x())
-        act_x = int(view_pos.y())
+        # Convert to activation map coordinates (accounting for PyQtGraph transpose)
+        # We transpose the image as (1, 0, 2): (H, W, C) -> (W, H, C)
+        # After transpose: act_rgb_t[i, j] = act_rgb[j, i]
+        # PyQtGraph displays act_rgb_t[i, j] at view position (i, j)
+        # So view position (view_x, view_y) shows act_rgb_t[view_x, view_y] = act_rgb[view_y, view_x]
+        # Therefore: view_x → data_x, view_y → data_y
+        act_x = int(view_pos.x())
+        act_y = int(view_pos.y())
 
         # Clamp to activation map bounds
         if self.activation_data is not None:
@@ -2382,15 +2500,16 @@ class CNNFilterActivationDetailViewer:
             act_y = max(0, min(act_y, h - 1))
             act_x = max(0, min(act_x, w - 1))
 
-        # Update RF overlay if it exists
-        if (self.parent_viewer.rf_overlay_viewer and
-            self.parent_viewer.rf_overlay_viewer.is_open and
-            self.parent_viewer.current_input is not None):
-            self.parent_viewer.rf_overlay_viewer.update_observation(
-                self.parent_viewer.current_input,
-                act_y=act_y,
-                act_x=act_x
-            )
+        # Toggle selection
+        if self.selected_pos == (act_y, act_x):
+            # Clicked same pixel - deselect
+            self.selected_pos = None
+        else:
+            # Select new pixel
+            self.selected_pos = (act_y, act_x)
+
+        # Re-render to update highlight and RF overlay
+        self._render(self.filter_data, self.activation_data)
 
     def close(self):
         """Close the detail viewer."""
@@ -2905,8 +3024,8 @@ class CNNFilterActivationViewer:
             # Auto-open or update maximal activation viewer (stays in sync with detail viewer)
             self._sync_maximal_activation_viewer(layer_idx, filter_idx)
 
-            # Auto-open or update receptive field overlay (stays in sync with detail viewer)
-            self._sync_rf_overlay_viewer(layer_idx, filter_idx)
+            # RF overlay is now integrated into detail viewer (click activation pixels to select)
+            # self._sync_rf_overlay_viewer(layer_idx, filter_idx)
 
         except Exception as e:
             import sys
@@ -3513,21 +3632,8 @@ class CNNFilterActivationViewer:
                 # Refresh without changing filter - just update images with latest top-K
                 self.maximal_activation_viewer.refresh()
 
-            # Update receptive field overlay with new observation
-            if self.rf_overlay_viewer is not None and self.rf_overlay_viewer.is_open:
-                if self.current_input is not None:
-                    # Get activation for currently displayed layer
-                    layer_idx = self.rf_overlay_viewer.layer_idx
-                    activation = self.conv_info[layer_idx].get('activation')
-                    if activation is not None:
-                        if activation.dim() == 4:
-                            activation = activation[0]
-                        # Show RF for center of activation map
-                        act_h, act_w = activation.shape[1], activation.shape[2]
-                        center_y, center_x = act_h // 2, act_w // 2
-                        self.rf_overlay_viewer.update_observation(
-                            self.current_input, act_y=center_y, act_x=center_x
-                        )
+            # RF overlay is now integrated into detail viewer - no separate window to update
+            # (detail viewer's _render() automatically updates RF when activation changes)
 
         except Exception as e:
             import sys

@@ -2,25 +2,32 @@
 
 # MODAL
 
+- FEAT: use MCP to control things
 - BUG: cant seem to detach modal runs
 - BUG: runs executed through modal dont seem to have same wandb run id
 - BUG: clean exit run_play on ctrl+c
 - BUG: remote runs get killed if I close terminal?
 
-# NEXT
+# SWEEPS
 
-- FEAT: make deterministic sampling vs stochastic a dropdown
-- BUG: cant train VizDoom-Basic-v0 when frame_stack is 1
-- FEAT: run_inspect.py add support for monitoring rollouts with different hyperparams
-- THINK: how to audit reward structure / mean, std, outliers, and histogram
 - FEAT: add sweep.py with --backend modal support
 - FEAT: sweep from run/checkpoint/
-- BUG: run_play.py user input not working for Atari envs
+
+# NEXT
+
+- FEAT: activation heatmap?
+- FEAT: run_play controls? eg: heatmap vs other
+- FEAT: single window workspace for run_play.py
+- FEAT: make deterministic sampling vs stochastic a dropdown
 - BUG: why cant I resume run from exactly same perf location
+- BUG: cant train VizDoom-Basic-v0 when frame_stack is 1
+
+- FEAT: run_inspect.py add support for monitoring rollouts with different hyperparams
+- THINK: how to audit reward structure / mean, std, outliers, and histogram
+- BUG: run_play.py user input not working for Atari envs
 - TEST: ensure evaluation is ran exactly same way as train (eg: alevecenv)
 - TODO: add env normalization support, make sure normalization is saved
 - TODO: add action number/ label before each frame stack image in inspect (allows easily seeing which action was performed when each frame was seen)
-- FEAT: CNN filter/activation inspectors
 - BUG: is eval not imposing timelimits?
 - TODO: remaining codebase TODOs (eg: lots of AI slop to refactor)
 
@@ -115,6 +122,7 @@ VizDoom-Deathmatch-v0
 
 ## WISHLIST
 
+- FEAT: dropout
 - FEAT: merge gymnasium recorder repo with this one
 - FEAT: batch norm support
 - FEAT: layer norm support

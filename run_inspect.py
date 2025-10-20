@@ -755,11 +755,9 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
             timer = TimerCls(1/30.0, active=False)  # default to 30 FPS, initially inactive
         # Table headers are reused for CSV export and for the current-step vertical view
         table_headers = [
-            "terminated",
-            "truncated",
+            "done",
             "step",
             "action",
-            "action_label",
             "probs",
             "greedy_match",
             "reward",
@@ -773,11 +771,9 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
             step_table = gr.Dataframe(
                 headers=table_headers,
                 datatype=[
-                    "bool",   # terminated
-                    "bool",   # truncated
+                    "str",    # done (merged terminated/truncated)
                     "number", # step
-                    "number", # action
-                    "str",    # action_label
+                    "str",    # action (merged action/action_label)
                     "str",    # probs (formatted string)
                     "bool",   # greedy_match
                     "number", # reward
@@ -787,7 +783,7 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                     "number", # gae_adv
                 ],
                 row_count=(0, "dynamic"),
-                col_count=(12, "fixed"),
+                col_count=(10, "fixed"),
                 label="",
                 interactive=False,
             )
@@ -820,11 +816,8 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                 base_str = str(v) if v is not None else ""
 
             # Apply highlighting based on metric name and value
-            if metric_name == "terminated" and v is True:
-                return f"🔴 {base_str}"
-            elif metric_name == "truncated" and v is True:
-                return f"🟡 {base_str}"
-            elif metric_name == "greedy_match" and v is False:
+            # Note: "done" column already has emojis embedded, no additional highlighting needed
+            if metric_name == "greedy_match" and v is False:
                 return f"🔵 {base_str}"
             elif metric_name == "reward":
                 if isinstance(v, (int, float)):
@@ -853,12 +846,35 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
         def _row_vals_from_step_dict(step_dict: Dict[str, Any] | None) -> List[Any]:
             if not isinstance(step_dict, dict):
                 return []
+
+            # Merge terminated/truncated into "done" column
+            terminated = step_dict.get("terminated", False)
+            truncated = step_dict.get("truncated", False)
+            if terminated and truncated:
+                done_str = "🔴🟡"
+            elif terminated:
+                done_str = "🔴"
+            elif truncated:
+                done_str = "🟡"
+            else:
+                done_str = ""
+
+            # Merge action/action_label into "action" column
+            action_val = step_dict.get("action")
+            action_label = step_dict.get("action_label")
+            if action_label is not None:
+                if isinstance(action_label, list):
+                    # MultiBinary case: show active labels
+                    action_str = ", ".join(action_label) if action_label else str(action_val)
+                else:
+                    action_str = f"{action_label} ({action_val})"
+            else:
+                action_str = str(action_val)
+
             return [
-                bool(step_dict.get("terminated")),
-                bool(step_dict.get("truncated")),
+                done_str,
                 int(step_dict.get("step", 0)),
-                step_dict.get("action"),
-                step_dict.get("action_label"),
+                action_str,
                 step_dict.get("probs"),
                 step_dict.get("greedy_match"),
                 step_dict.get("reward"),
@@ -888,12 +904,34 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
             )
 
         def _table_row_from_step(s: Dict[str, Any]) -> List[Any]:
+            # Merge terminated/truncated into "done" column
+            terminated = s.get("terminated", False)
+            truncated = s.get("truncated", False)
+            if terminated and truncated:
+                done_str = "🔴🟡"
+            elif terminated:
+                done_str = "🔴"
+            elif truncated:
+                done_str = "🟡"
+            else:
+                done_str = ""
+
+            # Merge action/action_label into "action" column
+            action_val = s["action"]
+            action_label = s.get("action_label")
+            if action_label is not None:
+                if isinstance(action_label, list):
+                    # MultiBinary case: show active labels
+                    action_str = ", ".join(action_label) if action_label else str(action_val)
+                else:
+                    action_str = f"{action_label} ({action_val})"
+            else:
+                action_str = str(action_val)
+
             return [
-                s.get("terminated", False),
-                s.get("truncated", False),
+                done_str,
                 s["step"],
-                s["action"],
-                s.get("action_label"),
+                action_str,
                 _format_probs(s.get("probs")),
                 s.get("greedy_match"),
                 _round3(s["reward"]),

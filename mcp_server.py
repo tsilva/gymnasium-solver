@@ -594,6 +594,109 @@ async def handle_list_tools() -> list[types.Tool]:
                 "required": ["run_id"],
             },
         ),
+        types.Tool(
+            name="run_play",
+            description="Play a trained policy or test an environment with random/user policy. Supports visualization options like CNN filters and preprocessing.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "run_id": {
+                        "type": "string",
+                        "description": "Run ID to play (use '@last' for most recent). Mutually exclusive with config_id."
+                    },
+                    "config_id": {
+                        "type": "string",
+                        "description": "Config ID in 'env:variant' format (e.g., 'CartPole-v1:ppo') for testing with random/user policy. Mutually exclusive with run_id."
+                    },
+                    "episodes": {
+                        "type": "integer",
+                        "description": "Number of episodes to play (default: 1)"
+                    },
+                    "deterministic": {
+                        "type": "boolean",
+                        "description": "Use deterministic actions (default: false)"
+                    },
+                    "headless": {
+                        "type": "boolean",
+                        "description": "Do not render the environment (default: true for API calls)"
+                    },
+                    "mode": {
+                        "type": "string",
+                        "description": "Action mode: 'trained', 'random', or 'user' (keyboard input)"
+                    },
+                    "seed": {
+                        "type": "string",
+                        "description": "Random seed for environment (int, 'train', 'val', 'test', or None)"
+                    },
+                    "env_kwargs": {
+                        "type": "object",
+                        "description": "Override env_kwargs fields (e.g., {'state': 'Level2-1'})"
+                    },
+                    "show_preprocessing": {
+                        "type": "boolean",
+                        "description": "Show preprocessed observations (default: false)"
+                    },
+                    "show_cnn_filters": {
+                        "type": "boolean",
+                        "description": "Show CNN filters and activations (default: false)"
+                    }
+                },
+            },
+        ),
+        types.Tool(
+            name="run_inspect",
+            description="Launch Gradio inspection UI for a training run. Runs in background as a web server.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "run_id": {
+                        "type": "string",
+                        "description": "Run ID to inspect (default: '@last')"
+                    },
+                    "port": {
+                        "type": "integer",
+                        "description": "Port for Gradio server (default: 7860)"
+                    },
+                    "host": {
+                        "type": "string",
+                        "description": "Host for Gradio server (default: 'localhost')"
+                    },
+                    "share": {
+                        "type": "boolean",
+                        "description": "Enable Gradio share link (default: false)"
+                    },
+                    "seed": {
+                        "type": "string",
+                        "description": "Random seed for environment (int, 'train', 'val', 'test', or None)"
+                    },
+                    "env_kwargs": {
+                        "type": "object",
+                        "description": "Override env_kwargs fields (e.g., {'state': 'Level2-1'})"
+                    }
+                },
+            },
+        ),
+        types.Tool(
+            name="run_publish",
+            description="Publish a training run to Hugging Face Hub",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "run_id": {
+                        "type": "string",
+                        "description": "Run ID to publish (default: '@last')"
+                    },
+                    "repo": {
+                        "type": "string",
+                        "description": "Target repo id (e.g., 'user/repo'). If omitted, will be inferred."
+                    },
+                    "private": {
+                        "type": "boolean",
+                        "description": "Create repo as private (default: false)"
+                    }
+                },
+            },
+        ),
     ]
 
 
@@ -724,6 +827,34 @@ async def handle_call_tool(
                 args["run_id"],
                 args.get("include_recent_metrics", True),
                 args.get("include_full_config", False)
+            )
+        elif name == "run_play":
+            result = await run_play(
+                args.get("run_id"),
+                args.get("config_id"),
+                args.get("episodes", 1),
+                args.get("deterministic", False),
+                args.get("headless", True),
+                args.get("mode"),
+                args.get("seed"),
+                args.get("env_kwargs"),
+                args.get("show_preprocessing", False),
+                args.get("show_cnn_filters", False)
+            )
+        elif name == "run_inspect":
+            result = await run_inspect(
+                args.get("run_id", "@last"),
+                args.get("port", 7860),
+                args.get("host", "localhost"),
+                args.get("share", False),
+                args.get("seed"),
+                args.get("env_kwargs")
+            )
+        elif name == "run_publish":
+            result = await run_publish(
+                args.get("run_id", "@last"),
+                args.get("repo"),
+                args.get("private", False)
             )
         else:
             raise ValueError(f"Unknown tool: {name}")
@@ -968,16 +1099,20 @@ async def start_training(
     # Set environment variables
     env = dict(os.environ)
     env["WANDB_MODE"] = wandb_mode
-    if quiet:
-        env["VIBES_QUIET"] = "1"
+    # Note: Intentionally NOT setting VIBES_QUIET to avoid potential issues with progress bars
+    # if quiet:
+    #     env["VIBES_QUIET"] = "1"
 
-    # Start process
+    # Start process in new session to fully detach from terminal
+    # Redirect all stdio to avoid blocking on pipes or interactive prompts
     process = subprocess.Popen(
         cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
         env=env,
-        text=True
+        text=True,
+        start_new_session=True  # Detach from controlling terminal
     )
 
     # Wait a moment to check if it started successfully
@@ -985,12 +1120,10 @@ async def start_training(
 
     if process.poll() is not None:
         # Process already exited
-        stdout, stderr = process.communicate()
         return {
             "success": False,
-            "error": "Training process exited immediately",
-            "stdout": stdout,
-            "stderr": stderr
+            "error": f"Training process exited immediately with code {process.returncode}",
+            "message": "Check the run logs for details"
         }
 
     # Track process
@@ -2439,6 +2572,210 @@ async def comprehensive_diagnostic(
             "system_fps": round(system_fps, 1)
         }
     }
+
+
+async def run_play(
+    run_id: Optional[str] = None,
+    config_id: Optional[str] = None,
+    episodes: int = 1,
+    deterministic: bool = False,
+    headless: bool = True,
+    mode: Optional[str] = None,
+    seed: Optional[str] = None,
+    env_kwargs: Optional[Dict[str, Any]] = None,
+    show_preprocessing: bool = False,
+    show_cnn_filters: bool = False
+) -> Dict[str, Any]:
+    """Play a trained policy or test environment with random/user policy."""
+
+    # Build command
+    cmd = ["python", "run_play.py"]
+
+    # Add run_id or config_id
+    if run_id and config_id:
+        return {"error": "Cannot specify both run_id and config_id"}
+    elif run_id:
+        cmd.extend(["--run-id", run_id])
+    elif config_id:
+        cmd.extend(["--config-id", config_id])
+    else:
+        return {"error": "Must specify either run_id or config_id"}
+
+    # Add options
+    if episodes != 1:
+        cmd.extend(["--episodes", str(episodes)])
+
+    if deterministic:
+        cmd.append("--deterministic")
+
+    if headless:
+        cmd.append("--headless")
+
+    if mode:
+        cmd.extend(["--mode", mode])
+
+    if seed:
+        cmd.extend(["--seed", str(seed)])
+
+    if show_preprocessing:
+        cmd.append("--show-preprocessing")
+
+    if show_cnn_filters:
+        cmd.append("--show-cnn-filters")
+
+    # Add env_kwargs
+    if env_kwargs:
+        for key, value in env_kwargs.items():
+            cmd.extend(["--env-kwargs", f"{key}={value}"])
+
+    # Run synchronously and capture output
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minute timeout
+        )
+
+        return {
+            "success": result.returncode == 0,
+            "returncode": result.returncode,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "command": " ".join(cmd)
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            "success": False,
+            "error": "Command timed out after 5 minutes",
+            "command": " ".join(cmd)
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "command": " ".join(cmd)
+        }
+
+
+async def run_inspect(
+    run_id: str = "@last",
+    port: int = 7860,
+    host: str = "localhost",
+    share: bool = False,
+    seed: Optional[str] = None,
+    env_kwargs: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Launch Gradio inspection UI in background."""
+
+    # Build command
+    cmd = ["python", "run_inspect.py"]
+
+    if run_id != "@last":
+        cmd.extend(["--run-id", run_id])
+
+    if port != 7860:
+        cmd.extend(["--port", str(port)])
+
+    if host != "localhost":
+        cmd.extend(["--host", host])
+
+    if share:
+        cmd.append("--share")
+
+    if seed:
+        cmd.extend(["--seed", str(seed)])
+
+    # Add env_kwargs
+    if env_kwargs:
+        for key, value in env_kwargs.items():
+            cmd.extend(["--env-kwargs", f"{key}={value}"])
+
+    # Start process in background
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+
+    # Wait a moment to check if it started successfully
+    await asyncio.sleep(2)
+
+    if process.poll() is not None:
+        # Process already exited
+        stdout, stderr = process.communicate()
+        return {
+            "success": False,
+            "error": "Gradio UI exited immediately",
+            "stdout": stdout,
+            "stderr": stderr,
+            "command": " ".join(cmd)
+        }
+
+    # Track process with a unique key (use port as identifier)
+    inspect_key = f"inspect_{port}"
+    _running_processes[inspect_key] = process
+
+    url = f"http://{host}:{port}"
+
+    return {
+        "success": True,
+        "run_id": run_id,
+        "pid": process.pid,
+        "url": url,
+        "message": f"Gradio UI started at {url}. Use stop_training with run_id='{inspect_key}' to stop.",
+        "command": " ".join(cmd)
+    }
+
+
+async def run_publish(
+    run_id: str = "@last",
+    repo: Optional[str] = None,
+    private: bool = False
+) -> Dict[str, Any]:
+    """Publish a training run to Hugging Face Hub."""
+
+    # Build command
+    cmd = ["python", "run_publish.py"]
+
+    if run_id != "@last":
+        cmd.extend(["--run-id", run_id])
+
+    if repo:
+        cmd.extend(["--repo", repo])
+
+    if private:
+        cmd.append("--private")
+
+    # Run synchronously and capture output
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=600  # 10 minute timeout for uploads
+        )
+
+        return {
+            "success": result.returncode == 0,
+            "returncode": result.returncode,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "command": " ".join(cmd)
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            "success": False,
+            "error": "Command timed out after 10 minutes",
+            "command": " ".join(cmd)
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "command": " ".join(cmd)
+        }
 
 
 # ============================================================================

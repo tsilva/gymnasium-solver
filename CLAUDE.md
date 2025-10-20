@@ -147,7 +147,9 @@ python scripts/brax_eval_policy.py
 
 ## MCP Tools (Programmatic Access)
 
-The codebase provides MCP (Model Context Protocol) tools for programmatic interaction with the training system. These tools are available through the Claude Code MCP server and provide an alternative to CLI commands:
+The codebase provides MCP (Model Context Protocol) tools for programmatic interaction with the training system. These tools are available through the Claude Code MCP server and provide an alternative to CLI commands.
+
+### Available Tools
 
 - **`mcp__gymnasium-solver__list_environments`**: List all available environment configurations with optional filtering
 - **`mcp__gymnasium-solver__list_variants`**: List algorithm variants for a specific environment
@@ -163,7 +165,80 @@ The codebase provides MCP (Model Context Protocol) tools for programmatic intera
 - **`mcp__gymnasium-solver__compare_runs`**: Compare key metrics across multiple runs
 - **`mcp__gymnasium-solver__get_best_run`**: Find the best performing run for an environment
 
-These tools are particularly useful for automated workflows, hyperparameter tuning agents, and programmatic training management.
+### Training with MCP Tools
+
+**Start a basic training run:**
+```python
+# Start training with default config
+mcp__gymnasium-solver__start_training(
+    config_id="CartPole-v1:ppo",
+    quiet=True  # Run in quiet mode (default)
+)
+```
+
+**Override configuration parameters:**
+```python
+# Start training with custom max_env_steps
+mcp__gymnasium-solver__start_training(
+    config_id="CartPole-v1:ppo",
+    max_env_steps=5000,
+    quiet=True
+)
+
+# Override multiple config fields
+mcp__gymnasium-solver__start_training(
+    config_id="CartPole-v1:ppo",
+    overrides={
+        "policy_lr": 0.001,
+        "batch_size": 64,
+        "n_envs": 4
+    },
+    quiet=True
+)
+```
+
+**Monitor and control training:**
+```python
+# Check if training is still running
+mcp__gymnasium-solver__get_training_status(run_id="abc123")
+
+# Get detailed run information
+mcp__gymnasium-solver__get_run_info(run_id="@last")
+
+# Stop a running training process
+mcp__gymnasium-solver__stop_training(run_id="abc123")
+```
+
+**Retrieve metrics and logs:**
+```python
+# Get metrics from a run
+mcp__gymnasium-solver__get_run_metrics(
+    run_id="@last",
+    metric_names=["train/roll/ep_rew/mean", "val/roll/ep_rew/mean"]
+)
+
+# Get logs for debugging
+mcp__gymnasium-solver__get_run_logs(run_id="@last", lines=100)
+```
+
+**List and compare runs:**
+```python
+# List recent runs
+mcp__gymnasium-solver__list_runs(env_filter="CartPole-v1", limit=10)
+
+# Compare multiple runs
+mcp__gymnasium-solver__compare_runs(
+    run_ids=["abc123", "def456", "ghi789"]
+)
+
+# Find best run for an environment
+mcp__gymnasium-solver__get_best_run(
+    env_id="CartPole-v1",
+    metric="val/roll/ep_rew/mean"
+)
+```
+
+These tools are particularly useful for automated workflows, hyperparameter tuning agents, and programmatic training management. They handle background process management automatically and provide structured output for easy parsing.
 
 ## Run Debugging and Analysis
 

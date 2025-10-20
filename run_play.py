@@ -102,6 +102,483 @@ def install_keyboard_shortcuts(win):
         print(f"Warning: Could not install keyboard shortcuts: {e}")
 
 
+class VisualizationToolbar:
+    """Interactive toolbar for toggling visualizations and changing color palettes."""
+
+    def __init__(self, config, policy_model=None, env=None, reward_plotter=None, obs_viewer=None, cnn_viewer=None):
+        """Initialize the visualization toolbar.
+
+        Args:
+            config: Configuration object with environment specs
+            policy_model: Policy model (for CNN viewer)
+            env: Environment instance
+            reward_plotter: Existing reward plotter instance (if already created)
+            obs_viewer: Existing observation viewer instance (if already created)
+            cnn_viewer: Existing CNN viewer instance (if already created)
+        """
+        try:
+            import pygame
+            self.pygame = pygame
+
+            pygame.init()
+
+            # Toolbar dimensions (more vertical, less horizontal)
+            self.width = 280
+            self.height = 380
+            self.screen = pygame.display.set_mode((self.width, self.height))
+            pygame.display.set_caption("Visualization Toolbar")
+
+            # Colors
+            self.bg_color = (30, 30, 35)
+            self.text_color = (220, 220, 220)
+            self.accent_color = (80, 160, 255)
+            self.active_color = (80, 200, 120)
+            self.inactive_color = (120, 120, 130)
+            self.button_bg = (50, 50, 55)
+            self.button_hover = (70, 70, 75)
+            self.button_active = (60, 140, 90)
+            self.button_border = (100, 100, 110)
+
+            # Fonts
+            self.title_font = pygame.font.Font(None, 28)
+            self.normal_font = pygame.font.Font(None, 22)
+            self.small_font = pygame.font.Font(None, 18)
+            self.icon_font = pygame.font.Font(None, 32)
+
+            # Button definitions (x, y, width, height, action, icon, label)
+            self.buttons = []
+            self.hovered_button = None
+            self.mouse_pos = (0, 0)
+
+            # Store references
+            self.config = config
+            self.policy_model = policy_model
+            self.env = env
+
+            # Active viewer instances (accept existing ones)
+            self.reward_plotter = reward_plotter
+            self.obs_viewer = obs_viewer
+            self.cnn_viewer = cnn_viewer
+
+            # Visualization states (initialize based on existing viewers)
+            self.states = {
+                'reward': reward_plotter is not None,
+                'observation': obs_viewer is not None,
+                'filters': cnn_viewer is not None
+            }
+
+            # Color palettes for CNN filters/activations
+            self.filter_palettes = ['RdBu', 'RdYlBu', 'Seismic', 'Coolwarm']
+            self.activation_palettes = ['Viridis', 'Plasma', 'Inferno', 'Magma', 'Cividis']
+            self.current_filter_palette = 0
+            self.current_activation_palette = 0
+
+            # Window is open
+            self.is_open = True
+
+            # Initial render
+            self._render()
+
+        except ImportError:
+            raise ImportError("pygame is required for visualization toolbar")
+
+    def _render(self):
+        """Render the toolbar UI."""
+        self.screen.fill(self.bg_color)
+
+        # Clear buttons list for redrawing
+        self.buttons = []
+        y_offset = 20
+
+        # Section: Viewers
+        section_title = self.small_font.render("Viewers:", True, self.accent_color)
+        self.screen.blit(section_title, (20, y_offset))
+        y_offset += 30
+
+        # Rewards button
+        btn_rect = self._draw_toggle_button(
+            x=20, y=y_offset,
+            label="Rewards",
+            is_active=self.states['reward'],
+            action='toggle_reward'
+        )
+        self.buttons.append(btn_rect)
+        y_offset += 55
+
+        # Observations button
+        btn_rect = self._draw_toggle_button(
+            x=20, y=y_offset,
+            label="Observations",
+            is_active=self.states['observation'],
+            action='toggle_observation'
+        )
+        self.buttons.append(btn_rect)
+        y_offset += 55
+
+        # Filters button
+        btn_rect = self._draw_toggle_button(
+            x=20, y=y_offset,
+            label="Filters",
+            is_active=self.states['filters'],
+            action='toggle_filters'
+        )
+        self.buttons.append(btn_rect)
+        y_offset += 65
+
+        # Section: Colormaps (only show if filters active)
+        if self.states['filters']:
+            section_title = self.small_font.render("Colormaps:", True, self.accent_color)
+            self.screen.blit(section_title, (20, y_offset))
+            y_offset += 30
+
+            # Filter colormap selector
+            filter_cmap = self.filter_palettes[self.current_filter_palette]
+            btn_left = self._draw_arrow_button(
+                x=20, y=y_offset,
+                direction="<",
+                action='cycle_filter_palette_prev'
+            )
+            self.buttons.append(btn_left)
+
+            label_text = self.small_font.render(f"Filter: {filter_cmap}", True, self.text_color)
+            self.screen.blit(label_text, (70, y_offset + 8))
+
+            btn_right = self._draw_arrow_button(
+                x=220, y=y_offset,
+                direction=">",
+                action='cycle_filter_palette_next'
+            )
+            self.buttons.append(btn_right)
+            y_offset += 40
+
+            # Activation colormap selector
+            act_cmap = self.activation_palettes[self.current_activation_palette]
+            btn_left = self._draw_arrow_button(
+                x=20, y=y_offset,
+                direction="<",
+                action='cycle_activation_palette_prev'
+            )
+            self.buttons.append(btn_left)
+
+            label_text = self.small_font.render(f"Activation: {act_cmap}", True, self.text_color)
+            self.screen.blit(label_text, (70, y_offset + 8))
+
+            btn_right = self._draw_arrow_button(
+                x=220, y=y_offset,
+                direction=">",
+                action='cycle_activation_palette_next'
+            )
+            self.buttons.append(btn_right)
+
+        self.pygame.display.flip()
+
+    def _draw_toggle_button(self, x, y, label, is_active, action):
+        """Draw a toggle button and return its rect."""
+        width = 240
+        height = 45
+
+        # Check if mouse is hovering
+        mouse_x, mouse_y = self.mouse_pos
+        is_hovered = x <= mouse_x <= x + width and y <= mouse_y <= y + height
+
+        # Determine button color
+        if is_active:
+            bg_color = self.button_active
+            border_color = self.active_color
+        elif is_hovered:
+            bg_color = self.button_hover
+            border_color = self.button_border
+        else:
+            bg_color = self.button_bg
+            border_color = self.button_border
+
+        # Draw button background
+        self.pygame.draw.rect(self.screen, bg_color, (x, y, width, height), border_radius=6)
+        # Draw border
+        self.pygame.draw.rect(self.screen, border_color, (x, y, width, height), width=2, border_radius=6)
+
+        # Draw label
+        label_surf = self.normal_font.render(label, True, self.text_color)
+        self.screen.blit(label_surf, (x + 15, y + 12))
+
+        # Draw status indicator
+        status_text = "ON" if is_active else "OFF"
+        status_color = self.active_color if is_active else self.inactive_color
+        status_surf = self.small_font.render(status_text, True, status_color)
+        self.screen.blit(status_surf, (x + 180, y + 14))
+
+        return {'rect': self.pygame.Rect(x, y, width, height), 'action': action}
+
+    def _draw_arrow_button(self, x, y, direction, action):
+        """Draw an arrow button for cycling options."""
+        width = 40
+        height = 30
+
+        # Check if mouse is hovering
+        mouse_x, mouse_y = self.mouse_pos
+        is_hovered = x <= mouse_x <= x + width and y <= mouse_y <= y + height
+
+        # Determine button color
+        bg_color = self.button_hover if is_hovered else self.button_bg
+        border_color = self.accent_color if is_hovered else self.button_border
+
+        # Draw button
+        self.pygame.draw.rect(self.screen, bg_color, (x, y, width, height), border_radius=4)
+        self.pygame.draw.rect(self.screen, border_color, (x, y, width, height), width=2, border_radius=4)
+
+        # Draw arrow
+        arrow_surf = self.normal_font.render(direction, True, self.text_color)
+        arrow_rect = arrow_surf.get_rect(center=(x + width // 2, y + height // 2))
+        self.screen.blit(arrow_surf, arrow_rect)
+
+        return {'rect': self.pygame.Rect(x, y, width, height), 'action': action}
+
+    def handle_events(self):
+        """Process toolbar events and return active viewer instances."""
+        if not self.is_open:
+            return None, None, None
+
+        # Update mouse position
+        self.mouse_pos = self.pygame.mouse.get_pos()
+
+        # Process all pygame events
+        for event in self.pygame.event.get():
+            if event.type == self.pygame.QUIT:
+                self.close()
+                return None, None, None
+            elif event.type == self.pygame.KEYDOWN:
+                if event.key == self.pygame.K_q:
+                    self.close()
+                    return None, None, None
+                elif event.key == self.pygame.K_r:
+                    self._toggle_reward()
+                elif event.key == self.pygame.K_o:
+                    self._toggle_observation()
+                elif event.key == self.pygame.K_f:
+                    self._toggle_filters()
+                elif event.key == self.pygame.K_LEFTBRACKET:
+                    self._cycle_filter_palette_prev()
+                elif event.key == self.pygame.K_RIGHTBRACKET:
+                    self._cycle_activation_palette_next()
+            elif event.type == self.pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # Left click
+                    self._handle_button_click(event.pos)
+
+        # Re-render on every call to keep window responsive
+        self._render()
+
+        return self.reward_plotter, self.obs_viewer, self.cnn_viewer
+
+    def _handle_button_click(self, pos):
+        """Handle mouse clicks on buttons."""
+        for button in self.buttons:
+            if button['rect'].collidepoint(pos):
+                action = button['action']
+
+                # Execute the appropriate action
+                if action == 'toggle_reward':
+                    self._toggle_reward()
+                elif action == 'toggle_observation':
+                    self._toggle_observation()
+                elif action == 'toggle_filters':
+                    self._toggle_filters()
+                elif action == 'cycle_filter_palette_prev':
+                    self._cycle_filter_palette_prev()
+                elif action == 'cycle_filter_palette_next':
+                    self._cycle_filter_palette_next()
+                elif action == 'cycle_activation_palette_prev':
+                    self._cycle_activation_palette_prev()
+                elif action == 'cycle_activation_palette_next':
+                    self._cycle_activation_palette_next()
+                break
+
+    def _toggle_reward(self):
+        """Toggle reward plotter."""
+        self.states['reward'] = not self.states['reward']
+
+        if self.states['reward']:
+            # Create reward plotter
+            try:
+                self.reward_plotter = RewardPlotter(update_interval=0.2, max_steps_shown=100)
+                _active_viewers['reward_plotter'] = self.reward_plotter
+                print("Reward plotter enabled")
+                # Restore focus to toolbar
+                self._restore_focus()
+            except Exception as e:
+                print(f"Failed to create reward plotter: {e}")
+                self.states['reward'] = False
+        else:
+            # Close reward plotter
+            if self.reward_plotter:
+                self.reward_plotter.close()
+                self.reward_plotter = None
+                _active_viewers['reward_plotter'] = None
+                print("Reward plotter disabled")
+
+    def _toggle_observation(self):
+        """Toggle observation viewer."""
+        self.states['observation'] = not self.states['observation']
+
+        if self.states['observation']:
+            # Create observation viewer
+            try:
+                self.obs_viewer = PreprocessedObservationViewer(update_interval=0.05)
+                _active_viewers['observation_viewer'] = self.obs_viewer
+                print("Observation viewer enabled")
+                # Restore focus to toolbar
+                self._restore_focus()
+            except Exception as e:
+                print(f"Failed to create observation viewer: {e}")
+                self.states['observation'] = False
+        else:
+            # Close observation viewer
+            if self.obs_viewer:
+                self.obs_viewer.close()
+                self.obs_viewer = None
+                _active_viewers['observation_viewer'] = None
+                print("Observation viewer disabled")
+
+    def _toggle_filters(self):
+        """Toggle CNN filter viewer."""
+        self.states['filters'] = not self.states['filters']
+
+        if self.states['filters']:
+            # Create CNN filter viewer
+            if self.policy_model is None:
+                print("Cannot enable filter viewer: no policy model loaded")
+                self.states['filters'] = False
+                return
+
+            try:
+                self.cnn_viewer = CNNFilterActivationViewer(self.policy_model, update_interval=0.1)
+                _active_viewers['cnn_filter_viewer'] = self.cnn_viewer
+                print("CNN filter viewer enabled")
+                # Restore focus to toolbar
+                self._restore_focus()
+            except Exception as e:
+                print(f"Failed to create CNN filter viewer: {e}")
+                self.states['filters'] = False
+                self.cnn_viewer = None
+        else:
+            # Close CNN filter viewer
+            if self.cnn_viewer is not None:
+                try:
+                    self.cnn_viewer.close()
+                except Exception as e:
+                    print(f"Warning: Error closing CNN filter viewer: {e}")
+                finally:
+                    self.cnn_viewer = None
+                    _active_viewers['cnn_filter_viewer'] = None
+                    print("CNN filter viewer disabled")
+
+    def _cycle_filter_palette_prev(self):
+        """Cycle to previous filter color palette."""
+        self.current_filter_palette = (self.current_filter_palette - 1) % len(self.filter_palettes)
+        palette_name = self.filter_palettes[self.current_filter_palette]
+        print(f"Filter colormap: {palette_name}")
+
+        # Apply to active CNN viewer
+        if self.cnn_viewer is not None and self.cnn_viewer.is_open:
+            try:
+                self.cnn_viewer.set_filter_colormap(palette_name)
+                print(f"  Applied {palette_name} to filter viewer")
+            except Exception as e:
+                print(f"  Error applying colormap: {e}")
+
+    def _cycle_filter_palette_next(self):
+        """Cycle to next filter color palette."""
+        self.current_filter_palette = (self.current_filter_palette + 1) % len(self.filter_palettes)
+        palette_name = self.filter_palettes[self.current_filter_palette]
+        print(f"Filter colormap: {palette_name}")
+
+        # Apply to active CNN viewer
+        if self.cnn_viewer is not None and self.cnn_viewer.is_open:
+            try:
+                self.cnn_viewer.set_filter_colormap(palette_name)
+                print(f"  Applied {palette_name} to filter viewer")
+            except Exception as e:
+                print(f"  Error applying colormap: {e}")
+
+    def _cycle_activation_palette_prev(self):
+        """Cycle to previous activation color palette."""
+        self.current_activation_palette = (self.current_activation_palette - 1) % len(self.activation_palettes)
+        palette_name = self.activation_palettes[self.current_activation_palette]
+        print(f"Activation colormap: {palette_name}")
+
+        # Apply to active CNN viewer
+        if self.cnn_viewer is not None and self.cnn_viewer.is_open:
+            try:
+                self.cnn_viewer.set_activation_colormap(palette_name)
+                print(f"  Applied {palette_name} to activation viewer")
+            except Exception as e:
+                print(f"  Error applying colormap: {e}")
+
+    def _cycle_activation_palette_next(self):
+        """Cycle to next activation color palette."""
+        self.current_activation_palette = (self.current_activation_palette + 1) % len(self.activation_palettes)
+        palette_name = self.activation_palettes[self.current_activation_palette]
+        print(f"Activation colormap: {palette_name}")
+
+        # Apply to active CNN viewer
+        if self.cnn_viewer is not None and self.cnn_viewer.is_open:
+            try:
+                self.cnn_viewer.set_activation_colormap(palette_name)
+                print(f"  Applied {palette_name} to activation viewer")
+            except Exception as e:
+                print(f"  Error applying colormap: {e}")
+
+    def _restore_focus(self):
+        """Restore focus to the toolbar window after creating viewers."""
+        try:
+            # Give the new window a moment to finish initializing
+            import time
+            time.sleep(0.05)
+
+            # Re-raise the toolbar window
+            import os
+            if os.name == 'posix':
+                # On macOS/Linux, use SDL window management
+                from pygame import display
+                display.get_wm_info()  # This can help trigger focus
+
+            # Force pygame window to front
+            self.pygame.event.pump()
+            self.pygame.display.flip()
+        except Exception as e:
+            # Focus restoration is best-effort, don't fail if it doesn't work
+            pass
+
+    def close(self):
+        """Close the toolbar and all active viewers."""
+        if not self.is_open:
+            return
+
+        self.is_open = False
+
+        # Close all active viewers
+        if self.reward_plotter:
+            try:
+                self.reward_plotter.close()
+            except Exception:
+                pass
+        if self.obs_viewer:
+            try:
+                self.obs_viewer.close()
+            except Exception:
+                pass
+        if self.cnn_viewer:
+            try:
+                self.cnn_viewer.close()
+            except Exception:
+                pass
+
+        # Quit pygame
+        try:
+            self.pygame.quit()
+        except Exception:
+            pass
+
+
 class RewardPlotter:
     """Real-time reward plotter for visualizing rewards during playback."""
 
@@ -585,7 +1062,7 @@ class RewardPlotter:
 class CNNFilterActivationDetailViewer:
     """Detail viewer for a single filter/activation pair."""
 
-    def __init__(self, layer_idx, filter_idx, filter_data, activation_data=None):
+    def __init__(self, layer_idx, filter_idx, filter_data, activation_data=None, parent_viewer=None):
         """Initialize detail viewer for a single filter/activation.
 
         Args:
@@ -593,6 +1070,7 @@ class CNNFilterActivationDetailViewer:
             filter_idx: Filter index within the layer
             filter_data: Filter kernel data (2D numpy array)
             activation_data: Activation map data (2D numpy array, optional)
+            parent_viewer: Parent CNNFilterActivationViewer instance for accessing colormap settings
         """
         try:
             import pyqtgraph as pg
@@ -602,6 +1080,11 @@ class CNNFilterActivationDetailViewer:
             self.np = np
             self.layer_idx = layer_idx
             self.filter_idx = filter_idx
+            self.parent_viewer = parent_viewer
+
+            # Store data for re-rendering
+            self.filter_data = filter_data
+            self.activation_data = activation_data
 
             # Set background to black
             pg.setConfigOption('background', 'k')
@@ -679,7 +1162,11 @@ class CNNFilterActivationDetailViewer:
 
     def _render(self, filter_data, activation_data):
         """Render filter and activation data."""
-        # Apply diverging colormap to filter (red-white-blue for negative-zero-positive)
+        # Store data for potential re-rendering
+        self.filter_data = filter_data
+        self.activation_data = activation_data
+
+        # Apply diverging colormap to filter
         fh, fw = filter_data.shape
         filter_rgb = self._apply_diverging_colormap(filter_data)
 
@@ -710,85 +1197,84 @@ class CNNFilterActivationDetailViewer:
         self.win.resize(int(window_width), int(window_height) + 30)
 
     def _apply_diverging_colormap(self, data):
-        """Apply red-white-blue diverging colormap to data (for filters).
+        """Apply diverging colormap to data (for filters).
 
-        Red = negative weights, White = zero, Blue = positive weights
+        Uses parent viewer's colormap if available, otherwise defaults to RdBu.
         """
-        # Normalize to [-1, 1] range centered at zero
+        # Use parent viewer's method if available
+        if self.parent_viewer is not None:
+            return self.parent_viewer._apply_diverging_colormap_to_array(data)
+
+        # Fallback: Default RdBu implementation
         abs_max = max(abs(data.min()), abs(data.max()))
         if abs_max > 0:
-            normalized = data / abs_max  # Range: [-1, 1]
+            normalized = data / abs_max
         else:
             normalized = self.np.zeros_like(data)
 
         h, w = data.shape
         rgb = self.np.zeros((h, w, 3), dtype=self.np.uint8)
 
-        # Vectorized implementation using numpy broadcasting
-        # Create masks for negative and positive values
         neg_mask = normalized < 0
         pos_mask = normalized >= 0
 
-        # Negative values: red to white
         intensity_neg = self.np.abs(normalized[neg_mask])
-        rgb[neg_mask, 0] = 255  # Red always full
+        rgb[neg_mask, 0] = 255
         rgb[neg_mask, 1] = (255 * (1 - intensity_neg)).astype(self.np.uint8)
         rgb[neg_mask, 2] = (255 * (1 - intensity_neg)).astype(self.np.uint8)
 
-        # Positive values: white to blue
         intensity_pos = normalized[pos_mask]
         rgb[pos_mask, 0] = (255 * (1 - intensity_pos)).astype(self.np.uint8)
         rgb[pos_mask, 1] = (255 * (1 - intensity_pos)).astype(self.np.uint8)
-        rgb[pos_mask, 2] = 255  # Blue always full
+        rgb[pos_mask, 2] = 255
 
         return rgb
 
     def _apply_viridis_colormap(self, data):
-        """Apply viridis colormap to data (for activations)."""
-        # Normalize to [0, 1]
+        """Apply sequential colormap to data (for activations).
+
+        Uses parent viewer's colormap if available, otherwise defaults to Viridis.
+        """
+        # Use parent viewer's method if available
+        if self.parent_viewer is not None:
+            return self.parent_viewer._apply_viridis_colormap_to_array(data)
+
+        # Fallback: Default Viridis implementation
         d_min, d_max = data.min(), data.max()
         if d_max > d_min:
             normalized = (data - d_min) / (d_max - d_min)
         else:
             normalized = self.np.zeros_like(data)
 
-        # Viridis colormap (approximate, sampled at key points)
         viridis_values = self.np.array([0.0, 0.13, 0.25, 0.38, 0.5, 0.63, 0.75, 0.88, 1.0])
         viridis_colors = self.np.array([
-            [68, 1, 84],
-            [72, 40, 120],
-            [62, 74, 137],
-            [49, 104, 142],
-            [38, 130, 142],
-            [31, 158, 137],
-            [53, 183, 121],
-            [110, 206, 88],
-            [253, 231, 37],
+            [68, 1, 84], [72, 40, 120], [62, 74, 137], [49, 104, 142],
+            [38, 130, 142], [31, 158, 137], [53, 183, 121], [110, 206, 88], [253, 231, 37]
         ], dtype=self.np.float32)
 
-        # Flatten normalized array for vectorized lookup
         flat_normalized = normalized.ravel()
-
-        # Find the indices of the color stops for each value
         indices = self.np.searchsorted(viridis_values, flat_normalized) - 1
         indices = self.np.clip(indices, 0, len(viridis_values) - 2)
 
-        # Get the two color stops for interpolation
         v0 = viridis_values[indices]
         v1 = viridis_values[indices + 1]
         c0 = viridis_colors[indices]
         c1 = viridis_colors[indices + 1]
 
-        # Compute interpolation factor
         t = self.np.zeros_like(flat_normalized)
         valid_mask = v1 > v0
         t[valid_mask] = (flat_normalized[valid_mask] - v0[valid_mask]) / (v1[valid_mask] - v0[valid_mask])
 
-        # Linear interpolation: c0 + t * (c1 - c0)
         rgb_flat = c0 + t[:, self.np.newaxis] * (c1 - c0)
         rgb = rgb_flat.reshape(data.shape[0], data.shape[1], 3).astype(self.np.uint8)
 
         return rgb
+
+    def refresh_colormaps(self):
+        """Re-render with current colormap settings from parent."""
+        if self.is_open and self.filter_data is not None:
+            print(f"  DetailViewer: Refreshing colormaps for Layer {self.layer_idx} Filter {self.filter_idx}")
+            self._render(self.filter_data, self.activation_data)
 
     def update_filter(self, layer_idx, filter_idx, filter_data, activation_data=None):
         """Update the viewer with a new filter/activation pair."""
@@ -850,6 +1336,10 @@ class CNNFilterActivationViewer:
         self.is_open = False  # Initialize early, before hooks
         self.use_pyqtgraph = False  # Initialize early
         self._window_sized = False  # Initialize early
+
+        # Colormap settings
+        self.filter_colormap = 'rdbu'  # Default diverging colormap for filters
+        self.activation_colormap = 'viridis'  # Default sequential colormap for activations
 
         # Extract Conv2d layers from the CNN
         if not hasattr(policy_model, 'cnn'):
@@ -1218,7 +1708,7 @@ class CNNFilterActivationViewer:
             if self.detail_viewer is None or not self.detail_viewer.is_open:
                 # Create new viewer on first click or if closed
                 self.detail_viewer = CNNFilterActivationDetailViewer(
-                    layer_idx, filter_idx, filter_2d, activation_2d
+                    layer_idx, filter_idx, filter_2d, activation_2d, parent_viewer=self
                 )
 
                 # Register in global viewers for F9 hotkey
@@ -1412,9 +1902,9 @@ class CNNFilterActivationViewer:
         return grid
 
     def _apply_diverging_colormap_to_array(self, data):
-        """Apply red-white-blue diverging colormap to data (for filters).
+        """Apply diverging colormap to data (for filters).
 
-        Red = negative weights, White = zero, Blue = positive weights
+        Uses self.filter_colormap to determine which colormap to apply.
         """
         # Normalize to [-1, 1] range centered at zero
         abs_max = max(abs(data.min()), abs(data.max()))
@@ -1426,26 +1916,51 @@ class CNNFilterActivationViewer:
         h, w = data.shape
         rgb = self.np.zeros((h, w, 3), dtype=self.np.uint8)
 
-        # Vectorized implementation using numpy broadcasting
-        neg_mask = normalized < 0
-        pos_mask = normalized >= 0
+        # Map normalized values from [-1, 1] to [0, 1] for colormap lookup
+        normalized_01 = (normalized + 1) / 2
 
-        # Negative values: red to white
-        intensity_neg = self.np.abs(normalized[neg_mask])
-        rgb[neg_mask, 0] = 255
-        rgb[neg_mask, 1] = (255 * (1 - intensity_neg)).astype(self.np.uint8)
-        rgb[neg_mask, 2] = (255 * (1 - intensity_neg)).astype(self.np.uint8)
-
-        # Positive values: white to blue
-        intensity_pos = normalized[pos_mask]
-        rgb[pos_mask, 0] = (255 * (1 - intensity_pos)).astype(self.np.uint8)
-        rgb[pos_mask, 1] = (255 * (1 - intensity_pos)).astype(self.np.uint8)
-        rgb[pos_mask, 2] = 255
+        # Select colormap
+        if self.filter_colormap == 'rdbu':
+            # Red-Blue diverging (red=negative, white=zero, blue=positive)
+            neg_mask = normalized < 0
+            pos_mask = normalized >= 0
+            intensity_neg = self.np.abs(normalized[neg_mask])
+            rgb[neg_mask, 0] = 255
+            rgb[neg_mask, 1] = (255 * (1 - intensity_neg)).astype(self.np.uint8)
+            rgb[neg_mask, 2] = (255 * (1 - intensity_neg)).astype(self.np.uint8)
+            intensity_pos = normalized[pos_mask]
+            rgb[pos_mask, 0] = (255 * (1 - intensity_pos)).astype(self.np.uint8)
+            rgb[pos_mask, 1] = (255 * (1 - intensity_pos)).astype(self.np.uint8)
+            rgb[pos_mask, 2] = 255
+        elif self.filter_colormap == 'rdylbu':
+            # Red-Yellow-Blue diverging
+            rgb = self._apply_sequential_colormap(normalized_01, 'rdylbu')
+        elif self.filter_colormap == 'seismic':
+            # Seismic colormap (blue-white-red)
+            rgb = self._apply_sequential_colormap(normalized_01, 'seismic')
+        elif self.filter_colormap == 'coolwarm':
+            # Coolwarm (blue-white-red)
+            rgb = self._apply_sequential_colormap(normalized_01, 'coolwarm')
+        else:
+            # Default to RdBu
+            neg_mask = normalized < 0
+            pos_mask = normalized >= 0
+            intensity_neg = self.np.abs(normalized[neg_mask])
+            rgb[neg_mask, 0] = 255
+            rgb[neg_mask, 1] = (255 * (1 - intensity_neg)).astype(self.np.uint8)
+            rgb[neg_mask, 2] = (255 * (1 - intensity_neg)).astype(self.np.uint8)
+            intensity_pos = normalized[pos_mask]
+            rgb[pos_mask, 0] = (255 * (1 - intensity_pos)).astype(self.np.uint8)
+            rgb[pos_mask, 1] = (255 * (1 - intensity_pos)).astype(self.np.uint8)
+            rgb[pos_mask, 2] = 255
 
         return rgb
 
     def _apply_viridis_colormap_to_array(self, data):
-        """Apply viridis colormap to data (for activations)."""
+        """Apply sequential colormap to data (for activations).
+
+        Uses self.activation_colormap to determine which colormap to apply.
+        """
         # Normalize to [0, 1]
         d_min, d_max = data.min(), data.max()
         if d_max > d_min:
@@ -1453,32 +1968,93 @@ class CNNFilterActivationViewer:
         else:
             normalized = self.np.zeros_like(data)
 
-        # Viridis colormap (approximate, sampled at key points)
-        viridis_values = self.np.array([0.0, 0.13, 0.25, 0.38, 0.5, 0.63, 0.75, 0.88, 1.0])
-        viridis_colors = self.np.array([
-            [68, 1, 84],
-            [72, 40, 120],
-            [62, 74, 137],
-            [49, 104, 142],
-            [38, 130, 142],
-            [31, 158, 137],
-            [53, 183, 121],
-            [110, 206, 88],
-            [253, 231, 37],
-        ], dtype=self.np.float32)
+        return self._apply_sequential_colormap(normalized, self.activation_colormap)
+
+    def _apply_sequential_colormap(self, normalized, colormap_name):
+        """Apply a sequential or diverging colormap to normalized data [0, 1].
+
+        Args:
+            normalized: Normalized data in range [0, 1]
+            colormap_name: Name of the colormap
+
+        Returns:
+            RGB array (H, W, 3)
+        """
+        # Define colormap lookup tables (sampled at key points)
+        colormaps = {
+            'viridis': {
+                'values': self.np.array([0.0, 0.13, 0.25, 0.38, 0.5, 0.63, 0.75, 0.88, 1.0]),
+                'colors': self.np.array([
+                    [68, 1, 84], [72, 40, 120], [62, 74, 137], [49, 104, 142],
+                    [38, 130, 142], [31, 158, 137], [53, 183, 121], [110, 206, 88], [253, 231, 37]
+                ], dtype=self.np.float32)
+            },
+            'plasma': {
+                'values': self.np.array([0.0, 0.13, 0.25, 0.38, 0.5, 0.63, 0.75, 0.88, 1.0]),
+                'colors': self.np.array([
+                    [13, 8, 135], [75, 3, 161], [125, 3, 168], [168, 34, 150],
+                    [203, 70, 121], [229, 107, 93], [248, 148, 65], [253, 195, 40], [240, 249, 33]
+                ], dtype=self.np.float32)
+            },
+            'inferno': {
+                'values': self.np.array([0.0, 0.13, 0.25, 0.38, 0.5, 0.63, 0.75, 0.88, 1.0]),
+                'colors': self.np.array([
+                    [0, 0, 4], [31, 12, 72], [85, 15, 109], [136, 34, 106],
+                    [186, 54, 85], [227, 89, 51], [249, 140, 10], [249, 201, 50], [252, 255, 164]
+                ], dtype=self.np.float32)
+            },
+            'magma': {
+                'values': self.np.array([0.0, 0.13, 0.25, 0.38, 0.5, 0.63, 0.75, 0.88, 1.0]),
+                'colors': self.np.array([
+                    [0, 0, 4], [28, 16, 68], [79, 18, 123], [129, 37, 129],
+                    [181, 54, 122], [229, 80, 100], [251, 136, 97], [254, 194, 135], [252, 253, 191]
+                ], dtype=self.np.float32)
+            },
+            'cividis': {
+                'values': self.np.array([0.0, 0.13, 0.25, 0.38, 0.5, 0.63, 0.75, 0.88, 1.0]),
+                'colors': self.np.array([
+                    [0, 32, 76], [0, 50, 85], [30, 66, 88], [54, 81, 94],
+                    [79, 97, 107], [109, 114, 121], [141, 132, 140], [178, 153, 164], [231, 179, 195]
+                ], dtype=self.np.float32)
+            },
+            'rdylbu': {
+                'values': self.np.array([0.0, 0.17, 0.33, 0.5, 0.67, 0.83, 1.0]),
+                'colors': self.np.array([
+                    [165, 0, 38], [244, 109, 67], [254, 224, 144],
+                    [255, 255, 191], [224, 243, 248], [116, 173, 209], [49, 54, 149]
+                ], dtype=self.np.float32)
+            },
+            'seismic': {
+                'values': self.np.array([0.0, 0.25, 0.5, 0.75, 1.0]),
+                'colors': self.np.array([
+                    [0, 0, 76], [67, 133, 255], [255, 255, 255], [255, 100, 0], [127, 0, 0]
+                ], dtype=self.np.float32)
+            },
+            'coolwarm': {
+                'values': self.np.array([0.0, 0.25, 0.5, 0.75, 1.0]),
+                'colors': self.np.array([
+                    [59, 76, 192], [144, 178, 254], [221, 221, 221], [245, 156, 125], [180, 4, 38]
+                ], dtype=self.np.float32)
+            }
+        }
+
+        # Get colormap or default to viridis
+        cmap = colormaps.get(colormap_name, colormaps['viridis'])
+        cmap_values = cmap['values']
+        cmap_colors = cmap['colors']
 
         # Flatten normalized array for vectorized lookup
         flat_normalized = normalized.ravel()
 
         # Find the indices of the color stops for each value
-        indices = self.np.searchsorted(viridis_values, flat_normalized) - 1
-        indices = self.np.clip(indices, 0, len(viridis_values) - 2)
+        indices = self.np.searchsorted(cmap_values, flat_normalized) - 1
+        indices = self.np.clip(indices, 0, len(cmap_values) - 2)
 
         # Get the two color stops for interpolation
-        v0 = viridis_values[indices]
-        v1 = viridis_values[indices + 1]
-        c0 = viridis_colors[indices]
-        c1 = viridis_colors[indices + 1]
+        v0 = cmap_values[indices]
+        v1 = cmap_values[indices + 1]
+        c0 = cmap_colors[indices]
+        c1 = cmap_colors[indices + 1]
 
         # Compute interpolation factor
         t = self.np.zeros_like(flat_normalized)
@@ -1487,7 +2063,7 @@ class CNNFilterActivationViewer:
 
         # Linear interpolation: c0 + t * (c1 - c0)
         rgb_flat = c0 + t[:, self.np.newaxis] * (c1 - c0)
-        rgb = rgb_flat.reshape(data.shape[0], data.shape[1], 3).astype(self.np.uint8)
+        rgb = rgb_flat.reshape(normalized.shape[0], normalized.shape[1], 3).astype(self.np.uint8)
 
         return rgb
 
@@ -1604,34 +2180,127 @@ class CNNFilterActivationViewer:
             self.win.resize(window_width, window_height)
             print(f"  Auto-sized window to {window_width}x{window_height} pixels")
 
+    def set_filter_colormap(self, colormap_name):
+        """Change the filter colormap and re-render filters.
+
+        Args:
+            colormap_name: Name of colormap ('RdBu', 'RdYlBu', 'Seismic', 'Coolwarm')
+        """
+        print(f"  CNNViewer: set_filter_colormap called with '{colormap_name}', is_open={self.is_open}")
+
+        if not self.is_open:
+            print(f"  CNNViewer: Viewer is closed, skipping colormap change")
+            return
+
+        old_colormap = self.filter_colormap
+        self.filter_colormap = colormap_name.lower()
+        print(f"  CNNViewer: Changed filter colormap from '{old_colormap}' to '{self.filter_colormap}'")
+
+        # Re-render filters with new colormap
+        try:
+            print(f"  CNNViewer: Calling _render_filters()...")
+            self._render_filters()
+            print(f"  CNNViewer: _render_filters() completed")
+
+            # Force Qt event processing to update display
+            if self.use_pyqtgraph:
+                try:
+                    from pyqtgraph.Qt import QtWidgets
+                    QtWidgets.QApplication.processEvents()
+                    print(f"  CNNViewer: Qt events processed")
+                except Exception as e:
+                    print(f"  CNNViewer: Error processing Qt events: {e}")
+
+            # Refresh detail viewer if open
+            if self.detail_viewer is not None and self.detail_viewer.is_open:
+                print(f"  CNNViewer: Refreshing detail viewer with new colormap...")
+                self.detail_viewer.refresh_colormaps()
+        except Exception as e:
+            print(f"  CNNViewer: Error rendering filters: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def set_activation_colormap(self, colormap_name):
+        """Change the activation colormap and re-render activations.
+
+        Args:
+            colormap_name: Name of colormap ('Viridis', 'Plasma', 'Inferno', 'Magma', 'Cividis')
+        """
+        print(f"  CNNViewer: set_activation_colormap called with '{colormap_name}', is_open={self.is_open}")
+
+        if not self.is_open:
+            print(f"  CNNViewer: Viewer is closed, skipping colormap change")
+            return
+
+        old_colormap = self.activation_colormap
+        self.activation_colormap = colormap_name.lower()
+        print(f"  CNNViewer: Changed activation colormap from '{old_colormap}' to '{self.activation_colormap}'")
+
+        # Force re-render of activations if they exist
+        try:
+            if self.use_pyqtgraph:
+                print(f"  CNNViewer: Calling _update_activations()...")
+                self._update_activations()
+                print(f"  CNNViewer: _update_activations() completed")
+
+                # Force Qt event processing to update display
+                try:
+                    from pyqtgraph.Qt import QtWidgets
+                    QtWidgets.QApplication.processEvents()
+                    print(f"  CNNViewer: Qt events processed")
+                except Exception as e:
+                    print(f"  CNNViewer: Error processing Qt events: {e}")
+
+                # Refresh detail viewer if open
+                if self.detail_viewer is not None and self.detail_viewer.is_open:
+                    print(f"  CNNViewer: Refreshing detail viewer with new colormap...")
+                    self.detail_viewer.refresh_colormaps()
+        except Exception as e:
+            print(f"  CNNViewer: Error rendering activations: {e}")
+            import traceback
+            traceback.print_exc()
+
     def close(self):
         """Close the viewer and remove hooks."""
+        if not self.is_open:
+            return
+
+        # Mark as closed immediately to prevent race conditions
+        self.is_open = False
+
         # Remove forward hooks
         for handle in self.activation_handles:
-            handle.remove()
+            try:
+                handle.remove()
+            except Exception:
+                pass
         self.activation_handles.clear()
 
         # Close detail viewer if open
         if self.detail_viewer is not None:
-            self.detail_viewer.close()
-            self.detail_viewer = None
-
-        if self.is_open:
-            # Flush any pending updates
-            if self.needs_update:
-                try:
-                    self._update_activations()
-                except Exception:
-                    pass
-
             try:
-                if self.use_pyqtgraph:
-                    self.win.close()
-                else:
-                    self.plt.close(self.fig)
+                self.detail_viewer.close()
             except Exception:
                 pass
-            self.is_open = False
+            finally:
+                self.detail_viewer = None
+
+        # Close the main window
+        try:
+            if self.use_pyqtgraph:
+                if hasattr(self, 'win') and self.win is not None:
+                    self.win.close()
+                    # Force window deletion
+                    try:
+                        from pyqtgraph.Qt import QtWidgets
+                        QtWidgets.QApplication.processEvents()
+                    except Exception:
+                        pass
+            else:
+                if hasattr(self, 'fig') and self.fig is not None:
+                    self.plt.close(self.fig)
+        except Exception as e:
+            print(f"Warning: Error closing CNN viewer window: {e}")
 
 
 class PreprocessedObservationViewer:
@@ -2287,6 +2956,8 @@ def main():
     p.add_argument("--plot-window-size", type=int, default=100, help="Number of steps to show in sliding window (default: 100)")
     p.add_argument("--show-preprocessing", dest="show_preprocessing", action="store_true", default=False, help="Show preprocessed observations in separate window (what agent sees)")
     p.add_argument("--show-cnn-filters", dest="show_cnn_filters", action="store_true", default=False, help="Show CNN filters and activations in separate window (requires CNN policy)")
+    p.add_argument("--toolbar", action="store_true", default=True, help="Show interactive visualization toolbar for toggling viewers and changing colormaps (default: True)")
+    p.add_argument("--no-toolbar", dest="toolbar", action="store_false", help="Disable interactive visualization toolbar")
     p.add_argument(
         "--env-kwargs",
         action="append",
@@ -2487,6 +3158,18 @@ def main():
             print(f"Warning: Could not initialize CNN filter/activation viewer: {e}")
             cnn_viewer = None
 
+    # Initialize visualization toolbar if enabled (after viewers are created)
+    toolbar = None
+    if args.toolbar and not args.headless:
+        try:
+            toolbar = VisualizationToolbar(config, policy_model, env, reward_plotter=plotter, obs_viewer=obs_viewer, cnn_viewer=cnn_viewer)
+            print("Visualization toolbar enabled")
+            print("  Click buttons to toggle viewers and change colormaps")
+            print("  Hotkeys: [R] Reward | [O] Observation | [F] Filters | [Q] Close")
+        except Exception as e:
+            print(f"Warning: Could not initialize visualization toolbar: {e}")
+            toolbar = None
+
     # Initialize rollout collector; step-by-step mode, FPS limiting, plotting, or obs viewer uses single-step rollouts
     collector = RolloutCollector(
         env=env,
@@ -2541,6 +3224,21 @@ def main():
             if cnn_viewer and cnn_viewer.is_open:
                 cnn_viewer.update()
 
+            # Update toolbar if enabled
+            if toolbar and toolbar.is_open:
+                # Handle toolbar events and get updated viewer references
+                result = toolbar.handle_events()
+                if result is not None:
+                    toolbar_plotter, toolbar_obs, toolbar_cnn = result
+
+                    # Update viewer references from toolbar
+                    if toolbar_plotter is not None:
+                        plotter = toolbar_plotter
+                    if toolbar_obs is not None:
+                        obs_viewer = toolbar_obs
+                    if toolbar_cnn is not None:
+                        cnn_viewer = toolbar_cnn
+
             # Apply FPS limiting if specified
             if frame_delay > 0:
                 elapsed = time.perf_counter() - step_start
@@ -2572,6 +3270,8 @@ def main():
     except KeyboardInterrupt:
         print("\nInterrupted by user")
     finally:
+        if toolbar:
+            toolbar.close()
         if plotter:
             plotter.close()
         if obs_viewer:

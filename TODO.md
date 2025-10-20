@@ -2,7 +2,7 @@
 
 # MODAL
 
-- FEAT: use MCP to control things
+- ✅ FEAT: use MCP to control things (added run_play, run_inspect, run_publish tools)
 - BUG: cant seem to detach modal runs
 - BUG: runs executed through modal dont seem to have same wandb run id
 - BUG: clean exit run_play on ctrl+c
@@ -15,22 +15,18 @@
 
 # RUN_PLAY
 
-- FEAT: activation heatmap?
-- FEAT: run_play controls? eg: heatmap vs other
+- Add action activation heatmap to run_play.py
+- Add window layout snapshot button
 - FEAT: single window workspace for run_play.py
-
-# RUN_INSPECT
-
-- FEAT: make deterministic sampling vs stochastic a dropdown
+- BUG: run_play.py user input not working for Atari envs
 
 # NEXT
 
+- FEAT: show max filter activation locations in frame
 - BUG: why cant I resume run from exactly same perf location
 - BUG: cant train VizDoom-Basic-v0 when frame_stack is 1
-
 - FEAT: run_inspect.py add support for monitoring rollouts with different hyperparams
 - THINK: how to audit reward structure / mean, std, outliers, and histogram
-- BUG: run_play.py user input not working for Atari envs
 - TEST: ensure evaluation is ran exactly same way as train (eg: alevecenv)
 - TODO: add env normalization support, make sure normalization is saved
 - TODO: add action number/ label before each frame stack image in inspect (allows easily seeing which action was performed when each frame was seen)
@@ -39,12 +35,10 @@
 
 ## SuperMarioBros-Nes
 
-- THINK: how do CNN filters deal with the frame stack
 - GOAL: ensure level-1-1 can be completed with ~100% win rate
 - EXP: train on level 2 after mastering level 1, check if it forgets level 1
 
 - TODO: add support for logging info vars in run_inspect.py
-- UX: make table lighter
 
 - FEAT: stack action just as frames 
 - FEAT: resize to preserve aspect ratio (to avoid distortions)

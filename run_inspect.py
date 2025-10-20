@@ -691,7 +691,12 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                 value=default_label,
                 interactive=True,
             )
-            deterministic = gr.Checkbox(label="Deterministic policy", value=False)
+            sampling_mode = gr.Dropdown(
+                label="Sampling mode",
+                choices=["stochastic", "deterministic"],
+                value="stochastic",
+                interactive=True,
+            )
             max_steps = gr.Slider(label="Max env steps", minimum=10, maximum=5000, value=default_max_steps, step=10)
             run_btn = gr.Button("Rollout")
 
@@ -1122,7 +1127,8 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                 _round3(s.get("gae_adv", None)),
             ]
 
-        def _inspect(rid: str, ckpt_label: str | None, det: bool, nsteps: int):
+        def _inspect(rid: str, ckpt_label: str | None, sampling: str, nsteps: int):
+            det = (sampling == "deterministic")
             frames_raw, _frames_proc_unused, frames_stack, steps, info = run_episode(rid, ckpt_label, det, int(nsteps), resolved_seed, env_kwargs_overrides)
             rows = [_table_row_from_step(s) for s in steps]
             # Initialize gallery selection, states, play button, and slider range
@@ -1153,7 +1159,7 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
             )
         run_btn.click(
             _inspect,
-            inputs=[run_id, checkpoint, deterministic, max_steps],
+            inputs=[run_id, checkpoint, sampling_mode, max_steps],
             outputs=[display_mode, frame_image, frame_slider, current_step_table, step_table, env_spec_json, model_spec_json, ckpt_metrics_json, frames_state, index_state, playing_state, play_pause_btn, rows_state, steps_state, frames_raw_state, frames_stack_state],
         )
 

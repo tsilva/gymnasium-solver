@@ -679,19 +679,9 @@ class CNNFilterActivationDetailViewer:
 
     def _render(self, filter_data, activation_data):
         """Render filter and activation data."""
-        # Normalize filter to 0-255
-        f_min, f_max = filter_data.min(), filter_data.max()
-        if f_max > f_min:
-            filter_norm = ((filter_data - f_min) / (f_max - f_min) * 255).astype(self.np.uint8)
-        else:
-            filter_norm = self.np.zeros_like(filter_data, dtype=self.np.uint8)
-
-        # Create RGB image for filter (grayscale)
+        # Apply diverging colormap to filter (red-white-blue for negative-zero-positive)
         fh, fw = filter_data.shape
-        filter_rgb = self.np.zeros((fh, fw, 3), dtype=self.np.uint8)
-        filter_rgb[:, :, 0] = filter_norm
-        filter_rgb[:, :, 1] = filter_norm
-        filter_rgb[:, :, 2] = filter_norm
+        filter_rgb = self._apply_diverging_colormap(filter_data)
 
         # Transpose for PyQtGraph
         filter_rgb_t = self.np.transpose(filter_rgb, (1, 0, 2))
@@ -705,19 +695,9 @@ class CNNFilterActivationDetailViewer:
 
         # Render activation if provided
         if activation_data is not None and self.act_item is not None:
-            # Normalize activation to 0-255
-            a_min, a_max = activation_data.min(), activation_data.max()
-            if a_max > a_min:
-                act_norm = ((activation_data - a_min) / (a_max - a_min) * 255).astype(self.np.uint8)
-            else:
-                act_norm = self.np.zeros_like(activation_data, dtype=self.np.uint8)
-
-            # Create RGB image for activation (grayscale)
+            # Apply viridis colormap to activation
             ah, aw = activation_data.shape
-            act_rgb = self.np.zeros((ah, aw, 3), dtype=self.np.uint8)
-            act_rgb[:, :, 0] = act_norm
-            act_rgb[:, :, 1] = act_norm
-            act_rgb[:, :, 2] = act_norm
+            act_rgb = self._apply_viridis_colormap(activation_data)
 
             # Transpose for PyQtGraph
             act_rgb_t = self.np.transpose(act_rgb, (1, 0, 2))
@@ -728,6 +708,87 @@ class CNNFilterActivationDetailViewer:
             window_width += ah * scale
 
         self.win.resize(int(window_width), int(window_height) + 30)
+
+    def _apply_diverging_colormap(self, data):
+        """Apply red-white-blue diverging colormap to data (for filters).
+
+        Red = negative weights, White = zero, Blue = positive weights
+        """
+        # Normalize to [-1, 1] range centered at zero
+        abs_max = max(abs(data.min()), abs(data.max()))
+        if abs_max > 0:
+            normalized = data / abs_max  # Range: [-1, 1]
+        else:
+            normalized = self.np.zeros_like(data)
+
+        h, w = data.shape
+        rgb = self.np.zeros((h, w, 3), dtype=self.np.uint8)
+
+        # Vectorized implementation using numpy broadcasting
+        # Create masks for negative and positive values
+        neg_mask = normalized < 0
+        pos_mask = normalized >= 0
+
+        # Negative values: red to white
+        intensity_neg = self.np.abs(normalized[neg_mask])
+        rgb[neg_mask, 0] = 255  # Red always full
+        rgb[neg_mask, 1] = (255 * (1 - intensity_neg)).astype(self.np.uint8)
+        rgb[neg_mask, 2] = (255 * (1 - intensity_neg)).astype(self.np.uint8)
+
+        # Positive values: white to blue
+        intensity_pos = normalized[pos_mask]
+        rgb[pos_mask, 0] = (255 * (1 - intensity_pos)).astype(self.np.uint8)
+        rgb[pos_mask, 1] = (255 * (1 - intensity_pos)).astype(self.np.uint8)
+        rgb[pos_mask, 2] = 255  # Blue always full
+
+        return rgb
+
+    def _apply_viridis_colormap(self, data):
+        """Apply viridis colormap to data (for activations)."""
+        # Normalize to [0, 1]
+        d_min, d_max = data.min(), data.max()
+        if d_max > d_min:
+            normalized = (data - d_min) / (d_max - d_min)
+        else:
+            normalized = self.np.zeros_like(data)
+
+        # Viridis colormap (approximate, sampled at key points)
+        viridis_values = self.np.array([0.0, 0.13, 0.25, 0.38, 0.5, 0.63, 0.75, 0.88, 1.0])
+        viridis_colors = self.np.array([
+            [68, 1, 84],
+            [72, 40, 120],
+            [62, 74, 137],
+            [49, 104, 142],
+            [38, 130, 142],
+            [31, 158, 137],
+            [53, 183, 121],
+            [110, 206, 88],
+            [253, 231, 37],
+        ], dtype=self.np.float32)
+
+        # Flatten normalized array for vectorized lookup
+        flat_normalized = normalized.ravel()
+
+        # Find the indices of the color stops for each value
+        indices = self.np.searchsorted(viridis_values, flat_normalized) - 1
+        indices = self.np.clip(indices, 0, len(viridis_values) - 2)
+
+        # Get the two color stops for interpolation
+        v0 = viridis_values[indices]
+        v1 = viridis_values[indices + 1]
+        c0 = viridis_colors[indices]
+        c1 = viridis_colors[indices + 1]
+
+        # Compute interpolation factor
+        t = self.np.zeros_like(flat_normalized)
+        valid_mask = v1 > v0
+        t[valid_mask] = (flat_normalized[valid_mask] - v0[valid_mask]) / (v1[valid_mask] - v0[valid_mask])
+
+        # Linear interpolation: c0 + t * (c1 - c0)
+        rgb_flat = c0 + t[:, self.np.newaxis] * (c1 - c0)
+        rgb = rgb_flat.reshape(data.shape[0], data.shape[1], 3).astype(self.np.uint8)
+
+        return rgb
 
     def update_filter(self, layer_idx, filter_idx, filter_data, activation_data=None):
         """Update the viewer with a new filter/activation pair."""
@@ -748,19 +809,8 @@ class CNNFilterActivationDetailViewer:
         if not self.is_open or self.act_item is None or activation_data is None:
             return
 
-        # Normalize activation to 0-255
-        a_min, a_max = activation_data.min(), activation_data.max()
-        if a_max > a_min:
-            act_norm = ((activation_data - a_min) / (a_max - a_min) * 255).astype(self.np.uint8)
-        else:
-            act_norm = self.np.zeros_like(activation_data, dtype=self.np.uint8)
-
-        # Create RGB image for activation (grayscale)
-        ah, aw = activation_data.shape
-        act_rgb = self.np.zeros((ah, aw, 3), dtype=self.np.uint8)
-        act_rgb[:, :, 0] = act_norm
-        act_rgb[:, :, 1] = act_norm
-        act_rgb[:, :, 2] = act_norm
+        # Apply viridis colormap to activation
+        act_rgb = self._apply_viridis_colormap(activation_data)
 
         # Transpose for PyQtGraph
         act_rgb_t = self.np.transpose(act_rgb, (1, 0, 2))
@@ -1215,11 +1265,10 @@ class CNNFilterActivationViewer:
 
             # Display based on backend
             if self.use_pyqtgraph:
-                # Filter grid is already 0-255 RGB, just convert to uint8
-                filter_grid_norm = filter_grid.astype(self.np.uint8)
+                # Filter grid is already uint8 RGB
                 # PyQtGraph expects (W, H, 3) format for RGB images, but numpy creates (H, W, 3)
                 # Transpose spatial dimensions: (H, W, 3) -> (W, H, 3)
-                filter_grid_transposed = self.np.transpose(filter_grid_norm, (1, 0, 2))
+                filter_grid_transposed = self.np.transpose(filter_grid, (1, 0, 2))
                 self.filter_items[idx].setImage(filter_grid_transposed)
 
                 # Set view range to match transposed dimensions
@@ -1228,8 +1277,7 @@ class CNNFilterActivationViewer:
             else:
                 self.axes[idx, 0].clear()
                 # Display RGB image (no colormap)
-                filter_grid_norm = filter_grid.astype(self.np.uint8)
-                self.axes[idx, 0].imshow(filter_grid_norm)
+                self.axes[idx, 0].imshow(filter_grid)
                 self.axes[idx, 0].set_title(f"Layer {idx} Filters ({info['out_channels']} × {info['kernel_size']})", fontsize=9)
                 self.axes[idx, 0].axis('off')
 
@@ -1277,9 +1325,8 @@ class CNNFilterActivationViewer:
                 'padding': padding,
             }
 
-        # Create RGB grid (start with black border color: R=0, G=0, B=0)
-        grid = self.np.zeros((grid_h, grid_w, 3), dtype=self.np.float32)
-        # All channels stay 0 for black
+        # Create RGB grid (start with dark gray border: R=30, G=30, B=30)
+        grid = self.np.full((grid_h, grid_w, 3), 30, dtype=self.np.uint8)
 
         for i in range(out_ch):
             row = i // grid_cols
@@ -1289,18 +1336,12 @@ class CNNFilterActivationViewer:
             y_start = row * (kH + padding) + padding
             x_start = col * (kW + padding) + padding
 
-            # Normalize filter to 0-255 range for each filter individually
+            # Apply diverging colormap to filter
             filt = filters_2d[i]
-            f_min, f_max = filt.min(), filt.max()
-            if f_max > f_min:
-                filt_norm = (filt - f_min) / (f_max - f_min) * 255
-            else:
-                filt_norm = self.np.zeros_like(filt)
+            filt_rgb = self._apply_diverging_colormap_to_array(filt)
 
-            # Place grayscale filter in all RGB channels (creates grayscale appearance)
-            grid[y_start:y_start + kH, x_start:x_start + kW, 0] = filt_norm  # R
-            grid[y_start:y_start + kH, x_start:x_start + kW, 1] = filt_norm  # G
-            grid[y_start:y_start + kH, x_start:x_start + kW, 2] = filt_norm  # B
+            # Place colored filter
+            grid[y_start:y_start + kH, x_start:x_start + kW] = filt_rgb
 
         return grid
 
@@ -1350,9 +1391,8 @@ class CNNFilterActivationViewer:
                 'n_channels': n_channels,
             }
 
-        # Create RGB grid (start with black border color: R=0, G=0, B=0)
-        grid = self.np.zeros((grid_h, grid_w, 3), dtype=self.np.float32)
-        # All channels stay 0 for black
+        # Create RGB grid (start with dark gray border: R=30, G=30, B=30)
+        grid = self.np.full((grid_h, grid_w, 3), 30, dtype=self.np.uint8)
 
         for i in range(n_channels):
             row = i // grid_cols
@@ -1362,20 +1402,94 @@ class CNNFilterActivationViewer:
             y_start = row * (H + padding) + padding
             x_start = col * (W + padding) + padding
 
-            # Normalize activation to 0-255 range for each map individually
+            # Apply viridis colormap to activation
             act = act_np[i]
-            a_min, a_max = act.min(), act.max()
-            if a_max > a_min:
-                act_norm = (act - a_min) / (a_max - a_min) * 255
-            else:
-                act_norm = self.np.zeros_like(act)
+            act_rgb = self._apply_viridis_colormap_to_array(act)
 
-            # Place grayscale activation in all RGB channels (creates grayscale appearance)
-            grid[y_start:y_start + H, x_start:x_start + W, 0] = act_norm  # R
-            grid[y_start:y_start + H, x_start:x_start + W, 1] = act_norm  # G
-            grid[y_start:y_start + H, x_start:x_start + W, 2] = act_norm  # B
+            # Place colored activation
+            grid[y_start:y_start + H, x_start:x_start + W] = act_rgb
 
         return grid
+
+    def _apply_diverging_colormap_to_array(self, data):
+        """Apply red-white-blue diverging colormap to data (for filters).
+
+        Red = negative weights, White = zero, Blue = positive weights
+        """
+        # Normalize to [-1, 1] range centered at zero
+        abs_max = max(abs(data.min()), abs(data.max()))
+        if abs_max > 0:
+            normalized = data / abs_max  # Range: [-1, 1]
+        else:
+            normalized = self.np.zeros_like(data)
+
+        h, w = data.shape
+        rgb = self.np.zeros((h, w, 3), dtype=self.np.uint8)
+
+        # Vectorized implementation using numpy broadcasting
+        neg_mask = normalized < 0
+        pos_mask = normalized >= 0
+
+        # Negative values: red to white
+        intensity_neg = self.np.abs(normalized[neg_mask])
+        rgb[neg_mask, 0] = 255
+        rgb[neg_mask, 1] = (255 * (1 - intensity_neg)).astype(self.np.uint8)
+        rgb[neg_mask, 2] = (255 * (1 - intensity_neg)).astype(self.np.uint8)
+
+        # Positive values: white to blue
+        intensity_pos = normalized[pos_mask]
+        rgb[pos_mask, 0] = (255 * (1 - intensity_pos)).astype(self.np.uint8)
+        rgb[pos_mask, 1] = (255 * (1 - intensity_pos)).astype(self.np.uint8)
+        rgb[pos_mask, 2] = 255
+
+        return rgb
+
+    def _apply_viridis_colormap_to_array(self, data):
+        """Apply viridis colormap to data (for activations)."""
+        # Normalize to [0, 1]
+        d_min, d_max = data.min(), data.max()
+        if d_max > d_min:
+            normalized = (data - d_min) / (d_max - d_min)
+        else:
+            normalized = self.np.zeros_like(data)
+
+        # Viridis colormap (approximate, sampled at key points)
+        viridis_values = self.np.array([0.0, 0.13, 0.25, 0.38, 0.5, 0.63, 0.75, 0.88, 1.0])
+        viridis_colors = self.np.array([
+            [68, 1, 84],
+            [72, 40, 120],
+            [62, 74, 137],
+            [49, 104, 142],
+            [38, 130, 142],
+            [31, 158, 137],
+            [53, 183, 121],
+            [110, 206, 88],
+            [253, 231, 37],
+        ], dtype=self.np.float32)
+
+        # Flatten normalized array for vectorized lookup
+        flat_normalized = normalized.ravel()
+
+        # Find the indices of the color stops for each value
+        indices = self.np.searchsorted(viridis_values, flat_normalized) - 1
+        indices = self.np.clip(indices, 0, len(viridis_values) - 2)
+
+        # Get the two color stops for interpolation
+        v0 = viridis_values[indices]
+        v1 = viridis_values[indices + 1]
+        c0 = viridis_colors[indices]
+        c1 = viridis_colors[indices + 1]
+
+        # Compute interpolation factor
+        t = self.np.zeros_like(flat_normalized)
+        valid_mask = v1 > v0
+        t[valid_mask] = (flat_normalized[valid_mask] - v0[valid_mask]) / (v1[valid_mask] - v0[valid_mask])
+
+        # Linear interpolation: c0 + t * (c1 - c0)
+        rgb_flat = c0 + t[:, self.np.newaxis] * (c1 - c0)
+        rgb = rgb_flat.reshape(data.shape[0], data.shape[1], 3).astype(self.np.uint8)
+
+        return rgb
 
     def update(self):
         """Update activation visualizations (throttled)."""
@@ -1414,11 +1528,10 @@ class CNNFilterActivationViewer:
 
                 # Display based on backend
                 if self.use_pyqtgraph:
-                    # Activation grid is already 0-255 RGB, just convert to uint8
-                    act_grid_norm = act_grid.astype(self.np.uint8)
+                    # Activation grid is already uint8 RGB
                     # PyQtGraph expects (W, H, 3) format for RGB images, but numpy creates (H, W, 3)
                     # Transpose spatial dimensions: (H, W, 3) -> (W, H, 3)
-                    act_grid_transposed = self.np.transpose(act_grid_norm, (1, 0, 2))
+                    act_grid_transposed = self.np.transpose(act_grid, (1, 0, 2))
                     self.activation_items[idx].setImage(act_grid_transposed)
 
                     # Set view range to match transposed dimensions
@@ -1427,8 +1540,7 @@ class CNNFilterActivationViewer:
                 else:
                     self.axes[idx, 1].clear()
                     # Display RGB image (no colormap)
-                    act_grid_norm = act_grid.astype(self.np.uint8)
-                    self.axes[idx, 1].imshow(act_grid_norm)
+                    self.axes[idx, 1].imshow(act_grid)
                     self.axes[idx, 1].set_title(f"Layer {idx} Activations", fontsize=9)
                     self.axes[idx, 1].axis('off')
 

@@ -828,6 +828,30 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
         def _round3(x):
             return round(float(x), 3)
 
+        def _action_to_text(action_val, action_labels_all, probs, greedy_match) -> str:
+            """Convert action data to simple text representation (for vertical view)."""
+            if isinstance(action_val, list) and isinstance(probs, list):
+                # MultiBinary case: show only pressed buttons
+                parts = []
+                for i, pressed in enumerate(action_val):
+                    if pressed and i < len(probs):
+                        prob_val = float(probs[i])
+                        if prob_val == 0.0:
+                            continue
+                        label = action_labels_all[i] if (isinstance(action_labels_all, list) and i < len(action_labels_all)) else f"{i}"
+                        indicator = " ⚡" if prob_val < 0.5 else ""
+                        parts.append(f"✅ {label} {prob_val:.2f}{indicator}")
+                return ", ".join(parts) if parts else "NOOP"
+            elif isinstance(probs, list) and isinstance(action_val, int):
+                # Discrete case: show selected action only
+                if 0 <= action_val < len(probs):
+                    prob_val = float(probs[action_val])
+                    label = action_labels_all[action_val] if (isinstance(action_labels_all, list) and action_val < len(action_labels_all)) else f"{action_val}"
+                    indicator = " ⚡" if greedy_match is False else ""
+                    return f"✅ {label} {prob_val:.2f}{indicator}"
+            # Fallback
+            return f"✅ {action_val}"
+
         def _verticalize_row(row: List[Any]) -> List[List[str]]:
             pairs: List[List[str]] = []
             for name, val in zip(table_headers, row):
@@ -878,12 +902,12 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                             label = f"{i}"
 
                         headers.append(label)
-                        # Mark pressed buttons with ► and add ⚡ for exploratory (prob < 0.5)
+                        # Mark pressed buttons with ✅ and unpressed with ⬜, add ⚡ for exploratory (prob < 0.5)
                         if pressed:
-                            indicator = "⚡" if prob_val < 0.5 else ""
-                            values.append(f"►{prob_val:.2f}{indicator}")
+                            indicator = " ⚡" if prob_val < 0.5 else ""
+                            values.append(f"✅ {prob_val:.2f}{indicator}")
                         else:
-                            values.append(f"{prob_val:.2f}")
+                            values.append(f"⬜ {prob_val:.2f}")
 
                 # Build HTML table
                 if headers:
@@ -908,12 +932,12 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                         label = f"{i}"
 
                     headers.append(label)
-                    # Mark selected action with ► and add ⚡ if exploratory
+                    # Mark selected action with ✅ and unselected with ⬜, add ⚡ if exploratory
                     if i == action_val:
                         indicator = " ⚡" if greedy_match is False else ""
-                        values.append(f"►{float(prob_val):.2f}{indicator}")
+                        values.append(f"✅ {float(prob_val):.2f}{indicator}")
                     else:
-                        values.append(f"{float(prob_val):.2f}")
+                        values.append(f"⬜ {float(prob_val):.2f}")
 
                 # Build HTML table
                 if headers:
@@ -921,13 +945,13 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                     value_row = "".join(f"<td style='padding:2px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em;'>{v}</td>" for v in values)
                     action_str = f"<table style='border-collapse:collapse; font-size:0.9em; margin:0;'><tr>{header_row}</tr><tr>{value_row}</tr></table>"
                 else:
-                    action_str = f"►{action_val}"
+                    action_str = f"✅{action_val}"
             else:
                 # Fallback: no probs available, just show action
                 if action_label is not None:
-                    action_str = f"►{action_label}"
+                    action_str = f"✅{action_label}"
                 else:
-                    action_str = f"►{action_val}"
+                    action_str = f"✅{action_val}"
 
             return [
                 done_str,
@@ -941,9 +965,46 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
             ]
 
         def _vertical_from_steps_index(steps: List[Dict[str, Any]] | None, idx: int) -> List[List[str]]:
-            if steps and 0 <= int(idx) < len(steps):
-                return _verticalize_row(_row_vals_from_step_dict(steps[int(idx)]))
-            return []
+            """Build vertical metric/value pairs from step dict, using text format for actions."""
+            if not steps or not (0 <= int(idx) < len(steps)):
+                return []
+
+            step = steps[int(idx)]
+            pairs = []
+
+            # Done
+            terminated = step.get("terminated", False)
+            truncated = step.get("truncated", False)
+            if terminated and truncated:
+                done_str = "🔴🟡"
+            elif terminated:
+                done_str = "🔴"
+            elif truncated:
+                done_str = "🟡"
+            else:
+                done_str = ""
+            pairs.append(["done", done_str])
+
+            # Step
+            pairs.append(["step", str(step.get("step", 0))])
+
+            # Action (use text format, not HTML)
+            action_text = _action_to_text(
+                step.get("action"),
+                step.get("action_labels"),
+                step.get("probs"),
+                step.get("greedy_match")
+            )
+            pairs.append(["action", action_text])
+
+            # Other metrics
+            pairs.append(["reward", _format_stat_value(step.get("reward"), "reward")])
+            pairs.append(["cum_reward", _format_stat_value(step.get("cum_reward"), "cum_reward")])
+            pairs.append(["mc_return", _format_stat_value(step.get("mc_return"), "mc_return")])
+            pairs.append(["value", _format_stat_value(step.get("value"), "value")])
+            pairs.append(["gae_adv", _format_stat_value(step.get("gae_adv"), "gae_adv")])
+
+            return pairs
 
         def _initial_display_state(active_frames: List[np.ndarray] | None, frame_label: str, steps: List[Dict[str, Any]] | None):
             first = (active_frames[0] if active_frames else None) if isinstance(active_frames, list) else None
@@ -999,12 +1060,12 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                             label = f"{i}"
 
                         headers.append(label)
-                        # Mark pressed buttons with ► and add ⚡ for exploratory (prob < 0.5)
+                        # Mark pressed buttons with ✅ and unpressed with ⬜, add ⚡ for exploratory (prob < 0.5)
                         if pressed:
-                            indicator = "⚡" if prob_val < 0.5 else ""
-                            values.append(f"►{prob_val:.2f}{indicator}")
+                            indicator = " ⚡" if prob_val < 0.5 else ""
+                            values.append(f"✅ {prob_val:.2f}{indicator}")
                         else:
-                            values.append(f"{prob_val:.2f}")
+                            values.append(f"⬜ {prob_val:.2f}")
 
                 # Build HTML table
                 if headers:
@@ -1029,12 +1090,12 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                         label = f"{i}"
 
                     headers.append(label)
-                    # Mark selected action with ► and add ⚡ if exploratory
+                    # Mark selected action with ✅ and unselected with ⬜, add ⚡ if exploratory
                     if i == action_val:
                         indicator = " ⚡" if greedy_match is False else ""
-                        values.append(f"►{float(prob_val):.2f}{indicator}")
+                        values.append(f"✅ {float(prob_val):.2f}{indicator}")
                     else:
-                        values.append(f"{float(prob_val):.2f}")
+                        values.append(f"⬜ {float(prob_val):.2f}")
 
                 # Build HTML table
                 if headers:
@@ -1042,13 +1103,13 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
                     value_row = "".join(f"<td style='padding:2px 6px; border:1px solid #ddd; text-align:center; font-size:0.85em;'>{v}</td>" for v in values)
                     action_str = f"<table style='border-collapse:collapse; font-size:0.9em; margin:0;'><tr>{header_row}</tr><tr>{value_row}</tr></table>"
                 else:
-                    action_str = f"►{action_val}"
+                    action_str = f"✅{action_val}"
             else:
                 # Fallback: no probs available, just show action
                 if action_label is not None:
-                    action_str = f"►{action_label}"
+                    action_str = f"✅{action_label}"
                 else:
-                    action_str = f"►{action_val}"
+                    action_str = f"✅{action_val}"
 
             return [
                 done_str,

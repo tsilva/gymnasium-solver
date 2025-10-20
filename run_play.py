@@ -2190,6 +2190,10 @@ class CNNFilterActivationDetailViewer:
             self.act_view = act_view
             self.act_item = act_item
 
+            # Add click handler to activation view for RF exploration
+            if self.act_view is not None:
+                self.act_view.scene().sigMouseClicked.connect(self._on_activation_clicked)
+
             # Render the data
             self._render(filter_data, activation_data)
 
@@ -2353,6 +2357,40 @@ class CNNFilterActivationDetailViewer:
         # Transpose for PyQtGraph
         act_rgb_t = self.np.transpose(act_rgb, (1, 0, 2))
         self.act_item.setImage(act_rgb_t)
+
+    def _on_activation_clicked(self, event):
+        """Handle clicks on activation map to show corresponding receptive field."""
+        if not self.act_view or not self.parent_viewer:
+            return
+
+        # Check if click is on activation view
+        scene_pos = event.scenePos()
+        if not self.act_view.sceneBoundingRect().contains(scene_pos):
+            return
+
+        # Map scene coordinates to view coordinates
+        view_pos = self.act_view.mapSceneToView(scene_pos)
+
+        # Convert to activation map coordinates (swap x/y due to PyQtGraph transpose)
+        # PyQtGraph displays images transposed, so x in view is y in data
+        act_y = int(view_pos.x())
+        act_x = int(view_pos.y())
+
+        # Clamp to activation map bounds
+        if self.activation_data is not None:
+            h, w = self.activation_data.shape
+            act_y = max(0, min(act_y, h - 1))
+            act_x = max(0, min(act_x, w - 1))
+
+        # Update RF overlay if it exists
+        if (self.parent_viewer.rf_overlay_viewer and
+            self.parent_viewer.rf_overlay_viewer.is_open and
+            self.parent_viewer.current_input is not None):
+            self.parent_viewer.rf_overlay_viewer.update_observation(
+                self.parent_viewer.current_input,
+                act_y=act_y,
+                act_x=act_x
+            )
 
     def close(self):
         """Close the detail viewer."""

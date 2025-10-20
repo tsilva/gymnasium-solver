@@ -242,13 +242,65 @@ async def handle_list_tools() -> list[types.Tool]:
         ),
         types.Tool(
             name="get_training_status",
-            description="Check if a training process is still running",
+            description="Check if a training process is still running, with optional detailed progress info including progress %, metrics, and recent logs",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "run_id": {
                         "type": "string",
                         "description": "Run ID to check status"
+                    },
+                    "include_details": {
+                        "type": "boolean",
+                        "description": "Include detailed progress, metrics, and logs (default: true)"
+                    }
+                },
+                "required": ["run_id"],
+            },
+        ),
+        types.Tool(
+            name="wait_for_training_completion",
+            description="Wait for a training run to complete and return final results. Blocks until training finishes or timeout is reached.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "run_id": {
+                        "type": "string",
+                        "description": "Run ID or '@last' for most recent run"
+                    },
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Maximum seconds to wait (default: 3600 = 1 hour)"
+                    },
+                    "poll_interval": {
+                        "type": "integer",
+                        "description": "Seconds between status checks (default: 5)"
+                    }
+                },
+                "required": ["run_id"],
+            },
+        ),
+        types.Tool(
+            name="stream_training_logs",
+            description="Get training logs with optional filtering by regex pattern",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "run_id": {
+                        "type": "string",
+                        "description": "Run ID or '@last' for most recent run"
+                    },
+                    "follow": {
+                        "type": "boolean",
+                        "description": "If true, returns most recent lines (default: false)"
+                    },
+                    "filter_pattern": {
+                        "type": "string",
+                        "description": "Optional regex pattern to filter log lines"
+                    },
+                    "lines": {
+                        "type": "integer",
+                        "description": "Number of lines to return (default: 50)"
                     }
                 },
                 "required": ["run_id"],
@@ -745,7 +797,23 @@ async def handle_call_tool(
         elif name == "stop_training":
             result = await stop_training(args["run_id"])
         elif name == "get_training_status":
-            result = await get_training_status(args["run_id"])
+            result = await get_training_status(
+                args["run_id"],
+                args.get("include_details", True)
+            )
+        elif name == "wait_for_training_completion":
+            result = await wait_for_training_completion(
+                args["run_id"],
+                args.get("timeout", 3600),
+                args.get("poll_interval", 5)
+            )
+        elif name == "stream_training_logs":
+            result = await stream_training_logs(
+                args["run_id"],
+                args.get("follow", False),
+                args.get("filter_pattern"),
+                args.get("lines", 50)
+            )
         elif name == "list_checkpoints":
             result = await list_checkpoints(args["run_id"])
         elif name == "compare_runs":
@@ -1104,12 +1172,14 @@ async def start_training(
     env["VIBES_QUIET"] = "1"
 
     # Start process in new session to fully detach from terminal
-    # Redirect all stdio to avoid blocking on pipes or interactive prompts
+    # Redirect stdout/stderr to a temp log file (will be in run directory anyway)
+    # Using a file instead of DEVNULL to avoid potential multiprocessing issues
+    log_file = open("/tmp/mcp_training.log", "a")
     process = subprocess.Popen(
         cmd,
         stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=log_file,
+        stderr=subprocess.STDOUT,  # Merge stderr into stdout
         env=env,
         text=True,
         start_new_session=True  # Detach from controlling terminal
@@ -1159,64 +1229,217 @@ async def stop_training(run_id: str) -> Dict[str, Any]:
     }
 
 
-async def get_training_status(run_id: str) -> Dict[str, Any]:
-    """Check if a training process is still running."""
+async def get_training_status(run_id: str, include_details: bool = True) -> Dict[str, Any]:
+    """Check if a training process is still running, with optional detailed progress info.
+
+    Args:
+        run_id: Run ID to check
+        include_details: If True, includes progress %, current metrics, and recent logs
+    """
+    import time
+
     # First check tracked processes
+    is_running = False
+    pid = None
+    source = None
+
     if run_id in _running_processes:
         process = _running_processes[run_id]
         poll_result = process.poll()
 
         if poll_result is None:
-            return {
-                "run_id": run_id,
-                "running": True,
-                "pid": process.pid,
-                "source": "tracked"
-            }
+            is_running = True
+            pid = process.pid
+            source = "tracked"
         else:
             # Process finished, remove from tracking
             del _running_processes[run_id]
 
-    # Fall back to system-wide process check
-    # Check if run directory has a lock file or recent activity
-    try:
-        run = Run.load(run_id)
-        run_dir = run.run_dir
+    # Fall back to system-wide process check if not found in tracked
+    if not is_running:
+        try:
+            run = Run.load(run_id)
+            run_dir = run.run_dir
 
-        # Method 1: Check for processes with CWD in the run directory
-        # Method 2: Check all train.py processes and see if any writes to this run dir
-        # Method 3: Check metrics.csv timestamp to see if recently updated
+            # Check metrics.csv timestamp to see if recently updated
+            metrics_file = Path(run_dir) / "metrics.csv"
+            if metrics_file.exists():
+                mtime = metrics_file.stat().st_mtime
+                age = time.time() - mtime
+                if age < 60:  # Updated in last minute
+                    # Find any train.py process
+                    result = subprocess.run(
+                        ["pgrep", "-f", "python.*train.py"],
+                        capture_output=True,
+                        text=True
+                    )
+                    if result.returncode == 0 and result.stdout.strip():
+                        pids = [int(pid) for pid in result.stdout.strip().split('\n') if pid]
+                        is_running = True
+                        pid = pids[0] if len(pids) == 1 else pids
+                        source = "system"
+        except Exception:
+            pass
 
-        # Use method 3: check if metrics.csv was updated in last 60 seconds
-        metrics_file = Path(run_dir) / "metrics.csv"
-        if metrics_file.exists():
-            import time
-            mtime = metrics_file.stat().st_mtime
-            age = time.time() - mtime
-            if age < 60:  # Updated in last minute
-                # Find any train.py process
-                result = subprocess.run(
-                    ["pgrep", "-f", "python.*train.py"],
-                    capture_output=True,
-                    text=True
-                )
-                if result.returncode == 0 and result.stdout.strip():
-                    pids = [int(pid) for pid in result.stdout.strip().split('\n') if pid]
-                    return {
-                        "run_id": run_id,
-                        "running": True,
-                        "pid": pids[0] if len(pids) == 1 else pids,
-                        "source": "system",
-                        "note": f"Inferred from recent metrics.csv activity ({age:.1f}s ago)"
-                    }
-    except Exception:
-        pass
+    # Build response
+    response = {
+        "run_id": run_id,
+        "running": is_running
+    }
 
-    # No running process found
+    if is_running:
+        response["pid"] = pid
+        response["source"] = source
+
+    if not is_running:
+        response["message"] = "No running process found"
+        return response
+
+    # Add detailed information if requested and running
+    if include_details and is_running:
+        try:
+            # Get progress from get_training_progress
+            progress_info = await get_training_progress(run_id)
+            if "progress" in progress_info:
+                response["progress"] = progress_info["progress"]
+                response["performance"] = progress_info.get("performance", {})
+
+            # Get last 10 lines of logs
+            logs_result = await get_run_logs(run_id, lines=10)
+            if "log" in logs_result:
+                response["recent_logs"] = logs_result["log"].strip().split('\n')[-10:]
+
+        except Exception as e:
+            response["details_error"] = str(e)
+
+    return response
+
+
+async def wait_for_training_completion(
+    run_id: str,
+    timeout: int = 3600,
+    poll_interval: int = 5
+) -> Dict[str, Any]:
+    """Wait for a training run to complete and return final results.
+
+    Args:
+        run_id: Run ID to wait for (supports '@last')
+        timeout: Maximum seconds to wait (default: 3600 = 1 hour)
+        poll_interval: Seconds between status checks (default: 5)
+
+    Returns:
+        Dict with final status, metrics, and completion reason
+    """
+    import time
+
+    start_time = time.time()
+    last_status = None
+
+    while (time.time() - start_time) < timeout:
+        # Check if still running
+        status = await get_training_status(run_id)
+        last_status = status
+
+        if not status.get("running", False):
+            # Training completed! Get final results
+            try:
+                run_info = await get_run_info(run_id)
+
+                # Get last few log lines to check completion reason
+                logs_result = await get_run_logs(run_id, lines=50)
+                logs = logs_result.get("log", "")
+
+                # Parse completion reason from logs
+                completion_reason = "unknown"
+                if "Training completed" in logs:
+                    # Extract reason from log line like: "Training completed in X seconds. Reason: ..."
+                    import re
+                    match = re.search(r"Reason: (.+?)(?:\.|$)", logs)
+                    if match:
+                        completion_reason = match.group(1)
+                elif "KeyboardInterrupt" in logs or "SIGTERM" in logs:
+                    completion_reason = "interrupted"
+                elif "error" in logs.lower() or "exception" in logs.lower():
+                    completion_reason = "error"
+
+                return {
+                    "success": True,
+                    "run_id": run_id,
+                    "status": "completed",
+                    "completion_reason": completion_reason,
+                    "elapsed_time": time.time() - start_time,
+                    "final_metrics": run_info.get("metrics_summary", {}),
+                    "config_summary": run_info.get("config", {})
+                }
+            except Exception as e:
+                return {
+                    "success": False,
+                    "error": f"Training completed but failed to get results: {str(e)}",
+                    "elapsed_time": time.time() - start_time
+                }
+
+        # Still running, wait before next check
+        await asyncio.sleep(poll_interval)
+
+    # Timeout reached
+    return {
+        "success": False,
+        "status": "timeout",
+        "error": f"Training did not complete within {timeout} seconds",
+        "elapsed_time": time.time() - start_time,
+        "last_status": last_status
+    }
+
+
+async def stream_training_logs(
+    run_id: str,
+    follow: bool = False,
+    filter_pattern: Optional[str] = None,
+    lines: int = 50
+) -> Dict[str, Any]:
+    """Get training logs with optional filtering.
+
+    Args:
+        run_id: Run ID (supports '@last')
+        follow: If True, returns most recent logs (last N lines)
+        filter_pattern: Optional regex pattern to filter log lines
+        lines: Number of lines to return (default: 50)
+
+    Returns:
+        Dict with filtered log content
+    """
+    # Get logs using existing get_run_logs
+    logs_result = await get_run_logs(run_id, lines=lines)
+
+    if "error" in logs_result:
+        return logs_result
+
+    log_content = logs_result.get("log", "")
+    log_lines = log_content.strip().split('\n')
+
+    # Apply filter if provided
+    if filter_pattern:
+        import re
+        try:
+            pattern = re.compile(filter_pattern)
+            log_lines = [line for line in log_lines if pattern.search(line)]
+        except re.error as e:
+            return {
+                "error": f"Invalid regex pattern: {str(e)}",
+                "pattern": filter_pattern
+            }
+
+    # If follow mode, take last N lines after filtering
+    if follow and len(log_lines) > lines:
+        log_lines = log_lines[-lines:]
+
     return {
         "run_id": run_id,
-        "running": False,
-        "message": "No running process found"
+        "log": '\n'.join(log_lines),
+        "lines_returned": len(log_lines),
+        "total_lines": logs_result.get("total_lines"),
+        "filtered": filter_pattern is not None,
+        "filter_pattern": filter_pattern
     }
 
 

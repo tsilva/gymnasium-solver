@@ -15,9 +15,9 @@
 
 # RUN_PLAY
 
+- Ensure random mode uses random policy instead of random sampling (init new model and just use that)
 - Add action activation heatmap to run_play.py
 - Add window layout snapshot button
-- FEAT: single window workspace for run_play.py
 - BUG: run_play.py user input not working for Atari envs
 
 # NEXT
@@ -104,7 +104,6 @@ VizDoom-Deathmatch-v0
 - Confirm that Pong-v5 deterministic env reaches 20-21
 - Check if we can get to 20-21 with RGB observations
 - Frame stacking should work to turn POMDP into MDP
-- TODO: add support for resuming with policy from previous run
 - add env normalization support (use that instead of normalization from feature extractor)
 - Search for where to check for SOTA scores on each env (ask gpt to research)
 

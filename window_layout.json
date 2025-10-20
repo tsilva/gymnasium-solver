@@ -1,7 +1,7 @@
 {
   "reward_plotter": {
-    "x": 1121,
-    "y": 316,
+    "x": 1316,
+    "y": 103,
     "width": 500,
     "height": 400
   },
@@ -10,6 +10,12 @@
     "y": 345,
     "width": 84,
     "height": 356
+  },
+  "action_visualizer": {
+    "x": 833,
+    "y": 101,
+    "width": 250,
+    "height": 238
   },
   "cnn_filter_viewer": {
     "x": 610,
@@ -22,5 +28,17 @@
     "y": 780,
     "width": 650,
     "height": 230
+  },
+  "maximal_activation_viewer": {
+    "x": 1100,
+    "y": 100,
+    "width": 188,
+    "height": 590
+  },
+  "rf_overlay_viewer": {
+    "x": 1341,
+    "y": 607,
+    "width": 356,
+    "height": 386
   }
 }

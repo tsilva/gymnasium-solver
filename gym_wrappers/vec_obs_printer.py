@@ -120,6 +120,10 @@ class VecObsBarPrinter(VectorWrapper):
         """Set action probabilities for visualization."""
         self._action_probs = action_probs
 
+    def get_action_probs(self) -> np.ndarray | None:
+        """Get action probabilities for visualization."""
+        return self._action_probs
+
     # ---- VectorEnv overrides ----
     def reset(self, **kwargs):
         obs, info = self.env.reset(**kwargs)

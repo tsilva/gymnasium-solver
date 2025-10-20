@@ -22,8 +22,11 @@ WINDOW_LAYOUT_FILE = Path(__file__).parent / "window_layout.json"
 _active_viewers = {
     'reward_plotter': None,
     'observation_viewer': None,
+    'action_visualizer': None,
     'cnn_filter_viewer': None,
-    'cnn_detail_viewer': None
+    'cnn_detail_viewer': None,
+    'maximal_activation_viewer': None,
+    'rf_overlay_viewer': None
 }
 
 
@@ -74,15 +77,20 @@ def load_window_layout():
         return {}
 
 
-def install_keyboard_shortcuts(win):
-    """Install keyboard shortcuts on a PyQtGraph window."""
+def install_keyboard_shortcuts(win, additional_handlers=None):
+    """Install keyboard shortcuts on a PyQtGraph window.
+
+    Args:
+        win: PyQtGraph window
+        additional_handlers: Dict of {key_code: handler_function} for additional shortcuts
+    """
     try:
         from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
 
         class KeyPressFilter(QtCore.QObject):
             def eventFilter(self, obj, event):
                 if event.type() == QtCore.QEvent.Type.KeyPress:
-                    # Check for F9 key (less likely to conflict)
+                    # Check for F9 key (save layout)
                     if event.key() == QtCore.Qt.Key.Key_F9:
                         try:
                             # Use QTimer to defer save to avoid blocking the event loop
@@ -90,6 +98,17 @@ def install_keyboard_shortcuts(win):
                         except Exception as e:
                             print(f"Error in hotkey handler: {e}")
                         return False  # Don't consume the event to prevent freezing
+
+                    # Check for additional handlers
+                    if additional_handlers:
+                        for key_code, handler in additional_handlers.items():
+                            if event.key() == key_code:
+                                try:
+                                    QtCore.QTimer.singleShot(0, handler)
+                                except Exception as e:
+                                    print(f"Error in additional hotkey handler: {e}")
+                                return False
+
                 return False  # Don't consume other events
 
         # Create and install event filter
@@ -105,7 +124,7 @@ def install_keyboard_shortcuts(win):
 class VisualizationToolbar:
     """Interactive toolbar for toggling visualizations and changing color palettes."""
 
-    def __init__(self, config, policy_model=None, env=None, reward_plotter=None, obs_viewer=None, cnn_viewer=None):
+    def __init__(self, config, policy_model=None, env=None, reward_plotter=None, obs_viewer=None, action_viewer=None, cnn_viewer=None):
         """Initialize the visualization toolbar.
 
         Args:
@@ -114,6 +133,7 @@ class VisualizationToolbar:
             env: Environment instance
             reward_plotter: Existing reward plotter instance (if already created)
             obs_viewer: Existing observation viewer instance (if already created)
+            action_viewer: Existing action visualizer instance (if already created)
             cnn_viewer: Existing CNN viewer instance (if already created)
         """
         try:
@@ -124,7 +144,7 @@ class VisualizationToolbar:
 
             # Toolbar dimensions (more vertical, less horizontal)
             self.width = 280
-            self.height = 380
+            self.height = 435
             self.screen = pygame.display.set_mode((self.width, self.height))
             pygame.display.set_caption("Visualization Toolbar")
 
@@ -158,12 +178,14 @@ class VisualizationToolbar:
             # Active viewer instances (accept existing ones)
             self.reward_plotter = reward_plotter
             self.obs_viewer = obs_viewer
+            self.action_viewer = action_viewer
             self.cnn_viewer = cnn_viewer
 
             # Visualization states (initialize based on existing viewers)
             self.states = {
                 'reward': reward_plotter is not None,
                 'observation': obs_viewer is not None,
+                'actions': action_viewer is not None,
                 'filters': cnn_viewer is not None
             }
 
@@ -211,6 +233,16 @@ class VisualizationToolbar:
             label="Observations",
             is_active=self.states['observation'],
             action='toggle_observation'
+        )
+        self.buttons.append(btn_rect)
+        y_offset += 55
+
+        # Actions button
+        btn_rect = self._draw_toggle_button(
+            x=20, y=y_offset,
+            label="Actions",
+            is_active=self.states['actions'],
+            action='toggle_actions'
         )
         self.buttons.append(btn_rect)
         y_offset += 55
@@ -336,7 +368,7 @@ class VisualizationToolbar:
     def handle_events(self):
         """Process toolbar events and return active viewer instances."""
         if not self.is_open:
-            return None, None, None
+            return None, None, None, None
 
         # Update mouse position
         self.mouse_pos = self.pygame.mouse.get_pos()
@@ -345,15 +377,17 @@ class VisualizationToolbar:
         for event in self.pygame.event.get():
             if event.type == self.pygame.QUIT:
                 self.close()
-                return None, None, None
+                return None, None, None, None
             elif event.type == self.pygame.KEYDOWN:
                 if event.key == self.pygame.K_q:
                     self.close()
-                    return None, None, None
+                    return None, None, None, None
                 elif event.key == self.pygame.K_r:
                     self._toggle_reward()
                 elif event.key == self.pygame.K_o:
                     self._toggle_observation()
+                elif event.key == self.pygame.K_a:
+                    self._toggle_actions()
                 elif event.key == self.pygame.K_f:
                     self._toggle_filters()
                 elif event.key == self.pygame.K_LEFTBRACKET:
@@ -367,7 +401,7 @@ class VisualizationToolbar:
         # Re-render on every call to keep window responsive
         self._render()
 
-        return self.reward_plotter, self.obs_viewer, self.cnn_viewer
+        return self.reward_plotter, self.obs_viewer, self.action_viewer, self.cnn_viewer
 
     def _handle_button_click(self, pos):
         """Handle mouse clicks on buttons."""
@@ -380,6 +414,8 @@ class VisualizationToolbar:
                     self._toggle_reward()
                 elif action == 'toggle_observation':
                     self._toggle_observation()
+                elif action == 'toggle_actions':
+                    self._toggle_actions()
                 elif action == 'toggle_filters':
                     self._toggle_filters()
                 elif action == 'cycle_filter_palette_prev':
@@ -437,6 +473,57 @@ class VisualizationToolbar:
                 self.obs_viewer = None
                 _active_viewers['observation_viewer'] = None
                 print("Observation viewer disabled")
+
+    def _toggle_actions(self):
+        """Toggle action visualizer."""
+        self.states['actions'] = not self.states['actions']
+
+        if self.states['actions']:
+            # Create action visualizer
+            if self.env is None:
+                print("Cannot enable action visualizer: no environment loaded")
+                self.states['actions'] = False
+                self._render()  # Re-render to show correct state
+                return
+
+            try:
+                # Get number of actions from environment
+                from gymnasium.spaces import Discrete, MultiBinary
+                action_space = self.env.single_action_space
+                if not isinstance(action_space, (Discrete, MultiBinary)):
+                    print(f"Action visualizer only supports Discrete and MultiBinary action spaces (got {type(action_space).__name__})")
+                    self.states['actions'] = False
+                    self._render()  # Re-render to show correct state
+                    return
+
+                n_actions = action_space.n
+
+                # Extract action labels from config
+                action_labels = extract_action_labels_from_config(self.config)
+                if action_labels:
+                    print(f"Loaded {len(action_labels)} action labels from config spec")
+                else:
+                    print("No action labels found in config spec")
+
+                space_type = "MultiBinary buttons" if isinstance(action_space, MultiBinary) else "Discrete actions"
+                self.action_viewer = ActionVisualizer(n_actions=n_actions, action_labels=action_labels, update_interval=0.05)
+                _active_viewers['action_visualizer'] = self.action_viewer
+                print("Action visualizer enabled")
+                # Restore focus to toolbar
+                self._restore_focus()
+            except Exception as e:
+                print(f"Failed to create action visualizer: {e}")
+                import traceback
+                traceback.print_exc()
+                self.states['actions'] = False
+                self._render()  # Re-render to show correct state
+        else:
+            # Close action visualizer
+            if self.action_viewer:
+                self.action_viewer.close()
+                self.action_viewer = None
+                _active_viewers['action_visualizer'] = None
+                print("Action visualizer disabled")
 
     def _toggle_filters(self):
         """Toggle CNN filter viewer."""
@@ -1059,6 +1146,971 @@ class RewardPlotter:
             self.is_open = False
 
 
+class ActionVisualizer:
+    """Real-time action probability visualizer showing which actions are selected and their probabilities."""
+
+    def __init__(self, n_actions: int, action_labels: dict[int, str] | None = None, update_interval: float = 0.05):
+        """Initialize the action visualizer.
+
+        Args:
+            n_actions: Number of possible actions
+            action_labels: Optional dict mapping action index to label string
+            update_interval: Minimum time (in seconds) between plot updates to throttle rendering
+        """
+        try:
+            import pyqtgraph as pg
+            from pyqtgraph.Qt import QtCore
+            import time
+
+            self.pg = pg
+            self.time = time
+            self.n_actions = n_actions
+            self.action_labels = action_labels or {}
+
+            # Set background to white for better visibility
+            pg.setConfigOption('background', 'w')
+            pg.setConfigOption('foreground', 'k')
+
+            # Create compact window (don't show yet)
+            self.win = pg.GraphicsLayoutWidget(show=False, title="Actions")
+            # Compact size: width=250 to fit label + bar + value, height based on number of actions
+            self.win.resize(250, max(60, 40 + n_actions * 22))
+            self.win.setWindowTitle('Actions')
+
+            # Set window flags before showing
+            try:
+                from pyqtgraph.Qt import QtCore
+                self.win.setWindowFlags(self.win.windowFlags() | QtCore.Qt.WindowType.WindowStaysOnTopHint)
+            except Exception:
+                pass
+
+            # Position window (use saved layout if available)
+            layout = load_window_layout()
+            if 'action_visualizer' in layout:
+                pos = layout['action_visualizer']
+                self.win.move(pos['x'], pos['y'])
+                if pos['width'] and pos['height']:
+                    self.win.resize(pos['width'], pos['height'])
+            else:
+                # Default position: below reward plotter
+                self.win.move(750, 500)
+
+            # Create compact plot
+            self.plot = self.win.addPlot()
+            self.plot.hideAxis('left')
+            self.plot.hideAxis('bottom')
+            self.plot.setXRange(0, 1, padding=0)
+            self.plot.setYRange(0, n_actions, padding=0)
+            self.plot.setMouseEnabled(x=False, y=False)
+
+            # Layout positions
+            self.label_x = 0.02  # Left edge for labels
+            self.bar_start_x = 0.35  # Where bars start
+            self.bar_max_width = 0.58  # Maximum bar width (ends at ~0.93)
+            self.value_x = 0.95  # Right edge for values
+
+            # Create horizontal bars and text for each action
+            self.bar_items = []
+            self.label_items = []
+            self.value_items = []
+
+            for i in range(n_actions):
+                # Invert y-position so action 0 is at top
+                y_pos = n_actions - i - 0.5
+
+                # Create action label (left side, left-aligned)
+                label = action_labels.get(i, f"{i}") if action_labels else f"{i}"
+                # Truncate long labels to fit
+                if len(label) > 12:
+                    label = label[:11] + '…'
+                label_text = pg.TextItem(text=label, anchor=(0, 0.5), color='k')
+                label_text.setPos(self.label_x, y_pos)
+                self.plot.addItem(label_text)
+                self.label_items.append(label_text)
+
+                # Create horizontal bar (starts at bar_start_x, extends rightward)
+                bar = pg.BarGraphItem(x=[self.bar_start_x], y=[y_pos], height=0.6, width=[0], brush='steelblue')
+                self.plot.addItem(bar)
+                self.bar_items.append(bar)
+
+                # Create probability value (right side, right-aligned)
+                value_text = pg.TextItem(text='0.00', anchor=(1, 0.5), color='k')
+                value_text.setPos(self.value_x, y_pos)
+                self.plot.addItem(value_text)
+                self.value_items.append(value_text)
+
+            # Store current state
+            self.current_probs = [0.0] * n_actions
+            self.current_action = None
+
+            # Track if window is still open
+            self.is_open = True
+
+            # Connect window close event
+            self.win.closeEvent = lambda event: setattr(self, 'is_open', False)
+
+            # Throttling: only update plot at fixed intervals
+            self.update_interval = update_interval
+            self.last_update_time = time.time()
+            self.needs_update = False
+
+            self.use_pyqtgraph = True
+
+            # Install keyboard shortcuts
+            install_keyboard_shortcuts(self.win)
+
+            # Show window after all setup is complete
+            self.win.show()
+            self.win.raise_()
+
+        except ImportError:
+            # Fallback to matplotlib if pyqtgraph is not available
+            import matplotlib.pyplot as plt
+            import time
+
+            self.plt = plt
+            self.time = time
+            self.n_actions = n_actions
+            self.action_labels = action_labels or {}
+            self.plt.ion()
+
+            self.fig, self.ax = self.plt.subplots(figsize=(4, max(2, min(6, 0.8 + n_actions * 0.3))))
+            self.fig.suptitle('Action Probabilities', fontsize=9, fontweight='bold')
+
+            # Position window
+            try:
+                manager = self.plt.get_current_fig_manager()
+                if hasattr(manager, 'window'):
+                    manager.window.wm_geometry("+750+500")
+            except Exception:
+                pass
+
+            self.ax.set_xlabel('Action', fontsize=7)
+            self.ax.set_ylabel('Probability', fontsize=7)
+            self.ax.set_ylim(0, 1.0)
+            self.ax.grid(True, alpha=0.3, axis='y')
+            self.ax.tick_params(labelsize=6)
+
+            # Set x-axis labels
+            x_positions = list(range(n_actions))
+            if action_labels:
+                labels = [action_labels.get(i, f"A{i}") for i in range(n_actions)]
+                self.ax.set_xticks(x_positions)
+                self.ax.set_xticklabels(labels, rotation=45 if n_actions > 8 else 0, ha='right' if n_actions > 8 else 'center')
+            else:
+                self.ax.set_xticks(x_positions)
+                self.ax.set_xticklabels([str(i) for i in range(n_actions)])
+
+            # Create initial bars
+            self.bars = self.ax.bar(x_positions, [0] * n_actions, color='steelblue')
+
+            # Store current state
+            self.current_probs = [0.0] * n_actions
+            self.current_action = None
+
+            self.is_open = True
+            self.fig.canvas.mpl_connect('close_event', self._on_close)
+
+            self.update_interval = update_interval
+            self.last_update_time = time.time()
+            self.needs_update = False
+
+            self.plt.tight_layout()
+            self.plt.show(block=False)
+            self.fig.canvas.draw()
+            self.fig.canvas.flush_events()
+
+            self.use_pyqtgraph = False
+
+    def _on_close(self, event):
+        """Handle window close event."""
+        self.is_open = False
+
+    def update(self, action_probs: list[float] | None, selected_action: int | None):
+        """Update the action probability visualization.
+
+        Args:
+            action_probs: List of probabilities for each action (length should match n_actions)
+            selected_action: Index of the selected action (highlighted)
+        """
+        if not self.is_open:
+            return
+
+        # Store current state
+        if action_probs is not None:
+            self.current_probs = list(action_probs)
+        self.current_action = selected_action
+        self.needs_update = True
+
+        # Check if enough time has passed since last update
+        current_time = self.time.time()
+        if current_time - self.last_update_time < self.update_interval:
+            return
+
+        # Perform the update
+        self._update_display()
+        self.last_update_time = current_time
+        self.needs_update = False
+
+    def _update_display(self):
+        """Update the display with current probabilities."""
+        if not self.is_open:
+            return
+
+        try:
+            if self.use_pyqtgraph:
+                # Update each bar and value text
+                for i, prob in enumerate(self.current_probs):
+                    y_pos = self.n_actions - i - 0.5
+
+                    # Set color based on whether this action/button is selected/pressed
+                    if i == self.current_action:
+                        # Discrete: specific action selected
+                        brush = self.pg.mkBrush((80, 200, 120))  # Green for selected
+                    elif self.current_action is None and prob > 0.5:
+                        # MultiBinary: button is pressed (state = 1)
+                        brush = self.pg.mkBrush((80, 200, 120))  # Green for pressed
+                    else:
+                        # Not selected/pressed
+                        brush = self.pg.mkBrush((31, 119, 180))  # Blue for others
+
+                    # Update bar width (bar starts at bar_start_x and extends based on probability)
+                    bar_width = prob * self.bar_max_width
+                    # Center the bar so its left edge starts at bar_start_x
+                    bar_center_x = self.bar_start_x + bar_width / 2
+                    self.bar_items[i].setOpts(x=[bar_center_x], y=[y_pos], height=0.6, width=[bar_width], brush=brush)
+
+                    # Update probability value text
+                    self.value_items[i].setText(f'{prob:.2f}')
+
+                # Process events to keep UI responsive
+                self.pg.QtWidgets.QApplication.processEvents()
+            else:
+                # Matplotlib fallback
+                for i, prob in enumerate(self.current_probs):
+                    self.bars[i].set_height(prob)
+                    if i == self.current_action:
+                        # Discrete: specific action selected
+                        self.bars[i].set_color('mediumseagreen')
+                    elif self.current_action is None and prob > 0.5:
+                        # MultiBinary: button is pressed (state = 1)
+                        self.bars[i].set_color('mediumseagreen')
+                    else:
+                        # Not selected/pressed
+                        self.bars[i].set_color('steelblue')
+
+                self.fig.canvas.draw()
+                self.fig.canvas.flush_events()
+        except Exception as e:
+            print(f"Warning: Error updating action visualizer: {e}")
+
+    def close(self):
+        """Close the viewer window, flushing any pending updates first."""
+        if self.is_open:
+            # Flush any pending updates before closing
+            if self.needs_update:
+                try:
+                    self._update_display()
+                except Exception:
+                    pass
+
+            try:
+                if self.use_pyqtgraph:
+                    self.win.close()
+                else:
+                    self.plt.close(self.fig)
+            except Exception:
+                pass
+            self.is_open = False
+
+
+def calculate_receptive_field_info(conv_layers):
+    """Calculate receptive field size, stride, and offset for each conv layer.
+
+    Args:
+        conv_layers: List of nn.Conv2d layers
+
+    Returns:
+        List of dicts with 'rf_size', 'rf_stride', 'rf_offset' for each layer
+    """
+    rf_info = []
+
+    # Start with identity receptive field
+    current_rf_size = 1      # Receptive field size
+    current_stride = 1       # Stride from output to input
+    current_offset = 0.5     # Center offset
+
+    for layer in conv_layers:
+        kernel_size = layer.kernel_size[0] if isinstance(layer.kernel_size, tuple) else layer.kernel_size
+        stride = layer.stride[0] if isinstance(layer.stride, tuple) else layer.stride
+        padding = layer.padding[0] if isinstance(layer.padding, tuple) else layer.padding
+
+        # Update receptive field size
+        # RF_out = RF_in + (kernel_size - 1) * stride_in
+        new_rf_size = current_rf_size + (kernel_size - 1) * current_stride
+
+        # Update stride (how much we move in input space per output pixel)
+        new_stride = current_stride * stride
+
+        # Update offset (center of first receptive field)
+        # offset_out = offset_in + ((kernel_size - 1) / 2 - padding) * stride_in
+        new_offset = current_offset + ((kernel_size - 1) / 2 - padding) * current_stride
+
+        rf_info.append({
+            'rf_size': new_rf_size,
+            'rf_stride': new_stride,
+            'rf_offset': new_offset,
+            'kernel_size': kernel_size,
+            'stride': stride,
+            'padding': padding,
+        })
+
+        current_rf_size = new_rf_size
+        current_stride = new_stride
+        current_offset = new_offset
+
+    return rf_info
+
+
+def get_receptive_field_box(layer_rf_info, act_y, act_x, input_shape):
+    """Get input bounding box for a specific activation position.
+
+    Args:
+        layer_rf_info: Dict with 'rf_size', 'rf_stride', 'rf_offset' for this layer
+        act_y: Activation Y coordinate (row)
+        act_x: Activation X coordinate (col)
+        input_shape: Tuple (H, W) of input image
+
+    Returns:
+        Dict with 'y_min', 'y_max', 'x_min', 'x_max' in input coordinates
+    """
+    rf_size = layer_rf_info['rf_size']
+    rf_stride = layer_rf_info['rf_stride']
+    rf_offset = layer_rf_info['rf_offset']
+
+    # Center of receptive field in input space
+    center_y = act_y * rf_stride + rf_offset
+    center_x = act_x * rf_stride + rf_offset
+
+    # Bounding box (half-width on each side)
+    half_size = rf_size / 2
+    y_min = max(0, int(center_y - half_size))
+    y_max = min(input_shape[0], int(center_y + half_size))
+    x_min = max(0, int(center_x - half_size))
+    x_max = min(input_shape[1], int(center_x + half_size))
+
+    return {
+        'y_min': y_min,
+        'y_max': y_max,
+        'x_min': x_min,
+        'x_max': x_max,
+        'center_y': center_y,
+        'center_x': center_x,
+    }
+
+
+class TopKActivationBuffer:
+    """Buffer to store top-K image patches that maximally activate a filter."""
+
+    def __init__(self, k=10):
+        """Initialize buffer.
+
+        Args:
+            k: Number of top activations to keep
+        """
+        import heapq
+        self.k = k
+        self.heap = []  # Min-heap of (activation_value, timestamp, patch_data)
+        self.counter = 0  # Monotonic counter for tie-breaking and ordering
+        self.heapq = heapq
+
+    def update(self, activation_value, input_patch):
+        """Update buffer with new activation.
+
+        Args:
+            activation_value: Scalar activation value (max or mean of activation map)
+            input_patch: Input image patch (numpy array, typically CHW or HW)
+        """
+        import numpy as np
+
+        # Use counter for stable ordering (more recent = higher priority in ties)
+        self.counter += 1
+
+        # Store copy of patch to avoid reference issues
+        patch_copy = input_patch.copy() if isinstance(input_patch, np.ndarray) else input_patch
+
+        if len(self.heap) < self.k:
+            # Heap not full, just add
+            self.heapq.heappush(self.heap, (activation_value, self.counter, patch_copy))
+        elif activation_value > self.heap[0][0]:
+            # New activation is larger than smallest in heap, replace
+            self.heapq.heapreplace(self.heap, (activation_value, self.counter, patch_copy))
+
+    def get_top_k(self):
+        """Get top-K patches sorted by activation value (highest first).
+
+        Returns:
+            List of (activation_value, patch_data) tuples, sorted descending
+        """
+        # Sort heap by activation value (descending), then by counter (descending)
+        sorted_items = sorted(self.heap, key=lambda x: (-x[0], -x[1]))
+        return [(val, patch) for val, _, patch in sorted_items]
+
+    def clear(self):
+        """Clear all stored activations."""
+        self.heap = []
+        self.counter = 0
+
+
+class MaximalActivationViewer:
+    """Viewer for displaying top-K image patches that maximally activate a filter."""
+
+    def __init__(self, layer_idx, filter_idx, buffer, parent_viewer=None):
+        """Initialize maximal activation viewer.
+
+        Args:
+            layer_idx: Layer index
+            filter_idx: Filter index within the layer
+            buffer: TopKActivationBuffer instance
+            parent_viewer: Parent CNNFilterActivationViewer for coordination
+        """
+        try:
+            import pyqtgraph as pg
+            import numpy as np
+
+            self.pg = pg
+            self.np = np
+            self.layer_idx = layer_idx
+            self.filter_idx = filter_idx
+            self.buffer = buffer
+            self.parent_viewer = parent_viewer
+
+            # Set background to black
+            pg.setConfigOption('background', 'k')
+            pg.setConfigOption('foreground', 'w')
+
+            # Create window
+            title = f"Layer {layer_idx} Filter {filter_idx} - Top Activations"
+            self.win = pg.GraphicsLayoutWidget(show=False, title=title)
+            self.win.setWindowTitle(title)
+
+            # Set window flags to stay on top
+            try:
+                from pyqtgraph.Qt import QtCore
+                self.win.setWindowFlags(self.win.windowFlags() | QtCore.Qt.WindowType.WindowStaysOnTopHint)
+            except Exception:
+                pass
+
+            # Remove spacing
+            self.win.ci.layout.setSpacing(1)
+            self.win.ci.layout.setContentsMargins(2, 2, 2, 2)
+
+            # Create grid of image items for top-K patches
+            self.patch_items = []
+            self.patch_views = []
+            self.value_labels = []
+
+            # Get top-K patches
+            top_k_patches = buffer.get_top_k()
+
+            if not top_k_patches:
+                # No patches yet, show placeholder
+                label = self.win.addLabel("No activations recorded yet.\nPlay some episodes to collect data.",
+                                         color='gray', size='12pt')
+                self.win.resize(400, 100)
+            else:
+                # Arrange in grid (2 columns for better viewing)
+                n_patches = len(top_k_patches)
+                n_cols = 2
+                n_rows = (n_patches + n_cols - 1) // n_cols
+
+                for idx, (act_val, patch) in enumerate(top_k_patches):
+                    row = idx // n_cols
+                    col = idx % n_cols
+
+                    # Add view box for patch
+                    view = self.win.addViewBox(row=row*2, col=col)
+                    view.setAspectLocked(True)
+                    view.invertY(True)
+                    view.setMenuEnabled(False)
+                    view.setMouseEnabled(x=False, y=False)
+                    view.enableAutoRange(enable=False)
+
+                    # Create image item
+                    img_item = pg.ImageItem()
+                    view.addItem(img_item)
+
+                    # Render patch
+                    patch_rgb = self._render_patch(patch)
+                    if patch_rgb is not None:
+                        # Transpose for PyQtGraph: (H, W, C) -> (W, H, C)
+                        if len(patch_rgb.shape) == 3:
+                            patch_rgb = self.np.transpose(patch_rgb, (1, 0, 2))
+                        elif len(patch_rgb.shape) == 2:
+                            patch_rgb = self.np.transpose(patch_rgb, (1, 0))
+
+                        img_item.setImage(patch_rgb)
+                        h, w = patch.shape[-2:] if len(patch.shape) >= 2 else patch.shape
+                        view.setRange(xRange=(0, h), yRange=(0, w), padding=0)
+
+                    self.patch_items.append(img_item)
+                    self.patch_views.append(view)
+
+                    # Add label below patch showing activation value
+                    label = self.win.addLabel(f"Act: {act_val:.3f}",
+                                             row=row*2+1, col=col,
+                                             color='cyan', size='10pt')
+                    self.value_labels.append(label)
+
+                # Auto-size window based on patch dimensions
+                if top_k_patches:
+                    sample_patch = top_k_patches[0][1]
+                    h, w = sample_patch.shape[-2:] if len(sample_patch.shape) >= 2 else sample_patch.shape
+                    # Scale up small patches for visibility
+                    scale = max(1, 80 // max(h, w))
+                    patch_display_size = max(h, w) * scale
+                    window_width = n_cols * patch_display_size + 20
+                    window_height = n_rows * (patch_display_size + 30) + 20
+                    self.win.resize(int(window_width), int(window_height))
+
+            self.is_open = True
+            self.has_data = len(top_k_patches) > 0  # Track if we have data to display
+
+            # Set up close event handler
+            def on_close(event):
+                self.is_open = False
+                if _active_viewers.get('maximal_activation_viewer') is self:
+                    _active_viewers['maximal_activation_viewer'] = None
+                event.accept()
+
+            self.win.closeEvent = on_close
+
+            # Position window (use saved layout if available)
+            layout = load_window_layout()
+            if 'maximal_activation_viewer' in layout:
+                pos = layout['maximal_activation_viewer']
+                self.win.move(pos['x'], pos['y'])
+            else:
+                # Default position: to the right of detail viewer
+                self.win.move(1100, 100)
+
+            # Show window
+            self.win.show()
+            self.win.raise_()
+
+        except ImportError:
+            raise ImportError("PyQtGraph is required for maximal activation viewer")
+
+    def refresh(self, layer_idx=None, filter_idx=None):
+        """Refresh display with current buffer data.
+
+        Args:
+            layer_idx: New layer index (if changing filter)
+            filter_idx: New filter index (if changing filter)
+        """
+        if not self.is_open:
+            return
+
+        # Update filter selection if provided
+        if layer_idx is not None and filter_idx is not None:
+            self.layer_idx = layer_idx
+            self.filter_idx = filter_idx
+            self.win.setWindowTitle(f"Layer {layer_idx} Filter {filter_idx} - Top Activations")
+
+            # Get new buffer
+            if self.parent_viewer:
+                self.buffer = self.parent_viewer.get_buffer(layer_idx, filter_idx)
+
+        # Get current top-K patches
+        if self.buffer is None:
+            return
+
+        top_k_patches = self.buffer.get_top_k()
+
+        # If no data yet and we're showing placeholder, just return
+        if not top_k_patches and not self.has_data:
+            return
+
+        # If we're transitioning from no data to having data, or vice versa, rebuild window
+        if (not top_k_patches and self.has_data) or (top_k_patches and not self.has_data):
+            self._rebuild_display(top_k_patches)
+            return
+
+        # Update existing displays in place
+        if top_k_patches and len(top_k_patches) == len(self.patch_items):
+            # Same number of items, just update values and images
+            for idx, (act_val, patch) in enumerate(top_k_patches):
+                # Update image
+                patch_rgb = self._render_patch(patch)
+                if patch_rgb is not None:
+                    if len(patch_rgb.shape) == 3:
+                        patch_rgb = self.np.transpose(patch_rgb, (1, 0, 2))
+                    elif len(patch_rgb.shape) == 2:
+                        patch_rgb = self.np.transpose(patch_rgb, (1, 0))
+                    self.patch_items[idx].setImage(patch_rgb)
+
+                # Update label
+                self.value_labels[idx].setText(f"Act: {act_val:.3f}")
+        else:
+            # Different number of items, need to rebuild
+            self._rebuild_display(top_k_patches)
+
+    def _rebuild_display(self, top_k_patches):
+        """Rebuild the entire display (when structure changes)."""
+        # Clear existing layout
+        self.win.clear()
+        self.patch_items = []
+        self.patch_views = []
+        self.value_labels = []
+
+        if not top_k_patches:
+            # No patches yet, show placeholder
+            self.win.addLabel("No activations recorded yet.\nPlay some episodes to collect data.",
+                             color='gray', size='12pt')
+            self.win.resize(400, 100)
+            self.has_data = False
+        else:
+            # Arrange in grid (2 columns for better viewing)
+            n_patches = len(top_k_patches)
+            n_cols = 2
+            n_rows = (n_patches + n_cols - 1) // n_cols
+
+            for idx, (act_val, patch) in enumerate(top_k_patches):
+                row = idx // n_cols
+                col = idx % n_cols
+
+                # Add view box for patch
+                view = self.win.addViewBox(row=row*2, col=col)
+                view.setAspectLocked(True)
+                view.invertY(True)
+                view.setMenuEnabled(False)
+                view.setMouseEnabled(x=False, y=False)
+                view.enableAutoRange(enable=False)
+
+                # Create image item
+                img_item = self.pg.ImageItem()
+                view.addItem(img_item)
+
+                # Render patch
+                patch_rgb = self._render_patch(patch)
+                if patch_rgb is not None:
+                    if len(patch_rgb.shape) == 3:
+                        patch_rgb = self.np.transpose(patch_rgb, (1, 0, 2))
+                    elif len(patch_rgb.shape) == 2:
+                        patch_rgb = self.np.transpose(patch_rgb, (1, 0))
+                    img_item.setImage(patch_rgb)
+                    h, w = patch.shape[-2:] if len(patch.shape) >= 2 else patch.shape
+                    view.setRange(xRange=(0, h), yRange=(0, w), padding=0)
+
+                self.patch_items.append(img_item)
+                self.patch_views.append(view)
+
+                # Add label below patch showing activation value
+                label = self.win.addLabel(f"Act: {act_val:.3f}",
+                                         row=row*2+1, col=col,
+                                         color='cyan', size='10pt')
+                self.value_labels.append(label)
+
+            # Auto-size window based on patch dimensions
+            if top_k_patches:
+                sample_patch = top_k_patches[0][1]
+                h, w = sample_patch.shape[-2:] if len(sample_patch.shape) >= 2 else sample_patch.shape
+                scale = max(1, 80 // max(h, w))
+                patch_display_size = max(h, w) * scale
+                window_width = n_cols * patch_display_size + 20
+                window_height = n_rows * (patch_display_size + 30) + 20
+                self.win.resize(int(window_width), int(window_height))
+
+            self.has_data = True
+
+    def _render_patch(self, patch):
+        """Render a patch as RGB or grayscale for display.
+
+        Args:
+            patch: Numpy array, typically (C, H, W) or (H, W)
+
+        Returns:
+            RGB or grayscale array ready for display
+        """
+        import numpy as np
+
+        if patch is None or patch.size == 0:
+            return None
+
+        # Normalize for display
+        patch_min, patch_max = patch.min(), patch.max()
+        if patch_max > patch_min:
+            patch_norm = (patch - patch_min) / (patch_max - patch_min)
+        else:
+            patch_norm = np.zeros_like(patch)
+
+        # Convert to uint8
+        patch_uint8 = (patch_norm * 255).astype(np.uint8)
+
+        # Handle different formats
+        if len(patch.shape) == 2:
+            # Grayscale (H, W)
+            return patch_uint8
+        elif len(patch.shape) == 3:
+            if patch.shape[0] == 1:
+                # Single channel (1, H, W) -> (H, W)
+                return patch_uint8[0]
+            elif patch.shape[0] == 3:
+                # RGB (3, H, W) -> (H, W, 3)
+                return np.transpose(patch_uint8, (1, 2, 0))
+            else:
+                # Multi-channel, average to grayscale
+                return patch_uint8.mean(axis=0).astype(np.uint8)
+
+        return patch_uint8
+
+    def close(self):
+        """Close the viewer."""
+        if self.is_open:
+            try:
+                self.win.close()
+            except Exception:
+                pass
+            self.is_open = False
+            if _active_viewers.get('maximal_activation_viewer') is self:
+                _active_viewers['maximal_activation_viewer'] = None
+
+
+class ReceptiveFieldOverlay:
+    """Overlay showing receptive field box on input observation."""
+
+    def __init__(self, layer_idx, filter_idx, rf_info, parent_viewer=None):
+        """Initialize receptive field overlay viewer.
+
+        Args:
+            layer_idx: Layer index
+            filter_idx: Filter index
+            rf_info: Receptive field info dict for this layer
+            parent_viewer: Parent CNNFilterActivationViewer
+        """
+        try:
+            import pyqtgraph as pg
+            import numpy as np
+
+            self.pg = pg
+            self.np = np
+            self.layer_idx = layer_idx
+            self.filter_idx = filter_idx
+            self.rf_info = rf_info
+            self.parent_viewer = parent_viewer
+
+            # Set background to black
+            pg.setConfigOption('background', 'k')
+            pg.setConfigOption('foreground', 'w')
+
+            # Create window
+            title = f"Layer {layer_idx} Filter {filter_idx} - Receptive Field"
+            self.win = pg.GraphicsLayoutWidget(show=False, title=title)
+            self.win.setWindowTitle(title)
+
+            # Set window flags
+            try:
+                from pyqtgraph.Qt import QtCore
+                self.win.setWindowFlags(self.win.windowFlags() | QtCore.Qt.WindowType.WindowStaysOnTopHint)
+            except Exception:
+                pass
+
+            # Remove spacing
+            self.win.ci.layout.setSpacing(0)
+            self.win.ci.layout.setContentsMargins(0, 0, 0, 0)
+
+            # Create view for input observation with RF overlay
+            self.view = self.win.addViewBox()
+            self.view.setAspectLocked(True)
+            self.view.invertY(True)
+            self.view.setMenuEnabled(False)
+            self.view.setMouseEnabled(x=False, y=False)
+
+            # Add image item for observation
+            self.obs_item = pg.ImageItem()
+            self.view.addItem(self.obs_item)
+
+            # Add ROI rectangle for receptive field
+            from pyqtgraph.Qt import QtCore, QtGui
+            self.rf_box = pg.ROI([0, 0], [1, 1], pen=pg.mkPen(color='cyan', width=3), movable=False, resizable=False)
+            # No need to remove handles - already has none when movable=False
+            self.view.addItem(self.rf_box)
+
+            # Add text label for RF info
+            self.info_label = pg.TextItem(anchor=(0, 0), color='cyan')
+            self.view.addItem(self.info_label)
+
+            # Current RF box position (for center of activation map)
+            self.current_box = None
+            self.current_input = None
+
+            self.is_open = True
+
+            # Set up close event handler
+            def on_close(event):
+                self.is_open = False
+                if _active_viewers.get('rf_overlay_viewer') is self:
+                    _active_viewers['rf_overlay_viewer'] = None
+                event.accept()
+
+            self.win.closeEvent = on_close
+
+            # Position window (use saved layout if available)
+            layout = load_window_layout()
+            if 'rf_overlay_viewer' in layout:
+                pos = layout['rf_overlay_viewer']
+                self.win.move(pos['x'], pos['y'])
+            else:
+                # Default position: below detail viewer
+                self.win.move(800, 400)
+
+            # Show window
+            self.win.show()
+            self.win.raise_()
+
+            # Display RF info
+            rf_size = rf_info['rf_size']
+            self.info_label.setText(f"RF Size: {rf_size}×{rf_size}")
+            self.info_label.setPos(5, 5)
+
+        except ImportError:
+            raise ImportError("PyQtGraph is required for receptive field overlay")
+
+    def update_observation(self, obs, rf_box=None, act_y=None, act_x=None):
+        """Update displayed observation and receptive field box.
+
+        Args:
+            obs: Input observation (numpy array, CHW or HW)
+            rf_box: Dict with 'y_min', 'y_max', 'x_min', 'x_max' (optional)
+            act_y: Activation Y coordinate (optional, for computing RF box)
+            act_x: Activation X coordinate (optional, for computing RF box)
+        """
+        if not self.is_open:
+            return
+
+        self.current_input = obs
+
+        # Render observation for display
+        obs_rgb = self._render_obs(obs)
+        if obs_rgb is not None:
+            # Transpose for PyQtGraph
+            if len(obs_rgb.shape) == 3:
+                obs_rgb = self.np.transpose(obs_rgb, (1, 0, 2))
+            elif len(obs_rgb.shape) == 2:
+                obs_rgb = self.np.transpose(obs_rgb, (1, 0))
+
+            self.obs_item.setImage(obs_rgb)
+
+            # Get input shape (H, W)
+            if len(obs.shape) == 3:
+                input_h, input_w = obs.shape[1], obs.shape[2]
+            else:
+                input_h, input_w = obs.shape
+
+            self.view.setRange(xRange=(0, input_h), yRange=(0, input_w), padding=0)
+
+            # Compute RF box if activation coordinates provided
+            if rf_box is None and act_y is not None and act_x is not None:
+                rf_box = get_receptive_field_box(self.rf_info, act_y, act_x, (input_h, input_w))
+
+            # Update RF box if provided
+            if rf_box is not None:
+                self.current_box = rf_box
+                # PyQtGraph ROI uses (x, y, w, h) format
+                x_min = rf_box['x_min']
+                y_min = rf_box['y_min']
+                width = rf_box['x_max'] - rf_box['x_min']
+                height = rf_box['y_max'] - rf_box['y_min']
+
+                self.rf_box.setPos([y_min, x_min])  # (row, col) = (y, x)
+                self.rf_box.setSize([height, width])
+
+            # Auto-size window
+            scale = max(1, 400 // max(input_h, input_w))
+            window_width = input_w * scale + 20
+            window_height = input_h * scale + 50
+            self.win.resize(int(window_width), int(window_height))
+
+    def _render_obs(self, obs):
+        """Render observation for display.
+
+        Args:
+            obs: Numpy array (C, H, W) or (H, W)
+
+        Returns:
+            RGB or grayscale array
+        """
+        if obs is None or obs.size == 0:
+            return None
+
+        # Normalize for display
+        obs_min, obs_max = obs.min(), obs.max()
+        if obs_max > obs_min:
+            obs_norm = (obs - obs_min) / (obs_max - obs_min)
+        else:
+            obs_norm = self.np.zeros_like(obs)
+
+        obs_uint8 = (obs_norm * 255).astype(self.np.uint8)
+
+        # Handle different formats
+        if len(obs.shape) == 2:
+            # Grayscale (H, W)
+            return obs_uint8
+        elif len(obs.shape) == 3:
+            if obs.shape[0] == 1:
+                # Single channel (1, H, W) -> (H, W)
+                return obs_uint8[0]
+            elif obs.shape[0] == 3:
+                # RGB (3, H, W) -> (H, W, 3)
+                return self.np.transpose(obs_uint8, (1, 2, 0))
+            else:
+                # Multi-channel, average to grayscale
+                return obs_uint8.mean(axis=0).astype(self.np.uint8)
+
+        return obs_uint8
+
+    def refresh(self, layer_idx=None, filter_idx=None):
+        """Refresh with new filter or update current display.
+
+        Args:
+            layer_idx: New layer index (if changing filter)
+            filter_idx: New filter index (if changing filter)
+        """
+        if not self.is_open:
+            return
+
+        # Update filter selection if provided
+        if layer_idx is not None and filter_idx is not None:
+            self.layer_idx = layer_idx
+            self.filter_idx = filter_idx
+            self.win.setWindowTitle(f"Layer {layer_idx} Filter {filter_idx} - Receptive Field")
+
+            # Get new RF info
+            if self.parent_viewer:
+                self.rf_info = self.parent_viewer.conv_info[layer_idx]['rf_info']
+
+            # Update RF size label
+            rf_size = self.rf_info['rf_size']
+            self.info_label.setText(f"RF Size: {rf_size}×{rf_size}")
+
+        # Refresh current observation if we have one
+        if self.current_input is not None:
+            # Re-compute RF box for center of activation map
+            if self.current_box is not None:
+                self.update_observation(self.current_input, rf_box=self.current_box)
+
+    def close(self):
+        """Close the viewer."""
+        if self.is_open:
+            try:
+                self.win.close()
+            except Exception:
+                pass
+            self.is_open = False
+            if _active_viewers.get('rf_overlay_viewer') is self:
+                _active_viewers['rf_overlay_viewer'] = None
+
+
 class CNNFilterActivationDetailViewer:
     """Detail viewer for a single filter/activation pair."""
 
@@ -1363,8 +2415,29 @@ class CNNFilterActivationViewer:
         if not self.conv_layers:
             raise ValueError("No Conv2d layers found in policy model")
 
+        # Calculate receptive field info for each layer
+        rf_info_list = calculate_receptive_field_info(self.conv_layers)
+        for idx, rf_info in enumerate(rf_info_list):
+            self.conv_info[idx]['rf_info'] = rf_info
+
         # Track single detail viewer (reused for all clicks)
         self.detail_viewer = None
+
+        # Track receptive field overlay viewer
+        self.rf_overlay_viewer = None
+
+        # Track single maximal activation viewer (synced with detail viewer)
+        self.maximal_activation_viewer = None
+
+        # Initialize activation buffers for each filter
+        # Structure: self.activation_buffers[layer_idx][filter_idx] = TopKActivationBuffer
+        self.activation_buffers = []
+        for info in self.conv_info:
+            layer_buffers = [TopKActivationBuffer(k=10) for _ in range(info['out_channels'])]
+            self.activation_buffers.append(layer_buffers)
+
+        # Store current input observation for buffer updates
+        self.current_input = None
 
         # Register forward hooks to capture activations
         self.activation_handles = []
@@ -1530,6 +2603,32 @@ class CNNFilterActivationViewer:
             import torch
             self.conv_info[layer_idx]['activation'] = output.detach().cpu()
             self.needs_update = True
+
+            # Update activation buffers if we have input
+            if self.current_input is not None:
+                try:
+                    # Output shape: (batch, channels, H, W)
+                    output_cpu = output.detach().cpu()
+                    if output_cpu.dim() == 4:
+                        output_cpu = output_cpu[0]  # Take first batch element
+
+                    # For each filter/channel, compute max activation and update buffer
+                    n_channels = output_cpu.shape[0]
+                    for filter_idx in range(n_channels):
+                        activation_map = output_cpu[filter_idx]  # (H, W)
+                        max_activation = float(activation_map.max())
+
+                        # Update buffer with input patch and max activation
+                        if self.current_input is not None:
+                            self.activation_buffers[layer_idx][filter_idx].update(
+                                max_activation,
+                                self.current_input
+                            )
+                except Exception as e:
+                    # Don't let buffer updates crash the forward pass
+                    import sys
+                    print(f"Warning: Failed to update activation buffer: {e}", file=sys.stderr)
+
         return hook
 
     def _make_filter_scene_click_handler(self, layer_idx, view_box):
@@ -1673,6 +2772,36 @@ class CNNFilterActivationViewer:
 
         return act_idx
 
+    def _open_maximal_activation_viewer(self, layer_idx, filter_idx):
+        """Open maximal activation viewer for a specific filter.
+
+        Args:
+            layer_idx: Layer index
+            filter_idx: Filter index
+        """
+        try:
+            # Get buffer for this filter
+            buffer = self.get_buffer(layer_idx, filter_idx)
+            if buffer is None:
+                print(f"No buffer found for Layer {layer_idx} Filter {filter_idx}")
+                return
+
+            # Close existing maximal activation viewer if open
+            if _active_viewers.get('maximal_activation_viewer') is not None:
+                try:
+                    _active_viewers['maximal_activation_viewer'].close()
+                except Exception:
+                    pass
+
+            # Create new viewer
+            viewer = MaximalActivationViewer(layer_idx, filter_idx, buffer, parent_viewer=self)
+            _active_viewers['maximal_activation_viewer'] = viewer
+
+            print(f"Opened maximal activation viewer: Layer {layer_idx} Filter {filter_idx}")
+        except Exception as e:
+            import sys
+            print(f"Error opening maximal activation viewer: {e}", file=sys.stderr)
+
     def _open_detail_viewer(self, layer_idx, filter_idx):
         """Open or update the detail viewer for the specified filter/activation pair."""
         info = self.conv_info[layer_idx]
@@ -1734,9 +2863,94 @@ class CNNFilterActivationViewer:
                 self.detail_viewer.update_filter(layer_idx, filter_idx, filter_2d, activation_2d)
                 self.detail_viewer.win.raise_()  # Bring to front
                 print(f"Updated detail viewer: Layer {layer_idx} Filter {filter_idx}")
+
+            # Auto-open or update maximal activation viewer (stays in sync with detail viewer)
+            self._sync_maximal_activation_viewer(layer_idx, filter_idx)
+
+            # Auto-open or update receptive field overlay (stays in sync with detail viewer)
+            self._sync_rf_overlay_viewer(layer_idx, filter_idx)
+
         except Exception as e:
             import sys
             print(f"Error with detail viewer: {e}", file=sys.stderr)
+
+    def _sync_rf_overlay_viewer(self, layer_idx, filter_idx):
+        """Keep receptive field overlay in sync with detail viewer.
+
+        Args:
+            layer_idx: Layer index
+            filter_idx: Filter index
+        """
+        try:
+            # Get RF info for this layer
+            rf_info = self.conv_info[layer_idx]['rf_info']
+
+            if self.rf_overlay_viewer is None or not self.rf_overlay_viewer.is_open:
+                # Create new RF overlay viewer
+                self.rf_overlay_viewer = ReceptiveFieldOverlay(
+                    layer_idx, filter_idx, rf_info, parent_viewer=self
+                )
+                _active_viewers['rf_overlay_viewer'] = self.rf_overlay_viewer
+
+                # Initialize with current observation if available
+                if self.current_input is not None:
+                    # Show RF box for center of activation map
+                    activation = self.conv_info[layer_idx].get('activation')
+                    if activation is not None:
+                        if activation.dim() == 4:
+                            activation = activation[0]
+                        # Use center of activation map
+                        act_h, act_w = activation.shape[1], activation.shape[2]
+                        center_y, center_x = act_h // 2, act_w // 2
+                        self.rf_overlay_viewer.update_observation(
+                            self.current_input, act_y=center_y, act_x=center_x
+                        )
+            else:
+                # Update existing viewer to new filter
+                self.rf_overlay_viewer.refresh(layer_idx, filter_idx)
+
+                # Update with current observation
+                if self.current_input is not None:
+                    activation = self.conv_info[layer_idx].get('activation')
+                    if activation is not None:
+                        if activation.dim() == 4:
+                            activation = activation[0]
+                        act_h, act_w = activation.shape[1], activation.shape[2]
+                        center_y, center_x = act_h // 2, act_w // 2
+                        self.rf_overlay_viewer.update_observation(
+                            self.current_input, act_y=center_y, act_x=center_x
+                        )
+
+        except Exception as e:
+            import sys
+            print(f"Error syncing RF overlay viewer: {e}", file=sys.stderr)
+
+    def _sync_maximal_activation_viewer(self, layer_idx, filter_idx):
+        """Keep maximal activation viewer in sync with detail viewer.
+
+        Args:
+            layer_idx: Layer index
+            filter_idx: Filter index
+        """
+        try:
+            # Get buffer for this filter
+            buffer = self.get_buffer(layer_idx, filter_idx)
+            if buffer is None:
+                return
+
+            if self.maximal_activation_viewer is None or not self.maximal_activation_viewer.is_open:
+                # Create new maximal activation viewer
+                self.maximal_activation_viewer = MaximalActivationViewer(
+                    layer_idx, filter_idx, buffer, parent_viewer=self
+                )
+                _active_viewers['maximal_activation_viewer'] = self.maximal_activation_viewer
+            else:
+                # Update existing viewer to new filter
+                self.maximal_activation_viewer.refresh(layer_idx, filter_idx)
+
+        except Exception as e:
+            import sys
+            print(f"Error syncing maximal activation viewer: {e}", file=sys.stderr)
 
     def _render_filters(self):
         """Render filter kernels for all Conv2d layers."""
@@ -2067,6 +3281,119 @@ class CNNFilterActivationViewer:
 
         return rgb
 
+    def set_input(self, obs):
+        """Store current input observation for activation buffer updates.
+
+        Args:
+            obs: Input observation (numpy array or tensor), typically (C, H, W) or (H, W)
+        """
+        import torch
+        import numpy as np
+
+        # Convert to numpy if tensor
+        if isinstance(obs, torch.Tensor):
+            obs = obs.detach().cpu().numpy()
+
+        # Store copy to avoid reference issues
+        self.current_input = obs.copy() if isinstance(obs, np.ndarray) else obs
+
+    def get_buffer(self, layer_idx, filter_idx):
+        """Get the activation buffer for a specific filter.
+
+        Args:
+            layer_idx: Layer index
+            filter_idx: Filter index within the layer
+
+        Returns:
+            TopKActivationBuffer instance
+        """
+        if layer_idx < len(self.activation_buffers) and filter_idx < len(self.activation_buffers[layer_idx]):
+            return self.activation_buffers[layer_idx][filter_idx]
+        return None
+
+    def save_activation_buffers(self, filepath):
+        """Save activation buffers to disk for offline analysis.
+
+        Args:
+            filepath: Path to save file (will create .npz file)
+        """
+        import numpy as np
+        from pathlib import Path
+
+        try:
+            filepath = Path(filepath)
+            filepath.parent.mkdir(parents=True, exist_ok=True)
+
+            # Collect all buffer data
+            buffer_data = {}
+            for layer_idx, layer_buffers in enumerate(self.activation_buffers):
+                for filter_idx, buffer in enumerate(layer_buffers):
+                    top_k = buffer.get_top_k()
+                    if top_k:
+                        # Store activation values and patches separately
+                        key_prefix = f"layer{layer_idx}_filter{filter_idx}"
+                        activations = np.array([val for val, _ in top_k])
+                        patches = np.array([patch for _, patch in top_k])
+                        buffer_data[f"{key_prefix}_activations"] = activations
+                        buffer_data[f"{key_prefix}_patches"] = patches
+
+            # Save to compressed npz file
+            np.savez_compressed(filepath, **buffer_data)
+            print(f"Saved activation buffers to {filepath}")
+
+        except Exception as e:
+            import sys
+            print(f"Error saving activation buffers: {e}", file=sys.stderr)
+
+    def load_activation_buffers(self, filepath):
+        """Load activation buffers from disk.
+
+        Args:
+            filepath: Path to load file (.npz file)
+        """
+        import numpy as np
+        from pathlib import Path
+
+        try:
+            filepath = Path(filepath)
+            if not filepath.exists():
+                print(f"File not found: {filepath}")
+                return
+
+            # Load data
+            data = np.load(filepath)
+
+            # Reconstruct buffers
+            for layer_idx, layer_buffers in enumerate(self.activation_buffers):
+                for filter_idx, buffer in enumerate(layer_buffers):
+                    key_prefix = f"layer{layer_idx}_filter{filter_idx}"
+                    act_key = f"{key_prefix}_activations"
+                    patch_key = f"{key_prefix}_patches"
+
+                    if act_key in data and patch_key in data:
+                        # Clear existing buffer
+                        buffer.clear()
+
+                        # Reload data
+                        activations = data[act_key]
+                        patches = data[patch_key]
+
+                        for act_val, patch in zip(activations, patches):
+                            buffer.update(float(act_val), patch)
+
+            print(f"Loaded activation buffers from {filepath}")
+
+        except Exception as e:
+            import sys
+            print(f"Error loading activation buffers: {e}", file=sys.stderr)
+
+    def clear_all_buffers(self):
+        """Clear all activation buffers."""
+        for layer_buffers in self.activation_buffers:
+            for buffer in layer_buffers:
+                buffer.clear()
+        print("Cleared all activation buffers")
+
     def update(self):
         """Update activation visualizations (throttled)."""
         if not self.is_open:
@@ -2142,6 +3469,27 @@ class CNNFilterActivationViewer:
                     if self.detail_viewer.filter_idx < activation.shape[0]:
                         activation_2d = activation[self.detail_viewer.filter_idx].cpu().numpy()
                         self.detail_viewer.update_activation(activation_2d)
+
+            # Update maximal activation viewer with new buffer data (real-time refresh)
+            if self.maximal_activation_viewer is not None and self.maximal_activation_viewer.is_open:
+                # Refresh without changing filter - just update images with latest top-K
+                self.maximal_activation_viewer.refresh()
+
+            # Update receptive field overlay with new observation
+            if self.rf_overlay_viewer is not None and self.rf_overlay_viewer.is_open:
+                if self.current_input is not None:
+                    # Get activation for currently displayed layer
+                    layer_idx = self.rf_overlay_viewer.layer_idx
+                    activation = self.conv_info[layer_idx].get('activation')
+                    if activation is not None:
+                        if activation.dim() == 4:
+                            activation = activation[0]
+                        # Show RF for center of activation map
+                        act_h, act_w = activation.shape[1], activation.shape[2]
+                        center_y, center_x = act_h // 2, act_w // 2
+                        self.rf_overlay_viewer.update_observation(
+                            self.current_input, act_y=center_y, act_x=center_x
+                        )
 
         except Exception as e:
             import sys
@@ -2615,6 +3963,9 @@ def extract_action_labels_from_config(config) -> dict[int, str] | None:
     if not isinstance(original_labels, dict):
         return None
 
+    # Ensure keys are integers (JSON serialization may convert them to strings)
+    original_labels = {int(k): v for k, v in original_labels.items()}
+
     # Check if there's a DiscreteActionSpaceRemapperWrapper
     remapping = None
     if hasattr(config, 'env_wrappers') and config.env_wrappers:
@@ -2637,7 +3988,7 @@ def extract_action_labels_from_config(config) -> dict[int, str] | None:
         return original_labels
 
 
-def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: bool = False, fps: int | None = None, action_labels: dict[int, str] | None = None, plotter: RewardPlotter | None = None, obs_viewer: PreprocessedObservationViewer | None = None):
+def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: bool = False, fps: int | None = None, action_labels: dict[int, str] | None = None, plotter: RewardPlotter | None = None, obs_viewer: PreprocessedObservationViewer | None = None, action_viewer: ActionVisualizer | None = None):
     """Play episodes with random actions or user input."""
     import numpy as np
     import gymnasium as gym
@@ -2888,6 +4239,18 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
         if obs_viewer and obs_viewer.is_open:
             obs_viewer.update(obs[0])
 
+        # Update action visualizer
+        if action_viewer and action_viewer.is_open:
+            if is_multibinary:
+                # For MultiBinary: show button states (0.0 or 1.0)
+                button_states = [float(action[i]) for i in range(len(action))]
+                action_viewer.update(button_states, None)
+            else:
+                # For Discrete: show uniform distribution with selected action highlighted
+                # (we don't have true probabilities in manual mode)
+                uniform_probs = [1.0 / n_actions] * n_actions
+                action_viewer.update(uniform_probs, action)
+
         # Apply FPS limiting if specified
         if frame_delay > 0:
             elapsed = time.perf_counter() - step_start
@@ -2955,6 +4318,7 @@ def main():
     p.add_argument("--plot-update-interval", type=float, default=0.2, help="Minimum time (seconds) between plot updates (default: 0.2, lower=smoother but slower game)")
     p.add_argument("--plot-window-size", type=int, default=100, help="Number of steps to show in sliding window (default: 100)")
     p.add_argument("--show-preprocessing", dest="show_preprocessing", action="store_true", default=False, help="Show preprocessed observations in separate window (what agent sees)")
+    p.add_argument("--show-actions", dest="show_actions", action="store_true", default=False, help="Show action probabilities in separate window (requires trained policy)")
     p.add_argument("--show-cnn-filters", dest="show_cnn_filters", action="store_true", default=False, help="Show CNN filters and activations in separate window (requires CNN policy)")
     p.add_argument("--toolbar", action="store_true", default=True, help="Show interactive visualization toolbar for toggling viewers and changing colormaps (default: True)")
     p.add_argument("--no-toolbar", dest="toolbar", action="store_false", help="Disable interactive visualization toolbar")
@@ -3093,6 +4457,10 @@ def main():
 
     # Extract action labels from config
     action_labels = extract_action_labels_from_config(config)
+    if action_labels:
+        print(f"Loaded {len(action_labels)} action labels from config spec")
+    else:
+        print("No action labels found in config spec")
 
     # Initialize reward plotter if enabled and not headless
     plotter = None
@@ -3124,16 +4492,39 @@ def main():
             print(f"Warning: Could not initialize preprocessed observation viewer: {e}")
             obs_viewer = None
 
+    # Initialize action visualizer if enabled and not headless
+    action_viewer = None
+    if args.show_actions and not args.headless:
+        try:
+            # Get number of actions from environment
+            from gymnasium.spaces import Discrete, MultiBinary
+            action_space = env.single_action_space
+            if isinstance(action_space, (Discrete, MultiBinary)):
+                n_actions = action_space.n
+                action_viewer = ActionVisualizer(n_actions=n_actions, action_labels=action_labels, update_interval=0.05)
+                _active_viewers['action_visualizer'] = action_viewer
+                backend = "PyQtGraph (fast)" if action_viewer.use_pyqtgraph else "Matplotlib"
+                space_type = "MultiBinary buttons" if isinstance(action_space, MultiBinary) else "Discrete actions"
+                print(f"Action visualizer enabled using {backend} for {space_type}")
+                print("Close the viewer window to disable it.")
+            else:
+                print(f"Warning: Action visualizer only supports Discrete and MultiBinary action spaces (got {type(action_space).__name__})")
+        except Exception as e:
+            print(f"Warning: Could not initialize action visualizer: {e}")
+            action_viewer = None
+
     # Handle different modes
     if args.mode in ["random", "user"]:
         # Manual control modes don't need policy
         try:
-            play_episodes_manual(env, target_episodes, args.mode, args.step_by_step, args.fps, action_labels, plotter, obs_viewer)
+            play_episodes_manual(env, target_episodes, args.mode, args.step_by_step, args.fps, action_labels, plotter, obs_viewer, action_viewer)
         finally:
             if plotter:
                 plotter.close()
             if obs_viewer:
                 obs_viewer.close()
+            if action_viewer:
+                action_viewer.close()
         print("Done.")
         return
 
@@ -3162,24 +4553,24 @@ def main():
     toolbar = None
     if args.toolbar and not args.headless:
         try:
-            toolbar = VisualizationToolbar(config, policy_model, env, reward_plotter=plotter, obs_viewer=obs_viewer, cnn_viewer=cnn_viewer)
+            toolbar = VisualizationToolbar(config, policy_model, env, reward_plotter=plotter, obs_viewer=obs_viewer, action_viewer=action_viewer, cnn_viewer=cnn_viewer)
             print("Visualization toolbar enabled")
             print("  Click buttons to toggle viewers and change colormaps")
-            print("  Hotkeys: [R] Reward | [O] Observation | [F] Filters | [Q] Close")
+            print("  Hotkeys: [R] Reward | [O] Observation | [A] Actions | [F] Filters | [Q] Close")
         except Exception as e:
             print(f"Warning: Could not initialize visualization toolbar: {e}")
             toolbar = None
 
-    # Initialize rollout collector; step-by-step mode, FPS limiting, plotting, or obs viewer uses single-step rollouts
+    # Initialize rollout collector; step-by-step mode, FPS limiting, plotting, or viewers use single-step rollouts
     collector = RolloutCollector(
         env=env,
         policy_model=policy_model,
-        n_steps=1 if (args.step_by_step or args.fps or plotter or obs_viewer or cnn_viewer) else config.n_steps,
+        n_steps=1 if (args.step_by_step or args.fps or plotter or obs_viewer or action_viewer or cnn_viewer) else config.n_steps,
         **config.rollout_collector_hyperparams(),
     )
 
     # Print hotkey instructions if any viewers are active
-    if plotter or obs_viewer or cnn_viewer:
+    if plotter or obs_viewer or action_viewer or cnn_viewer:
         print("\n" + "="*60)
         print("💡 TIP: Press F9 in any visualization window to save")
         print("   the current window layout to window_layout.json")
@@ -3222,20 +4613,46 @@ def main():
 
             # Update CNN filter/activation viewer if enabled
             if cnn_viewer and cnn_viewer.is_open:
+                # Pass current observation to CNN viewer for activation buffer updates
+                if collector.n_steps == 1:
+                    obs = collector._buffer.obs_buf[collector._buffer.pos - 1, 0]
+                    cnn_viewer.set_input(obs)
                 cnn_viewer.update()
+
+            # Update action visualizer if enabled
+            if action_viewer and action_viewer.is_open and collector.n_steps == 1:
+                from gymnasium.spaces import MultiBinary
+                action_space = env.single_action_space
+
+                if isinstance(action_space, MultiBinary):
+                    # For MultiBinary: show button states (0.0 or 1.0)
+                    action_array = collector._buffer.actions_buf[collector._buffer.pos - 1, 0]
+                    button_states = [float(action_array[i]) for i in range(len(action_array))]
+                    # No single "selected" action for MultiBinary, pass None
+                    action_viewer.update(button_states, None)
+                else:
+                    # For Discrete: show action probabilities
+                    action_probs = env.get_action_probs()
+                    # Get the selected action from the buffer
+                    selected_action = int(collector._buffer.actions_buf[collector._buffer.pos - 1, 0])
+                    # Update action visualizer
+                    if action_probs is not None:
+                        action_viewer.update(action_probs[0], selected_action)
 
             # Update toolbar if enabled
             if toolbar and toolbar.is_open:
                 # Handle toolbar events and get updated viewer references
                 result = toolbar.handle_events()
                 if result is not None:
-                    toolbar_plotter, toolbar_obs, toolbar_cnn = result
+                    toolbar_plotter, toolbar_obs, toolbar_action, toolbar_cnn = result
 
                     # Update viewer references from toolbar
                     if toolbar_plotter is not None:
                         plotter = toolbar_plotter
                     if toolbar_obs is not None:
                         obs_viewer = toolbar_obs
+                    if toolbar_action is not None:
+                        action_viewer = toolbar_action
                     if toolbar_cnn is not None:
                         cnn_viewer = toolbar_cnn
 
@@ -3276,6 +4693,8 @@ def main():
             plotter.close()
         if obs_viewer:
             obs_viewer.close()
+        if action_viewer:
+            action_viewer.close()
         if cnn_viewer:
             cnn_viewer.close()
 

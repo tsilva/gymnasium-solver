@@ -1099,9 +1099,9 @@ async def start_training(
     # Set environment variables
     env = dict(os.environ)
     env["WANDB_MODE"] = wandb_mode
-    # Note: Intentionally NOT setting VIBES_QUIET to avoid potential issues with progress bars
-    # if quiet:
-    #     env["VIBES_QUIET"] = "1"
+    # Always set VIBES_QUIET when running via MCP to disable progress bars
+    # Progress bars don't work properly when stdout is redirected
+    env["VIBES_QUIET"] = "1"
 
     # Start process in new session to fully detach from terminal
     # Redirect all stdio to avoid blocking on pipes or interactive prompts

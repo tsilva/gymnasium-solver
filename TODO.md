@@ -1,23 +1,22 @@
 # TODO
 
-# NEXT
+# MODAL
 
 - BUG: cant seem to detach modal runs
 - BUG: runs executed through modal dont seem to have same wandb run id
 - BUG: clean exit run_play on ctrl+c
 - BUG: remote runs get killed if I close terminal?
 
-- BUG: remote runs are still creating local run folder (empty)
-- BUG: cant train VizDoom-Basic-v0 when frame_stack is 1
-- TODO: progress bar for rollout collection
-- FEAT: run_inspect.py add support for monitoring rollouts with different hyperparams
+# NEXT
 
+- BUG: cant train VizDoom-Basic-v0 when frame_stack is 1
+- FEAT: run_inspect.py add support for monitoring rollouts with different hyperparams
 - THINK: how to audit reward structure / mean, std, outliers, and histogram
 - FEAT: add sweep.py with --backend modal support
 - FEAT: sweep from run/checkpoint/
 - BUG: run_play.py user input not working for Atari envs
 - TEST: CleanRL's envpool implementation
-- FEAT: train from previous run, use that to do multiple runs until convergence (new run loads param); should we restore optimizer? confirm new run starts with same performance, check if it evolves better with same or dfiferent optimizer
+- BUG: why cant I resume run from exactly same perf location
 - TEST: ensure evaluation is ran exactly same way as train (eg: alevecenv)
 - TODO: add env normalization support, make sure normalization is saved
 - TODO: add action number/ label before each frame stack image in inspect (allows easily seeing which action was performed when each frame was seen)

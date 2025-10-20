@@ -334,7 +334,7 @@ def create_training_function(app: modal.App, resources: ResourceRequirements, de
 
             Args:
                 train_args: List of CLI arguments to pass to train.py (excluding --modal)
-                run_id: Pre-generated run ID to use for W&B and local run directory
+                run_id: Pre-generated run ID to use for W&B run naming
                 project_id: W&B project ID from config (used to set WANDB_PROJECT env var)
 
             Returns:
@@ -466,7 +466,7 @@ def create_training_function(app: modal.App, resources: ResourceRequirements, de
 
             Args:
                 train_args: List of CLI arguments to pass to train.py (excluding --modal)
-                run_id: Pre-generated run ID to use for W&B and local run directory
+                run_id: Pre-generated run ID to use for W&B run naming
                 project_id: W&B project ID from config (used to set WANDB_PROJECT env var)
 
             Yields:
@@ -605,7 +605,6 @@ def launch_modal_training(args):
         args: Parsed argparse arguments from train.py
     """
     import wandb
-    from utils.run import Run
     from utils.config import load_config
 
     # Check if detached mode is requested
@@ -648,18 +647,15 @@ def launch_modal_training(args):
         )
         print(f"Resource requirements: {resources}")
 
-        # Generate run ID locally and create local run directory stub
-        # This ensures W&B run name matches local run directory
+        # Generate run ID locally for W&B and Modal app naming
+        # Note: We do NOT create a local run directory for Modal runs
+        # since all artifacts are stored remotely in W&B
         run_id = wandb.util.generate_id()
         config = load_config(config_id, variant_id)
 
         # Extract project_id from config to set WANDB_PROJECT in Modal
         # This is needed for W&B artifact downloads (e.g., --init-from-run)
         project_id = config.project_id
-
-        # Create local run directory with the generated ID
-        print(f"Creating local run directory: runs/{run_id}")
-        Run.create(run_id=run_id, config=config)
 
     # Create Modal app with dynamic name
     app_name = f"gymnasium-solver-{project_id}-{run_id or 'resume'}"

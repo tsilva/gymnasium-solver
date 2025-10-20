@@ -119,6 +119,7 @@ VizDoom-Deathmatch-v0
 
 ## WISHLIST
 
+- FEAT: merge gymnasium recorder repo with this one
 - FEAT: batch norm support
 - FEAT: layer norm support
 - FEAT: add observation/action noise support

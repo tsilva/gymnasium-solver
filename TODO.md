@@ -14,7 +14,6 @@
 
 # RUN_PLAY
 
-- Ensure random mode uses random policy instead of random sampling (init new model and just use that)
 - Add window layout snapshot button
 - BUG: run_play.py user input not working for Atari envs
 
@@ -32,11 +31,9 @@
 
 ## SuperMarioBros-Nes
 
+- FEAT: wrapper that patches parts of OBS (eg: hud)
 - GOAL: ensure level-1-1 can be completed with ~100% win rate
 - EXP: train on level 2 after mastering level 1, check if it forgets level 1
-
-- TODO: add support for logging info vars in run_inspect.py
-
 - FEAT: stack action just as frames 
 - FEAT: resize to preserve aspect ratio (to avoid distortions)
 - FEAT: crop mario frames

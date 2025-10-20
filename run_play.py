@@ -4453,7 +4453,7 @@ def main():
         "--mode",
         choices=["trained", "random", "user"],
         default=None,
-        help="Action mode: 'trained' (use trained policy), 'random' (sample from action space), 'user' (keyboard input). Default: 'trained' for --run-id, 'random' for --config-id",
+        help="Action mode: 'trained' (use trained policy), 'random' (use untrained/random policy), 'user' (keyboard input). Default: 'trained' for --run-id, 'random' for --config-id",
     )
     p.add_argument("--seed", type=str, default=None, help="Random seed for environment (int, 'train', 'val', 'test', or None for test seed)")
     p.add_argument("--fps", type=int, default=None, help="Limit playback to target FPS (frames per second)")
@@ -4464,6 +4464,8 @@ def main():
     p.add_argument("--show-preprocessing", dest="show_preprocessing", action="store_true", default=False, help="Show preprocessed observations in separate window (what agent sees)")
     p.add_argument("--show-actions", dest="show_actions", action="store_true", default=False, help="Show action probabilities in separate window (requires trained policy)")
     p.add_argument("--show-cnn-filters", dest="show_cnn_filters", action="store_true", default=False, help="Show CNN filters and activations in separate window (requires CNN policy)")
+    p.add_argument("--show-obs", dest="show_obs", action="store_true", default=None, help="Show live observation values during playback (default: True for interactive, False when headless)")
+    p.add_argument("--no-show-obs", dest="show_obs", action="store_false", help="Disable live observation values")
     p.add_argument("--toolbar", action="store_true", default=True, help="Show interactive visualization toolbar for toggling viewers and changing colormaps (default: True)")
     p.add_argument("--no-toolbar", dest="toolbar", action="store_false", help="Disable interactive visualization toolbar")
     p.add_argument(
@@ -4475,6 +4477,10 @@ def main():
     )
     args = p.parse_args()
     target_episodes = max(1, int(args.episodes))
+
+    # Default show_obs based on headless mode if not explicitly set
+    if args.show_obs is None:
+        args.show_obs = not args.headless
 
     # Auto-detect config-id vs run-id from positional argument
     if args.id is not None:
@@ -4597,7 +4603,7 @@ def main():
 
     # Attach a live observation bar printer for interactive play (vector-level wrapper)
     from gym_wrappers.vec_obs_printer import VecObsBarPrinter
-    env = VecObsBarPrinter(env, bar_width=40, env_index=0, enable=True, target_episodes=target_episodes)
+    env = VecObsBarPrinter(env, bar_width=40, env_index=0, enable=args.show_obs, target_episodes=target_episodes)
 
     # Extract action labels from config
     action_labels = extract_action_labels_from_config(config)
@@ -4658,8 +4664,8 @@ def main():
             action_viewer = None
 
     # Handle different modes
-    if args.mode in ["random", "user"]:
-        # Manual control modes don't need policy
+    if args.mode == "user":
+        # User control mode doesn't need policy
         try:
             play_episodes_manual(env, target_episodes, args.mode, args.step_by_step, args.fps, action_labels, plotter, obs_viewer, action_viewer)
         finally:
@@ -4672,10 +4678,19 @@ def main():
         print("Done.")
         return
 
-    # Trained mode: load policy
-    assert run is not None, "run must be loaded for trained mode"
-    # TODO: we should be loading the agent and having it run the episode
-    policy_model, _ = load_policy_model_from_checkpoint(run.best_checkpoint_path, env, config)
+    # Load or build policy based on mode
+    if args.mode == "trained":
+        # Trained mode: load policy from checkpoint
+        assert run is not None, "run must be loaded for trained mode"
+        # TODO: we should be loading the agent and having it run the episode
+        policy_model, _ = load_policy_model_from_checkpoint(run.best_checkpoint_path, env, config)
+    elif args.mode == "random":
+        # Random mode: build new untrained policy
+        from utils.policy_factory import build_policy_from_env_and_config
+        policy_model = build_policy_from_env_and_config(env, config)
+        print(f"Initialized random policy: {policy_model.__class__.__name__}")
+    else:
+        raise ValueError(f"Unknown mode: {args.mode}")
 
     # Initialize CNN filter/activation viewer if enabled and not headless
     cnn_viewer = None

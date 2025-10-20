@@ -157,6 +157,45 @@ def _ensure_action_shape(env, action):
     return action
 
 
+def _filter_info_vars(info: dict) -> dict:
+    """Filter info dict to extract displayable variables, excluding internal/large keys.
+
+    Args:
+        info: Raw info dict from env.step()
+
+    Returns:
+        Filtered dict with only displayable info vars
+    """
+    # Keys to exclude from display (internal, too large, or redundant)
+    excluded_keys = {
+        'episode',           # Contains arrays
+        '_episode',          # Mask array
+        'terminal_observation',  # Observation data (large)
+        'action_mask',       # Can be large, already shown in action table
+        'TimeLimit.truncated',  # Redundant with truncated flag
+    }
+
+    filtered = {}
+    for key, value in info.items():
+        if key in excluded_keys:
+            continue
+
+        # Skip large numpy arrays (keep small scalars)
+        if isinstance(value, np.ndarray):
+            if value.size > 10:
+                continue
+            # Convert small arrays to lists for display
+            value = value.tolist()
+
+        # Skip dict values that are too complex
+        if isinstance(value, dict):
+            continue
+
+        filtered[key] = value
+
+    return filtered
+
+
 def run_episode(
     run_id: str,
     checkpoint_label: str | None,
@@ -514,6 +553,11 @@ def run_episode(
             truncated = bool(_unwrap_vec(truncated))
             done = terminated or truncated
 
+            # Extract and filter info vars for display
+            # Unwrap vectorized info dict (take first env)
+            info_unwrapped = info[0] if isinstance(info, (list, tuple)) and len(info) > 0 else info
+            filtered_info = _filter_info_vars(info_unwrapped)
+
             total_reward += reward
             rewards_buf.append(reward)
             values_buf.append(float(val) if val is not None else 0.0)
@@ -568,6 +612,7 @@ def run_episode(
                 "truncated": truncated,
                 "probs": probs,
                 "greedy_match": greedy_match,
+                "info": filtered_info,  # Environment-specific info vars
             })
 
             t += 1
@@ -1008,6 +1053,16 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
             pairs.append(["mc_return", _format_stat_value(step.get("mc_return"), "mc_return")])
             pairs.append(["value", _format_stat_value(step.get("value"), "value")])
             pairs.append(["gae_adv", _format_stat_value(step.get("gae_adv"), "gae_adv")])
+
+            # Add environment-specific info vars (if present)
+            info_dict = step.get("info", {})
+            if info_dict:
+                # Add separator for visual clarity
+                pairs.append(["---", "---"])
+                # Sort info vars by key for consistent ordering
+                for key in sorted(info_dict.keys()):
+                    value = info_dict[key]
+                    pairs.append([f"info/{key}", _format_stat_value(value, key)])
 
             return pairs
 

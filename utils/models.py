@@ -8,6 +8,7 @@ import torch.nn as nn
 from torch.distributions import Categorical, Bernoulli, Independent
 
 from .torch import compute_param_group_grad_norm, init_model_weights
+from .distributions import MaskedCategorical
 
 
 def resolve_activation(activation_id: str) -> type[nn.Module]:
@@ -272,8 +273,11 @@ class MLPPolicy(BaseModel):
             probs = torch.sigmoid(logits)
             dist = Independent(Bernoulli(probs=probs), 1)
         else:
-            # Use Categorical for discrete actions
-            dist = Categorical(logits=logits)
+            # Use MaskedCategorical if action masking is applied, otherwise standard Categorical
+            if self.valid_actions is not None:
+                dist = MaskedCategorical(logits=logits)
+            else:
+                dist = Categorical(logits=logits)
 
         return dist, None  # Return None for value to maintain compatibility
 
@@ -356,8 +360,11 @@ class MLPActorCritic(BaseModel):
             probs = torch.sigmoid(logits)
             policy_dist = Independent(Bernoulli(probs=probs), 1)
         else:
-            # Use Categorical for discrete actions
-            policy_dist = Categorical(logits=logits)
+            # Use MaskedCategorical if action masking is applied, otherwise standard Categorical
+            if self.valid_actions is not None:
+                policy_dist = MaskedCategorical(logits=logits)
+            else:
+                policy_dist = Categorical(logits=logits)
 
         # Forward through value head and get value prediction
         value_pred = self.value_head(x).squeeze(-1)
@@ -494,8 +501,11 @@ class CNNActorCritic(BaseModel):
             probs = torch.sigmoid(logits)
             policy_dist = Independent(Bernoulli(probs=probs), 1)
         else:
-            # Use Categorical for discrete actions
-            policy_dist = Categorical(logits=logits)
+            # Use MaskedCategorical if action masking is applied, otherwise standard Categorical
+            if self.valid_actions is not None:
+                policy_dist = MaskedCategorical(logits=logits)
+            else:
+                policy_dist = Categorical(logits=logits)
 
         # Value head
         value_pred = self.value_head(x).squeeze(-1)

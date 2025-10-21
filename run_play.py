@@ -9,6 +9,9 @@ import platform
 import time
 from pathlib import Path
 
+import torch
+import torch.nn as nn
+
 from utils.environment import build_env_from_config
 from utils.policy_factory import load_policy_model_from_checkpoint
 from utils.random import set_random_seed
@@ -26,7 +29,8 @@ _active_viewers = {
     'cnn_filter_viewer': None,
     'cnn_detail_viewer': None,
     'maximal_activation_viewer': None,
-    'rf_overlay_viewer': None
+    'rf_overlay_viewer': None,
+    'gradcam_viewer': None
 }
 
 
@@ -124,7 +128,7 @@ def install_keyboard_shortcuts(win, additional_handlers=None):
 class VisualizationToolbar:
     """Interactive toolbar for toggling visualizations and changing color palettes."""
 
-    def __init__(self, config, policy_model=None, env=None, reward_plotter=None, obs_viewer=None, action_viewer=None, cnn_viewer=None):
+    def __init__(self, config, policy_model=None, env=None, reward_plotter=None, obs_viewer=None, action_viewer=None, cnn_viewer=None, gradcam_viewer=None):
         """Initialize the visualization toolbar.
 
         Args:
@@ -135,6 +139,7 @@ class VisualizationToolbar:
             obs_viewer: Existing observation viewer instance (if already created)
             action_viewer: Existing action visualizer instance (if already created)
             cnn_viewer: Existing CNN viewer instance (if already created)
+            gradcam_viewer: Existing GradCAM viewer instance (if already created)
         """
         try:
             import pygame
@@ -144,7 +149,7 @@ class VisualizationToolbar:
 
             # Toolbar dimensions (more vertical, less horizontal)
             self.width = 280
-            self.height = 435
+            self.height = 490
             self.screen = pygame.display.set_mode((self.width, self.height))
             pygame.display.set_caption("Visualization Toolbar")
 
@@ -180,13 +185,15 @@ class VisualizationToolbar:
             self.obs_viewer = obs_viewer
             self.action_viewer = action_viewer
             self.cnn_viewer = cnn_viewer
+            self.gradcam_viewer = gradcam_viewer
 
             # Visualization states (initialize based on existing viewers)
             self.states = {
                 'reward': reward_plotter is not None,
                 'observation': obs_viewer is not None,
                 'actions': action_viewer is not None,
-                'filters': cnn_viewer is not None
+                'filters': cnn_viewer is not None,
+                'gradcam': gradcam_viewer is not None
             }
 
             # Color palettes for CNN filters/activations
@@ -253,6 +260,16 @@ class VisualizationToolbar:
             label="Filters",
             is_active=self.states['filters'],
             action='toggle_filters'
+        )
+        self.buttons.append(btn_rect)
+        y_offset += 55
+
+        # GradCAM button
+        btn_rect = self._draw_toggle_button(
+            x=20, y=y_offset,
+            label="GradCAM",
+            is_active=self.states['gradcam'],
+            action='toggle_gradcam'
         )
         self.buttons.append(btn_rect)
         y_offset += 65
@@ -390,6 +407,8 @@ class VisualizationToolbar:
                     self._toggle_actions()
                 elif event.key == self.pygame.K_f:
                     self._toggle_filters()
+                elif event.key == self.pygame.K_g:
+                    self._toggle_gradcam()
                 elif event.key == self.pygame.K_LEFTBRACKET:
                     self._cycle_filter_palette_prev()
                 elif event.key == self.pygame.K_RIGHTBRACKET:
@@ -401,7 +420,7 @@ class VisualizationToolbar:
         # Re-render on every call to keep window responsive
         self._render()
 
-        return self.reward_plotter, self.obs_viewer, self.action_viewer, self.cnn_viewer
+        return self.reward_plotter, self.obs_viewer, self.action_viewer, self.cnn_viewer, self.gradcam_viewer
 
     def _handle_button_click(self, pos):
         """Handle mouse clicks on buttons."""
@@ -418,6 +437,8 @@ class VisualizationToolbar:
                     self._toggle_actions()
                 elif action == 'toggle_filters':
                     self._toggle_filters()
+                elif action == 'toggle_gradcam':
+                    self._toggle_gradcam()
                 elif action == 'cycle_filter_palette_prev':
                     self._cycle_filter_palette_prev()
                 elif action == 'cycle_filter_palette_next':
@@ -557,6 +578,39 @@ class VisualizationToolbar:
                     self.cnn_viewer = None
                     _active_viewers['cnn_filter_viewer'] = None
                     print("CNN filter viewer disabled")
+
+    def _toggle_gradcam(self):
+        """Toggle GradCAM viewer."""
+        self.states['gradcam'] = not self.states['gradcam']
+
+        if self.states['gradcam']:
+            # Create GradCAM viewer
+            if self.policy_model is None:
+                print("Cannot enable GradCAM viewer: no policy model loaded")
+                self.states['gradcam'] = False
+                return
+
+            try:
+                self.gradcam_viewer = GradCAMViewer(self.policy_model, update_interval=0.1)
+                _active_viewers['gradcam_viewer'] = self.gradcam_viewer
+                print("GradCAM viewer enabled")
+                # Restore focus to toolbar
+                self._restore_focus()
+            except Exception as e:
+                print(f"Failed to create GradCAM viewer: {e}")
+                self.states['gradcam'] = False
+                self.gradcam_viewer = None
+        else:
+            # Close GradCAM viewer
+            if self.gradcam_viewer is not None:
+                try:
+                    self.gradcam_viewer.close()
+                except Exception as e:
+                    print(f"Warning: Error closing GradCAM viewer: {e}")
+                finally:
+                    self.gradcam_viewer = None
+                    _active_viewers['gradcam_viewer'] = None
+                    print("GradCAM viewer disabled")
 
     def _cycle_filter_palette_prev(self):
         """Cycle to previous filter color palette."""
@@ -4446,6 +4500,285 @@ def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: boo
         pygame.quit()
 
 
+class PolicyLogitsWrapper(nn.Module):
+    """Wrapper to extract only policy logits from actor-critic models for GradCAM."""
+
+    def __init__(self, policy_model):
+        super().__init__()
+        self.policy_model = policy_model
+
+    def forward(self, x):
+        """Forward pass that returns only policy logits."""
+
+        # Handle both actor-critic and policy-only models
+        result = self.policy_model(x)
+
+        if isinstance(result, tuple) and len(result) == 2:
+            # Actor-critic: (distribution, value)
+            dist, _ = result
+            # Extract logits from distribution
+            if hasattr(dist, 'logits'):
+                return dist.logits
+            elif hasattr(dist, 'probs'):
+                # Convert probs to logits
+                return torch.log(dist.probs + 1e-8)
+            else:
+                raise ValueError("Distribution doesn't have logits or probs attribute")
+        else:
+            # Policy-only model
+            dist = result
+            if hasattr(dist, 'logits'):
+                return dist.logits
+            elif hasattr(dist, 'probs'):
+                return torch.log(dist.probs + 1e-8)
+            else:
+                raise ValueError("Distribution doesn't have logits or probs attribute")
+
+
+class GradCAMViewer:
+    """Real-time GradCAM saliency map visualizer for CNN policies."""
+
+    def __init__(self, policy_model, update_interval: float = 0.1):
+        """Initialize the GradCAM viewer.
+
+        Args:
+            policy_model: The policy model (must have a 'cnn' attribute with Conv2d layers)
+            update_interval: Minimum time (in seconds) between updates to throttle rendering
+        """
+        import torch.nn as nn
+        import time
+
+        self.time = time
+        self.update_interval = update_interval
+        self.last_update_time = time.time()
+        self.is_open = False
+        self.use_pyqtgraph = False
+
+        # Validate model has CNN
+        if not hasattr(policy_model, 'cnn'):
+            raise ValueError("Policy model must have a 'cnn' attribute for GradCAM visualization")
+
+        # Find the last Conv2d layer (typical target for GradCAM)
+        self.conv_layers = []
+        for module in policy_model.cnn:
+            if isinstance(module, nn.Conv2d):
+                self.conv_layers.append(module)
+
+        if not self.conv_layers:
+            raise ValueError("No Conv2d layers found in policy model")
+
+        # Store policy model and target layer
+        self.policy_model = policy_model
+        self.target_layer = self.conv_layers[-1]  # Use last conv layer by default
+
+        # Initialize GradCAM
+        try:
+            from pytorch_grad_cam import GradCAM
+            from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
+
+            # Wrap model to extract only logits (needed for actor-critic models)
+            wrapped_model = PolicyLogitsWrapper(policy_model)
+
+            # Create GradCAM instance
+            self.gradcam = GradCAM(
+                model=wrapped_model,
+                target_layers=[self.target_layer],
+                reshape_transform=None  # No reshape needed for standard CNNs
+            )
+            self.ClassifierOutputTarget = ClassifierOutputTarget
+
+        except ImportError:
+            raise ImportError("pytorch-grad-cam is required. Install with: pip install grad-cam")
+
+        # Current observation and action for GradCAM
+        self.current_obs = None
+        self.current_action = None
+
+        try:
+            import pyqtgraph as pg
+            from pyqtgraph.Qt import QtCore
+            import numpy as np
+
+            self.pg = pg
+            self.np = np
+
+            # Set background to black
+            pg.setConfigOption('background', 'k')
+            pg.setConfigOption('foreground', 'w')
+
+            # Create window
+            self.win = pg.GraphicsLayoutWidget(show=False, title="GradCAM Saliency")
+            self.win.resize(400, 450)
+
+            # Set window to stay on top
+            try:
+                self.win.setWindowFlags(self.win.windowFlags() | QtCore.Qt.WindowType.WindowStaysOnTopHint)
+            except Exception:
+                pass
+
+            # Position window (use saved layout if available)
+            layout = load_window_layout()
+            if 'gradcam_viewer' in layout:
+                pos = layout['gradcam_viewer']
+                self.win.move(pos['x'], pos['y'])
+                self.win.resize(pos['width'], pos['height'])
+            else:
+                # Default position
+                self.win.move(1200, 50)
+
+            # Create simple layout: just the overlay
+            self.win.ci.layout.setSpacing(5)
+            self.win.ci.layout.setContentsMargins(5, 5, 5, 5)
+
+            # Title label
+            self.win.addLabel("GradCAM Saliency Overlay", col=0, row=0)
+
+            # Overlay view (observation + saliency heatmap)
+            self.overlay_view = self.win.addViewBox(col=0, row=1)
+            self.overlay_view.setAspectLocked(True)
+            self.overlay_view.invertY(True)
+            self.overlay_view.setMenuEnabled(False)
+            self.overlay_view.setMouseEnabled(x=False, y=False)
+            self.overlay_item = pg.ImageItem()
+            self.overlay_view.addItem(self.overlay_item)
+
+            # Action info label
+            self.action_label = self.win.addLabel("", col=0, row=2)
+
+            # Install keyboard shortcuts
+            install_keyboard_shortcuts(self.win)
+
+            # Show window and mark as open
+            self.win.show()
+            self.is_open = True
+            self.use_pyqtgraph = True
+
+            # Register in global viewers
+            _active_viewers['gradcam_viewer'] = self
+
+        except ImportError:
+            raise ImportError("pyqtgraph is required for GradCAM viewer")
+
+    def set_input(self, obs, action=None):
+        """Set the current observation and action for GradCAM.
+
+        Args:
+            obs: Current observation (numpy array or torch tensor)
+            action: Selected action index (for targeted GradCAM)
+        """
+        import torch
+        import numpy as np
+
+        # Convert to numpy if needed
+        if isinstance(obs, torch.Tensor):
+            obs = obs.cpu().numpy()
+
+        self.current_obs = obs
+        self.current_action = action
+
+    def update(self):
+        """Update the GradCAM visualization."""
+        if not self.is_open or self.current_obs is None:
+            return
+
+        # Throttle updates
+        current_time = self.time.time()
+        if current_time - self.last_update_time < self.update_interval:
+            return
+
+        self.last_update_time = current_time
+
+        try:
+            import torch
+            import numpy as np
+            from pytorch_grad_cam.utils.image import show_cam_on_image
+
+            # Prepare input (add batch dimension if needed)
+            obs_input = self.current_obs
+            if obs_input.ndim == 3:  # (C, H, W)
+                obs_input = obs_input[np.newaxis, ...]  # (1, C, H, W)
+
+            # Convert to torch tensor
+            obs_tensor = torch.from_numpy(obs_input).float()
+
+            # Normalize to [0, 1] if uint8
+            if obs_input.dtype == np.uint8:
+                obs_tensor = obs_tensor / 255.0
+
+            # Move to same device as model
+            device = next(self.policy_model.parameters()).device
+            obs_tensor = obs_tensor.to(device)
+
+            # Create target for GradCAM (use selected action or None for dominant action)
+            targets = None
+            if self.current_action is not None:
+                targets = [self.ClassifierOutputTarget(self.current_action)]
+
+            # Generate GradCAM heatmap
+            # GradCAM expects input with requires_grad=True
+            obs_tensor.requires_grad = True
+            grayscale_cam = self.gradcam(input_tensor=obs_tensor, targets=targets)
+
+            # Get the heatmap for the first (and only) image in batch
+            cam = grayscale_cam[0]  # Shape: (H, W)
+
+            # Prepare original observation for display (convert CHW to HWC)
+            obs_display = obs_input[0]  # Remove batch dimension
+
+            # Handle stacked frames (e.g., 4 frames from Atari) - take the last frame
+            if obs_display.shape[0] > 3:  # More than 3 channels means stacked frames
+                obs_display = obs_display[-1:]  # Take last frame (most recent)
+
+            if obs_display.shape[0] in [1, 3, 4]:  # CHW format
+                obs_display = np.transpose(obs_display, (1, 2, 0))  # Convert to HWC
+
+            # Handle grayscale images (C=1) - convert to RGB
+            if obs_display.shape[2] == 1:
+                obs_display = np.repeat(obs_display, 3, axis=2)  # Convert to RGB
+            # Handle stacked grayscale frames in HWC format
+            elif obs_display.shape[2] > 3:
+                obs_display = obs_display[:, :, -1:]  # Take last frame
+                obs_display = np.repeat(obs_display, 3, axis=2)  # Convert to RGB
+
+            # Normalize to [0, 1] for visualization
+            if obs_display.dtype == np.uint8:
+                obs_rgb = obs_display.astype(np.float32) / 255.0
+            else:
+                obs_rgb = obs_display.astype(np.float32)
+                # Ensure in [0, 1] range
+                if obs_rgb.max() > 1.0:
+                    obs_rgb = obs_rgb / 255.0
+
+            # Create overlay using show_cam_on_image
+            overlay = show_cam_on_image(obs_rgb, cam, use_rgb=True)
+
+            # Update overlay image
+            self.overlay_item.setImage(overlay.transpose(1, 0, 2))
+
+            # Update action label
+            if self.current_action is not None:
+                self.action_label.setText(f"Action: {self.current_action}")
+            else:
+                self.action_label.setText("Action: Dominant (argmax)")
+
+            # Process Qt events to update display
+            if hasattr(self.pg.QtWidgets.QApplication, 'instance'):
+                app = self.pg.QtWidgets.QApplication.instance()
+                if app:
+                    app.processEvents()
+
+        except Exception as e:
+            print(f"Error updating GradCAM: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def close(self):
+        """Close the viewer window."""
+        if self.is_open and hasattr(self, 'win'):
+            self.win.close()
+            self.is_open = False
+
+
 def main():
     # Parse command line arguments
     p = argparse.ArgumentParser(description="Play a trained agent using RolloutCollector (human render)")
@@ -4477,6 +4810,7 @@ def main():
     p.add_argument("--show-preprocessing", dest="show_preprocessing", action="store_true", default=False, help="Show preprocessed observations in separate window (what agent sees)")
     p.add_argument("--show-actions", dest="show_actions", action="store_true", default=False, help="Show action probabilities in separate window (requires trained policy)")
     p.add_argument("--show-cnn-filters", dest="show_cnn_filters", action="store_true", default=False, help="Show CNN filters and activations in separate window (requires CNN policy)")
+    p.add_argument("--show-gradcam", dest="show_gradcam", action="store_true", default=False, help="Show GradCAM saliency map in separate window (requires CNN policy)")
     p.add_argument("--show-obs", dest="show_obs", action="store_true", default=None, help="Show live observation values during playback (default: True for interactive, False when headless)")
     p.add_argument("--no-show-obs", dest="show_obs", action="store_false", help="Disable live observation values")
     p.add_argument("--toolbar", action="store_true", default=True, help="Show interactive visualization toolbar for toggling viewers and changing colormaps (default: True)")
@@ -4616,7 +4950,7 @@ def main():
 
     # Attach a live observation bar printer for interactive play (vector-level wrapper)
     from gym_wrappers.vec_obs_printer import VecObsBarPrinter
-    env = VecObsBarPrinter(env, bar_width=40, env_index=0, enable=args.show_obs, target_episodes=target_episodes)
+    #env = VecObsBarPrinter(env, bar_width=40, env_index=0, enable=args.show_obs, target_episodes=target_episodes)
 
     # Extract action labels from config
     action_labels = extract_action_labels_from_config(config)
@@ -4721,14 +5055,29 @@ def main():
             print(f"Warning: Could not initialize CNN filter/activation viewer: {e}")
             cnn_viewer = None
 
+    # Initialize GradCAM viewer if enabled and not headless
+    gradcam_viewer = None
+    if args.show_gradcam and not args.headless:
+        try:
+            gradcam_viewer = GradCAMViewer(policy_model, update_interval=0.1)
+            _active_viewers['gradcam_viewer'] = gradcam_viewer
+            print(f"GradCAM saliency map viewer enabled using PyQtGraph")
+            print("Close the viewer window to disable it.")
+        except ValueError as e:
+            print(f"Warning: {e}")
+            gradcam_viewer = None
+        except Exception as e:
+            print(f"Warning: Could not initialize GradCAM viewer: {e}")
+            gradcam_viewer = None
+
     # Initialize visualization toolbar if enabled (after viewers are created)
     toolbar = None
     if args.toolbar and not args.headless:
         try:
-            toolbar = VisualizationToolbar(config, policy_model, env, reward_plotter=plotter, obs_viewer=obs_viewer, action_viewer=action_viewer, cnn_viewer=cnn_viewer)
+            toolbar = VisualizationToolbar(config, policy_model, env, reward_plotter=plotter, obs_viewer=obs_viewer, action_viewer=action_viewer, cnn_viewer=cnn_viewer, gradcam_viewer=gradcam_viewer)
             print("Visualization toolbar enabled")
             print("  Click buttons to toggle viewers and change colormaps")
-            print("  Hotkeys: [R] Reward | [O] Observation | [A] Actions | [F] Filters | [Q] Close")
+            print("  Hotkeys: [R] Reward | [O] Observation | [A] Actions | [F] Filters | [G] GradCAM | [Q] Close")
         except Exception as e:
             print(f"Warning: Could not initialize visualization toolbar: {e}")
             toolbar = None
@@ -4737,12 +5086,12 @@ def main():
     collector = RolloutCollector(
         env=env,
         policy_model=policy_model,
-        n_steps=1 if (args.step_by_step or args.fps or plotter or obs_viewer or action_viewer or cnn_viewer) else config.n_steps,
+        n_steps=1 if (args.step_by_step or args.fps or plotter or obs_viewer or action_viewer or cnn_viewer or gradcam_viewer) else config.n_steps,
         **config.rollout_collector_hyperparams(),
     )
 
     # Print hotkey instructions if any viewers are active
-    if plotter or obs_viewer or action_viewer or cnn_viewer:
+    if plotter or obs_viewer or action_viewer or cnn_viewer or gradcam_viewer:
         print("\n" + "="*60)
         print("💡 TIP: Press F9 in any visualization window to save")
         print("   the current window layout to window_layout.json")
@@ -4791,6 +5140,14 @@ def main():
                     cnn_viewer.set_input(obs)
                 cnn_viewer.update()
 
+            # Update GradCAM viewer if enabled
+            if gradcam_viewer and gradcam_viewer.is_open and collector.n_steps == 1:
+                # Get current observation and action
+                obs = collector._buffer.obs_buf[collector._buffer.pos - 1, 0]
+                action = int(collector._buffer.actions_buf[collector._buffer.pos - 1, 0])
+                gradcam_viewer.set_input(obs, action)
+                gradcam_viewer.update()
+
             # Update action visualizer if enabled
             if action_viewer and action_viewer.is_open and collector.n_steps == 1:
                 from gymnasium.spaces import MultiBinary
@@ -4816,7 +5173,7 @@ def main():
                 # Handle toolbar events and get updated viewer references
                 result = toolbar.handle_events()
                 if result is not None:
-                    toolbar_plotter, toolbar_obs, toolbar_action, toolbar_cnn = result
+                    toolbar_plotter, toolbar_obs, toolbar_action, toolbar_cnn, toolbar_gradcam = result
 
                     # Update viewer references from toolbar
                     if toolbar_plotter is not None:
@@ -4827,6 +5184,8 @@ def main():
                         action_viewer = toolbar_action
                     if toolbar_cnn is not None:
                         cnn_viewer = toolbar_cnn
+                    if toolbar_gradcam is not None:
+                        gradcam_viewer = toolbar_gradcam
 
             # Apply FPS limiting if specified
             if frame_delay > 0:

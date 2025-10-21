@@ -38,6 +38,8 @@ dependencies = [
     # Building from source also fails. Use with Rosetta or wait for upstream fix.
     "stable-retro>=0.9.5",
     "pyqtgraph>=0.13.7",
+    "grad-cam>=1.5.4",
+    "opencv-python-headless>=4.8.0",  # Override grad-cam's opencv-python to avoid Qt conflicts
 ]
 
 [tool.setuptools.packages.find]

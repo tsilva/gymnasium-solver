@@ -128,7 +128,7 @@ def install_keyboard_shortcuts(win, additional_handlers=None):
 class VisualizationToolbar:
     """Interactive toolbar for toggling visualizations and changing color palettes."""
 
-    def __init__(self, config, policy_model=None, env=None, reward_plotter=None, obs_viewer=None, action_viewer=None, cnn_viewer=None, gradcam_viewer=None):
+    def __init__(self, config, policy_model=None, env=None, reward_plotter=None, obs_viewer=None, action_viewer=None, cnn_viewer=None, gradcam_viewer=None, fps=None):
         """Initialize the visualization toolbar.
 
         Args:
@@ -140,6 +140,7 @@ class VisualizationToolbar:
             action_viewer: Existing action visualizer instance (if already created)
             cnn_viewer: Existing CNN viewer instance (if already created)
             gradcam_viewer: Existing GradCAM viewer instance (if already created)
+            fps: Initial FPS limit (frames per second)
         """
         try:
             import pygame
@@ -149,7 +150,7 @@ class VisualizationToolbar:
 
             # Toolbar dimensions (more vertical, less horizontal)
             self.width = 280
-            self.height = 490
+            self.height = 570
             self.screen = pygame.display.set_mode((self.width, self.height))
             pygame.display.set_caption("Visualization Toolbar")
 
@@ -205,6 +206,14 @@ class VisualizationToolbar:
             # CAM methods for GradCAM
             self.cam_methods = list(GradCAMViewer.CAM_METHODS.keys())
             self.current_cam_method = 0
+
+            # FPS control
+            self.fps = fps
+            self.fps_presets = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, None]  # None = unlimited
+            if fps in self.fps_presets:
+                self.current_fps_preset = self.fps_presets.index(fps)
+            else:
+                self.current_fps_preset = len(self.fps_presets) - 1  # Default to unlimited
 
             # Window is open
             self.is_open = True
@@ -348,6 +357,31 @@ class VisualizationToolbar:
                 action='cycle_cam_method_next'
             )
             self.buttons.append(btn_right)
+            y_offset += 50
+
+        # Section: FPS Control
+        section_title = self.small_font.render("FPS Limit:", True, self.accent_color)
+        self.screen.blit(section_title, (20, y_offset))
+        y_offset += 30
+
+        # FPS preset selector
+        fps_text = str(self.fps) if self.fps else "Unlimited"
+        btn_left = self._draw_arrow_button(
+            x=20, y=y_offset,
+            direction="<",
+            action='cycle_fps_prev'
+        )
+        self.buttons.append(btn_left)
+
+        label_text = self.small_font.render(fps_text, True, self.text_color)
+        self.screen.blit(label_text, (70, y_offset + 8))
+
+        btn_right = self._draw_arrow_button(
+            x=220, y=y_offset,
+            direction=">",
+            action='cycle_fps_next'
+        )
+        self.buttons.append(btn_right)
 
         self.pygame.display.flip()
 
@@ -413,9 +447,9 @@ class VisualizationToolbar:
         return {'rect': self.pygame.Rect(x, y, width, height), 'action': action}
 
     def handle_events(self):
-        """Process toolbar events and return active viewer instances."""
+        """Process toolbar events and return active viewer instances and current FPS."""
         if not self.is_open:
-            return None, None, None, None
+            return None, None, None, None, None
 
         # Update mouse position
         self.mouse_pos = self.pygame.mouse.get_pos()
@@ -424,11 +458,11 @@ class VisualizationToolbar:
         for event in self.pygame.event.get():
             if event.type == self.pygame.QUIT:
                 self.close()
-                return None, None, None, None
+                return None, None, None, None, None
             elif event.type == self.pygame.KEYDOWN:
                 if event.key == self.pygame.K_q:
                     self.close()
-                    return None, None, None, None
+                    return None, None, None, None, None
                 elif event.key == self.pygame.K_r:
                     self._toggle_reward()
                 elif event.key == self.pygame.K_o:
@@ -450,7 +484,7 @@ class VisualizationToolbar:
         # Re-render on every call to keep window responsive
         self._render()
 
-        return self.reward_plotter, self.obs_viewer, self.action_viewer, self.cnn_viewer, self.gradcam_viewer
+        return self.reward_plotter, self.obs_viewer, self.action_viewer, self.cnn_viewer, self.gradcam_viewer, self.fps
 
     def _handle_button_click(self, pos):
         """Handle mouse clicks on buttons."""
@@ -481,6 +515,10 @@ class VisualizationToolbar:
                     self._cycle_cam_method_prev()
                 elif action == 'cycle_cam_method_next':
                     self._cycle_cam_method_next()
+                elif action == 'cycle_fps_prev':
+                    self._cycle_fps_prev()
+                elif action == 'cycle_fps_next':
+                    self._cycle_fps_next()
                 break
 
     def _toggle_reward(self):
@@ -727,6 +765,20 @@ class VisualizationToolbar:
                 self.gradcam_viewer.set_cam_method(method_name)
             except Exception as e:
                 print(f"  Error switching CAM method: {e}")
+
+    def _cycle_fps_prev(self):
+        """Cycle to previous FPS preset."""
+        self.current_fps_preset = (self.current_fps_preset - 1) % len(self.fps_presets)
+        self.fps = self.fps_presets[self.current_fps_preset]
+        fps_text = str(self.fps) if self.fps else "Unlimited"
+        print(f"FPS limit: {fps_text}")
+
+    def _cycle_fps_next(self):
+        """Cycle to next FPS preset."""
+        self.current_fps_preset = (self.current_fps_preset + 1) % len(self.fps_presets)
+        self.fps = self.fps_presets[self.current_fps_preset]
+        fps_text = str(self.fps) if self.fps else "Unlimited"
+        print(f"FPS limit: {fps_text}")
 
     def _restore_focus(self):
         """Restore focus to the toolbar window after creating viewers."""
@@ -5184,7 +5236,7 @@ def main():
     toolbar = None
     if args.toolbar and not args.headless:
         try:
-            toolbar = VisualizationToolbar(config, policy_model, env, reward_plotter=plotter, obs_viewer=obs_viewer, action_viewer=action_viewer, cnn_viewer=cnn_viewer, gradcam_viewer=gradcam_viewer)
+            toolbar = VisualizationToolbar(config, policy_model, env, reward_plotter=plotter, obs_viewer=obs_viewer, action_viewer=action_viewer, cnn_viewer=cnn_viewer, gradcam_viewer=gradcam_viewer, fps=args.fps)
             print("Visualization toolbar enabled")
             print("  Click buttons to toggle viewers and change colormaps")
             print("  Hotkeys: [R] Reward | [O] Observation | [A] Actions | [F] Filters | [G] GradCAM | [Q] Close")
@@ -5280,10 +5332,10 @@ def main():
 
             # Update toolbar if enabled
             if toolbar and toolbar.is_open:
-                # Handle toolbar events and get updated viewer references
+                # Handle toolbar events and get updated viewer references and FPS
                 result = toolbar.handle_events()
                 if result is not None:
-                    toolbar_plotter, toolbar_obs, toolbar_action, toolbar_cnn, toolbar_gradcam = result
+                    toolbar_plotter, toolbar_obs, toolbar_action, toolbar_cnn, toolbar_gradcam, toolbar_fps = result
 
                     # Update viewer references from toolbar
                     if toolbar_plotter is not None:
@@ -5296,6 +5348,11 @@ def main():
                         cnn_viewer = toolbar_cnn
                     if toolbar_gradcam is not None:
                         gradcam_viewer = toolbar_gradcam
+
+                    # Update FPS limit from toolbar
+                    if toolbar_fps != args.fps:
+                        args.fps = toolbar_fps
+                        frame_delay = 1.0 / args.fps if args.fps else 0
 
             # Apply FPS limiting if specified
             if frame_delay > 0:

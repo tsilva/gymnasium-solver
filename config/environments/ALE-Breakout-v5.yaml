@@ -170,7 +170,7 @@ rgb_ppo: &rgb_ppo
   n_steps: 256
   policy_lr: 0.00025
   #ent_coef: 0.0
-  ent_coef: 0.001
+  ent_coef: 0.01
   n_epochs: 3 
   clip_range: 0.1
   batch_size: 512

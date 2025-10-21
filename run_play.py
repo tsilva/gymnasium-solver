@@ -202,6 +202,10 @@ class VisualizationToolbar:
             self.current_filter_palette = 0
             self.current_activation_palette = 0
 
+            # CAM methods for GradCAM
+            self.cam_methods = list(GradCAMViewer.CAM_METHODS.keys())
+            self.current_cam_method = 0
+
             # Window is open
             self.is_open = True
 
@@ -316,6 +320,32 @@ class VisualizationToolbar:
                 x=220, y=y_offset,
                 direction=">",
                 action='cycle_activation_palette_next'
+            )
+            self.buttons.append(btn_right)
+            y_offset += 40
+
+        # Section: CAM Methods (only show if gradcam active)
+        if self.states['gradcam']:
+            section_title = self.small_font.render("CAM Method:", True, self.accent_color)
+            self.screen.blit(section_title, (20, y_offset))
+            y_offset += 30
+
+            # CAM method selector
+            cam_method = self.cam_methods[self.current_cam_method]
+            btn_left = self._draw_arrow_button(
+                x=20, y=y_offset,
+                direction="<",
+                action='cycle_cam_method_prev'
+            )
+            self.buttons.append(btn_left)
+
+            label_text = self.small_font.render(cam_method, True, self.text_color)
+            self.screen.blit(label_text, (70, y_offset + 8))
+
+            btn_right = self._draw_arrow_button(
+                x=220, y=y_offset,
+                direction=">",
+                action='cycle_cam_method_next'
             )
             self.buttons.append(btn_right)
 
@@ -447,6 +477,10 @@ class VisualizationToolbar:
                     self._cycle_activation_palette_prev()
                 elif action == 'cycle_activation_palette_next':
                     self._cycle_activation_palette_next()
+                elif action == 'cycle_cam_method_prev':
+                    self._cycle_cam_method_prev()
+                elif action == 'cycle_cam_method_next':
+                    self._cycle_cam_method_next()
                 break
 
     def _toggle_reward(self):
@@ -667,6 +701,32 @@ class VisualizationToolbar:
                 print(f"  Applied {palette_name} to activation viewer")
             except Exception as e:
                 print(f"  Error applying colormap: {e}")
+
+    def _cycle_cam_method_prev(self):
+        """Cycle to previous CAM method."""
+        self.current_cam_method = (self.current_cam_method - 1) % len(self.cam_methods)
+        method_name = self.cam_methods[self.current_cam_method]
+        print(f"CAM method: {method_name}")
+
+        # Apply to active GradCAM viewer
+        if self.gradcam_viewer is not None and self.gradcam_viewer.is_open:
+            try:
+                self.gradcam_viewer.set_cam_method(method_name)
+            except Exception as e:
+                print(f"  Error switching CAM method: {e}")
+
+    def _cycle_cam_method_next(self):
+        """Cycle to next CAM method."""
+        self.current_cam_method = (self.current_cam_method + 1) % len(self.cam_methods)
+        method_name = self.cam_methods[self.current_cam_method]
+        print(f"CAM method: {method_name}")
+
+        # Apply to active GradCAM viewer
+        if self.gradcam_viewer is not None and self.gradcam_viewer.is_open:
+            try:
+                self.gradcam_viewer.set_cam_method(method_name)
+            except Exception as e:
+                print(f"  Error switching CAM method: {e}")
 
     def _restore_focus(self):
         """Restore focus to the toolbar window after creating viewers."""
@@ -4538,12 +4598,24 @@ class PolicyLogitsWrapper(nn.Module):
 class GradCAMViewer:
     """Real-time GradCAM saliency map visualizer for CNN policies."""
 
-    def __init__(self, policy_model, update_interval: float = 0.1):
+    # Available CAM methods
+    CAM_METHODS = {
+        'GradCAM': 'GradCAM',
+        'GradCAM++': 'GradCAMPlusPlus',
+        'XGradCAM': 'XGradCAM',
+        'LayerCAM': 'LayerCAM',
+        'ScoreCAM': 'ScoreCAM',
+        'EigenCAM': 'EigenCAM',
+        'HiResCAM': 'HiResCAM',
+    }
+
+    def __init__(self, policy_model, update_interval: float = 0.1, cam_method: str = 'GradCAM'):
         """Initialize the GradCAM viewer.
 
         Args:
             policy_model: The policy model (must have a 'cnn' attribute with Conv2d layers)
             update_interval: Minimum time (in seconds) between updates to throttle rendering
+            cam_method: CAM method to use (default: 'GradCAM')
         """
         import torch.nn as nn
         import time
@@ -4570,22 +4642,18 @@ class GradCAMViewer:
         # Store policy model and target layer
         self.policy_model = policy_model
         self.target_layer = self.conv_layers[-1]  # Use last conv layer by default
+        self.wrapped_model = PolicyLogitsWrapper(policy_model)
+
+        # Current CAM method
+        self.current_cam_method = cam_method
 
         # Initialize GradCAM
         try:
-            from pytorch_grad_cam import GradCAM
             from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
-
-            # Wrap model to extract only logits (needed for actor-critic models)
-            wrapped_model = PolicyLogitsWrapper(policy_model)
-
-            # Create GradCAM instance
-            self.gradcam = GradCAM(
-                model=wrapped_model,
-                target_layers=[self.target_layer],
-                reshape_transform=None  # No reshape needed for standard CNNs
-            )
             self.ClassifierOutputTarget = ClassifierOutputTarget
+
+            # Create CAM instance
+            self._create_cam_instance(cam_method)
 
         except ImportError:
             raise ImportError("pytorch-grad-cam is required. Install with: pip install grad-cam")
@@ -4594,6 +4662,7 @@ class GradCAMViewer:
         self.current_obs = None
         self.current_action = None
 
+        # Initialize PyQtGraph window
         try:
             import pyqtgraph as pg
             from pyqtgraph.Qt import QtCore
@@ -4658,6 +4727,47 @@ class GradCAMViewer:
 
         except ImportError:
             raise ImportError("pyqtgraph is required for GradCAM viewer")
+
+    def _create_cam_instance(self, method_name: str):
+        """Create a new CAM instance with the specified method.
+
+        Args:
+            method_name: Name of the CAM method (e.g., 'GradCAM', 'GradCAM++')
+        """
+        import pytorch_grad_cam
+
+        # Get the class name from the mapping
+        class_name = self.CAM_METHODS.get(method_name, 'GradCAM')
+
+        # Get the CAM class
+        cam_class = getattr(pytorch_grad_cam, class_name, None)
+        if cam_class is None:
+            print(f"Warning: CAM method '{class_name}' not found, falling back to GradCAM")
+            cam_class = pytorch_grad_cam.GradCAM
+
+        # Create new CAM instance
+        self.gradcam = cam_class(
+            model=self.wrapped_model,
+            target_layers=[self.target_layer],
+            reshape_transform=None
+        )
+        self.current_cam_method = method_name
+
+    def set_cam_method(self, method_name: str):
+        """Change the CAM method.
+
+        Args:
+            method_name: Name of the CAM method (e.g., 'GradCAM', 'GradCAM++')
+        """
+        if method_name not in self.CAM_METHODS:
+            print(f"Warning: Unknown CAM method '{method_name}', ignoring")
+            return
+
+        try:
+            self._create_cam_instance(method_name)
+            print(f"Switched to {method_name}")
+        except Exception as e:
+            print(f"Error switching to {method_name}: {e}")
 
     def set_input(self, obs, action=None):
         """Set the current observation and action for GradCAM.

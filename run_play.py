@@ -2022,8 +2022,10 @@ class ReceptiveFieldOverlay:
                 width = rf_box['x_max'] - rf_box['x_min']
                 height = rf_box['y_max'] - rf_box['y_min']
 
-                self.rf_box.setPos([y_min, x_min])  # (row, col) = (y, x)
-                self.rf_box.setSize([height, width])
+                # PyQtGraph ROI setPos expects [x, y] in view coords
+                # With setRange(xRange=(0,H), yRange=(0,W)), this maps to [col, row] in original image
+                self.rf_box.setPos([x_min, y_min])  # [x, y] = [col, row]
+                self.rf_box.setSize([width, height])
 
             # Auto-size window
             scale = max(1, 400 // max(input_h, input_w))
@@ -2326,8 +2328,11 @@ class CNNFilterActivationDetailViewer:
                             y_min = rf_box_coords['y_min']
                             width = rf_box_coords['x_max'] - rf_box_coords['x_min']
                             height = rf_box_coords['y_max'] - rf_box_coords['y_min']
-                            self.rf_box.setPos([y_min, x_min])
-                            self.rf_box.setSize([height, width])
+                            # PyQtGraph ROI coordinates: after transpose and setRange(xRange=(0,H), yRange=(0,W)),
+                            # the view's x-axis spans [0,H] (rows) and y-axis spans [0,W] (cols).
+                            # But ROI setPos expects [x, y] which should map to [col, row] in original space!
+                            self.rf_box.setPos([x_min, y_min])  # [x, y] = [col, row]
+                            self.rf_box.setSize([width, height])  # [width, height]
                             self.rf_box.show()
                     else:
                         self.rf_box.hide()
@@ -2457,6 +2462,14 @@ class CNNFilterActivationDetailViewer:
         self.layer_idx = layer_idx
         self.filter_idx = filter_idx
 
+        # Update RF info if layer changed
+        if (self.rf_view is not None and self.parent_viewer is not None and
+            hasattr(self.parent_viewer, 'conv_info') and
+            self.parent_viewer.conv_info and
+            layer_idx < len(self.parent_viewer.conv_info) and
+            'rf_info' in self.parent_viewer.conv_info[layer_idx]):
+            self.rf_info = self.parent_viewer.conv_info[layer_idx]['rf_info']
+
         # Update window title
         self.win.setWindowTitle(f"Layer {layer_idx} Filter {filter_idx}")
 
@@ -2488,11 +2501,11 @@ class CNNFilterActivationDetailViewer:
         # Convert to activation map coordinates (accounting for PyQtGraph transpose)
         # We transpose the image as (1, 0, 2): (H, W, C) -> (W, H, C)
         # After transpose: act_rgb_t[i, j] = act_rgb[j, i]
-        # PyQtGraph displays act_rgb_t[i, j] at view position (i, j)
+        # PyQtGraph displays act_rgb_t[i, j] at view position (x=i, y=j)
         # So view position (view_x, view_y) shows act_rgb_t[view_x, view_y] = act_rgb[view_y, view_x]
-        # Therefore: view_x → data_x, view_y → data_y
-        act_x = int(view_pos.x())
-        act_y = int(view_pos.y())
+        # Since act_rgb[row, col], we have: view_x → col, view_y → row
+        act_x = int(view_pos.x())  # view x → transposed index 0 → original column
+        act_y = int(view_pos.y())  # view y → transposed index 1 → original row
 
         # Clamp to activation map bounds
         if self.activation_data is not None:

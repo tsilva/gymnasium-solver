@@ -163,13 +163,14 @@ rgb_ppo: &rgb_ppo
   algo_id: ppo
   description: "PPO with 4-frame grayscale stacks (84x84) via ALE atari vectorization"
   
-  max_env_steps: 20e6
+  #max_env_steps: 20e6
 
   # TODO: test async vectorization, if faster apply by default to all atari envs if n_envs > 1
   n_envs: 32
   n_steps: 256
   policy_lr: 0.00025
-  ent_coef: 0.0
+  #ent_coef: 0.0
+  ent_coef: 0.1
   n_epochs: 3 
   clip_range: 0.1
   batch_size: 512

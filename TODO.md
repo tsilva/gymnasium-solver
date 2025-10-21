@@ -14,6 +14,7 @@
 
 # RUN_PLAY
 
+- Add fps changer
 - Add window layout snapshot button
 - BUG: run_play.py user input not working for Atari envs
 
@@ -37,7 +38,6 @@
 - FEAT: stack action just as frames 
 - FEAT: resize to preserve aspect ratio (to avoid distortions)
 - FEAT: crop mario frames
-
 - TEST: quantize image (before or after downscaling)
 - TEST: instead of cropping HUDS just mask them with black so that we can keep a constant image size between envs
 - If VF stabilized try increasing LR

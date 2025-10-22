@@ -116,6 +116,61 @@ def compute_kl_diagnostics(old_logprobs: torch.Tensor, new_logprobs: torch.Tenso
     return kl_div, approx_kl
 
 
+def compute_kl_metrics(
+    old_logprobs: torch.Tensor,
+    new_logprobs: torch.Tensor
+) -> tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor]:
+    """Compute KL metrics for logging and return raw values.
+
+    Args:
+        old_logprobs: Log probabilities from the rollout policy
+        new_logprobs: Log probabilities from the current policy
+
+    Returns:
+        Tuple of (metrics_dict, kl_div, approx_kl)
+        - metrics_dict: Dictionary with 'opt/ppo/kl' and 'opt/ppo/approx_kl'
+        - kl_div: Raw KL divergence tensor
+        - approx_kl: Raw approximate KL tensor
+    """
+    with torch.no_grad():
+        kl_div, approx_kl = compute_kl_diagnostics(old_logprobs, new_logprobs)
+
+    metrics = {
+        'opt/ppo/kl': kl_div.detach(),
+        'opt/ppo/approx_kl': approx_kl.detach(),
+    }
+    return metrics, kl_div, approx_kl
+
+
+def normalize_batch_with_metrics(
+    tensor: torch.Tensor,
+    normalize_mode: str | bool,
+    metric_prefix: str
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    """Normalize tensor and return metrics if batch normalization enabled.
+
+    Args:
+        tensor: Tensor to normalize (advantages, returns, etc.)
+        normalize_mode: One of "batch", "rollout", "off", False, or None
+        metric_prefix: Metric namespace (e.g., "roll/adv")
+
+    Returns:
+        (normalized_tensor, metrics_dict)
+    """
+    assert normalize_mode in ("batch", "rollout", "off", "", False, None), \
+        f"normalize_mode must be 'batch', 'rollout', 'off', False, or None, got {normalize_mode}"
+
+    if normalize_mode != "batch":
+        return tensor, {}
+
+    normalized = batch_normalize(tensor)
+    metrics = {
+        f'{metric_prefix}/norm/mean': normalized.mean().detach(),
+        f'{metric_prefix}/norm/std': normalized.std().detach()
+    }
+    return normalized, metrics
+
+
 def compute_param_group_grad_norm(params):
     """Compute L2 grad norm over params; ignore None grads (0.0 if none)."""
     total_sq = 0.0

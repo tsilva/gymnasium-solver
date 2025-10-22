@@ -708,6 +708,19 @@ class Config:
         if hasattr(self, 'normalize_advantages'):
             result['normalize_advantages'] = self.normalize_advantages == "rollout"
         return result
+
+    def get_rollout_collector_kwargs(self) -> Dict[str, Any]:
+        """Get all kwargs needed for RolloutCollector initialization."""
+        return {
+            "n_steps": self.n_steps,
+            **self.rollout_collector_hyperparams(),
+            "gamma": self.gamma,
+            "gae_lambda": self.gae_lambda,
+            "returns_type": self.returns_type,
+            "normalize_returns": self.normalize_returns == "rollout",
+            "advantages_type": self.advantages_type,
+            "normalize_advantages": self.normalize_advantages == "rollout",
+        }
     
     def save_to_json(self, path: str) -> None:
         """Save configuration to a JSON file."""

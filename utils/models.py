@@ -9,6 +9,7 @@ from torch.distributions import Categorical, Bernoulli, Independent
 
 from .torch import compute_param_group_grad_norm, init_model_weights
 from .distributions import MaskedCategorical
+from .policy_ops import create_action_distribution
 
 
 def resolve_activation(activation_id: str) -> type[nn.Module]:
@@ -165,6 +166,24 @@ class BaseModel(nn.Module):
         for name, module in module_dict.items():
             module.register_forward_hook(self._make_activation_hook(name))
 
+    def register_backbone_hooks(self, backbone: nn.Module, prefix: str = 'backbone', layer_types: tuple = None):
+        """Register activation hooks on backbone layers.
+
+        Args:
+            backbone: The backbone module (Sequential or ModuleList)
+            prefix: Prefix for hook names (default: 'backbone')
+            layer_types: Tuple of layer types to track (default: Linear, Embedding, Conv2d)
+        """
+        if layer_types is None:
+            layer_types = (nn.Linear, nn.Embedding, nn.Conv2d)
+
+        hooks_to_register = {}
+        if isinstance(backbone, (nn.Sequential, nn.ModuleList)) or hasattr(backbone, '__iter__'):
+            for i, layer in enumerate(backbone):
+                if isinstance(layer, layer_types):
+                    hooks_to_register[f'{prefix}.{i}'] = layer
+        self.register_activation_hooks(hooks_to_register)
+
     def compute_activation_stats(self) -> Dict[str, float]:
         """Compute activation statistics from stored activations.
 
@@ -186,9 +205,22 @@ class BaseModel(nn.Module):
         return metrics
 
     def compute_grad_norms(self) -> Dict[str, float]:
-        """Compute gradient norms for named parameter groups (default: 'all')."""
-        all_params = list(self.parameters())
-        return {"opt/grads/norm/all": compute_param_group_grad_norm(all_params)}
+        """Auto-discover and compute grad norms for standard components."""
+        components = {}
+
+        # Auto-discover by naming convention
+        for name in ['backbone', 'trunk', 'cnn', 'mlp', 'policy_head', 'actor_head', 'value_head', 'critic_head']:
+            if hasattr(self, name):
+                module = getattr(self, name)
+                if isinstance(module, nn.Module):
+                    components[name] = list(module.parameters())
+
+        # If no components found, fall back to all parameters
+        if not components:
+            all_params = list(self.parameters())
+            return {"opt/grads/norm/all": compute_param_group_grad_norm(all_params)}
+
+        return self.compute_component_grad_norms(components)
 
     def compute_component_grad_norms(self, components: Dict[str, list]) -> Dict[str, float]:
         """Compute gradient norms for base + named components.
@@ -249,44 +281,17 @@ class MLPPolicy(BaseModel):
         init_model_weights(self, default_activation=activation, policy_heads=[self.policy_head])
 
         # Register activation hooks on backbone layers
-        hooks_to_register = {}
-        for i, layer in enumerate(self.backbone):
-            if isinstance(layer, (nn.Linear, nn.Embedding)):
-                hooks_to_register[f'backbone.{i}'] = layer
-        self.register_activation_hooks(hooks_to_register)
+        self.register_backbone_hooks(self.backbone)
 
     def forward(self, obs: torch.Tensor):
         x = self.backbone(obs)
         logits = self.policy_head(x)
 
-        # Apply action masking if valid_actions is specified
-        if self.valid_actions is not None:
-            # Create a mask for invalid actions
-            mask = torch.ones_like(logits, dtype=torch.bool)
-            mask[:, self.valid_actions] = False
-            # Set invalid action logits to -inf
-            logits = logits.masked_fill(mask, float('-inf'))
-
-        # Create distribution based on action space type
-        if self.action_space_type == "multibinary":
-            # Use Independent Bernoulli for multi-binary actions
-            probs = torch.sigmoid(logits)
-            dist = Independent(Bernoulli(probs=probs), 1)
-        else:
-            # Use MaskedCategorical if action masking is applied, otherwise standard Categorical
-            if self.valid_actions is not None:
-                dist = MaskedCategorical(logits=logits)
-            else:
-                dist = Categorical(logits=logits)
+        # Create distribution with optional action masking
+        dist = create_action_distribution(logits, self.valid_actions, self.action_space_type)
 
         return dist, None  # Return None for value to maintain compatibility
 
-    def compute_grad_norms(self) -> Dict[str, float]:
-        """Compute gradient norms for MLP policy components."""
-        return self.compute_component_grad_norms({
-            "backbone": list(self.backbone.parameters()),
-            "policy_head": list(self.policy_head.parameters()),
-        })
 
 class MLPActorCritic(BaseModel):
     def __init__(
@@ -329,11 +334,7 @@ class MLPActorCritic(BaseModel):
         )
 
         # Register activation hooks on backbone layers
-        hooks_to_register = {}
-        for i, layer in enumerate(self.backbone):
-            if isinstance(layer, (nn.Linear, nn.Embedding)):
-                hooks_to_register[f'backbone.{i}'] = layer
-        self.register_activation_hooks(hooks_to_register)
+        self.register_backbone_hooks(self.backbone)
 
     def forward(self, obs: torch.Tensor):
         # Forward observation through backbone
@@ -346,25 +347,8 @@ class MLPActorCritic(BaseModel):
         # Forward through policy head and get policy logits
         logits = self.policy_head(x)
 
-        # Apply action masking if valid_actions is specified
-        if self.valid_actions is not None:
-            # Create a mask for invalid actions
-            mask = torch.ones_like(logits, dtype=torch.bool)
-            mask[:, self.valid_actions] = False
-            # Set invalid action logits to -inf
-            logits = logits.masked_fill(mask, float('-inf'))
-
-        # Create distribution based on action space type
-        if self.action_space_type == "multibinary":
-            # Use Independent Bernoulli for multi-binary actions
-            probs = torch.sigmoid(logits)
-            policy_dist = Independent(Bernoulli(probs=probs), 1)
-        else:
-            # Use MaskedCategorical if action masking is applied, otherwise standard Categorical
-            if self.valid_actions is not None:
-                policy_dist = MaskedCategorical(logits=logits)
-            else:
-                policy_dist = Categorical(logits=logits)
+        # Create distribution with optional action masking
+        policy_dist = create_action_distribution(logits, self.valid_actions, self.action_space_type)
 
         # Forward through value head and get value prediction
         value_pred = self.value_head(x).squeeze(-1)
@@ -372,14 +356,6 @@ class MLPActorCritic(BaseModel):
         # Return policy distribution and value prediction
         return policy_dist, value_pred
 
-    # TODO: generalize to get_metrics
-    def compute_grad_norms(self) -> Dict[str, float]:
-        """Compute gradient norms for MLP actor-critic components."""
-        return self.compute_component_grad_norms({
-            "backbone": list(self.backbone.parameters()),
-            "policy_head": list(self.policy_head.parameters()),
-            "value_head": list(self.value_head.parameters()),
-        })
 
 
 class CNNActorCritic(BaseModel):
@@ -452,15 +428,9 @@ class CNNActorCritic(BaseModel):
         )
 
         # Register activation hooks on CNN and MLP layers
-        hooks_to_register = {}
-        for i, layer in enumerate(self.cnn):
-            if isinstance(layer, nn.Conv2d):
-                hooks_to_register[f'cnn.{i}'] = layer
+        self.register_backbone_hooks(self.cnn, prefix='cnn')
         if hasattr(self.mlp, '__iter__'):
-            for i, layer in enumerate(self.mlp):
-                if isinstance(layer, nn.Linear):
-                    hooks_to_register[f'mlp.{i}'] = layer
-        self.register_activation_hooks(hooks_to_register)
+            self.register_backbone_hooks(self.mlp, prefix='mlp')
 
     def forward(self, obs: torch.Tensor):
         """Forward pass through CNN, MLP, and heads.
@@ -487,36 +457,10 @@ class CNNActorCritic(BaseModel):
         # Policy head
         logits = self.policy_head(x)
 
-        # Apply action masking if valid_actions is specified
-        if self.valid_actions is not None:
-            # Create a mask for invalid actions
-            mask = torch.ones_like(logits, dtype=torch.bool)
-            mask[:, self.valid_actions] = False
-            # Set invalid action logits to -inf
-            logits = logits.masked_fill(mask, float('-inf'))
-
-        # Create distribution based on action space type
-        if self.action_space_type == "multibinary":
-            # Use Independent Bernoulli for multi-binary actions
-            probs = torch.sigmoid(logits)
-            policy_dist = Independent(Bernoulli(probs=probs), 1)
-        else:
-            # Use MaskedCategorical if action masking is applied, otherwise standard Categorical
-            if self.valid_actions is not None:
-                policy_dist = MaskedCategorical(logits=logits)
-            else:
-                policy_dist = Categorical(logits=logits)
+        # Create distribution with optional action masking
+        policy_dist = create_action_distribution(logits, self.valid_actions, self.action_space_type)
 
         # Value head
         value_pred = self.value_head(x).squeeze(-1)
 
         return policy_dist, value_pred
-
-    def compute_grad_norms(self) -> Dict[str, float]:
-        """Compute gradient norms for CNN actor-critic components."""
-        return self.compute_component_grad_norms({
-            "cnn": list(self.cnn.parameters()),
-            "mlp": list(self.mlp.parameters()) if hasattr(self.mlp, 'parameters') else [],
-            "policy_head": list(self.policy_head.parameters()),
-            "value_head": list(self.value_head.parameters()),
-        })

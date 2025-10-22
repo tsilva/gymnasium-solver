@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-from utils.torch import assert_detached, batch_normalize, compute_kl_diagnostics
+from utils.torch import assert_detached, batch_normalize, compute_kl_diagnostics, compute_kl_metrics, normalize_batch_with_metrics
 
 from ..base_agent import BaseAgent
 from .ppo_alerts import PPOAlerts
@@ -34,11 +34,9 @@ class PPOAgent(BaseAgent):
 
         # TODO: perform these ops before calling losses_for_batch?
         # Batch-normalize advantage if requested
-        if self.config.normalize_advantages == "batch":
-            advantages = batch_normalize(advantages)
-            # Track post-normalization advantage statistics
-            adv_norm_mean = advantages.mean()
-            adv_norm_std = advantages.std()
+        advantages, adv_norm_metrics = normalize_batch_with_metrics(
+            advantages, self.config.normalize_advantages, "roll/adv"
+        )
 
         # Infer policy_distribution and value_predictions from the actor critic model
         policy_dist, values_pred = self.policy_model(observations)
@@ -120,10 +118,18 @@ class PPOAgent(BaseAgent):
             # Measure how many value predictions were clipped
             clip_fraction_vf = ((values_delta < -self.clip_range_vf) | (values_delta > self.clip_range_vf)).float().mean()
 
-            kl_div, approx_kl = compute_kl_diagnostics(old_logprobs, new_logprobs)
             # TODO: should I make metric explain that explained_var is for value head?
             explained_var = 1 - torch.var(returns - values_pred) / torch.var(returns)
-        
+
+        # Compute KL metrics
+        kl_metrics, kl_div, approx_kl = compute_kl_metrics(old_logprobs, new_logprobs)
+
+        # In case the KL divergence exceeded the target, stop training on this epoch
+        early_stop_epoch = False
+        if target_kl is not None:
+            approx_kl_value = float(approx_kl.detach())
+            early_stop_epoch = approx_kl_value > target_kl
+
         metrics = {
             'opt/loss/total': loss.detach(),
             'opt/loss/policy': policy_loss.detach(),
@@ -134,22 +140,11 @@ class PPOAgent(BaseAgent):
             'opt/policy/entropy': entropy.detach(),
             'opt/ppo/clip_fraction': clip_fraction.detach(),
             'opt/ppo/clip_fraction_vf': clip_fraction_vf.detach(),
-            'opt/ppo/kl': kl_div.detach(),
-            'opt/ppo/approx_kl': approx_kl.detach(),
             'opt/value/explained_var': explained_var.detach(),
+            'opt/ppo/kl_stop_triggered': 1 if early_stop_epoch else 0,
+            **kl_metrics,
+            **adv_norm_metrics,
         }
-
-        # Add post-normalization advantage stats if batch normalization was applied
-        if self.config.normalize_advantages == "batch":
-            metrics['roll/adv/norm/mean'] = adv_norm_mean.detach()
-            metrics['roll/adv/norm/std'] = adv_norm_std.detach()
-
-        # In case the KL divergence exceeded the target, stop training on this epoch
-        early_stop_epoch = False
-        if target_kl is not None:
-            approx_kl_value = float(approx_kl.detach())
-            early_stop_epoch = approx_kl_value > target_kl
-            metrics['opt/ppo/kl_stop_triggered'] = 1 if early_stop_epoch else 0
 
         # Log all metrics (will be avarages and flushed by end of epoch)
         self.metrics_recorder.record("train", metrics)

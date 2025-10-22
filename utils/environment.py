@@ -3,18 +3,85 @@ import gymnasium as gym
 from gym_wrappers.env_wrapper_registry import EnvWrapperRegistry
 
 
+# Environment type detection registry
+ENV_TYPE_PATTERNS = {
+    'alepy': lambda env_id: env_id.lower().startswith("ale/"),
+    'vizdoom': lambda env_id: env_id.lower().startswith("vizdoom-"),
+    'stable_retro': lambda env_id: env_id.lower().startswith("retro/"),
+    'mab': lambda env_id: (
+        env_id.lower().startswith("bandit-") or
+        env_id.lower().startswith("bandit/") or
+        env_id.lower() == "bandit-v0"
+    )
+}
+
+
+def get_env_type(env_id: str) -> str | None:
+    """Return env type or None if standard gym.
+
+    Args:
+        env_id: Environment identifier
+
+    Returns:
+        One of 'alepy', 'vizdoom', 'stable_retro', 'mab', or None for standard gym
+    """
+    for env_type, matcher in ENV_TYPE_PATTERNS.items():
+        if matcher(env_id):
+            return env_type
+    return None
+
+
+# Keep convenience functions for backward compatibility
 def _is_alepy_env_id(env_id: str) -> bool:
-    return env_id.lower().startswith("ale/")
+    return get_env_type(env_id) == 'alepy'
+
 
 def _is_vizdoom_env_id(env_id: str) -> bool:
-    return env_id.lower().startswith("vizdoom-")
+    return get_env_type(env_id) == 'vizdoom'
+
 
 def _is_stable_retro_env_id(env_id: str) -> bool:
-    return env_id.lower().startswith("retro/")
+    return get_env_type(env_id) == 'stable_retro'
+
 
 def _is_mab_env_id(env_id: str) -> bool:
-    return env_id.lower().startswith("bandit-") or env_id.lower().startswith("bandit/") or env_id.lower() == "bandit-v0"
+    return get_env_type(env_id) == 'mab'
 
+def _annotate_vec_env(vec_env, env_id, env_spec, obs_type, render_mode, project_id, seed):
+    """Annotate vec env with metadata for VecEnvInfoWrapper compatibility."""
+    vec_env._spec = env_spec
+    vec_env.env_id = env_id
+    vec_env._project_id = project_id
+    vec_env._obs_type = obs_type
+    vec_env.render_mode = render_mode
+    vec_env._last_seed = seed
+    return vec_env
+
+
+# Forward declarations for env builders
+def _build_env_alepy(env_id, obs_type, render_mode, **env_kwargs): ...
+def _build_env_vizdoom(env_id, obs_type, render_mode, **env_kwargs): ...
+def _build_env_stable_retro(env_id, obs_type, render_mode, **env_kwargs): ...
+def _build_env_mab(env_id, obs_type, render_mode, **env_kwargs): ...
+def _build_env_gym(env_id, obs_type, render_mode, **env_kwargs): ...
+
+# Environment builder dispatch registry
+ENV_BUILDERS = {
+    'alepy': _build_env_alepy,
+    'vizdoom': _build_env_vizdoom,
+    'stable_retro': _build_env_stable_retro,
+    'mab': _build_env_mab,
+}
+
+
+def _build_single_env(env_id: str, obs_type: str, render_mode: str, **kwargs):
+    """Dispatch to appropriate env builder based on env_id."""
+    env_type = get_env_type(env_id)
+    builder = ENV_BUILDERS.get(env_type, _build_env_gym)
+    return builder(env_id, obs_type, render_mode, **kwargs)
+
+
+# Actual implementations below
 def _build_env_alepy(env_id, obs_type, render_mode, **env_kwargs):
     if obs_type == "objects": return _build_env_alepy__objects(env_id, render_mode, **env_kwargs)
     else: return _build_env_alepy__standard(env_id, obs_type, render_mode, **env_kwargs)
@@ -240,12 +307,7 @@ def _build_vec_env_alepy(
 
     # Annotate env so VecEnvInfoWrapper can expose metadata/compat fallbacks
     vec_env._ale_atari_vec = True  # type: ignore[attr-defined]
-    vec_env._spec = env_spec  # type: ignore[attr-defined]
-    vec_env.env_id = env_id  # type: ignore[attr-defined]
-    vec_env._project_id = project_id  # type: ignore[attr-defined]
-    vec_env._obs_type = obs_type  # type: ignore[attr-defined]
-    vec_env.render_mode = render_mode  # type: ignore[attr-defined]
-    vec_env._last_seed = seed  # type: ignore[attr-defined]
+    _annotate_vec_env(vec_env, env_id, env_spec, obs_type, render_mode, project_id, seed)
 
     # TODO: is this working? how? is it slow?
     if record_video: vec_env = ALEVecVideoRecorder(vec_env, **record_video_kwargs)
@@ -307,11 +369,8 @@ def _build_vec_env_gym(
 
             local_env_kwargs["frameskip"] = atari_native_frameskip
 
-        if is_alepy_env: env = _build_env_alepy(env_id, obs_type, render_mode, **local_env_kwargs)
-        elif is_vizdoom_env: env = _build_env_vizdoom(env_id, obs_type, render_mode, **local_env_kwargs)
-        elif is_stable_retro_env: env = _build_env_stable_retro(env_id, obs_type, render_mode, **local_env_kwargs)
-        elif is_bandit_env: env = _build_env_mab(env_id, obs_type, render_mode, **local_env_kwargs)
-        else: env = _build_env_gym(env_id, obs_type, render_mode, **local_env_kwargs)
+        # Dispatch to appropriate env builder
+        env = _build_single_env(env_id, obs_type, render_mode, **local_env_kwargs)
 
         if is_alepy_env and obs_type == "rgb":
             grayscale_flag = True if grayscale_obs is None else grayscale_obs

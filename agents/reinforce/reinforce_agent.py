@@ -1,6 +1,6 @@
 import torch
 
-from utils.torch import assert_detached, batch_normalize, compute_kl_diagnostics
+from utils.torch import assert_detached, batch_normalize, compute_kl_metrics, normalize_batch_with_metrics
 
 from ..base_agent import BaseAgent
 
@@ -20,16 +20,14 @@ class REINFORCEAgent(BaseAgent):
         assert_detached(observations, actions, returns, advantages)
 
         # Normalize returns if requested
-        if self.config.normalize_returns == "batch":
-            returns = batch_normalize(returns)
-            returns_norm_mean = returns.mean()
-            returns_norm_std = returns.std()
+        returns, returns_norm_metrics = normalize_batch_with_metrics(
+            returns, self.config.normalize_returns, "roll/return"
+        )
 
         # Normalize advantages if requested
-        if self.config.normalize_advantages == "batch":
-            advantages = batch_normalize(advantages)
-            adv_norm_mean = advantages.mean()
-            adv_norm_std = advantages.std()
+        advantages, adv_norm_metrics = normalize_batch_with_metrics(
+            advantages, self.config.normalize_advantages, "roll/adv"
+        )
 
         # Pick the configured policy targets
         if self.config.policy_targets == "returns": 
@@ -64,36 +62,26 @@ class REINFORCEAgent(BaseAgent):
         entropy = dist.entropy().mean()
         entropy_loss = -entropy
 
-        # KL diagnostics between rollout policy (old) and current policy (new)
-        # Matches PPO-style on-action KL estimates
-        with torch.no_grad():
-            kl_div, approx_kl = compute_kl_diagnostics(old_logprobs, logprobs)
-        
         # The final loss is the sum of the policy loss and the entropy loss;
         # the higher the entropy coefficient the more priority we give to exploration
         ent_coef = self.ent_coef
         loss = policy_loss + (ent_coef * entropy_loss)
-        
+
+        # Compute KL metrics (matches PPO-style on-action KL estimates)
+        kl_metrics, _, _ = compute_kl_metrics(old_logprobs, logprobs)
+
         # Log the metrics for monitoring training progress
         metrics = {
             'opt/loss/total' : loss.detach(),
             'opt/loss/policy': policy_loss.detach(),
             'opt/loss/entropy': entropy_loss.detach(),
             'opt/policy/entropy': entropy.detach(),
-            'opt/ppo/kl': kl_div.detach(),
-            'opt/ppo/approx_kl': approx_kl.detach(),
             'policy_targets_mean': policy_targets.mean().detach(),
             'policy_targets_std': policy_targets.std().detach(),
+            **kl_metrics,
+            **returns_norm_metrics,
+            **adv_norm_metrics,
         }
-
-        # Add post-normalization stats if normalization was applied
-        if self.config.normalize_returns == "batch":
-            metrics['roll/return_norm/mean'] = returns_norm_mean.detach()
-            metrics['roll/return_norm/std'] = returns_norm_std.detach()
-
-        if self.config.normalize_advantages == "batch":
-            metrics['roll/adv_norm/mean'] = adv_norm_mean.detach()
-            metrics['roll/adv_norm/std'] = adv_norm_std.detach()
 
         self.metrics_recorder.record("train", metrics)
 

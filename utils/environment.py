@@ -221,8 +221,12 @@ def build_env(
     # Add episode statistics recorder wrapper
     vec_env = RecordEpisodeStatistics(vec_env)
 
-    # Add static normalization wrapper (if requested)
-    if normalize_obs == "static": vec_env = VecNormalizeStatic(vec_env)
+    # Add observation normalization wrapper (if requested)
+    if normalize_obs == "static":
+        vec_env = VecNormalizeStatic(vec_env)
+    elif normalize_obs in (True, "rolling"):
+        from gymnasium.wrappers.vector import NormalizeObservation
+        vec_env = NormalizeObservation(vec_env)
 
     # Add video recorder wrapper (if requested)
     if record_video: vec_env = VecVideoRecorder(vec_env)

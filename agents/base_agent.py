@@ -274,15 +274,16 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         # Check if collecting another rollout would exceed max_env_steps budget
         # If so, stop training before the rollout (prevents overshooting the budget)
         if self.config.max_env_steps is not None:
+            # train_metrics["cnt/total_env_steps"] is actually total_steps (n_envs * vec_steps)
             current_env_steps = train_metrics.get("cnt/total_env_steps", 0)
-            next_rollout_steps = self.config.n_envs * self.config.n_steps
-            would_exceed = (current_env_steps + next_rollout_steps) > self.config.max_env_steps
+            next_rollout_env_steps = self.config.n_envs * self.config.n_steps
+            would_exceed = (current_env_steps + next_rollout_env_steps) > self.config.max_env_steps
 
             if would_exceed:
                 from utils.formatting import format_metric_value
                 current_s = format_metric_value("train/cnt/total_env_steps", current_env_steps)
                 limit_s = format_metric_value("train/cnt/total_env_steps", self.config.max_env_steps)
-                reason = f"'train/cnt/total_env_steps': {current_s} + {next_rollout_steps} would exceed {limit_s}."
+                reason = f"'train/cnt/total_env_steps': {current_s} + {next_rollout_env_steps} would exceed {limit_s}."
                 print(f"Early stopping! {reason}")
                 self.set_early_stop_reason(reason)
                 self.trainer.should_stop = True
@@ -460,14 +461,24 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
                     # Don't clear metrics yet - early stopping callback needs them
         pass
 
-    def on_fit_end(self):
-        # Wait for async eval thread to complete if still running
+    def _cleanup_async_eval(self):
+        """Clean up async eval thread. Called on both normal completion and exceptions."""
+        if not self.config.eval_async:
+            return
         self._async_eval_shutdown.set()
         with self._async_eval_lock:
             self._async_eval_pending_epoch = None
         if self._async_eval_thread is not None and self._async_eval_thread.is_alive():
-            self._async_eval_thread.join()
+            self._async_eval_thread.join(timeout=5.0)  # Add timeout to prevent indefinite blocking
         self._async_eval_thread = None
+
+    def on_exception(self, trainer, pl_module, exception):
+        """Handle cleanup when training fails with an exception."""
+        self._cleanup_async_eval()
+
+    def on_fit_end(self):
+        # Wait for async eval thread to complete if still running
+        self._cleanup_async_eval()
 
         # If user aborted before training, skip finalization work
         if getattr(self, "_aborted_before_training", False):
@@ -580,9 +591,9 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         max_env_steps = self.config.max_env_steps
         if max_env_steps is None: return 0.0
         train_collector = self.get_rollout_collector("train")
-        # max_env_steps is env_steps, so use total_timesteps for progress calculation
-        total_timesteps = train_collector.total_timesteps
-        training_progress = max(0.0, min(total_timesteps / max_env_steps, 1.0))
+        # max_env_steps is env_steps, so use total_steps for progress calculation
+        total_env_steps = train_collector.total_steps
+        training_progress = max(0.0, min(total_env_steps / max_env_steps, 1.0))
         return training_progress
 
     def configure_optimizers(self):
@@ -661,7 +672,7 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
 
         state = {
             "epoch": int(self.current_epoch),
-            "total_timesteps": train_metrics.get("cnt/total_env_steps", 0),
+            "total_env_steps": train_metrics.get("cnt/total_env_steps", 0),
             "total_vec_steps": train_metrics.get("cnt/total_vec_steps", 0),
             "run_id": self.run.run_id if self.run else None,
             "config": config_dict,
@@ -813,7 +824,10 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
                 train_collector = self.get_rollout_collector("train")
                 if state and "best_train_reward" in state and state["best_train_reward"] is not None:
                     train_collector._best_episode_reward = float(state["best_train_reward"])
-                if state and "total_timesteps" in state:
+                if state and "total_env_steps" in state:
+                    train_collector.total_steps = int(state["total_env_steps"])
+                elif state and "total_timesteps" in state:
+                    # Backward compatibility: old checkpoints used "total_timesteps"
                     train_collector.total_steps = int(state["total_timesteps"])
                 if state and "total_vec_steps" in state:
                     train_collector.total_vec_steps = int(state["total_vec_steps"])
@@ -825,12 +839,12 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         # Print checkpoint info
         if state:
             epoch = state.get("epoch", "unknown")
-            total_timesteps = state.get("total_timesteps", "unknown")
+            total_env_steps = state.get("total_env_steps", state.get("total_timesteps", "unknown"))
             best_train = state.get("best_train_reward", "unknown")
             best_val = state.get("best_val_reward", "unknown")
 
             print(f"Checkpoint loaded from epoch {epoch}:")
-            print(f"  Total timesteps: {total_timesteps}")
+            print(f"  Total env steps: {total_env_steps}")
             print(f"  Best train reward: {best_train}")
             print(f"  Best val reward: {best_val}")
         else:

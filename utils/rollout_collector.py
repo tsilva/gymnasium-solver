@@ -159,6 +159,7 @@ class RolloutCollector():
         coerced_list = []
         for (_, _, obs) in self.terminal_obs_info:
             arr = np.asarray(obs)
+            # Handle image observations (3D CHW format)
             if len(exp) == 3:
                 C, H, W = int(exp[0]), int(exp[1]), int(exp[2])
                 if arr.ndim == 3:
@@ -173,7 +174,18 @@ class RolloutCollector():
                         arr = arr[None, ...]
                 elif arr.ndim == 2 and C == 1 and arr.shape == (H, W):
                     arr = arr[None, ...]
-            # For non-image shapes, keep as-is
+            # Handle vector observations (ensure shape matches)
+            elif len(exp) > 0:
+                # For 1D or 2D vector observations, ensure shape matches expected
+                if arr.shape != exp:
+                    # Try to reshape if size matches
+                    if arr.size == np.prod(exp):
+                        arr = arr.reshape(exp)
+                    else:
+                        raise ValueError(
+                            f"Terminal observation shape {arr.shape} cannot be coerced to buffer shape {exp}"
+                        )
+            # For scalar observations (exp == ()), keep as-is
             coerced_list.append(arr)
         term_obs_batch = np.stack(coerced_list)
         batch_values = self._predict_values_np(term_obs_batch)

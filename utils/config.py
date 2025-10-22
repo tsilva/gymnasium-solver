@@ -249,7 +249,8 @@ class Config:
                 end_pos = 1.0
 
             assert start_pos >= 0 and end_pos >= 0, f"{param}_schedule start/end must be non-negative."
-            assert end_pos >= start_pos, f"{param}_schedule end must be >= start."
+            assert end_pos > start_pos, \
+                f"{param}_schedule end must be > start (degenerate schedule not allowed: start={start_pos}, end={end_pos})."
             assert not (self.max_env_steps is None and (start_pos <= 1.0 or end_pos <= 1.0)), \
                 f"{param}_schedule uses fractional start/end positions but config.max_env_steps is not set."
 
@@ -714,12 +715,6 @@ class Config:
         return {
             "n_steps": self.n_steps,
             **self.rollout_collector_hyperparams(),
-            "gamma": self.gamma,
-            "gae_lambda": self.gae_lambda,
-            "returns_type": self.returns_type,
-            "normalize_returns": self.normalize_returns == "rollout",
-            "advantages_type": self.advantages_type,
-            "normalize_advantages": self.normalize_advantages == "rollout",
         }
     
     def save_to_json(self, path: str) -> None:

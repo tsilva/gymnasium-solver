@@ -58,30 +58,6 @@ def _annotate_vec_env(vec_env, env_id, env_spec, obs_type, render_mode, project_
     return vec_env
 
 
-# Forward declarations for env builders
-def _build_env_alepy(env_id, obs_type, render_mode, **env_kwargs): ...
-def _build_env_vizdoom(env_id, obs_type, render_mode, **env_kwargs): ...
-def _build_env_stable_retro(env_id, obs_type, render_mode, **env_kwargs): ...
-def _build_env_mab(env_id, obs_type, render_mode, **env_kwargs): ...
-def _build_env_gym(env_id, obs_type, render_mode, **env_kwargs): ...
-
-# Environment builder dispatch registry
-ENV_BUILDERS = {
-    'alepy': _build_env_alepy,
-    'vizdoom': _build_env_vizdoom,
-    'stable_retro': _build_env_stable_retro,
-    'mab': _build_env_mab,
-}
-
-
-def _build_single_env(env_id: str, obs_type: str, render_mode: str, **kwargs):
-    """Dispatch to appropriate env builder based on env_id."""
-    env_type = get_env_type(env_id)
-    builder = ENV_BUILDERS.get(env_type, _build_env_gym)
-    return builder(env_id, obs_type, render_mode, **kwargs)
-
-
-# Actual implementations below
 def _build_env_alepy(env_id, obs_type, render_mode, **env_kwargs):
     if obs_type == "objects": return _build_env_alepy__objects(env_id, render_mode, **env_kwargs)
     else: return _build_env_alepy__standard(env_id, obs_type, render_mode, **env_kwargs)
@@ -128,6 +104,23 @@ def _build_env_mab(env_id, obs_type, render_mode, **env_kwargs):
 def _build_env_gym(env_id, obs_type, render_mode, **env_kwargs):
     import gymnasium as gym
     return gym.make(env_id, render_mode=render_mode, **env_kwargs)
+
+
+# Environment builder dispatch registry
+ENV_BUILDERS = {
+    'alepy': _build_env_alepy,
+    'vizdoom': _build_env_vizdoom,
+    'stable_retro': _build_env_stable_retro,
+    'mab': _build_env_mab,
+}
+
+
+def _build_single_env(env_id: str, obs_type: str, render_mode: str, **kwargs):
+    """Dispatch to appropriate env builder based on env_id."""
+    env_type = get_env_type(env_id)
+    builder = ENV_BUILDERS.get(env_type, _build_env_gym)
+    return builder(env_id, obs_type, render_mode, **kwargs)
+
 
 def build_env(
     env_id: str,

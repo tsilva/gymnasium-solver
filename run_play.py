@@ -5323,12 +5323,14 @@ def main():
                     action_viewer.update(button_states, None)
                 else:
                     # For Discrete: show action probabilities
-                    action_probs = env.get_action_probs()
-                    # Get the selected action from the buffer
-                    selected_action = int(collector._buffer.actions_buf[collector._buffer.pos - 1, 0])
-                    # Update action visualizer
-                    if action_probs is not None:
-                        action_viewer.update(action_probs[0], selected_action)
+                    # Check if get_action_probs is available (not supported in ALE vectorization)
+                    if hasattr(env, 'get_action_probs'):
+                        action_probs = env.get_action_probs()
+                        # Get the selected action from the buffer
+                        selected_action = int(collector._buffer.actions_buf[collector._buffer.pos - 1, 0])
+                        # Update action visualizer
+                        if action_probs is not None:
+                            action_viewer.update(action_probs[0], selected_action)
 
             # Update toolbar if enabled
             if toolbar and toolbar.is_open:

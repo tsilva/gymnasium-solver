@@ -16,6 +16,9 @@
 
 # RUN_PLAY
 
+- step by step support
+- run play without ui
+- TASK: dont use alevecenv for evaluation, at least not in runplay, consider just running single env directly
 - Add fps changer
 - Add window layout snapshot button
 - BUG: run_play.py user input not working for Atari envs

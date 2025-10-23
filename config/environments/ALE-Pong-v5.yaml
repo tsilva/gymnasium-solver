@@ -272,7 +272,7 @@ rgb_ppo: &rgb_ppo
   batch_size: 1024
   n_epochs: 15
   policy_lr: 3e-4
-  ent_coef: 0.0
+  ent_coef: 0.01
   eval_async: true
   eval_warmup_epochs: 100
   eval_freq_epochs: 5
@@ -283,7 +283,8 @@ rgb_deterministic_ppo:
   <<: *env_deterministic
   project_id: ALE-Pong-v5_rgb_deterministic
   description: "PPO with RGB observations - deterministic version with ALE atari vectorization"
-  early_stop_on_eval_threshold: 19.5
+  early_stop_on_eval_threshold: 15
+  # TODO: fix bug where eval seems to not use the best model
   # TODO: reduce frame skip
   # TODO: reduce frame stack
   # TODO: cover hud and then check gradcam

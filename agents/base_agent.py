@@ -180,14 +180,28 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
 
     def build_rollout_collector(self, stage: str):
         from utils.rollouts import RolloutCollector
+        import copy
 
         # Ensure _rollout_collectors is initialized
         self._rollout_collectors = self._rollout_collectors if hasattr(self, "_rollout_collectors") else {}
 
+        # For validation/test stages, create a separate model copy to avoid
+        # device conflicts during async evaluation. Training uses the main model.
+        if stage in ("val", "test"):
+            # Create a shallow copy of the model structure
+            policy_copy = copy.deepcopy(self.policy_model)
+            # Store reference for updates during async eval
+            if not hasattr(self, "_eval_models"):
+                self._eval_models = {}
+            self._eval_models[stage] = policy_copy
+            model_for_collector = policy_copy
+        else:
+            model_for_collector = self.policy_model
+
         # Build the rollout collector
         self._rollout_collectors[stage] = RolloutCollector(
             self.get_env(stage),
-            self.policy_model,
+            model_for_collector,
             **self.config.get_rollout_collector_kwargs()
         )
 
@@ -381,6 +395,10 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         with self._async_eval_lock:
             self._async_eval_running_epoch = eval_epoch
             self._async_eval_pending_epoch = None
+
+        # Update eval model copy with current training weights (fast state_dict copy)
+        if hasattr(self, "_eval_models") and "val" in self._eval_models:
+            self._eval_models["val"].load_state_dict(self.policy_model.state_dict())
 
         def _run_eval():
             # Capture the epoch we're evaluating (thread-safe)

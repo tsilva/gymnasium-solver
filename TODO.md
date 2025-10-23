@@ -1,5 +1,7 @@
 # TODO
 
+- BUG: Cartpole-v1 eval not working 
+
 # MODAL
 
 - TASK: run sweep remotely

@@ -470,7 +470,7 @@ class RolloutCollector():
 
         # Collect one rollout
         rollout_start = time.time()
-        for step_idx in tqdm(range(self.n_steps), desc="Rollout", leave=False, dynamic_ncols=True):
+        for step_idx in tqdm(range(self.n_steps), desc="Rollout", leave=False, dynamic_ncols=True, position=0):
             # Convert current observations to torch tensor (ship to device)
             obs_t = torch.as_tensor(self.obs, device=self.device)
 

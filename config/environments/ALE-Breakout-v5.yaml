@@ -166,8 +166,8 @@ rgb_ppo: &rgb_ppo
   #max_env_steps: 20e6
 
   # TODO: test async vectorization, if faster apply by default to all atari envs if n_envs > 1
-  n_envs: 32
-  n_steps: 256
+  #n_envs: 32
+  #n_steps: 256
   #policy_lr: 0.00025
   #ent_coef: 0.0
   #ent_coef: 0.02
@@ -176,26 +176,38 @@ rgb_ppo: &rgb_ppo
   #batch_size: 512
 
   # Set training budget (required for schedules)
-  max_env_steps: 50e6
+  #max_env_steps: 50e6
 
   # Add entropy decay (CRITICAL - forces policy to commit)
-  ent_coef:
-    start: 0.01
-    end: 0.001
-    from: 0.0
-    to: 0.5
-    schedule: linear
+  #ent_coef:
+  #  start: 0.01
+  #  end: 0.001
+  #  from: 0.0
+  #  to: 0.5
+  #  schedule: linear
 
   # Add learning rate schedule
-  policy_lr:
-    start: 0.0025
-    end: 0.0
-    schedule: linear
+  #policy_lr:
+ #   start: 0.0025
+#    end: 0.0
+#    schedule: linear
 
   # Increase batch size and epochs
-  batch_size: 1024  # up from 512
-  n_epochs: 4       # up from 3
-  clip_range: 0.2   # up from 0.1
+  #batch_size: 1024  # up from 512
+  #n_epochs: 4       # up from 3
+  #clip_range: 0.2   # up from 0.1
+
+  n_envs: 32
+
+  n_steps: 128
+  n_epochs: 4
+  batch_size: 1024
+  learning_rate: 2.5e-4
+  clip_range: 0.1
+  vf_coef: 0.5
+  ent_coef: 0.01
+
+
   
   eval_warmup_epochs: 200
   eval_freq_epochs: 100

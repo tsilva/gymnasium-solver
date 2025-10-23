@@ -283,3 +283,7 @@ rgb_deterministic_ppo:
   <<: *env_deterministic
   project_id: ALE-Pong-v5_rgb_deterministic
   description: "PPO with RGB observations - deterministic version with ALE atari vectorization"
+  early_stop_on_eval_threshold: 19.5
+  # TODO: reduce frame skip
+  # TODO: reduce frame stack
+  # TODO: cover hud and then check gradcam

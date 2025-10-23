@@ -1,0 +1,28 @@
+method: random
+metric:
+  name: train/roll/ep_rew/mean
+  goal: maximize
+project: ALE-Breakout-v5
+program: train.py
+command:
+  - ${env}
+  - python
+  - ${program}
+  - --config_id
+  - ALE-Breakout-v5:rgb_deterministic_ppo
+  - --wandb_sweep
+parameters:
+  max_env_steps: 1e6
+  eval_freq_epochs: null
+  policy_lr:
+    distribution: log_uniform_values
+    min: 0.00001
+    max: 0.001
+  ent_coef:
+    distribution: log_uniform_values
+    min: 0.001
+    max: 0.1
+  clip_range:
+    distribution: uniform
+    min: 0.05
+    max: 0.3

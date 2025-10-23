@@ -2,6 +2,8 @@
 
 # MODAL
 
+- TASK: run sweep remotely
+- TASK: let agent/script say which run performs best (best ep_rew_mean slope from 0 to last step)
 - BUG: cant seem to detach modal runs
 - BUG: runs executed through modal dont seem to have same wandb run id
 - BUG: clean exit run_play on ctrl+c

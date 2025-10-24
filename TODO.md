@@ -1,7 +1,6 @@
 # TODO
 
-- BUG: Cartpole-v1 eval not working 
-
+- BUG: Cartpole-v1 eval not working (record training and or eval videos)
 # MODAL
 
 - TASK: run sweep remotely

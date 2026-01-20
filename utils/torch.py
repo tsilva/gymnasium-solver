@@ -11,6 +11,20 @@ import torch
 import torch.nn as nn
 
 
+# Canonical activation mapping used across the codebase
+ACTIVATION_MAPPING = {
+    "tanh": nn.Tanh,
+    "relu": nn.ReLU,
+    "leaky_relu": nn.LeakyReLU,
+    "elu": nn.ELU,
+    "selu": nn.SELU,
+    "gelu": nn.GELU,
+    "silu": nn.SiLU,
+    "swish": nn.SiLU,
+    "identity": nn.Identity,
+}
+
+
 @contextmanager
 def inference_ctx(*modules):
     """Temporarily set modules to eval and disable grads; restore training flags after."""
@@ -68,18 +82,7 @@ def _activation_instance_from_spec(spec: "str | type[nn.Module] | nn.Module") ->
         return spec()
     if isinstance(spec, str):
         key = spec.lower()
-        mapping = {
-            "tanh": nn.Tanh,
-            "relu": nn.ReLU,
-            "leaky_relu": nn.LeakyReLU,
-            "elu": nn.ELU,
-            "selu": nn.SELU,
-            "gelu": nn.GELU,
-            "silu": nn.SiLU,
-            "swish": nn.SiLU,
-            "identity": nn.Identity,
-        }
-        return mapping.get(key, nn.ReLU)()
+        return ACTIVATION_MAPPING.get(key, nn.ReLU)()
     return nn.ReLU()
 
 

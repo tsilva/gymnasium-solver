@@ -25,9 +25,7 @@ class REINFORCEAgent(BaseAgent):
         )
 
         # Normalize advantages if requested
-        advantages, adv_norm_metrics = normalize_batch_with_metrics(
-            advantages, self.config.normalize_advantages, "roll/adv"
-        )
+        advantages, adv_norm_metrics = self._normalize_advantages(advantages)
 
         # Pick the configured policy targets
         if self.config.policy_targets == "returns": 
@@ -71,11 +69,9 @@ class REINFORCEAgent(BaseAgent):
         kl_metrics, _, _ = compute_kl_metrics(old_logprobs, logprobs)
 
         # Log the metrics for monitoring training progress
+        common_metrics = self._build_common_metrics(loss, policy_loss, entropy_loss, entropy)
         metrics = {
-            'opt/loss/total' : loss.detach(),
-            'opt/loss/policy': policy_loss.detach(),
-            'opt/loss/entropy': entropy_loss.detach(),
-            'opt/policy/entropy': entropy.detach(),
+            **common_metrics,
             'policy_targets_mean': policy_targets.mean().detach(),
             'policy_targets_std': policy_targets.std().detach(),
             **kl_metrics,

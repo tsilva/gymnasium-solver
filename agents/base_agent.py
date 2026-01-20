@@ -110,8 +110,24 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         # Subclasses must implement this to compute the losses for each training steps' batch
         pass
 
+    def _normalize_advantages(self, advantages):
+        """Normalize advantages if configured, returning normalized tensor and metrics."""
+        from utils.torch import normalize_batch_with_metrics
+        return normalize_batch_with_metrics(
+            advantages, self.config.normalize_advantages, "roll/adv"
+        )
+
+    def _build_common_metrics(self, loss, policy_loss, entropy_loss, entropy):
+        """Build common metrics shared across algorithms."""
+        return {
+            'opt/loss/total': loss.detach(),
+            'opt/loss/policy': policy_loss.detach(),
+            'opt/loss/entropy': entropy_loss.detach(),
+            'opt/policy/entropy': entropy.detach(),
+        }
+
     def build_env(self, stage: str, **kwargs):
-        from utils.environment import build_env_from_config, _is_alepy_env_id, _is_stable_retro_env_id
+        from utils.environment import build_env_from_config, get_env_type
 
         # Ensure _envs is initialized
         self._envs = self._envs if hasattr(self, "_envs") else {}
@@ -123,7 +139,7 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
             kwargs["n_envs"] = eval_n_envs
 
         reuse_alepy_vectorization = (
-            _is_alepy_env_id(self.config.env_id)
+            get_env_type(self.config.env_id) == 'alepy'
             and getattr(self.config, "obs_type", None) == "rgb"
             and self.config.vectorization_mode in ("auto", "alepy")
             and "vectorization_mode" not in kwargs
@@ -162,7 +178,7 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
 
         # stable-retro doesn't support multiple emulator instances per process
         # Force async vectorization for val/test stages and disable video recording
-        if _is_stable_retro_env_id(self.config.env_id) and stage in ("val", "test"):
+        if get_env_type(self.config.env_id) == 'stable_retro' and stage in ("val", "test"):
             kwargs.setdefault("n_envs", 1)
             kwargs["vectorization_mode"] = "async"
             kwargs["record_video"] = False  # async mode doesn't support video recording

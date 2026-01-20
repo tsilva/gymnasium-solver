@@ -31,21 +31,13 @@ def get_env_type(env_id: str) -> str | None:
     return None
 
 
-# Keep convenience functions for backward compatibility
-def _is_alepy_env_id(env_id: str) -> bool:
-    return get_env_type(env_id) == 'alepy'
+def _merge_env_kwargs(env_kwargs: dict, defaults: dict) -> dict:
+    """Merge env_kwargs with defaults, returning new dict without mutating input."""
+    merged = dict(env_kwargs)
+    for key, value in defaults.items():
+        merged.setdefault(key, value)
+    return merged
 
-
-def _is_vizdoom_env_id(env_id: str) -> bool:
-    return get_env_type(env_id) == 'vizdoom'
-
-
-def _is_stable_retro_env_id(env_id: str) -> bool:
-    return get_env_type(env_id) == 'stable_retro'
-
-
-def _is_mab_env_id(env_id: str) -> bool:
-    return get_env_type(env_id) == 'mab'
 
 def _annotate_vec_env(vec_env, env_id, env_spec, obs_type, render_mode, project_id, seed):
     """Annotate vec env with metadata for VecEnvInfoWrapper compatibility."""
@@ -65,16 +57,14 @@ def _build_env_alepy(env_id, obs_type, render_mode, **env_kwargs):
 def _build_env_alepy__objects(env_id, render_mode, **env_kwargs):
     from ocatari.core import OCAtari
     # Always use full action space (18 actions) for standardization across all Atari games
-    env_kwargs = dict(env_kwargs)
-    env_kwargs.setdefault('full_action_space', True)
+    env_kwargs = _merge_env_kwargs(env_kwargs, {'full_action_space': True})
     return OCAtari(env_id, mode="ram", hud=False, render_mode=render_mode, **env_kwargs)
 
 def _build_env_alepy__standard(env_id, obs_type, render_mode, **env_kwargs):
     assert obs_type in ("ram", "rgb"), f"Unsupported obs_type for ALE: {obs_type}" # TODO: use enum to reference obs type
     # Always use full action space (18 actions) for standardization across all Atari games
     # Action masking will be handled by the policy model via valid_actions parameter
-    env_kwargs = dict(env_kwargs)
-    env_kwargs.setdefault('full_action_space', True)
+    env_kwargs = _merge_env_kwargs(env_kwargs, {'full_action_space': True})
     return gym.make(env_id, obs_type=obs_type, render_mode=render_mode, **env_kwargs)
 
 def _build_env_vizdoom(env_id, obs_type, render_mode, **env_kwargs):
@@ -164,7 +154,7 @@ def build_env(
     assert not (record_video and vectorization_mode == "async"), f"async vectorization does not support video recording: vectorization_mode={vectorization_mode}"
 
     # In case this is an ALE env, ensure envs are registered
-    is_alepy_env = _is_alepy_env_id(env_id)
+    is_alepy_env = get_env_type(env_id) == 'alepy'
     if is_alepy_env: import ale_py; gym.register_envs(ale_py)
     
     # In case vectorization_mode is auto, resolve to 
@@ -175,7 +165,7 @@ def build_env(
     # In case vectorization_mode is auto, and this is a stable-retro env,
     # use async vectorization (multiprocessing) for Retro envs when n_envs > 1
     # (only one emulator core supported per process)
-    is_stable_retro_env = _is_stable_retro_env_id(env_id)
+    is_stable_retro_env = get_env_type(env_id) == 'stable_retro'
     if vectorization_mode == "auto" and is_stable_retro_env: vectorization_mode = "async" if n_envs > 1 else "sync"
 
     # Create the vectorized environment
@@ -334,10 +324,10 @@ def _build_vec_env_gym(
     from gym_wrappers.env_video_recorder import EnvVideoRecorder
 
     # Resolve env type
-    is_alepy_env = _is_alepy_env_id(env_id)
-    is_vizdoom_env = _is_vizdoom_env_id(env_id)
-    is_stable_retro_env = _is_stable_retro_env_id(env_id)
-    is_bandit_env = _is_mab_env_id(env_id)
+    is_alepy_env = get_env_type(env_id) == 'alepy'
+    is_vizdoom_env = get_env_type(env_id) == 'vizdoom'
+    is_stable_retro_env = get_env_type(env_id) == 'stable_retro'
+    is_bandit_env = get_env_type(env_id) == 'mab'
 
     def env_fn():
         from gymnasium.wrappers import (

@@ -104,12 +104,13 @@ class RolloutCollector():
 
         # Lightweight running statistics (avoid per-sample Python overhead)
         # Obs/reward running stats over all seen samples (scalar over all dims)
-        self._obs_stats = RunningStats()
-        self._rew_stats = RunningStats()
-        self._base_stats = RunningStats()
-        self._adv_stats = RunningStats()
-        self._adv_norm_stats = RunningStats()  # Normalized advantages (post-normalization)
-        self._ret_stats = RunningStats()
+        stats = {name: RunningStats() for name in ['obs', 'rew', 'base', 'adv', 'adv_norm', 'ret']}
+        self._obs_stats = stats['obs']
+        self._rew_stats = stats['rew']
+        self._base_stats = stats['base']
+        self._adv_stats = stats['adv']
+        self._adv_norm_stats = stats['adv_norm']  # Normalized advantages (post-normalization)
+        self._ret_stats = stats['ret']
 
         # Action histogram (discrete); grows dynamically as needed
         self._action_counts = None

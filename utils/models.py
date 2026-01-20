@@ -7,25 +7,14 @@ import torch
 import torch.nn as nn
 from torch.distributions import Categorical, Bernoulli, Independent
 
-from .torch import compute_param_group_grad_norm, init_model_weights
+from .torch import compute_param_group_grad_norm, init_model_weights, ACTIVATION_MAPPING
 from .distributions import MaskedCategorical
 from .policy_ops import create_action_distribution
 
 
 def resolve_activation(activation_id: str) -> type[nn.Module]:
     key = activation_id.lower()
-    mapping = {
-        "tanh": nn.Tanh,
-        "relu": nn.ReLU,
-        "leaky_relu": nn.LeakyReLU,
-        "elu": nn.ELU,
-        "selu": nn.SELU,
-        "gelu": nn.GELU,
-        "silu": nn.SiLU,
-        "swish": nn.SiLU,  # alias
-        "identity": nn.Identity,
-    }
-    return mapping[key]
+    return ACTIVATION_MAPPING[key]
 
 
 def build_mlp(input_shape: Union[tuple[int, ...], int], hidden_dims: tuple[int, ...], activation:str):

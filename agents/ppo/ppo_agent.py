@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-from utils.torch import assert_detached, batch_normalize, compute_kl_diagnostics, compute_kl_metrics, normalize_batch_with_metrics
+from utils.torch import assert_detached, batch_normalize, compute_kl_diagnostics, compute_kl_metrics
 
 from ..base_agent import BaseAgent
 from .ppo_alerts import PPOAlerts
@@ -34,9 +34,7 @@ class PPOAgent(BaseAgent):
 
         # TODO: perform these ops before calling losses_for_batch?
         # Batch-normalize advantage if requested
-        advantages, adv_norm_metrics = normalize_batch_with_metrics(
-            advantages, self.config.normalize_advantages, "roll/adv"
-        )
+        advantages, adv_norm_metrics = self._normalize_advantages(advantages)
 
         # Infer policy_distribution and value_predictions from the actor critic model
         policy_dist, values_pred = self.policy_model(observations)
@@ -130,14 +128,12 @@ class PPOAgent(BaseAgent):
             approx_kl_value = float(approx_kl.detach())
             early_stop_epoch = approx_kl_value > target_kl
 
+        common_metrics = self._build_common_metrics(loss, policy_loss, entropy_loss, entropy)
         metrics = {
-            'opt/loss/total': loss.detach(),
-            'opt/loss/policy': policy_loss.detach(),
-            'opt/loss/entropy': entropy_loss.detach(),
+            **common_metrics,
             'opt/loss/entropy_scaled': scaled_entropy_loss.detach(),
             'opt/loss/value': value_loss.detach(),
             'opt/loss/value_scaled': scaled_value_loss.detach(),
-            'opt/policy/entropy': entropy.detach(),
             'opt/ppo/clip_fraction': clip_fraction.detach(),
             'opt/ppo/clip_fraction_vf': clip_fraction_vf.detach(),
             'opt/value/explained_var': explained_var.detach(),

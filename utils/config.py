@@ -500,8 +500,8 @@ class Config:
             return
 
         # Only apply defaults for ALE RGB environments
-        from utils.environment import _is_alepy_env_id
-        if not _is_alepy_env_id(self.env_id):
+        from utils.environment import get_env_type
+        if not get_env_type(self.env_id) == 'alepy':
             return
         if self.obs_type != Config.ObsType.rgb:
             return
@@ -530,8 +530,8 @@ class Config:
         This ensures consistent behavior across VizDoom environments while still
         allowing YAML configs to override any of these defaults.
         """
-        from utils.environment import _is_vizdoom_env_id
-        if not _is_vizdoom_env_id(self.env_id):
+        from utils.environment import get_env_type
+        if not get_env_type(self.env_id) == 'vizdoom':
             return
 
         # Apply VizDoom defaults if not explicitly set
@@ -565,8 +565,8 @@ class Config:
         This ensures consistent behavior across Retro environments while still
         allowing YAML configs to override any of these defaults.
         """
-        from utils.environment import _is_stable_retro_env_id
-        if not _is_stable_retro_env_id(self.env_id):
+        from utils.environment import get_env_type
+        if not get_env_type(self.env_id) == 'stable_retro':
             return
 
         # Apply Retro defaults if not explicitly set
@@ -771,8 +771,8 @@ class Config:
 
         # Validate that 'atari' is only used for Atari RGB environments
         if self.vectorization_mode == "atari":
-            from utils.environment import _is_alepy_env_id
-            if not _is_alepy_env_id(self.env_id):
+            from utils.environment import get_env_type
+            if not get_env_type(self.env_id) == 'alepy':
                 raise ValueError(f"vectorization_mode='atari' is only valid for Atari environments (ALE/*), got env_id: {self.env_id}")
             if self.obs_type != Config.ObsType.rgb:
                 raise ValueError(f"vectorization_mode='atari' is only valid for RGB observations, got obs_type: {self.obs_type}")

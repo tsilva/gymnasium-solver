@@ -126,9 +126,6 @@ python scripts/sweep_modal.py config/sweeps/cartpole_ppo_grid.yaml --create-only
 
 ### Benchmarking
 ```bash
-# Benchmark vectorized environment FPS
-python scripts/benchmark_vecenv_fps.py
-
 # Benchmark rollout collectors
 python scripts/benchmark_collectors.py
 

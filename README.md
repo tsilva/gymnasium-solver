@@ -8,7 +8,7 @@
   [![W&B](https://img.shields.io/badge/W%26B-integrated-yellow)](https://wandb.ai/)
   [![Hugging Face](https://img.shields.io/badge/HuggingFace-Hub-ff69b4)](https://huggingface.co/)
 
-  **Train RL agents in minutes with config-first design, vectorized environments, and seamless W&B/HuggingFace integration**
+  **⚡ Train RL agents in minutes with config-first design, vectorized environments, and seamless W&B/HuggingFace integration 🎮**
 
   [Documentation](./CLAUDE.md) · [Issues](https://github.com/tsilva/gymnasium-solver/issues)
 

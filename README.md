@@ -1,6 +1,6 @@
 <div align="center">
 
-  <img src="logo.png" alt="gymnasium-solver" width="512">
+  <img src="logo.png" alt="gymsolve" width="512">
 
   [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
   [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -10,7 +10,7 @@
 
   **🎮 Fast RL framework with PPO and REINFORCE on Gymnasium ⚡**
 
-  [Documentation](./CLAUDE.md) · [Issues](https://github.com/tsilva/gymnasium-solver/issues)
+  [Documentation](./CLAUDE.md) · [Issues](https://github.com/tsilva/gymsolve/issues)
 
 </div>
 
@@ -22,7 +22,7 @@
 
 ## Overview
 
-gymnasium-solver is a PyTorch Lightning-based framework for training reinforcement learning agents on Gymnasium environments. Built for speed and flexibility:
+gymsolve is a PyTorch Lightning-based framework for training reinforcement learning agents on Gymnasium environments. Built for speed and flexibility:
 
 - **Config-first**: YAML configurations with inheritance, variants, and hyperparameter schedules
 - **Fast training**: Vectorized environments with automatic parallelism
@@ -167,15 +167,15 @@ python scripts/sweep_modal.py config/sweeps/cartpole_ppo_grid.yaml --count 10
 
 ```python
 # Start training programmatically
-mcp__gymnasium_solver__start_training(
+mcp__gymsolve__start_training(
     config_id="CartPole-v1:ppo",
     max_env_steps=10000,
     quiet=True
 )
 
 # Monitor and retrieve metrics
-status = mcp__gymnasium_solver__get_training_status(run_id="@last")
-metrics = mcp__gymnasium_solver__get_run_metrics(run_id="@last")
+status = mcp__gymsolve__get_training_status(run_id="@last")
+metrics = mcp__gymsolve__get_run_metrics(run_id="@last")
 ```
 
 ### Publish to Hugging Face Hub

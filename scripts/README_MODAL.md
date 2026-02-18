@@ -84,7 +84,7 @@ python scripts/sweep_modal.py --sweep-id <id> --count 50 --runs-per-worker 1
 
 ### Repository URL
 
-By default, Modal workers clone from `https://github.com/tsilva/gymnasium-solver.git`.
+By default, Modal workers clone from `https://github.com/tsilva/gymsolve.git`.
 
 To use a different repository, set the `REPO_URL` environment variable when launching:
 

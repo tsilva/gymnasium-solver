@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-gymnasium-solver is a fast, config-first reinforcement learning framework built on PyTorch Lightning and Gymnasium. It trains PPO and REINFORCE agents with vectorized environments, video capture, and seamless W&B/Hugging Face Hub integration.
+gymsolve is a fast, config-first reinforcement learning framework built on PyTorch Lightning and Gymnasium. It trains PPO and REINFORCE agents with vectorized environments, video capture, and seamless W&B/Hugging Face Hub integration.
 
 **Important**: This is a self-education project undergoing rapid development ("vibe coding"). Expect instability and breaking changes until the first official release.
 
@@ -148,26 +148,26 @@ The codebase provides MCP (Model Context Protocol) tools for programmatic intera
 
 ### Available Tools
 
-- **`mcp__gymnasium-solver__list_environments`**: List all available environment configurations with optional filtering
-- **`mcp__gymnasium-solver__list_variants`**: List algorithm variants for a specific environment
-- **`mcp__gymnasium-solver__get_config`**: Get full configuration for an environment:variant combination
-- **`mcp__gymnasium-solver__start_training`**: Start training with config overrides and automatic run management
-- **`mcp__gymnasium-solver__list_runs`**: List training runs with filtering by environment, algorithm, or status
-- **`mcp__gymnasium-solver__get_run_info`**: Get detailed information about a specific run (supports `@last`)
-- **`mcp__gymnasium-solver__get_run_metrics`**: Retrieve metrics data from a training run
-- **`mcp__gymnasium-solver__get_run_logs`**: Access log output for debugging
-- **`mcp__gymnasium-solver__get_training_status`**: Check if a training process is still running
-- **`mcp__gymnasium-solver__stop_training`**: Stop a running training process
-- **`mcp__gymnasium-solver__list_checkpoints`**: List available checkpoints for a run
-- **`mcp__gymnasium-solver__compare_runs`**: Compare key metrics across multiple runs
-- **`mcp__gymnasium-solver__get_best_run`**: Find the best performing run for an environment
+- **`mcp__gymsolve__list_environments`**: List all available environment configurations with optional filtering
+- **`mcp__gymsolve__list_variants`**: List algorithm variants for a specific environment
+- **`mcp__gymsolve__get_config`**: Get full configuration for an environment:variant combination
+- **`mcp__gymsolve__start_training`**: Start training with config overrides and automatic run management
+- **`mcp__gymsolve__list_runs`**: List training runs with filtering by environment, algorithm, or status
+- **`mcp__gymsolve__get_run_info`**: Get detailed information about a specific run (supports `@last`)
+- **`mcp__gymsolve__get_run_metrics`**: Retrieve metrics data from a training run
+- **`mcp__gymsolve__get_run_logs`**: Access log output for debugging
+- **`mcp__gymsolve__get_training_status`**: Check if a training process is still running
+- **`mcp__gymsolve__stop_training`**: Stop a running training process
+- **`mcp__gymsolve__list_checkpoints`**: List available checkpoints for a run
+- **`mcp__gymsolve__compare_runs`**: Compare key metrics across multiple runs
+- **`mcp__gymsolve__get_best_run`**: Find the best performing run for an environment
 
 ### Training with MCP Tools
 
 **Start a basic training run:**
 ```python
 # Start training with default config
-mcp__gymnasium-solver__start_training(
+mcp__gymsolve__start_training(
     config_id="CartPole-v1:ppo",
     quiet=True  # Run in quiet mode (default)
 )
@@ -176,14 +176,14 @@ mcp__gymnasium-solver__start_training(
 **Override configuration parameters:**
 ```python
 # Start training with custom max_env_steps
-mcp__gymnasium-solver__start_training(
+mcp__gymsolve__start_training(
     config_id="CartPole-v1:ppo",
     max_env_steps=5000,
     quiet=True
 )
 
 # Override multiple config fields
-mcp__gymnasium-solver__start_training(
+mcp__gymsolve__start_training(
     config_id="CartPole-v1:ppo",
     overrides={
         "policy_lr": 0.001,
@@ -197,39 +197,39 @@ mcp__gymnasium-solver__start_training(
 **Monitor and control training:**
 ```python
 # Check if training is still running
-mcp__gymnasium-solver__get_training_status(run_id="abc123")
+mcp__gymsolve__get_training_status(run_id="abc123")
 
 # Get detailed run information
-mcp__gymnasium-solver__get_run_info(run_id="@last")
+mcp__gymsolve__get_run_info(run_id="@last")
 
 # Stop a running training process
-mcp__gymnasium-solver__stop_training(run_id="abc123")
+mcp__gymsolve__stop_training(run_id="abc123")
 ```
 
 **Retrieve metrics and logs:**
 ```python
 # Get metrics from a run
-mcp__gymnasium-solver__get_run_metrics(
+mcp__gymsolve__get_run_metrics(
     run_id="@last",
     metric_names=["train/roll/ep_rew/mean", "val/roll/ep_rew/mean"]
 )
 
 # Get logs for debugging
-mcp__gymnasium-solver__get_run_logs(run_id="@last", lines=100)
+mcp__gymsolve__get_run_logs(run_id="@last", lines=100)
 ```
 
 **List and compare runs:**
 ```python
 # List recent runs
-mcp__gymnasium-solver__list_runs(env_filter="CartPole-v1", limit=10)
+mcp__gymsolve__list_runs(env_filter="CartPole-v1", limit=10)
 
 # Compare multiple runs
-mcp__gymnasium-solver__compare_runs(
+mcp__gymsolve__compare_runs(
     run_ids=["abc123", "def456", "ghi789"]
 )
 
 # Find best run for an environment
-mcp__gymnasium-solver__get_best_run(
+mcp__gymsolve__get_best_run(
     env_id="CartPole-v1",
     metric="val/roll/ep_rew/mean"
 )

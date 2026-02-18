@@ -22,9 +22,9 @@ Execution Modes:
       Monitor via Modal dashboard at https://modal.com/apps or W&B.
 
 Modal App Naming:
-    - Apps are named with the pattern: gymnasium-solver-{project_id}-{run_id}
-    - Example: gymnasium-solver-CartPole-v1-abc123xyz
-    - For resume mode: gymnasium-solver-unknown-resume (until run ID is determined from checkpoint)
+    - Apps are named with the pattern: gymsolve-{project_id}-{run_id}
+    - Example: gymsolve-CartPole-v1-abc123xyz
+    - For resume mode: gymsolve-unknown-resume (until run ID is determined from checkpoint)
 
 Resource Allocation:
     - CPU: Scaled based on n_envs (2-16 cores)
@@ -232,10 +232,10 @@ image = (
         "libglib2.0-0",  # Required by some Gym environments
     )
     .pip_install(*get_training_dependencies())
-    .env({"PYTHONPATH": "/root/gymnasium-solver"})  # Make local modules importable during deserialization
+    .env({"PYTHONPATH": "/root/gymsolve"})  # Make local modules importable during deserialization
     .add_local_dir(
         PROJECT_ROOT,
-        remote_path="/root/gymnasium-solver",
+        remote_path="/root/gymsolve",
         # Exclude unnecessary directories and files to reduce image size and avoid build conflicts
         ignore=[
             ".git",
@@ -344,7 +344,7 @@ def create_training_function(app: modal.App, resources: ResourceRequirements, de
             import subprocess
 
             # Change to mounted code directory
-            code_dir = "/root/gymnasium-solver"
+            code_dir = "/root/gymsolve"
             os.chdir(code_dir)
             print(f"Working directory: {os.getcwd()}", flush=True)
 
@@ -481,7 +481,7 @@ def create_training_function(app: modal.App, resources: ResourceRequirements, de
                 yield msg
 
             # Change to mounted code directory
-            code_dir = "/root/gymnasium-solver"
+            code_dir = "/root/gymsolve"
             os.chdir(code_dir)
             yield from log_and_yield(f"Working directory: {os.getcwd()}\n")
 
@@ -658,7 +658,7 @@ def launch_modal_training(args):
         project_id = config.project_id
 
     # Create Modal app with dynamic name
-    app_name = f"gymnasium-solver-{project_id}-{run_id or 'resume'}"
+    app_name = f"gymsolve-{project_id}-{run_id or 'resume'}"
     print(f"Modal app name: {app_name}")
     app = modal.App(app_name)
 

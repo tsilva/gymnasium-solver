@@ -29,7 +29,7 @@ Place the `doom.wad` file in one of these locations:
 
 3. **Current working directory**:
    ```bash
-   cp doom.wad /home/tsilva/repos/tsilva/gymnasium-solver/
+   cp doom.wad /home/tsilva/repos/tsilva/gymsolve/
    ```
 
 ### Using FreeDoom (Free Alternative)

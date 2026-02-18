@@ -14,14 +14,14 @@ import os
 import modal
 
 # Define Modal app
-app = modal.App("gymnasium-solver-train")
+app = modal.App("gymsolve-train")
 
 # Volume for Retro ROMs
 roms_volume = modal.Volume.from_name("roms", create_if_missing=True)
 
 # Get repo URL from environment or use default
 REPO_URL = os.environ.get(
-    "REPO_URL", "https://github.com/tsilva/gymnasium-solver.git"
+    "REPO_URL", "https://github.com/tsilva/gymsolve.git"
 )
 
 # Create Modal image with all dependencies from pyproject.toml
@@ -35,8 +35,8 @@ image = (
         "libglib2.0-0",
     )
     .run_commands(
-        f"git clone --depth 1 {REPO_URL} /tmp/gymnasium-solver",
-        "pip install -e /tmp/gymnasium-solver",
+        f"git clone --depth 1 {REPO_URL} /tmp/gymsolve",
+        "pip install -e /tmp/gymsolve",
     )
 )
 
@@ -68,7 +68,7 @@ def train(
     from pathlib import Path
 
     # Package already installed in image from pyproject.toml
-    os.chdir("/tmp/gymnasium-solver")
+    os.chdir("/tmp/gymsolve")
     print(f"Working directory: {os.getcwd()}")
 
     # If this is a Retro environment, import the ROM from volume

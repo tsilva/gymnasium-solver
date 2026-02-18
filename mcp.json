@@ -1,10 +1,10 @@
 {
   "mcpServers": {
-    "gymnasium-solver": {
+    "gymsolve": {
       "command": "python3",
       "args": ["mcp_server.py"],
       "env": {},
-      "description": "Training run management for gymnasium-solver: list envs/configs, start/monitor/debug runs, compare results"
+      "description": "Training run management for gymsolve: list envs/configs, start/monitor/debug runs, compare results"
     }
   }
 }

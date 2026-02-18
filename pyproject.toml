@@ -3,9 +3,9 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "gymnasium-solver-env"
+name = "gymsolve-env"
 version = "0.1.0"
-description = "Environment for gymnasium-solver (uv/jupyter kernel)"
+description = "Environment for gymsolve (uv/jupyter kernel)"
 requires-python = ">=3.12"
 dependencies = [
     "gymnasium[classic-control,atari,box2d,mujoco,other]",
@@ -40,6 +40,9 @@ dependencies = [
     "pyqtgraph>=0.13.7",
     "grad-cam>=1.5.4",
     "opencv-python-headless>=4.8.0",  # Override grad-cam's opencv-python to avoid Qt conflicts
+    "google-generativeai>=0.8.6",
+    "openai>=2.21.0",
+    "pillow>=11.3.0",
 ]
 
 [tool.setuptools.packages.find]

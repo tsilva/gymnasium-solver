@@ -80,7 +80,7 @@ def run_sweep_agent(sweep_id: str, entity: str, project: str, count: int = 1):
 
     # Get repository URL from environment or use default
     repo_url = os.environ.get(
-        "REPO_URL", "https://github.com/tsilva/gymnasium-solver.git"
+        "REPO_URL", "https://github.com/tsilva/gymsolve.git"
     )
 
     # Clone repository to temporary directory

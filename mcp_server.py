@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MCP server for gymnasium-solver training run management.
+"""MCP server for gymsolve training run management.
 
 Provides tools for Claude Code to interact with training sessions and inspect runs.
 Enables agent-guided optimization cycles: launch runs, debug, tweak, relaunch.
@@ -35,7 +35,7 @@ from utils.run import Run, RUNS_DIR
 # Track running training processes
 _running_processes: Dict[str, subprocess.Popen] = {}
 
-server = Server("gymnasium-solver")
+server = Server("gymsolve")
 
 
 # ============================================================================
@@ -3075,7 +3075,7 @@ async def main():
             read_stream,
             write_stream,
             InitializationOptions(
-                server_name="gymnasium-solver",
+                server_name="gymsolve",
                 server_version="0.1.0",
                 capabilities=server.get_capabilities(
                     notification_options=NotificationOptions(),

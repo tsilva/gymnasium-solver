@@ -87,3 +87,9 @@ markers = [
 
 # Minimum version requirement
 minversion = "6.0"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]

@@ -23,14 +23,17 @@ def test_max_steps_override(monkeypatch):
         captured["config"] = config
         return DummyAgent(config)
 
+    monkeypatch.setenv("WANDB_MODE", "disabled")
     monkeypatch.setattr("agents.build_agent", fake_build_agent)
+    monkeypatch.setattr("utils.train_launcher.build_agent", fake_build_agent)
+    monkeypatch.setattr("utils.train_launcher._ensure_wandb_run_initialized", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         "utils.wandb_workspace.create_or_update_workspace_for_current_run",
         lambda *args, **kwargs: None,
     )
-    monkeypatch.setattr(sys, "argv", ["train.py", "Bandit-v0:ppo", "--max-steps", "123"])
+    monkeypatch.setattr(sys, "argv", ["train.py", "Bandit-v0:ppo", "--max-env-steps", "123"])
 
     train.main()
 
     assert "config" in captured
-    assert captured["config"].max_timesteps == 123
+    assert captured["config"].max_env_steps == 123

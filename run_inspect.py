@@ -33,37 +33,16 @@ PLAY_ICON = "\u25B6"  # ▶
 PAUSE_ICON = "\u23F8"  # ⏸
 
 from utils.policy_factory import load_policy_model_from_checkpoint
+from utils.playback import (
+    build_single_env_from_config,
+    get_action_label_list_from_env,
+    resolve_playback_seed,
+)
 from utils.rollouts import (
     compute_batched_gae_advantages_and_returns,
     compute_batched_mc_returns,
 )
-from utils.run import Run, list_run_ids
-
-
-def _ensure_run_available(run_id: str) -> str:
-    """Ensure run is available locally, downloading from W&B if necessary.
-
-    Args:
-        run_id: Run ID (may be @last)
-
-    Returns:
-        Resolved run ID (with @last expanded to actual ID)
-    """
-    # Resolve @last symlink
-    if run_id == "@last":
-        from utils.run import LAST_RUN_DIR
-        if not LAST_RUN_DIR.exists():
-            raise FileNotFoundError("No @last run found. Train a model first.")
-        run_id = LAST_RUN_DIR.resolve().name
-
-    # Check if run exists locally, if not try to download from W&B
-    run_dir = Run._resolve_run_dir(run_id)
-    if not run_dir.exists():
-        print(f"Run {run_id} not found locally. Attempting to download from W&B...")
-        from utils.wandb_artifacts import download_run_artifact
-        download_run_artifact(run_id)
-
-    return run_id
+from utils.run import load_available_run, resolve_checkpoint_dir, list_run_ids
 
 
 def _to_batched_array(arr: np.ndarray, dtype) -> np.ndarray:
@@ -204,8 +183,7 @@ def run_episode(
     seed: int | None = None,
     env_kwargs_overrides: list | None = None,
 ) -> Tuple[List[np.ndarray], List[np.ndarray] | None, List[np.ndarray] | None, List[Dict[str, Any]], Dict[str, Any]]:
-    run_id = _ensure_run_available(run_id)
-    run = Run.load(run_id)
+    run = load_available_run(run_id)
     config = run.load_config()
 
     # Apply env_kwargs overrides
@@ -213,27 +191,9 @@ def run_episode(
         from utils.train_launcher import _apply_env_kwargs_overrides
         config = _apply_env_kwargs_overrides(config, env_kwargs_overrides)
 
-    #labels, _, default_label = run.list_checkpoints(), {}, "@best"
-    checkpoint_dir = run.checkpoints_dir / checkpoint_label
-
-    from utils.environment import build_env_from_config
-    from utils.random import set_random_seed
-
-    # Use provided seed or fallback to test seed
-    if seed is None:
-        seed = config.seed_test
-
-    # Seed all RNGs (Python, NumPy, PyTorch) for reproducibility
-    # This matches run_play.py behavior and ensures deterministic sampling
-    set_random_seed(seed)
-
-    env = build_env_from_config(
-        config,
-        n_envs=1,
-        render_mode="rgb_array",
-        vectorization_mode='sync',
-        seed=seed,
-    )
+    checkpoint_dir = resolve_checkpoint_dir(run, checkpoint_label)
+    seed = resolve_playback_seed(config, seed)
+    env = build_single_env_from_config(config, render_mode="rgb_array", seed=seed)
 
     # Get checkpoint path with backward compatibility for old policy.ckpt format
     checkpoint_path = run._get_checkpoint_path(checkpoint_dir)
@@ -244,15 +204,7 @@ def run_episode(
     is_multibinary_action_space = isinstance(single_action_space, gym.spaces.MultiBinary)
     is_multidiscrete_action_space = isinstance(single_action_space, gym.spaces.MultiDiscrete)
 
-    act_labels_raw = env.get_action_labels()
-    action_labels: List[str] | None = None
-    if act_labels_raw is not None:
-        if isinstance(act_labels_raw, dict):
-            # Convert dict {0: 'NOOP', 1: 'RIGHT', ...} to list ['NOOP', 'RIGHT', ...]
-            max_idx = max(act_labels_raw.keys()) if act_labels_raw else -1
-            action_labels = [str(act_labels_raw.get(i, i)) for i in range(max_idx + 1)]
-        else:
-            action_labels = [str(x) for x in act_labels_raw]
+    action_labels = get_action_label_list_from_env(env)
 
     # Collect environment spec for summary tabs (VecInfoWrapper exposes safe helpers)
     env_spec_obj = env.get_spec()
@@ -682,24 +634,11 @@ def build_ui(default_run_id: str = "@last", seed_arg: str | None = None, env_kwa
 
     runs = list_run_ids()
     initial_run = default_run_id if default_run_id else (runs[0] if runs else "@last")
-
-    # Resolve seed argument (same logic as run_play.py)
-    initial_config = Run.load(initial_run).load_config()
-    if seed_arg is None:
-        resolved_seed = initial_config.seed_test
-    elif seed_arg in ["train", "val", "test"]:
-        seeds = {
-            "train": initial_config.seed_train,
-            "val": initial_config.seed_val,
-            "test": initial_config.seed_test,
-        }
-        resolved_seed = seeds[seed_arg]
-    else:
-        resolved_seed = int(seed_arg)
+    initial_config = load_available_run(initial_run).load_config()
+    resolved_seed = resolve_playback_seed(initial_config, seed_arg)
 
     def _checkpoint_choices_for_run(run_identifier: str):
-        run_id = _ensure_run_available(run_identifier)
-        checkpoints = Run.load(run_id).list_checkpoints()
+        checkpoints = load_available_run(run_identifier).list_checkpoints()
         return checkpoints, {}, "@best"
 
     labels, _, default_label = _checkpoint_choices_for_run(initial_run)

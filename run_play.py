@@ -12,11 +12,14 @@ from pathlib import Path
 import torch
 import torch.nn as nn
 
-from utils.environment import build_env_from_config
 from utils.policy_factory import load_policy_model_from_checkpoint
-from utils.random import set_random_seed
+from utils.playback import (
+    build_single_env_from_config,
+    get_action_labels_from_env,
+    resolve_playback_seed,
+)
 from utils.rollouts import RolloutCollector
-from utils.run import Run
+from utils.run import load_available_run
 
 # Global window layout file
 WINDOW_LAYOUT_FILE = Path(__file__).parent / "window_layout.json"
@@ -591,12 +594,12 @@ class VisualizationToolbar:
 
                 n_actions = action_space.n
 
-                # Extract action labels from config
-                action_labels = extract_action_labels_from_config(self.config)
+                # Prefer env-derived labels so wrapper remapping stays consistent.
+                action_labels = get_action_labels_from_env(self.env)
                 if action_labels:
-                    print(f"Loaded {len(action_labels)} action labels from config spec")
+                    print(f"Loaded {len(action_labels)} action labels from environment")
                 else:
-                    print("No action labels found in config spec")
+                    print("No action labels found in environment")
 
                 space_type = "MultiBinary buttons" if isinstance(action_space, MultiBinary) else "Discrete actions"
                 self.action_viewer = ActionVisualizer(n_actions=n_actions, action_labels=action_labels, update_interval=0.05)
@@ -4263,54 +4266,6 @@ class PreprocessedObservationViewer:
                 pass
             self.is_open = False
 
-
-def extract_action_labels_from_config(config) -> dict[int, str] | None:
-    """Extract and remap action labels from config spec.
-
-    Returns a dict mapping action_id (after wrappers) to label string.
-    Returns None if labels are not available in config.
-    """
-    # Check if config has spec with action_space labels
-    if not hasattr(config, 'spec') or config.spec is None:
-        return None
-
-    spec = config.spec
-    if not isinstance(spec, dict) or 'action_space' not in spec:
-        return None
-
-    action_space_spec = spec['action_space']
-    if not isinstance(action_space_spec, dict) or 'labels' not in action_space_spec:
-        return None
-
-    original_labels = action_space_spec['labels']
-    if not isinstance(original_labels, dict):
-        return None
-
-    # Ensure keys are integers (JSON serialization may convert them to strings)
-    original_labels = {int(k): v for k, v in original_labels.items()}
-
-    # Check if there's a DiscreteActionSpaceRemapperWrapper
-    remapping = None
-    if hasattr(config, 'env_wrappers') and config.env_wrappers:
-        for wrapper_spec in config.env_wrappers:
-            if isinstance(wrapper_spec, dict) and wrapper_spec.get('id') == 'DiscreteActionSpaceRemapperWrapper':
-                remapping = wrapper_spec.get('mapping')
-                break
-
-    # Apply remapping if present
-    if remapping:
-        # remapping[i] = original_action_id
-        # So new_action_id i maps to original_labels[remapping[i]]
-        remapped_labels = {}
-        for new_id, orig_id in enumerate(remapping):
-            if orig_id in original_labels:
-                remapped_labels[new_id] = original_labels[orig_id]
-        return remapped_labels
-    else:
-        # No remapping, return original labels
-        return original_labels
-
-
 def play_episodes_manual(env, target_episodes: int, mode: str, step_by_step: bool = False, fps: int | None = None, action_labels: dict[int, str] | None = None, plotter: RewardPlotter | None = None, obs_viewer: PreprocessedObservationViewer | None = None, action_viewer: ActionVisualizer | None = None):
     """Play episodes with random actions or user input."""
     import numpy as np
@@ -5045,23 +5000,7 @@ def main():
         run = None
     else:
         # Run-id mode: load trained policy from checkpoint
-        # Resolve run ID (handle @last symlink)
-        run_id = args.run_id
-        if run_id == "@last":
-            from utils.run import LAST_RUN_DIR
-            if not LAST_RUN_DIR.exists():
-                raise FileNotFoundError("No @last run found. Train a model first.")
-            run_id = LAST_RUN_DIR.resolve().name
-
-        # Check if run exists locally, if not try to download from W&B
-        run_dir = Run._resolve_run_dir(run_id)
-        if not run_dir.exists():
-            print(f"Run {run_id} not found locally. Attempting to download from W&B...")
-            from utils.wandb_artifacts import download_run_artifact
-            download_run_artifact(run_id)
-
-        # Load run and config
-        run = Run.load(run_id)
+        run = load_available_run(args.run_id)
         config = run.load_config()
 
         # Apply env_kwargs overrides
@@ -5081,45 +5020,22 @@ def main():
     if args.fps is None and config.spec and 'render_fps' in config.spec:
         args.fps = config.spec['render_fps']
 
-    # Resolve seed argument
-    if args.seed is None:
-        # Default to test seed
-        seed = config.seed_test
-    elif args.seed in ["train", "val", "test"]:
-        # Map stage names to corresponding seeds
-        seeds = {
-            "train": config.seed_train,
-            "val": config.seed_val,
-            "test": config.seed_test,
-        }
-        seed = seeds[args.seed]
-    else:
-        # Parse as integer
-        seed = int(args.seed)
-
-    # Seed all RNGs (Python, NumPy, PyTorch) for reproducibility
-    set_random_seed(seed)
-
-    # Build a single-env environment with human rendering
-    # Force vectorization_mode='sync' to ensure render() is supported (ALE atari vectorization doesn't support it)
-    env_overrides = {
-        'n_envs': 1,
-        'vectorization_mode': 'sync',
-        'render_mode': "human" if not args.headless else None,
-        'seed': seed
-    }
-    env = build_env_from_config(config, **env_overrides)
+    seed = resolve_playback_seed(config, args.seed)
+    env = build_single_env_from_config(
+        config,
+        render_mode="human" if not args.headless else None,
+        seed=seed,
+    )
 
     # Attach a live observation bar printer for interactive play (vector-level wrapper)
     from gym_wrappers.vec_obs_printer import VecObsBarPrinter
     #env = VecObsBarPrinter(env, bar_width=40, env_index=0, enable=args.show_obs, target_episodes=target_episodes)
 
-    # Extract action labels from config
-    action_labels = extract_action_labels_from_config(config)
+    action_labels = get_action_labels_from_env(env)
     if action_labels:
-        print(f"Loaded {len(action_labels)} action labels from config spec")
+        print(f"Loaded {len(action_labels)} action labels from environment")
     else:
-        print("No action labels found in config spec")
+        print("No action labels found in environment")
 
     # Initialize reward plotter if enabled and not headless
     plotter = None

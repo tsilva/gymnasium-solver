@@ -39,6 +39,70 @@ def _symlink_to_dir(symlink_path: Path, target_dir: Path):
     if os.path.islink(symlink_path): os.unlink(symlink_path)
     symlink_path.symlink_to(target_dir.resolve(), target_is_directory=True)
 
+
+def resolve_run_id(run_id: str) -> str:
+    """Resolve symbolic run identifiers like ``@last`` to a concrete run id."""
+    if run_id != "@last":
+        return run_id
+    if not LAST_RUN_DIR.exists():
+        raise FileNotFoundError("No @last run found. Train a model first.")
+    return LAST_RUN_DIR.resolve().name
+
+
+def ensure_run_dir(run_id: str) -> Path:
+    """Ensure a run directory exists locally, downloading it if needed."""
+    resolved_run_id = resolve_run_id(run_id)
+    run_dir = Run._resolve_run_dir(resolved_run_id)
+    if run_dir.exists():
+        return run_dir
+
+    print(f"Run {resolved_run_id} not found locally. Attempting to download from W&B...")
+    from utils.wandb_artifacts import download_run_artifact
+
+    download_run_artifact(resolved_run_id)
+    if not run_dir.exists():
+        raise FileNotFoundError(f"run directory not found: {run_dir}")
+    return run_dir
+
+
+def load_available_run(run_id: str) -> "Run":
+    """Load a run, resolving symbolic ids and downloading artifacts if needed."""
+    resolved_run_id = resolve_run_id(run_id)
+    ensure_run_dir(resolved_run_id)
+    return Run.load(resolved_run_id)
+
+
+def resolve_checkpoint_dir(run: "Run", epoch_spec: str | None) -> Path:
+    """Resolve a checkpoint directory from an optional checkpoint spec."""
+    if epoch_spec is None:
+        if run.best_checkpoint_dir.exists():
+            return run.best_checkpoint_dir
+        if run.last_checkpoint_dir.exists():
+            return run.last_checkpoint_dir
+        raise FileNotFoundError(f"No checkpoints found for run {run.run_id}")
+
+    if epoch_spec == "@best":
+        if not run.best_checkpoint_dir.exists():
+            raise FileNotFoundError(f"No best checkpoint found for run {run.run_id}")
+        return run.best_checkpoint_dir
+    if epoch_spec == "@last":
+        if not run.last_checkpoint_dir.exists():
+            raise FileNotFoundError(f"No last checkpoint found for run {run.run_id}")
+        return run.last_checkpoint_dir
+
+    epoch_str = epoch_spec[6:] if epoch_spec.startswith("epoch=") else epoch_spec
+    try:
+        epoch = int(epoch_str)
+    except ValueError as exc:
+        raise ValueError(
+            f"Invalid epoch spec: {epoch_spec}. Use '@best', '@last', 'epoch=N', or an integer."
+        ) from exc
+
+    checkpoint_dir = run.checkpoint_dir_for_epoch(epoch)
+    if not checkpoint_dir.exists():
+        raise FileNotFoundError(f"Checkpoint for epoch {epoch} not found in run {run.run_id}")
+    return checkpoint_dir
+
 def list_run_ids() -> List[str]:
     return [p.name for p in RUNS_DIR.iterdir() if p.is_dir()]
 

@@ -222,31 +222,18 @@ def _launch_training_resume(args) -> None:
     from utils.config import Config
     from utils.formatting import format_duration
     from utils.random import set_random_seed
-    from utils.run import Run
+    from utils.run import load_available_run, resolve_checkpoint_dir
     from utils.io import read_json
     import wandb
 
-    # Resolve run ID (handle @last symlink)
-    run_id = args.resume
-    if run_id == "@last":
-        from utils.run import LAST_RUN_DIR
-        if not LAST_RUN_DIR.exists():
-            raise FileNotFoundError("No @last run found. Train a model first.")
-        run_id = LAST_RUN_DIR.resolve().name
-
-    # Check if run exists locally, if not try to download from W&B
-    run_dir = Run._resolve_run_dir(run_id)
-    if not run_dir.exists():
-        print(f"Run {run_id} not found locally. Attempting to download from W&B...")
-        from utils.wandb_artifacts import download_run_artifact
-        download_run_artifact(run_id)
-
     # Load run
+    run_id = args.resume
     print(f"Resuming run: {run_id}")
-    run = Run.load(run_id)
+    run = load_available_run(run_id)
+    run_id = run.run_id
 
     # Resolve checkpoint directory
-    checkpoint_dir = _resolve_checkpoint_dir(run, args.epoch)
+    checkpoint_dir = resolve_checkpoint_dir(run, args.epoch)
     print(f"Loading checkpoint from: {checkpoint_dir}")
 
     # Load config from checkpoint (prefer state.json, fallback to run's config.json)
@@ -351,7 +338,7 @@ def _load_pretrained_weights(agent, run_spec: str, load_optimizer: bool = True) 
                        Recommended for continuing training on same environment.
                        Set to False for transfer learning to different tasks.
     """
-    from utils.run import Run, LAST_RUN_DIR
+    from utils.run import load_available_run, resolve_checkpoint_dir, resolve_run_id
 
     # Parse run_spec into run_id and checkpoint_spec
     if "/" in run_spec:
@@ -360,25 +347,13 @@ def _load_pretrained_weights(agent, run_spec: str, load_optimizer: bool = True) 
         run_id = run_spec
         checkpoint_spec = None
 
-    # Resolve run ID (handle @last symlink)
-    if run_id == "@last":
-        if not LAST_RUN_DIR.exists():
-            raise FileNotFoundError("No @last run found. Train a model first.")
-        run_id = LAST_RUN_DIR.resolve().name
-
-    # Check if run exists locally, if not try to download from W&B
-    run_dir = Run._resolve_run_dir(run_id)
-    if not run_dir.exists():
-        print(f"Run {run_id} not found locally. Attempting to download from W&B...")
-        from utils.wandb_artifacts import download_run_artifact
-        download_run_artifact(run_id)
-
     # Load run
-    print(f"Loading pretrained weights from run: {run_id}")
-    run = Run.load(run_id)
+    resolved_run_id = resolve_run_id(run_id)
+    print(f"Loading pretrained weights from run: {resolved_run_id}")
+    run = load_available_run(run_id)
 
     # Resolve checkpoint directory
-    checkpoint_dir = _resolve_checkpoint_dir(run, epoch_spec=checkpoint_spec)
+    checkpoint_dir = resolve_checkpoint_dir(run, checkpoint_spec)
     checkpoint_desc = checkpoint_spec if checkpoint_spec else "(@best if available, else @last)"
     print(f"Loading weights from: {checkpoint_dir} {checkpoint_desc}")
 
@@ -387,56 +362,10 @@ def _load_pretrained_weights(agent, run_spec: str, load_optimizer: bool = True) 
     # Use load_optimizer_only=True to skip RNG states and step counters (fresh training progress)
     agent.load_checkpoint(checkpoint_dir, resume_training=load_optimizer, strict=False, load_optimizer_only=load_optimizer)
     if load_optimizer:
-        print(f"Pretrained weights and optimizer state loaded from {run_id}")
+        print(f"Pretrained weights and optimizer state loaded from {resolved_run_id}")
         print("Note: Starting fresh training progress (epoch 0, timestep 0) with warm optimizer")
     else:
-        print(f"Pretrained weights loaded from {run_id} (optimizer state not loaded)")
-
-
-def _resolve_checkpoint_dir(run, epoch_spec: Optional[str]) -> Path:
-    """Resolve checkpoint directory from epoch spec.
-
-    Args:
-        run: Run object
-        epoch_spec: Epoch specifier: None, '@best', '@last', 'epoch=N', or epoch number
-
-    Returns:
-        Path to checkpoint directory
-    """
-    from pathlib import Path
-
-    # Default: prefer @best if exists, else @last
-    if epoch_spec is None:
-        if run.best_checkpoint_dir.exists():
-            return run.best_checkpoint_dir
-        elif run.last_checkpoint_dir.exists():
-            return run.last_checkpoint_dir
-        else:
-            raise FileNotFoundError(f"No checkpoints found for run {run.run_id}")
-
-    # Handle symlinks
-    if epoch_spec == "@best":
-        if not run.best_checkpoint_dir.exists():
-            raise FileNotFoundError(f"No best checkpoint found for run {run.run_id}")
-        return run.best_checkpoint_dir
-    elif epoch_spec == "@last":
-        if not run.last_checkpoint_dir.exists():
-            raise FileNotFoundError(f"No last checkpoint found for run {run.run_id}")
-        return run.last_checkpoint_dir
-
-    # Handle specific epoch number (supports both "13" and "epoch=13" formats)
-    epoch_str = epoch_spec
-    if epoch_spec.startswith("epoch="):
-        epoch_str = epoch_spec[6:]  # Strip "epoch=" prefix
-
-    try:
-        epoch = int(epoch_str)
-        checkpoint_dir = run.checkpoint_dir_for_epoch(epoch)
-        if not checkpoint_dir.exists():
-            raise FileNotFoundError(f"Checkpoint for epoch {epoch} not found in run {run.run_id}")
-        return checkpoint_dir
-    except ValueError:
-        raise ValueError(f"Invalid epoch spec: {epoch_spec}. Use '@best', '@last', 'epoch=N', or an integer.")
+        print(f"Pretrained weights loaded from {resolved_run_id} (optimizer state not loaded)")
 
 
 def launch_training_from_args(args) -> None:

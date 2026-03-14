@@ -86,7 +86,7 @@ python run_inspect.py --run-id @last --port 7860
 | Classic Control | CartPole, MountainCar, Acrobot, Taxi | Fast training, ideal for testing |
 | Atari (ALE) | Pong, Breakout, Space Invaders | RGB/RAM/Objects observation modes |
 | VizDoom | Basic, Deadly Corridor, Defend Center | First-person shooter scenarios |
-| Retro | NES/SNES/Genesis games | Requires stable-retro |
+| Retro | NES/SNES/Genesis games | Requires `stable-retro` (`stable-retro-apple-silicon` on Apple Silicon) |
 | Box2D | LunarLander, BipedalWalker | Physics simulation |
 | Custom | Multi-armed bandits | Extensible registry |
 
@@ -211,7 +211,7 @@ pytest tests/test_ppo.py -v  # Specific test
 | Issue | Solution |
 |-------|----------|
 | CUDA out of memory | Reduce `n_envs`, `batch_size`, or `n_steps` |
-| Retro fails on M1 Mac | stable-retro 0.9.5 has ARM64 issues; use Rosetta |
+| Retro fails on Apple Silicon | Install `stable-retro-apple-silicon==0.9.9.post1` and re-run `uv sync` |
 | W&B resume fails | Set `WANDB_ENTITY` and `WANDB_PROJECT` env vars |
 
 ## Documentation

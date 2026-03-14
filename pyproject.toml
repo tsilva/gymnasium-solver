@@ -34,9 +34,8 @@ dependencies = [
     "mcp",
     "python-dotenv",
     "modal>=0.64.0",
-    # NOTE: stable-retro 0.9.5 is BROKEN on M1 Mac (arm64 wheel contains x86_64 binary)
-    # Building from source also fails. Use with Rosetta or wait for upstream fix.
-    "stable-retro>=0.9.5",
+    "stable-retro-apple-silicon==0.9.9.post1; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "stable-retro>=0.9.9; sys_platform != 'darwin' or platform_machine != 'arm64'",
     "pyqtgraph>=0.13.7",
     "grad-cam>=1.5.4",
     "opencv-python-headless>=4.8.0",  # Override grad-cam's opencv-python to avoid Qt conflicts

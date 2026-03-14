@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""List imported ROMs for stable-retro and their locations."""
+"""List imported ROMs for Retro environments and their locations."""
 
 import sys
 from pathlib import Path
@@ -71,11 +71,11 @@ def main():
     try:
         import retro
     except ImportError:
-        print("ERROR: stable-retro is not installed.")
-        print("Install it with: uv pip install -e '.[retro]'")
+        print("ERROR: Retro support is not installed.")
+        print("Install project dependencies with: uv sync")
         sys.exit(1)
 
-    print("Stable-Retro ROM Locations")
+    print("Retro ROM Locations")
     print("=" * 80)
     print()
 

@@ -1,3 +1,4 @@
+import importlib
 import sys
 from contextlib import contextmanager
 from types import ModuleType, SimpleNamespace
@@ -52,9 +53,8 @@ def _install_environment_stub(monkeypatch):
     env_mod.build_env = build_env
     env_mod.build_env_from_config = build_env_from_config
     env_mod.get_env_type = lambda _env_id: None
-    # Ensure utils package exists in sys.modules for submodule registration
     if "utils" not in sys.modules:
-        sys.modules["utils"] = ModuleType("utils")
+        importlib.import_module("utils")
     monkeypatch.setitem(sys.modules, "utils.environment", env_mod)
 
 
@@ -90,7 +90,7 @@ def _install_training_support_stubs(monkeypatch):
     logging_mod.stream_output_to_log = stream_output_to_log
 
     if "utils" not in sys.modules:
-        sys.modules["utils"] = ModuleType("utils")
+        importlib.import_module("utils")
     monkeypatch.setitem(sys.modules, "utils.trainer_loggers", loggers_mod)
     monkeypatch.setitem(sys.modules, "utils.callback_builder", callbacks_mod)
     monkeypatch.setitem(sys.modules, "utils.logging", logging_mod)
@@ -156,7 +156,7 @@ def _install_trainer_factory_stub(monkeypatch):
 
     tf_mod.build_trainer = build_trainer
     if "utils" not in sys.modules:
-        sys.modules["utils"] = ModuleType("utils")
+        importlib.import_module("utils")
     monkeypatch.setitem(sys.modules, "utils.trainer_factory", tf_mod)
 
 

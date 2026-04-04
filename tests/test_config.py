@@ -161,6 +161,51 @@ def test_config_build_from_dict_filters_unknown_fields():
 
 
 @pytest.mark.unit
+def test_config_build_from_dict_keeps_expected_model_and_rollout_resolution():
+    cfg = Config.build_from_dict(_config_dict())
+
+    assert cfg.policy == Config.PolicyType.mlp_actorcritic
+    assert cfg.hidden_dims == (128, 128)
+    assert cfg.activation == "relu"
+    assert cfg.policy_kwargs == {}
+    assert cfg.get_rollout_collector_kwargs() == {
+        "n_steps": 128,
+        "gamma": 0.99,
+        "normalize_returns": False,
+        "returns_type": "gae:rtg",
+        "gae_lambda": 0.95,
+        "advantages_type": "gae",
+        "normalize_advantages": False,
+    }
+
+
+@pytest.mark.unit
+def test_load_config_keeps_expected_yaml_resolution_and_rollout_kwargs():
+    from utils.config import load_config
+
+    cfg = load_config("CartPole-v1", "ppo")
+
+    assert cfg.project_id == "CartPole-v1"
+    assert cfg.env_id == "CartPole-v1"
+    assert cfg.n_envs == 8
+    assert cfg.n_steps == 32
+    assert cfg.batch_size == 256
+    assert cfg.max_env_steps == 100000
+    assert cfg.policy_lr == pytest.approx(0.001)
+    assert cfg.policy == Config.PolicyType.mlp_actorcritic
+    assert cfg.hidden_dims == (256, 256)
+    assert cfg.get_rollout_collector_kwargs() == {
+        "n_steps": 32,
+        "gamma": 0.98,
+        "normalize_returns": False,
+        "returns_type": "gae:rtg",
+        "gae_lambda": 0.8,
+        "advantages_type": "gae",
+        "normalize_advantages": False,
+    }
+
+
+@pytest.mark.unit
 def test_config_fractional_eval_warmup_epochs():
     """Test that fractional eval_warmup_epochs is resolved correctly"""
     cfg = Config.build_from_dict(_config_dict(eval_warmup_epochs=0.3))

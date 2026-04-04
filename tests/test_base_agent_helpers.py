@@ -3,6 +3,7 @@ import sys
 import threading
 import time
 import types
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import torch
@@ -51,6 +52,91 @@ def test_get_async_eval_metric_reads_shared_results():
     inst = _build_agent(async_metrics={"val/roll/ep_rew/mean": 123.4})
     assert inst.get_async_eval_metric("val/roll/ep_rew/mean") == 123.4
     assert inst.get_async_eval_metric("missing") is None
+
+
+def test_train_dataloader_bootstraps_initial_rollout_and_loader(monkeypatch):
+    built = {}
+
+    class _Collector:
+        def __init__(self):
+            self.collect_calls = 0
+
+        def collect(self):
+            self.collect_calls += 1
+            return SimpleNamespace(observations=torch.zeros(8, 1))
+
+    def fake_build_loader(**kwargs):
+        built.update(kwargs)
+        return "loader"
+
+    monkeypatch.setattr(
+        "utils.dataloaders.build_index_collate_loader_from_collector",
+        fake_build_loader,
+    )
+    monkeypatch.setattr(
+        "utils.random.get_global_torch_generator",
+        lambda seed: f"generator-{seed}",
+    )
+
+    collector = _Collector()
+    inst = BaseAgent.__new__(BaseAgent)
+    object.__setattr__(inst, "config", SimpleNamespace(seed=7, batch_size=4, n_epochs=3))
+    object.__setattr__(inst, "_rollout_collectors", {"train": collector})
+    object.__setattr__(inst, "_trajectories", [])
+    object.__setattr__(inst, "current_epoch", 0)
+
+    loader = inst.train_dataloader()
+
+    assert loader == "loader"
+    assert inst._train_dataloader == "loader"
+    assert collector.collect_calls == 1
+    assert built["collector"] is collector
+    assert built["trajectories_getter"]() is inst._trajectories
+    assert built["batch_size"] == 4
+    assert built["num_passes"] == 3
+    assert built["generator"] == "generator-7"
+
+
+def test_on_train_epoch_start_stops_before_overshooting_budget():
+    events = []
+
+    class _Timings:
+        def start(self, *_args, **_kwargs):
+            events.append("timings:start")
+
+    class _Collector:
+        def __init__(self):
+            self.collect_calls = 0
+
+        def get_metrics(self):
+            return {"cnt/total_env_steps": 96}
+
+        def collect(self):
+            self.collect_calls += 1
+            return None
+
+    collector = _Collector()
+    inst = BaseAgent.__new__(BaseAgent)
+    object.__setattr__(
+        inst,
+        "config",
+        SimpleNamespace(eval_async=False, max_env_steps=100, n_envs=2, n_steps=3),
+    )
+    object.__setattr__(inst, "_print_metrics_logger", None)
+    object.__setattr__(inst, "_rollout_collectors", {"train": collector})
+    object.__setattr__(inst, "timings", _Timings())
+    object.__setattr__(inst, "trainer", SimpleNamespace(should_stop=False))
+    object.__setattr__(inst, "current_epoch", 1)
+    object.__setattr__(inst, "_early_stop_reason", "")
+    object.__setattr__(inst, "_read_hyperparameters_from_run", lambda: events.append("read"))
+    object.__setattr__(inst, "_log_hyperparameters", lambda: events.append("log"))
+
+    inst.on_train_epoch_start()
+
+    assert inst.trainer.should_stop is True
+    assert collector.collect_calls == 0
+    assert "would exceed" in inst._early_stop_reason
+    assert events == ["timings:start", "read", "log"]
 
 
 def test_validation_hooks_record_async_eval_metrics():
@@ -113,6 +199,115 @@ def test_validation_hooks_record_async_eval_metrics():
     inst.on_validation_epoch_end()
     assert inst.metrics_recorder.calls[-1][0] == "val"
     assert inst.metrics_recorder.calls[-1][1]["eval/model_epoch"] == 5
+
+
+def test_learn_creates_run_and_redirects_output(monkeypatch, tmp_path):
+    events = []
+
+    @contextmanager
+    def fake_stream_output_to_log(path):
+        events.append(("stream", path))
+        events.append("stream:enter")
+        try:
+            yield
+        finally:
+            events.append("stream:exit")
+
+    run_stub = SimpleNamespace(
+        run_id="run-123",
+        _ensure_path=lambda name: tmp_path / name,
+    )
+
+    def fake_create(run_id, config):
+        events.append(("create", run_id, config))
+        return run_stub
+
+    monkeypatch.setattr("utils.logging.stream_output_to_log", fake_stream_output_to_log)
+
+    import agents.base_agent_runtime as runtime
+
+    monkeypatch.setattr(runtime.wandb, "run", None, raising=False)
+    monkeypatch.setattr(runtime.Run, "create", staticmethod(fake_create))
+
+    inst = BaseAgent.__new__(BaseAgent)
+    object.__setattr__(inst, "run", None)
+    object.__setattr__(inst, "config", SimpleNamespace())
+    object.__setattr__(inst, "_learn", lambda: events.append("learn"))
+
+    inst.learn()
+
+    assert inst.run is run_stub
+    assert events[0][0] == "create"
+    assert events[0][1].startswith("local-")
+    assert events[1] == ("stream", tmp_path / "run.log")
+    assert events[2:] == ["stream:enter", "learn", "stream:exit"]
+
+
+def test_learn_runtime_builds_trainer_and_respects_resume_epoch(monkeypatch):
+    events = []
+    built = {}
+
+    trainer_loggers_mod = types.ModuleType("utils.trainer_loggers")
+    callback_builder_mod = types.ModuleType("utils.callback_builder")
+    trainer_factory_mod = types.ModuleType("utils.trainer_factory")
+
+    class _TrainerLoggersBuilder:
+        def __init__(self, agent):
+            events.append("loggers:init")
+            self.agent = agent
+
+        def build(self):
+            events.append("loggers:build")
+            return ["logger"]
+
+    class _CallbackBuilder:
+        def __init__(self, agent):
+            events.append("callbacks:init")
+            self.agent = agent
+
+        def build(self):
+            events.append("callbacks:build")
+            return ["callback"]
+
+    def fake_build_trainer(*, config, logger, callbacks):
+        events.append(("trainer:build", logger, callbacks, config))
+        trainer = SimpleNamespace(
+            fit=lambda agent: events.append(("trainer:fit", agent)),
+            fit_loop=SimpleNamespace(
+                epoch_progress=SimpleNamespace(
+                    current=SimpleNamespace(completed=0, processed=0)
+                )
+            ),
+        )
+        built["trainer"] = trainer
+        return trainer
+
+    trainer_loggers_mod.TrainerLoggersBuilder = _TrainerLoggersBuilder
+    callback_builder_mod.CallbackBuilder = _CallbackBuilder
+    trainer_factory_mod.build_trainer = fake_build_trainer
+    monkeypatch.setitem(sys.modules, "utils.trainer_loggers", trainer_loggers_mod)
+    monkeypatch.setitem(sys.modules, "utils.callback_builder", callback_builder_mod)
+    monkeypatch.setitem(sys.modules, "utils.trainer_factory", trainer_factory_mod)
+
+    inst = BaseAgent.__new__(BaseAgent)
+    config = SimpleNamespace()
+    object.__setattr__(inst, "config", config)
+    object.__setattr__(inst, "run", SimpleNamespace())
+    object.__setattr__(inst, "_resume_from_epoch", 3)
+
+    inst._learn()
+
+    trainer = built["trainer"]
+    assert trainer.fit_loop.epoch_progress.current.completed == 3
+    assert trainer.fit_loop.epoch_progress.current.processed == 3
+    assert events == [
+        "loggers:init",
+        "loggers:build",
+        "callbacks:init",
+        "callbacks:build",
+        ("trainer:build", ["logger"], ["callback"], config),
+        ("trainer:fit", inst),
+    ]
 
 
 def test_save_and_load_checkpoint_restore_public_training_state(tmp_path):

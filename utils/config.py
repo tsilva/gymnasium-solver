@@ -19,6 +19,7 @@ from utils.config_defaults import (
     resolve_vizdoom_defaults,
 )
 from utils.config_loading import build_config_from_dict, load_config_from_yaml
+from utils.config_resolution import finalize_config
 from utils.config_schedules import (
     resolve_schedule_defaults,
     resolve_schedule_dicts,
@@ -355,18 +356,7 @@ class Config:
         )
 
     def __post_init__(self):
-        self._resolve_defaults()
-        self._resolve_n_envs()
-        self._resolve_atari_defaults()
-        self._resolve_vizdoom_defaults()
-        self._resolve_retro_defaults()
-        self._resolve_numeric_strings()
-        self._resolve_batch_size()
-        self._resolve_eval_warmup_epochs()
-        self._resolve_schedules()
-        self._resolve_schedule_defaults()
-        self._resolve_policy()
-        self.validate()
+        finalize_config(self)
         
     def _resolve_policy(self) -> None:
         resolve_policy(self)

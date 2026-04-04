@@ -1,4 +1,5 @@
 
+import gymnasium as gym
 import numpy as np
 import pytest
 import torch
@@ -11,24 +12,38 @@ class DummyVecEnv:
         self.num_envs = num_envs
         self._obs = np.zeros((num_envs, obs_dim), dtype=np.float32)
         self._step = 0
+        self.single_observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(obs_dim,), dtype=np.float32)
+        self.observation_space = self.single_observation_space
+        self.single_action_space = gym.spaces.Discrete(2)
+        self.action_space = self.single_action_space
 
     def reset(self):
         self._step = 0
         self._obs.fill(0.0)
-        return self._obs.copy()
+        return self._obs.copy(), {}
 
     def step(self, actions):
         self._step += 1
         next_obs = self._obs + 1.0
         rewards = np.ones(self.num_envs, dtype=np.float32)
-        dones = np.array([self._step % 5 == 0] * self.num_envs)
-        infos = [{"episode": {"r": 1.0, "l": 5}} if d else {} for d in dones]
+        terminated = np.array([self._step % 5 == 0] * self.num_envs, dtype=bool)
+        truncated = np.array([False] * self.num_envs, dtype=bool)
+        infos = {}
+        if terminated.any():
+            infos = {
+                "episode": {
+                    "r": np.where(terminated, 1.0, 0.0).astype(np.float32),
+                    "l": np.where(terminated, 5, 0).astype(np.int32),
+                },
+                "_episode": terminated.copy(),
+            }
         self._obs = next_obs
-        return next_obs.copy(), rewards, dones, infos
+        return next_obs.copy(), rewards, terminated, truncated, infos
 
 
-class DummyPolicy:
+class DummyPolicy(torch.nn.Module):
     def __init__(self, action_dim=2):
+        super().__init__()
         self.action_dim = action_dim
         self.linear = torch.nn.Linear(4, action_dim)
 
@@ -86,22 +101,33 @@ def test_mc_episode_returns_constant_within_episode():
             self._T = int(T)
             self._obs = np.zeros((1, obs_dim), dtype=np.float32)
             self._step = 0
+            self.single_observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(obs_dim,), dtype=np.float32)
+            self.observation_space = self.single_observation_space
+            self.single_action_space = gym.spaces.Discrete(2)
+            self.action_space = self.single_action_space
 
         def reset(self):
             self._step = 0
             self._obs.fill(0.0)
-            return self._obs.copy()
+            return self._obs.copy(), {}
 
         def step(self, actions):
             self._step += 1
             next_obs = self._obs  # keep constant shape/values
             reward = np.array([1.0], dtype=np.float32)
-            done = np.array([self._step >= self._T], dtype=bool)
-            infos = [
-                {"episode": {"r": float(self._T), "l": int(self._T)}} if done[0] else {}
-            ]
+            terminated = np.array([self._step >= self._T], dtype=bool)
+            truncated = np.array([False], dtype=bool)
+            infos = {}
+            if terminated[0]:
+                infos = {
+                    "episode": {
+                        "r": np.array([float(self._T)], dtype=np.float32),
+                        "l": np.array([int(self._T)], dtype=np.int32),
+                    },
+                    "_episode": terminated.copy(),
+                }
             self._obs = next_obs
-            return next_obs.copy(), reward, done, infos
+            return next_obs.copy(), reward, terminated, truncated, infos
 
     env = SingleEpisodeEnv(T=5)
     policy = DummyPolicy()

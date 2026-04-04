@@ -1,3 +1,4 @@
+import gymnasium as gym
 import numpy as np
 import pytest
 import torch
@@ -111,20 +112,25 @@ class AlwaysNotDoneVecEnv:
         self.num_envs = num_envs
         self._obs = np.zeros((num_envs, obs_dim), dtype=np.float32)
         self._step = 0
+        self.single_observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(obs_dim,), dtype=np.float32)
+        self.observation_space = self.single_observation_space
+        self.single_action_space = gym.spaces.Discrete(3)
+        self.action_space = self.single_action_space
 
     def reset(self):
         self._step = 0
         self._obs.fill(0.0)
-        return self._obs.copy()
+        return self._obs.copy(), {}
 
     def step(self, actions):
         self._step += 1
         next_obs = self._obs + 1.0
         rewards = np.zeros(self.num_envs, dtype=np.float32)
-        dones = np.array([False] * self.num_envs, dtype=bool)
-        infos = [{} for _ in range(self.num_envs)]
+        terminated = np.array([False] * self.num_envs, dtype=bool)
+        truncated = np.array([False] * self.num_envs, dtype=bool)
+        infos = {}
         self._obs = next_obs
-        return next_obs.copy(), rewards, dones, infos
+        return next_obs.copy(), rewards, terminated, truncated, infos
 
 
 class CyclicPolicy(torch.nn.Module):
@@ -138,17 +144,15 @@ class CyclicPolicy(torch.nn.Module):
     def device(self):
         return self.dummy.device
 
-    def act(self, obs, deterministic=False):
+    def forward(self, obs):
         b = obs.shape[0]
         a_val = self._step % self.k
         self._step += 1
-        a = torch.full((b,), a_val, dtype=torch.int64, device=obs.device)
-        logp = torch.zeros(b, dtype=torch.float32, device=obs.device)
-        v = torch.zeros(b, dtype=torch.float32, device=obs.device)
-        return a, logp, v
-
-    def predict_values(self, obs):
-        return torch.zeros(obs.shape[0], dtype=torch.float32, device=obs.device)
+        logits = torch.full((b, self.k), -10.0, dtype=torch.float32, device=obs.device)
+        logits[:, a_val] = 10.0
+        dist = torch.distributions.Categorical(logits=logits)
+        value = torch.zeros(b, 1, dtype=torch.float32, device=obs.device)
+        return dist, value
 
 
 @pytest.mark.unit
@@ -185,24 +189,36 @@ class SingleEnvWithTrailingPartial:
         self.num_envs = 1
         self._step = 0
         self._obs = np.array([[0.0]], dtype=np.float32)
+        self.single_observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32)
+        self.observation_space = self.single_observation_space
+        self.single_action_space = gym.spaces.Discrete(2)
+        self.action_space = self.single_action_space
 
     def reset(self):
         self._step = 0
         self._obs[:] = 0.0
-        return self._obs.copy()
+        return self._obs.copy(), {}
 
     def step(self, actions):
         rewards_seq = [1.0, 2.0, 3.0, 4.0]
         dones_seq = [False, True, False, False]
         idx = min(self._step, len(rewards_seq) - 1)
         reward = np.array([rewards_seq[idx]], dtype=np.float32)
-        done = np.array([dones_seq[idx]], dtype=bool)
-        info = {"episode": {"r": float(sum(rewards_seq[: idx + 1])), "l": idx + 1}} if done[0] else {}
-        infos = [info]
+        terminated = np.array([dones_seq[idx]], dtype=bool)
+        truncated = np.array([False], dtype=bool)
+        infos = {}
+        if terminated[0]:
+            infos = {
+                "episode": {
+                    "r": np.array([float(sum(rewards_seq[: idx + 1]))], dtype=np.float32),
+                    "l": np.array([idx + 1], dtype=np.int32),
+                },
+                "_episode": terminated.copy(),
+            }
         next_obs = self._obs
         self._obs = next_obs
         self._step += 1
-        return next_obs.copy(), reward, done, infos
+        return next_obs.copy(), reward, terminated, truncated, infos
 
 
 class ZeroPolicy(torch.nn.Module):
@@ -214,15 +230,13 @@ class ZeroPolicy(torch.nn.Module):
     def device(self):
         return self.dummy.device
 
-    def act(self, obs, deterministic=False):
+    def forward(self, obs):
         b = obs.shape[0]
-        a = torch.zeros(b, dtype=torch.int64, device=obs.device)
-        logp = torch.zeros(b, dtype=torch.float32, device=obs.device)
-        v = torch.zeros(b, dtype=torch.float32, device=obs.device)
-        return a, logp, v
-
-    def predict_values(self, obs):
-        return torch.zeros(obs.shape[0], dtype=torch.float32, device=obs.device)
+        logits = torch.full((b, 2), -10.0, dtype=torch.float32, device=obs.device)
+        logits[:, 0] = 10.0
+        dist = torch.distributions.Categorical(logits=logits)
+        value = torch.zeros(b, 1, dtype=torch.float32, device=obs.device)
+        return dist, value
 
 
 @pytest.mark.unit
@@ -248,20 +262,25 @@ def test_collector_scalar_like_obs_shapes():
             # Return scalar-like observations as (n_envs, 1)
             self._obs = np.zeros((num_envs, 1), dtype=np.float32)
             self._step = 0
+            self.single_observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32)
+            self.observation_space = self.single_observation_space
+            self.single_action_space = gym.spaces.Discrete(2)
+            self.action_space = self.single_action_space
 
         def reset(self):
             self._step = 0
             self._obs.fill(0.0)
-            return self._obs.copy()  # shape (n_envs, 1)
+            return self._obs.copy(), {}  # shape (n_envs, 1)
 
         def step(self, actions):
             self._step += 1
             next_obs = self._obs + 1.0
             rewards = np.ones(self.num_envs, dtype=np.float32)
-            dones = np.array([False] * self.num_envs, dtype=bool)
-            infos = [{} for _ in range(self.num_envs)]
+            terminated = np.array([False] * self.num_envs, dtype=bool)
+            truncated = np.array([False] * self.num_envs, dtype=bool)
+            infos = {}
             self._obs = next_obs
-            return next_obs.copy(), rewards, dones, infos
+            return next_obs.copy(), rewards, terminated, truncated, infos
 
     env = ScalarObsEnv(num_envs=2)
     policy = ZeroPolicy()

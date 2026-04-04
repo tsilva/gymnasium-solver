@@ -6,12 +6,12 @@ Benchmark DataLoader configurations on a real CartPole-v1 rollout:
 3) DataLoader with MultiPassRandomSampler (shuffle=False; single loader with num_passes)
 4) PyTorch Lightning 1-epoch train loop using MultiPassRandomSampler (measure Lightning overhead)
 
-We first load the CartPole-v1_ppo config, build the vec env, create an ActorCritic
+We first load the CartPole-v1:ppo config, build the vec env, create an ActorCritic
 policy with matching hidden_dims, collect a single rollout using RolloutCollector,
 then benchmark iterating that dataset with the strategies above.
 
 Usage:
-    python scripts/benchmark_dataloaders.py --config-id CartPole-v1_ppo --num-workers 2 --passes 20
+    python scripts/benchmark_dataloaders.py --config-id CartPole-v1:ppo --num-workers 2 --passes 20
 
 Notes:
 - Each rollout produces n_envs * n_steps samples (e.g., 8*32=256 for CartPole-v1_ppo).
@@ -49,7 +49,7 @@ from utils.samplers import MultiPassRandomSampler
 
 @dataclass
 class BenchmarkConfig:
-    config_id: str = "CartPole-v1_ppo"
+    config_id: str = "CartPole-v1:ppo"
     batch_size: int | None = None  # if None, take from loaded config
     num_workers: int = 4
     passes: int | None = None      # if None, take from loaded config (n_epochs)
@@ -60,7 +60,8 @@ class BenchmarkConfig:
 
 def make_rollout_dataset(cfg: BenchmarkConfig):
     # Load experiment config and env
-    exp_cfg = load_config(cfg.config_id)
+    env_id, variant_id = cfg.config_id.split(":", 1)
+    exp_cfg = load_config(env_id, variant_id)
     env = build_env(
         exp_cfg.env_id,
         seed=exp_cfg.seed,
@@ -363,7 +364,7 @@ def run_benchmark(cfg: BenchmarkConfig) -> Dict[str, Any]:
 
 def parse_args() -> BenchmarkConfig:
     p = argparse.ArgumentParser(description="Benchmark DataLoader strategies on a real CartPole-v1 rollout")
-    p.add_argument("--config-id", type=str, default="CartPole-v1_ppo")
+    p.add_argument("--config-id", type=str, default="CartPole-v1:ppo")
     p.add_argument("--batch-size", type=int, default=None, help="Override batch size (defaults to config.batch_size)")
     p.add_argument("--num-workers", type=int, default=4)
     p.add_argument("--passes", type=int, default=None, help="Override number of passes (defaults to config.n_epochs)")
@@ -384,7 +385,7 @@ def parse_args() -> BenchmarkConfig:
 
 def main():
     cfg = parse_args()
-    cfg.config_id = "CartPole-v1_ppo"  # Ensure we use a known config for benchmarking
+    cfg.config_id = "CartPole-v1:ppo"  # Ensure we use a known config for benchmarking
     cfg.num_workers = 0
     cfg.passes = 20  # Set a fixed number of passes for benchmarking
 

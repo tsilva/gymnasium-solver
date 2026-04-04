@@ -7,10 +7,17 @@ import pytorch_lightning as pl
 import torch.nn as nn
 
 import wandb
+from agents.base_agent_async_eval import cleanup_async_eval, launch_async_eval
+from agents.base_agent_bootstrap import build_stage_env, build_stage_rollout_collector
+from agents.base_agent_checkpointing import (
+    load_agent_checkpoint,
+    restore_deferred_optimizer_states,
+    save_agent_checkpoint,
+)
+from agents.base_agent_optimization import backpropagate_and_step
 from agents.hyperparameter_mixin import HyperparameterMixin
 from utils.config import Config
 from utils.decorators import must_implement
-from utils.io import write_json
 from utils.metric_bundles import CoreMetricAlerts
 from utils.metrics_monitor import MetricsMonitor
 from utils.metrics_recorder import MetricsRecorder
@@ -127,99 +134,13 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         }
 
     def build_env(self, stage: str, **kwargs):
-        from utils.environment import build_env_from_config, get_env_type
-
-        # Ensure _envs is initialized
-        self._envs = self._envs if hasattr(self, "_envs") else {}
-
-        # When eval_async is enabled, use much fewer eval envs to reduce CPU contention
-        # Use 1/4 of training envs (min 4, max 8) so eval can lag behind without blocking training
-        if self.config.eval_async and stage == "val" and "n_envs" not in kwargs:
-            eval_n_envs = max(4, min(8, self.config.n_envs // 4))
-            kwargs["n_envs"] = eval_n_envs
-
-        reuse_alepy_vectorization = (
-            get_env_type(self.config.env_id) == 'alepy'
-            and getattr(self.config, "obs_type", None) == "rgb"
-            and self.config.vectorization_mode in ("auto", "alepy")
-            and "vectorization_mode" not in kwargs
-        )
-
-        default_kwargs = {
-            "train": {
-                "seed": self.config.seed_train,
-            },
-            # Record truncated video of first env (requires vectorization_mode='sync', render_mode="rgb_array")
-            # When eval_async is enabled, uses fewer envs (set via kwargs above)
-            "val": {
-                "seed": self.config.seed_val,
-                "vectorization_mode": "sync",
-                "render_mode": "rgb_array",
-                "record_video": False, #self.config.obs_type == "rgb", # TODO: softcode
-                "record_video_kwargs": {
-                    "video_length": 100,
-                },
-            },
-            # Record truncated video of first env (requires vectorization_mode='sync', render_mode="rgb_array")
-            "test": {
-                "seed": self.config.seed_test,
-                "vectorization_mode": "sync",
-                "render_mode": "rgb_array",
-                "record_video": False, #self.config.obs_type == "rgb", # TODO: softcode
-                "record_video_kwargs": {
-                    "video_length": None,
-                },
-            },
-        }
-
-        if reuse_alepy_vectorization:
-            default_kwargs["val"]["vectorization_mode"] = self.config.vectorization_mode
-            default_kwargs["test"]["vectorization_mode"] = self.config.vectorization_mode
-
-        # stable-retro doesn't support multiple emulator instances per process
-        # Force async vectorization for val/test stages and disable video recording
-        if get_env_type(self.config.env_id) == 'stable_retro' and stage in ("val", "test"):
-            kwargs.setdefault("n_envs", 1)
-            kwargs["vectorization_mode"] = "async"
-            kwargs["record_video"] = False  # async mode doesn't support video recording
-
-        # Build the environment
-        self._envs[stage] = build_env_from_config(
-            self.config, **{
-                **default_kwargs[stage],
-                **kwargs,
-            }
-        )
+        build_stage_env(self, stage, **kwargs)
             
     def get_env(self, stage: str):
         return self._envs[stage]
 
     def build_rollout_collector(self, stage: str):
-        from utils.rollouts import RolloutCollector
-        import copy
-
-        # Ensure _rollout_collectors is initialized
-        self._rollout_collectors = self._rollout_collectors if hasattr(self, "_rollout_collectors") else {}
-
-        # For validation/test stages, create a separate model copy to avoid
-        # device conflicts during async evaluation. Training uses the main model.
-        if stage in ("val", "test"):
-            # Create a shallow copy of the model structure
-            policy_copy = copy.deepcopy(self.policy_model)
-            # Store reference for updates during async eval
-            if not hasattr(self, "_eval_models"):
-                self._eval_models = {}
-            self._eval_models[stage] = policy_copy
-            model_for_collector = policy_copy
-        else:
-            model_for_collector = self.policy_model
-
-        # Build the rollout collector
-        self._rollout_collectors[stage] = RolloutCollector(
-            self.get_env(stage),
-            model_for_collector,
-            **self.config.get_rollout_collector_kwargs()
-        )
+        build_stage_rollout_collector(self, stage)
 
     def attach_print_metrics_logger(self, logger: "MetricsTableLogger") -> None:
         self._print_metrics_logger = logger
@@ -233,17 +154,7 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         return self._rollout_collectors[stage]
 
     def on_fit_start(self):
-        # Restore deferred optimizer state if resuming from checkpoint
-        if hasattr(self, '_deferred_optimizer_states'):
-            optimizer_states = self._deferred_optimizer_states
-            optimizers = self.optimizers()
-            if not isinstance(optimizers, (list, tuple)):
-                optimizers = [optimizers]
-
-            for opt, opt_state in zip(optimizers, optimizer_states):
-                opt.load_state_dict(opt_state)
-            print("Optimizer state restored from checkpoint")
-            delattr(self, '_deferred_optimizer_states')
+        restore_deferred_optimizer_states(self)
 
         # Start the timing tracker for the entire training run
         train_collector = self.get_rollout_collector("train")
@@ -385,82 +296,7 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
             self._launch_async_eval()
 
     def _launch_async_eval(self, eval_epoch: Optional[int] = None):
-        """Launch async evaluation in background thread.
-
-        If eval is already running, marks current epoch as pending for re-evaluation
-        instead of blocking. When the running eval completes, it will automatically
-        launch evaluation for the pending epoch.
-
-        Args:
-            eval_epoch: Epoch to evaluate. If None, uses current_epoch.
-        """
-        if self._async_eval_shutdown.is_set():
-            return
-        if eval_epoch is None:
-            eval_epoch = int(self.current_epoch)
-
-        # If eval is already running, mark this epoch as pending and return
-        if self._async_eval_thread is not None and self._async_eval_thread.is_alive():
-            if self._async_eval_shutdown.is_set():
-                return
-            with self._async_eval_lock:
-                self._async_eval_pending_epoch = eval_epoch
-            return
-
-        # Mark which epoch we're evaluating
-        with self._async_eval_lock:
-            self._async_eval_running_epoch = eval_epoch
-            self._async_eval_pending_epoch = None
-
-        # Update eval model copy with current training weights (fast state_dict copy)
-        if hasattr(self, "_eval_models") and "val" in self._eval_models:
-            self._eval_models["val"].load_state_dict(self.policy_model.state_dict())
-
-        def _run_eval():
-            # Capture the epoch we're evaluating (thread-safe)
-            with self._async_eval_lock:
-                current_eval_epoch = self._async_eval_running_epoch
-
-            if self._async_eval_shutdown.is_set():
-                return
-
-            val_collector = self.get_rollout_collector("val")
-            val_metrics = val_collector.evaluate_episodes(
-                n_episodes=self.config.eval_episodes,
-                deterministic=self.config.eval_deterministic,
-            )
-
-            # Compute FPS metrics
-            epoch_fps_values = self.timings.throughput_since("on_validation_epoch_start", values_now=val_metrics)
-            epoch_fps = epoch_fps_values.get("cnt/total_vec_steps", epoch_fps_values.get("roll/vec_steps", 0.0))
-
-            # Store results in shared dict with lock, including which epoch was evaluated
-            with self._async_eval_lock:
-                self._async_eval_metrics = {
-                    **val_metrics,
-                    "cnt/epoch": int(current_eval_epoch),
-                    "eval/model_epoch": int(current_eval_epoch),  # Track which model was evaluated
-                    "epoch_fps": epoch_fps,
-                }
-                self._async_eval_running_epoch = None
-                pending_epoch = self._async_eval_pending_epoch
-                # Clear pending now that we've captured it
-                self._async_eval_pending_epoch = None
-
-            # Trigger early stopping check if trainer is available
-            if hasattr(self, 'trainer') and self.trainer is not None:
-                # Run callbacks on_validation_epoch_end to check early stopping
-                # This is safe because callbacks are designed to be called from any thread
-                for callback in self.trainer.callbacks:
-                    if hasattr(callback, '_maybe_stop'):
-                        callback._maybe_stop(self.trainer, self)
-
-            # If there's a pending epoch, launch eval for it immediately
-            if pending_epoch is not None and not self._async_eval_shutdown.is_set():
-                self._launch_async_eval(eval_epoch=pending_epoch)
-
-        self._async_eval_thread = threading.Thread(target=_run_eval, daemon=True)
-        self._async_eval_thread.start()
+        launch_async_eval(self, eval_epoch=eval_epoch)
 
     # TODO: if running in bg, consider using simple rollout collector that sends metrics over, if eval mean_reward_treshold is reached, training is stopped
     # TODO: currently recording more than the requested episodes (rollout not trimmed)
@@ -496,15 +332,7 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
         pass
 
     def _cleanup_async_eval(self):
-        """Clean up async eval thread. Called on both normal completion and exceptions."""
-        if not self.config.eval_async:
-            return
-        self._async_eval_shutdown.set()
-        with self._async_eval_lock:
-            self._async_eval_pending_epoch = None
-        if self._async_eval_thread is not None and self._async_eval_thread.is_alive():
-            self._async_eval_thread.join(timeout=5.0)  # Add timeout to prevent indefinite blocking
-        self._async_eval_thread = None
+        cleanup_async_eval(self)
 
     def on_exception(self, trainer, pl_module, exception):
         """Handle cleanup when training fails with an exception."""
@@ -589,36 +417,7 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
 
 
     def _backpropagate_and_step(self, losses):
-        # TODO: create method that encapsulates this logic
-        optimizers = self.optimizers()
-        if not isinstance(losses, (list, tuple)): losses = [losses]
-        if not isinstance(optimizers, (list, tuple)): optimizers = [optimizers]
-        models = [self.policy_model] # TODO: temporary hack
-
-        # Backpropagate and step for each model, loss, and optimizer combo
-        for model, loss, optimizer in zip(models, losses, optimizers):
-            # Backpropagate loss, zeroing out gradients first 
-            # so they're not accumulated from previous steps
-            optimizer.zero_grad()
-            self.manual_backward(loss) # TODO: this or loss.backward()?
-            
-            # Compute model gradient norms and log them
-            # (do this before any gradient clipping)
-            metrics = model.compute_grad_norms()
-            self.metrics_recorder.record("train", metrics)
-
-            # Clip gradients using Lightning's built-in method
-            # (respects strategy/precision, eg: mixed precision training)
-            if self.config.max_grad_norm is not None:
-                self.clip_gradients(
-                    optimizer,
-                    gradient_clip_val=self.config.max_grad_norm,
-                    gradient_clip_algorithm="norm",
-                )
-
-            # Perform an optimization step 
-            # using the computed gradients
-            optimizer.step()
+        backpropagate_and_step(self, losses)
 
     def calc_training_progress(self):
         """Calculate training progress as a fraction of max_env_steps (0.0 to 1.0)."""
@@ -656,230 +455,13 @@ class BaseAgent(HyperparameterMixin, pl.LightningModule):
     # -------------------------
 
     def save_checkpoint(self, checkpoint_dir: Path) -> None:
-        """Save complete training state to directory for resuming.
-
-        Saves:
-        - Model state dict
-        - Optimizer state dict(s)
-        - Training counters (epoch, timesteps)
-        - RNG states (torch, numpy, random, cuda)
-        - Config
-        - Run ID
-        - Metrics recorder state (best rewards, etc.)
-        """
-        import random
-        import numpy as np
-        import torch
-        from pathlib import Path
-
-        checkpoint_dir = Path(checkpoint_dir)
-
-        # Save model state
-        model_path = checkpoint_dir / "model.pt"
-        torch.save(self.policy_model.state_dict(), model_path)
-
-        # Save optimizer state(s) if trainer is attached (during training)
-        try:
-            optimizers = self.optimizers()
-            if not isinstance(optimizers, (list, tuple)):
-                optimizers = [optimizers]
-
-            optimizer_states = [opt.state_dict() for opt in optimizers]
-            optimizer_path = checkpoint_dir / "optimizer.pt"
-            torch.save(optimizer_states, optimizer_path)
-        except RuntimeError:
-            # Trainer not attached yet (e.g., checkpoint being saved before training)
-            # This is fine, we'll skip optimizer state
-            pass
-
-        # Gather training state
-        train_collector = self.get_rollout_collector("train")
-        train_metrics = train_collector.get_metrics()
-
-        # Get best rewards from collectors
-        val_collector = self.get_rollout_collector("val")
-
-        # Serialize config (same as save_to_json)
-        from dataclasses import asdict
-        config_dict = asdict(self.config)
-        config_dict["algo_id"] = self.config.algo_id  # Add algo_id explicitly
-
-        state = {
-            "epoch": int(self.current_epoch),
-            "total_env_steps": train_metrics.get("cnt/total_env_steps", 0),
-            "total_vec_steps": train_metrics.get("cnt/total_vec_steps", 0),
-            "run_id": self.run.run_id if self.run else None,
-            "config": config_dict,
-            "best_train_reward": float(train_collector._best_episode_reward),
-            "best_val_reward": float(val_collector._best_episode_reward),
-            "rng_states": {
-                "torch": torch.get_rng_state().tolist(),
-                "torch_cuda": [s.tolist() for s in torch.cuda.get_rng_state_all()] if torch.cuda.is_available() else None,
-                "numpy": {
-                    "state_type": np.random.get_state()[0],
-                    "state_keys": np.random.get_state()[1].tolist(),
-                    "state_pos": int(np.random.get_state()[2]),
-                    "state_has_gauss": int(np.random.get_state()[3]),
-                    "state_cached_gaussian": float(np.random.get_state()[4]),
-                },
-                "random": random.getstate(),
-            },
-        }
-
-        # Save state as JSON
-        state_path = checkpoint_dir / "state.json"
-        from utils.io import write_json
-        write_json(state_path, state)
+        save_agent_checkpoint(self, checkpoint_dir)
 
     def load_checkpoint(self, checkpoint_dir: Path, resume_training: bool = True, strict: bool = True, load_optimizer_only: bool = False) -> None:
-        """Restore complete training state from directory.
-
-        Args:
-            checkpoint_dir: Directory containing checkpoint files
-            resume_training: If True, restore optimizer and RNG states for exact resumption
-            strict: If True, require exact match of model state dict keys. If False, allow partial loading (useful for transfer learning)
-            load_optimizer_only: If True, only load optimizer state (not RNG or step counters). Useful for transfer learning where you want optimizer warmstart but fresh training progress.
-        """
-        import random
-        import numpy as np
-        import torch
-        from pathlib import Path
-
-        checkpoint_dir = Path(checkpoint_dir)
-
-        # Load model state (support both new and old formats)
-        model_path = checkpoint_dir / "model.pt"
-        old_model_path = checkpoint_dir / "policy.ckpt"
-
-        def _load_state_dict_flexible(state_dict, strict):
-            """Load state dict with flexible matching for transfer learning."""
-            if strict:
-                return self.policy_model.load_state_dict(state_dict, strict=True)
-
-            # Filter state dict to only include keys with matching shapes
-            model_state = self.policy_model.state_dict()
-            filtered_state = {}
-            size_mismatches = []
-
-            for key, value in state_dict.items():
-                if key in model_state:
-                    if value.shape == model_state[key].shape:
-                        filtered_state[key] = value
-                    else:
-                        size_mismatches.append(key)
-
-            result = self.policy_model.load_state_dict(filtered_state, strict=False)
-            loaded = len(filtered_state)
-            skipped = len(size_mismatches)
-            missing = len(result.missing_keys)
-
-            if loaded > 0:
-                print(f"Partial weight loading: {loaded} params loaded, {skipped} skipped (size mismatch), {missing} missing")
-            else:
-                print(f"Warning: No compatible weights found for transfer learning")
-
-            return result
-
-        if model_path.exists():
-            model_state = torch.load(model_path, map_location='cpu', weights_only=True)
-            _load_state_dict_flexible(model_state, strict)
-        elif old_model_path.exists():
-            # Old checkpoint format
-            print("Loading from old checkpoint format (policy.ckpt)")
-            checkpoint = torch.load(old_model_path, map_location='cpu', weights_only=False)
-            if "model_state_dict" in checkpoint:
-                _load_state_dict_flexible(checkpoint["model_state_dict"], strict)
-            else:
-                # Even older format, direct state dict
-                _load_state_dict_flexible(checkpoint, strict)
-        else:
-            raise FileNotFoundError(f"Model checkpoint not found at {model_path} or {old_model_path}")
-
-        # Load state JSON (if it exists)
-        state_path = checkpoint_dir / "state.json"
-        if state_path.exists():
-            from utils.io import read_json
-            state = read_json(state_path)
-        else:
-            # Old checkpoint without state.json
-            print("Warning: Checkpoint missing state.json, skipping optimizer/RNG restoration")
-            state = None
-            resume_training = False  # Can't fully resume without state
-
-        # If resuming training, restore optimizer and RNG states
-        if resume_training and state:
-            # Load optimizer state(s) - defer restoration until after optimizer is created
-            optimizer_path = checkpoint_dir / "optimizer.pt"
-            if optimizer_path.exists():
-                try:
-                    optimizer_states = torch.load(optimizer_path, map_location='cpu', weights_only=False)
-                    if not isinstance(optimizer_states, list):
-                        optimizer_states = [optimizer_states]
-
-                    optimizers = self.optimizers()
-                    if not isinstance(optimizers, (list, tuple)):
-                        optimizers = [optimizers]
-
-                    for opt, opt_state in zip(optimizers, optimizer_states):
-                        opt.load_state_dict(opt_state)
-                    print("Optimizer state restored")
-                except RuntimeError:
-                    # Trainer not attached yet, defer restoration until on_fit_start
-                    self._deferred_optimizer_states = optimizer_states
-                    print("Note: Optimizer state will be restored after trainer initialization")
-
-            # Only restore RNG and counters if doing full resume (not optimizer-only transfer learning)
-            if not load_optimizer_only:
-                # Restore RNG states
-                if state and "rng_states" in state:
-                    rng_states = state["rng_states"]
-                    torch.set_rng_state(torch.ByteTensor(rng_states["torch"]))
-                    if rng_states.get("torch_cuda") and torch.cuda.is_available():
-                        torch.cuda.set_rng_state_all([torch.ByteTensor(s) for s in rng_states["torch_cuda"]])
-
-                    # Restore numpy RNG state
-                    numpy_state = rng_states["numpy"]
-                    np_state_tuple = (
-                        numpy_state["state_type"],
-                        np.array(numpy_state["state_keys"], dtype=np.uint32),
-                        numpy_state["state_pos"],
-                        numpy_state["state_has_gauss"],
-                        numpy_state["state_cached_gaussian"],
-                    )
-                    np.random.set_state(np_state_tuple)
-
-                    # Restore random module state
-                    # random.getstate() returns a tuple that we need to reconstruct
-                    random_state = rng_states["random"]
-                    # Convert list back to proper tuple structure
-                    random.setstate((random_state[0], tuple(random_state[1]), random_state[2]))
-
-                # Restore best episode rewards and step counters in collectors
-                train_collector = self.get_rollout_collector("train")
-                if state and "best_train_reward" in state and state["best_train_reward"] is not None:
-                    train_collector._best_episode_reward = float(state["best_train_reward"])
-                if state and "total_env_steps" in state:
-                    train_collector.total_steps = int(state["total_env_steps"])
-                elif state and "total_timesteps" in state:
-                    # Backward compatibility: old checkpoints used "total_timesteps"
-                    train_collector.total_steps = int(state["total_timesteps"])
-                if state and "total_vec_steps" in state:
-                    train_collector.total_vec_steps = int(state["total_vec_steps"])
-
-                if state and "best_val_reward" in state and state["best_val_reward"] is not None:
-                    val_collector = self.get_rollout_collector("val")
-                    val_collector._best_episode_reward = float(state["best_val_reward"])
-
-        # Print checkpoint info
-        if state:
-            epoch = state.get("epoch", "unknown")
-            total_env_steps = state.get("total_env_steps", state.get("total_timesteps", "unknown"))
-            best_train = state.get("best_train_reward", "unknown")
-            best_val = state.get("best_val_reward", "unknown")
-
-            print(f"Checkpoint loaded from epoch {epoch}:")
-            print(f"  Total env steps: {total_env_steps}")
-            print(f"  Best train reward: {best_train}")
-            print(f"  Best val reward: {best_val}")
-        else:
-            print("Checkpoint loaded (model weights only, no training state)")
+        load_agent_checkpoint(
+            self,
+            checkpoint_dir,
+            resume_training=resume_training,
+            strict=strict,
+            load_optimizer_only=load_optimizer_only,
+        )

@@ -1,3 +1,4 @@
+import gymnasium as gym
 import numpy as np
 import pytest
 import torch
@@ -19,41 +20,49 @@ class DummyVecEnvTimeout1:
         self.num_envs = 1
         self._step = 0
         self._obs = np.array([[1.0]], dtype=np.float32)  # shape (1,1)
+        self.single_observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32)
+        self.observation_space = self.single_observation_space
+        self.single_action_space = gym.spaces.Discrete(2)
+        self.action_space = self.single_action_space
 
     def reset(self):
         self._step = 0
         self._obs[:] = 1.0
-        return self._obs.copy()
+        return self._obs.copy(), {}
 
     def step(self, actions):
         self._step += 1
         if self._step == 1:
             next_obs = np.array([[2.0]], dtype=np.float32)
             rewards = np.array([0.0], dtype=np.float32)
-            dones = np.array([False], dtype=bool)
-            infos = [{}]
+            terminated = np.array([False], dtype=bool)
+            truncated = np.array([False], dtype=bool)
+            infos = {}
             self._obs = next_obs
-            return next_obs.copy(), rewards, dones, infos
+            return next_obs.copy(), rewards, terminated, truncated, infos
         elif self._step == 2:
             next_obs = np.array([[0.0]], dtype=np.float32)  # new episode start
             rewards = np.array([0.0], dtype=np.float32)
-            dones = np.array([True], dtype=bool)
-            infos = [
-                {
-                    'episode': {'r': 0.0, 'l': 2},
-                    'TimeLimit.truncated': True,
-                    'terminal_observation': np.array([42.0], dtype=np.float32),
-                }
-            ]
+            terminated = np.array([False], dtype=bool)
+            truncated = np.array([True], dtype=bool)
+            infos = {
+                "episode": {
+                    "r": np.array([0.0], dtype=np.float32),
+                    "l": np.array([2], dtype=np.int32),
+                },
+                "_episode": np.array([True], dtype=bool),
+                "final_observation": np.array([[42.0]], dtype=np.float32),
+            }
             self._obs = next_obs
-            return next_obs.copy(), rewards, dones, infos
+            return next_obs.copy(), rewards, terminated, truncated, infos
         else:
             next_obs = np.array([[0.0]], dtype=np.float32)
             rewards = np.array([0.0], dtype=np.float32)
-            dones = np.array([False], dtype=bool)
-            infos = [{}]
+            terminated = np.array([False], dtype=bool)
+            truncated = np.array([False], dtype=bool)
+            infos = {}
             self._obs = next_obs
-            return next_obs.copy(), rewards, dones, infos
+            return next_obs.copy(), rewards, terminated, truncated, infos
 
 
 class DeterministicPolicy(torch.nn.Module):
@@ -124,20 +133,34 @@ def test_rollout_collector_deterministic_actions_and_shapes():
             self.num_envs = num_envs
             self._obs = np.zeros((num_envs, obs_dim), dtype=np.float32)
             self._step = 0
+            self.single_observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(obs_dim,), dtype=np.float32)
+            self.observation_space = self.single_observation_space
+            self.single_action_space = gym.spaces.Discrete(2)
+            self.action_space = self.single_action_space
 
         def reset(self):
             self._step = 0
             self._obs.fill(0.0)
-            return self._obs.copy()
+            return self._obs.copy(), {}
 
         def step(self, actions):
             self._step += 1
             next_obs = self._obs + 1.0
             rewards = np.ones(self.num_envs, dtype=np.float32)
-            dones = np.array([False] * self.num_envs, dtype=bool)
-            infos = [{} for _ in range(self.num_envs)]
+            terminated = np.array([self._step % 2 == 0] * self.num_envs, dtype=bool)
+            truncated = np.array([False] * self.num_envs, dtype=bool)
+            infos = {}
+            if terminated.any():
+                infos = {
+                    "episode": {
+                        "r": np.where(terminated, 2.0, 0.0).astype(np.float32),
+                        "l": np.where(terminated, 2, 0).astype(np.int32),
+                    },
+                    "_episode": terminated.copy(),
+                }
+                next_obs[terminated] = 0.0
             self._obs = next_obs
-            return next_obs.copy(), rewards, dones, infos
+            return next_obs.copy(), rewards, terminated, truncated, infos
 
     env = SimpleVecEnv(num_envs=2)
     policy = DeterministicPolicy()
@@ -168,22 +191,32 @@ def test_rollout_collector_pop_recent_episodes_returns_and_clears():
             self._obs = np.zeros((1, 1), dtype=np.float32)
             self._episode_id = 0
             self._step_in_episode = 0
+            self.single_observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(1,), dtype=np.float32)
+            self.observation_space = self.single_observation_space
+            self.single_action_space = gym.spaces.Discrete(2)
+            self.action_space = self.single_action_space
 
         def reset(self):
             self._step_in_episode = 0
-            return self._obs.copy()
+            return self._obs.copy(), {}
 
         def step(self, actions):
             self._step_in_episode += 1
             reward = float(self._episode_id + 1)
-            info = {'episode': {'r': reward, 'l': self._step_in_episode}}
             self._episode_id += 1
             self._step_in_episode = 0
             next_obs = self._obs.copy()
             rewards = np.array([reward], dtype=np.float32)
-            dones = np.array([True], dtype=bool)
-            infos = [info]
-            return next_obs, rewards, dones, infos
+            terminated = np.array([True], dtype=bool)
+            truncated = np.array([False], dtype=bool)
+            infos = {
+                "episode": {
+                    "r": np.array([reward], dtype=np.float32),
+                    "l": np.array([1], dtype=np.int32),
+                },
+                "_episode": np.array([True], dtype=bool),
+            }
+            return next_obs, rewards, terminated, truncated, infos
 
     env = SingleStepVecEnv()
     policy = DeterministicPolicy()

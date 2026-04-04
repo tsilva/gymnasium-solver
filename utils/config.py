@@ -7,8 +7,27 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
 
+from utils.config_defaults import (
+    resolve_atari_defaults,
+    resolve_batch_size,
+    resolve_defaults,
+    resolve_eval_warmup_epochs,
+    resolve_n_envs,
+    resolve_numeric_strings,
+    resolve_policy,
+    resolve_retro_defaults,
+    resolve_vizdoom_defaults,
+)
+from utils.config_loading import build_config_from_dict, load_config_from_yaml
+from utils.config_schedules import (
+    resolve_schedule_defaults,
+    resolve_schedule_dicts,
+    validate_schedules,
+)
+from utils.config_serialization import config_to_dict
+from utils.config_validation import validate_common_config, validate_ppo_config
 from utils.formatting import sanitize_name
-from utils.io import read_yaml, write_json
+from utils.io import write_json
 from utils.validators import ensure_in_range, ensure_non_negative, ensure_positive
 
 logger = logging.getLogger(__name__)
@@ -221,38 +240,8 @@ class Config:
         )
 
     def _validate_schedules(self) -> None:
-        """Validate all hyperparameter schedule configurations.
-
-        Schedule start/end positions can be:
-        - Fractional values in [0, 1]: interpreted as fraction of max_env_steps
-        - Values > 1: interpreted as absolute env_steps
-        """
-        schedule_suffix = "_schedule"
-        for key in list(vars(self).keys()):
-            if not key.endswith(schedule_suffix):
-                continue
-            schedule = getattr(self, key)
-            if not schedule:
-                continue
-
-            param = key[: -len(schedule_suffix)]
-            start_value = getattr(self, f"{param}_schedule_start_value", None)
-            end_value = getattr(self, f"{param}_schedule_end_value", None)
-            assert start_value is not None and end_value is not None, \
-                f"{param}_schedule requires start and end values to be defined."
-
-            start_pos = getattr(self, f"{param}_schedule_start", None) or 0.0
-            end_pos = getattr(self, f"{param}_schedule_end", None)
-            if end_pos is None:
-                assert self.max_env_steps is not None, \
-                    f"{param}_schedule requires max_env_steps or an explicit schedule_end value."
-                end_pos = 1.0
-
-            assert start_pos >= 0 and end_pos >= 0, f"{param}_schedule start/end must be non-negative."
-            assert end_pos > start_pos, \
-                f"{param}_schedule end must be > start (degenerate schedule not allowed: start={start_pos}, end={end_pos})."
-            assert not (self.max_env_steps is None and (start_pos <= 1.0 or end_pos <= 1.0)), \
-                f"{param}_schedule uses fractional start/end positions but config.max_env_steps is not set."
+        """Validate all hyperparameter schedule configurations."""
+        validate_schedules(self)
 
     # How to calculate rollout returns (algo defaults in subclasses)
     returns_type: Optional["Config.ReturnsType"] = None  # type: ignore[assignment]
@@ -344,105 +333,26 @@ class Config:
 
     @classmethod
     def build_from_dict(cls, config_dict: Dict[str, Any]) -> 'Config':
-        _config_dict = config_dict.copy()
-        algo_id = _config_dict.pop("algo_id")
-        config_cls = {
-            "reinforce": REINFORCEConfig,
-            "ppo": PPOConfig,
-        }[algo_id]
-
-        # Filter out unknown fields to handle config schema evolution
-        # Only include fields that can be passed to __init__ (init=True)
-        valid_fields = {k for k, f in config_cls.__dataclass_fields__.items() if f.init}
-        filtered_dict = {k: v for k, v in _config_dict.items() if k in valid_fields}
-
-        config = config_cls(**filtered_dict)
-        return config
+        return build_config_from_dict(
+            config_dict,
+            algo_config_classes={
+                "reinforce": REINFORCEConfig,
+                "ppo": PPOConfig,
+            },
+        )
 
     @classmethod
     def build_from_yaml(cls, config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> 'Config':
-        """Load config from environment YAMLs"""
-        # Get the project root directory
-        project_root = Path(__file__).parent.parent
-        env_config_path = project_root / config_dir
-
-        # Build an index of config_id -> raw mapping supporting BOTH formats
-        all_configs: Dict[str, Dict[str, Any]] = {}
-
-        def _collect_from_file(path: Path) -> None:
-            # Load the YAML file
-            doc = read_yaml(path) or {}
-
-            # Load the base config from the YAML file
-            config_field_names = set(cls.__dataclass_fields__.keys())
-            base_config: Dict[str, Any] = {}
-            base_section = doc.get("_base") if isinstance(doc.get("_base"), dict) else {}
-            if isinstance(base_section, dict):
-                base_config.update({k: v for k, v in base_section.items() if k in config_field_names})
-            base_config.update({k: v for k, v in doc.items() if k in config_field_names})
-
-            # Search for variant configs in the YAML file
-            # and add them to the all_configs dictionary
-            # (they inherit from base config)
-            for k, v in doc.items():
-                # Skip base config fields
-                if k in config_field_names: continue
-
-                # Skip non-dict fields
-                if not isinstance(v, dict): continue
-
-                # Skip meta/utility sections (e.g., anchors) prefixed with underscore
-                if isinstance(k, str) and k.startswith("_"):
-                    continue
-
-                # Create the variant config
-                variant_id = str(k)
-                variant_cfg = dict(base_config)
-                # Don't filter here - build_from_dict will filter using the correct subclass fields
-                # after determining algo_id (e.g., PPOConfig has clip_range but base Config doesn't)
-                variant_cfg.update(v)
-
-                # Construct default project_id from env_id + obs_type at variant level
-                # (each variant may have different env_id/obs_type)
-                if "project_id" not in variant_cfg or not variant_cfg["project_id"]:
-                    env_id = variant_cfg.get("env_id", "")
-                    obs_type = variant_cfg.get("obs_type", "rgb")
-                    # Handle both string and enum cases
-                    obs_type_str = obs_type.value if hasattr(obs_type, 'value') else str(obs_type)
-                    # Always append obs_type to env_id for project_id
-                    if env_id:
-                        variant_cfg["project_id"] = f"{env_id}_{obs_type_str}"
-                    else:
-                        variant_cfg["project_id"] = path.stem
-
-                project_id = variant_cfg["project_id"]
-                variant_config_id = f"{project_id}_{variant_id}"
-                all_configs[variant_config_id] = variant_cfg
-
-                # Allow lookups by raw env id and sanitized aliases so callers
-                # can pass either "ALE/Pong-v5" or "ALE-Pong-v5" without
-                # needing to duplicate configs per naming style.
-                alias_keys = {variant_config_id}
-                env_id = variant_cfg.get("env_id")
-                if env_id:
-                    alias_keys.add(f"{env_id}_{variant_id}")
-                    alias_keys.add(f"{sanitize_name(env_id)}_{variant_id}")
-                alias_keys.add(f"{sanitize_name(project_id)}_{variant_id}")
-
-                for alias in alias_keys:
-                    all_configs.setdefault(alias, variant_cfg)
-
-        # Load all config files
-        yaml_files = sorted(env_config_path.glob("*.yaml"))
-        for yf in yaml_files: _collect_from_file(yf)
-
-        # Support passing a fully qualified id like "CartPole-v1_ppo" in config_id
-        chosen_id = f"{config_id}_{variant_id}"
-        config_variant_cfg = all_configs[chosen_id]
-
-        # Create and return the config instance
-        instance = cls.build_from_dict(config_variant_cfg)
-        return instance
+        """Load config from environment YAMLs."""
+        return load_config_from_yaml(
+            config_id=config_id,
+            variant_id=variant_id,
+            config_dir=config_dir,
+            project_root=Path(__file__).parent.parent,
+            config_field_names=set(cls.__dataclass_fields__.keys()),
+            sanitize_name=sanitize_name,
+            build_from_dict=cls.build_from_dict,
+        )
 
     def __post_init__(self):
         self._resolve_defaults()
@@ -459,219 +369,42 @@ class Config:
         self.validate()
         
     def _resolve_policy(self) -> None:
-        """Resolve model architecture from model_id."""
-        assert self.model_id is not None, \
-            "model_id is required. Available models: mlp_tiny, mlp_small, mlp_medium, mlp_large, cnn_nature, cnn_impala, cnn_large"
-
-        from utils.model_registry import resolve_model_spec
-        spec = resolve_model_spec(self.model_id)
-
-        # Populate internal fields from model spec
-        self.policy = spec.policy
-        self._hidden_dims = spec.hidden_dims
-        self._activation = spec.activation
-        self._policy_kwargs = dict(spec.policy_kwargs)
+        resolve_policy(self)
 
     def _resolve_defaults(self) -> None:
-        for f in self.__dataclass_fields__.values():
-            value = getattr(self, f.name)
-            if value is not None: continue
-            if f.default is not MISSING: setattr(self, f.name, f.default)
-            elif f.default_factory is not MISSING: setattr(self, f.name, f.default_factory())
+        resolve_defaults(self)
 
     def _resolve_n_envs(self) -> None:
         """Resolve n_envs "auto" to cpu_count()."""
-        if self.n_envs == "auto":
-            self.n_envs = os.cpu_count() or 1
+        resolve_n_envs(self)
 
     def _resolve_atari_defaults(self) -> None:
-        """Apply Atari defaults when vectorization_mode='atari' and params are not set.
-
-        ALE native vectorization applies these transformations under the hood:
-        - frame_skip: 4
-        - grayscale: True
-        - img_height: 84
-        - img_width: 84
-        - stack_num: 4
-
-        This method syncs config with these defaults so the config reflects actual behavior.
-        """
-        if self.vectorization_mode not in ("atari", "auto"):
-            return
-
-        # Only apply defaults for ALE RGB environments
-        from utils.environment import get_env_type
-        if not get_env_type(self.env_id) == 'alepy':
-            return
-        if self.obs_type != Config.ObsType.rgb:
-            return
-
-        # Apply Atari defaults if not explicitly set
-        if self.grayscale_obs is None:
-            self.grayscale_obs = True
-        if self.resize_obs is None:
-            self.resize_obs = (84, 84)
-        if self.frame_stack is None:
-            self.frame_stack = 4
-        if self.frame_skip is None:
-            self.frame_skip = 4
+        """Apply Atari defaults when vectorization_mode='atari' and params are not set."""
+        resolve_atari_defaults(self)
 
     def _resolve_vizdoom_defaults(self) -> None:
-        """Apply VizDoom defaults when params are not explicitly set.
-
-        Standard VizDoom preprocessing pipeline:
-        - obs_type: rgb
-        - grayscale: True
-        - img_height: 84
-        - img_width: 84
-        - frame_stack: 4
-        - model_id: cnn_nature
-
-        This ensures consistent behavior across VizDoom environments while still
-        allowing YAML configs to override any of these defaults.
-        """
-        from utils.environment import get_env_type
-        if not get_env_type(self.env_id) == 'vizdoom':
-            return
-
-        # Apply VizDoom defaults if not explicitly set
-        if self.obs_type == Config.ObsType.vector:
-            self.obs_type = Config.ObsType.rgb
-        if self.grayscale_obs is None:
-            self.grayscale_obs = True
-        if self.resize_obs is None:
-            self.resize_obs = (84, 84)
-        if self.frame_stack is None:
-            self.frame_stack = 4
-        if self.model_id is None:
-            self.model_id = "cnn_nature"
-        if self.vectorization_mode is None or self.vectorization_mode == "auto":
-            self.vectorization_mode = "async"
+        """Apply VizDoom defaults when params are not explicitly set."""
+        resolve_vizdoom_defaults(self)
 
     def _resolve_retro_defaults(self) -> None:
-        """Apply Retro (stable-retro) defaults when params are not explicitly set.
-
-        Standard Retro preprocessing pipeline:
-        - obs_type: rgb
-        - grayscale: True
-        - img_height: 84
-        - img_width: 84
-        - frame_stack: 4
-        - frame_skip: 4
-        - vectorization_mode: async
-        - model_id: cnn_nature
-
-        Retro uses async vectorization because only one emulator core is supported per process.
-        This ensures consistent behavior across Retro environments while still
-        allowing YAML configs to override any of these defaults.
-        """
-        from utils.environment import get_env_type
-        if not get_env_type(self.env_id) == 'stable_retro':
-            return
-
-        # Apply Retro defaults if not explicitly set
-        if self.obs_type == Config.ObsType.vector:
-            self.obs_type = Config.ObsType.rgb
-        if self.grayscale_obs is None:
-            self.grayscale_obs = True
-        if self.resize_obs is None:
-            self.resize_obs = (84, 84)
-        if self.frame_stack is None:
-            self.frame_stack = 4
-        if self.frame_skip is None:
-            self.frame_skip = 4
-        if self.vectorization_mode is None or self.vectorization_mode == "auto":
-            self.vectorization_mode = "async"
-        if self.model_id is None:
-            self.model_id = "cnn_nature"
+        """Apply Retro (stable-retro) defaults when params are not explicitly set."""
+        resolve_retro_defaults(self)
 
     def _resolve_numeric_strings(self) -> None:
-        for key, value in list(asdict(self).items()):
-            if not isinstance(value, str): continue
-            try: setattr(self, key, float(value))
-            except: pass
+        resolve_numeric_strings(self)
 
     def _resolve_batch_size(self) -> None:
-        # Set default batch size based on policy type if not specified
-        if self.batch_size is None:
-            policy_str = self.policy.value if hasattr(self.policy, 'value') else str(self.policy)
-            if 'cnn' in policy_str:
-                self.batch_size = 256
-            else:  # mlp policies
-                self.batch_size = 64
-
-        batch_size = self.batch_size
-        if batch_size > 1: return
-        rollout_size = self.n_envs * self.n_steps
-        new_batch_size = max(1, int(rollout_size * batch_size))
-        self.batch_size = new_batch_size
+        resolve_batch_size(self)
 
     def _resolve_eval_warmup_epochs(self) -> None:
         """Resolve fractional eval_warmup_epochs to absolute epochs."""
-        warmup = self.eval_warmup_epochs
-        # Only resolve if warmup is in (0, 1) - fractional range
-        if warmup <= 0 or warmup >= 1:
-            return
-
-        # Fractional warmup requires max_env_steps to be set
-        assert self.max_env_steps is not None, \
-            "Fractional eval_warmup_epochs requires max_env_steps to be set"
-
-        # Calculate total epochs: max_env_steps / (n_envs * n_steps)
-        total_epochs = self.max_env_steps / (self.n_envs * self.n_steps)
-
-        # Convert fraction to absolute epochs
-        self.eval_warmup_epochs = int(total_epochs * warmup)
+        resolve_eval_warmup_epochs(self)
 
     def _resolve_schedules(self) -> None:
-        # Schedulable parameters that support dict syntax (base params only)
-        schedulable_params = {'policy_lr', 'ent_coef'}
-
-        # Iterate over attribute names to avoid mutating during iteration
-        for key in list(vars(self).keys()):
-            value = getattr(self, key)
-
-            # Handle dict-based schedule syntax
-            if isinstance(value, dict) and key in schedulable_params:
-                schedule_type = value.get('schedule', 'linear')
-                start_value = value.get('start')
-                end_value = value.get('end', 0.0)
-                from_pos = value.get('from', 0.0)
-                to_pos = value.get('to', 1.0)
-                warmup = value.get('warmup', 0.0)
-
-                assert start_value is not None, f"{key} schedule dict must have 'start' key"
-
-                # Convert string values to floats (YAML may parse scientific notation as strings)
-                start_value = float(start_value)
-                end_value = float(end_value)
-                from_pos = float(from_pos)
-                to_pos = float(to_pos)
-                warmup = float(warmup)
-
-                self._set_schedule_attrs(key, schedule_type, start_value, end_value, from_pos, to_pos)
-                # Set warmup if specified
-                if warmup > 0.0:
-                    setattr(self, f"{key}_schedule_warmup", warmup)
+        resolve_schedule_dicts(self, {"policy_lr", "ent_coef"})
 
     def _resolve_schedule_defaults(self) -> None:
-        schedule_suffix = "_schedule"
-        for key in list(vars(self).keys()):
-            if not key.endswith(schedule_suffix):
-                continue
-            schedule = getattr(self, key)
-            if not schedule:
-                continue
-
-            param = key[: -len(schedule_suffix)]
-
-            # Start/end values default to the current parameter value and zero respectively
-            self._default_schedule_attr(f"{param}_schedule_start_value", getattr(self, param))
-            self._default_schedule_attr(f"{param}_schedule_end_value", 0.0)
-
-            # Default start/end positions use fractions of training progress
-            self._default_schedule_attr(f"{param}_schedule_start", 0.0)
-            self._default_schedule_attr(f"{param}_schedule_end", 1.0)
+        resolve_schedule_defaults(self)
 
     def get_env_args(self) -> Dict[str, Any]:
         return dict(
@@ -719,87 +452,12 @@ class Config:
     
     def save_to_json(self, path: str) -> None:
         """Save configuration to a JSON file."""
-        data = asdict(self)
-        # Remove internal fields that should not be serialized
-        data.pop('_hidden_dims', None)
-        data.pop('_activation', None)
-        data.pop('_policy_kwargs', None)
-        data["algo_id"] = self.algo_id # TODO: do this in serializer method instead
-
-        # Include schedule metadata (set via setattr, not in dataclass fields)
-        # Preserve schedule information so config can be fully reconstructed
-        for attr_name in dir(self):
-            if '_schedule' in attr_name and not attr_name.startswith('_'):
-                value = getattr(self, attr_name, None)
-                if value is not None:
-                    data[attr_name] = value
-
+        data = config_to_dict(self)
         write_json(path, data, indent=2, ensure_ascii=False, default=str)
     
     # TODO: figure out a way to softcode this
     def validate(self):
-        self._validate_positive("seed", allow_none=False)
-        self._validate_positive("n_envs", allow_none=False)
-        self._validate_positive("policy_lr")
-        self._validate_non_negative("ent_coef")
-        self._validate_positive("n_epochs")
-        self._validate_positive("n_steps")
-        self._validate_positive("batch_size")
-        self._validate_positive("max_env_steps")
-        self._validate_positive("frame_skip")
-        self._validate_range("gamma", 0, 1)
-        self._validate_positive("eval_freq_epochs")
-        self._validate_non_negative("eval_warmup_epochs", allow_none=False)
-        self._validate_positive("eval_episodes")
-        self._validate_positive("reward_threshold")
-
-        # Validate and auto-round max_env_steps to be divisible by n_envs for clean conversion
-        if self.max_env_steps is not None and self.max_env_steps % self.n_envs != 0:
-            rounded = round(self.max_env_steps / self.n_envs) * self.n_envs
-            logger.warning(
-                f"max_env_steps ({self.max_env_steps}) not divisible by n_envs ({self.n_envs}). "
-                f"Auto-rounding to {rounded}."
-            )
-            self.max_env_steps = rounded
-
-        if self.devices is not None and not (isinstance(self.devices, int) or self.devices == "auto"):
-            raise ValueError("devices may be an int, 'auto', or None.")
-
-        # Validate vectorization_mode
-        if self.vectorization_mode not in {"auto", "atari", "sync", "async", None}:
-            raise ValueError(f"vectorization_mode must be 'auto', 'atari', 'sync', 'async', or None, got: {self.vectorization_mode}")
-
-        # Validate that 'atari' is only used for Atari RGB environments
-        if self.vectorization_mode == "atari":
-            from utils.environment import get_env_type
-            if not get_env_type(self.env_id) == 'alepy':
-                raise ValueError(f"vectorization_mode='atari' is only valid for Atari environments (ALE/*), got env_id: {self.env_id}")
-            if self.obs_type != Config.ObsType.rgb:
-                raise ValueError(f"vectorization_mode='atari' is only valid for RGB observations, got obs_type: {self.obs_type}")
-
-        if self.n_envs is not None and self.n_steps is not None and self.batch_size is not None:
-            rollout_size = self.n_envs * self.n_steps
-            if not (self.batch_size <= rollout_size):
-                raise ValueError(
-                    f"batch_size ({self.batch_size}) should not exceed n_envs ({self.n_envs}) * n_steps ({self.n_steps})."
-                )
-            # Ensure uniform minibatches: batch_size must evenly divide rollout_size
-            if rollout_size % int(self.batch_size) != 0:
-                raise ValueError(
-                    "batch_size must divide (n_envs * n_steps) exactly to yield uniform minibatches: "
-                    f"rollout_size={rollout_size}, batch_size={self.batch_size}."
-                )
-
-        if self.policy_targets is not None and self.policy_targets not in {Config.PolicyTargetsType.returns, Config.PolicyTargetsType.advantages}:  # type: ignore[operator]
-            raise ValueError("policy_targets must be 'returns' or 'advantages'.")
-
-        # PPO replay-specific checks (only if fields exist)
-        self._validate_non_negative("replay_ratio")
-        self._validate_non_negative("replay_buffer_size")
-        self._validate_positive("replay_is_clip")
-
-        # Validate hyperparameter schedules
-        self._validate_schedules()
+        validate_common_config(self, config_enum_cls=Config, logger=logger)
 
 # TODO: these config extensions should somehow be provided by the agent itself
 @dataclass
@@ -845,44 +503,12 @@ class PPOConfig(Config):
         return "ppo"
 
     def _resolve_schedules(self) -> None:
-        # PPO adds vf_coef, clip_range, and clip_range_vf to schedulable params
         super()._resolve_schedules()
-
-        schedulable_params = {'vf_coef', 'clip_range', 'clip_range_vf'}
-        for key in list(vars(self).keys()):
-            value = getattr(self, key)
-            if isinstance(value, dict) and key in schedulable_params:
-                schedule_type = value.get('schedule', 'linear')
-                start_value = value.get('start')
-                end_value = value.get('end', 0.0)
-                from_pos = value.get('from', 0.0)
-                to_pos = value.get('to', 1.0)
-                warmup = value.get('warmup', 0.0)
-
-                assert start_value is not None, f"{key} schedule dict must have 'start' key"
-
-                start_value = float(start_value)
-                end_value = float(end_value)
-                from_pos = float(from_pos)
-                to_pos = float(to_pos)
-                warmup = float(warmup)
-
-                self._set_schedule_attrs(key, schedule_type, start_value, end_value, from_pos, to_pos)
-                if warmup > 0.0:
-                    setattr(self, f"{key}_schedule_warmup", warmup)
+        resolve_schedule_dicts(self, {"vf_coef", "clip_range", "clip_range_vf"})
 
     def validate(self):
         super().validate()
-
-        # PPO-specific validations
-        self._validate_positive("target_kl")
-        self._validate_range("gae_lambda", 0, 1)
-        self._validate_range("clip_range", 0, 1, inclusive_min=False, inclusive_max=False)
-        self._validate_range("clip_range_vf", 0, 1, inclusive_min=False, inclusive_max=False)
-        self._validate_non_negative("vf_coef")
-
-        if self.normalize_advantages is not None and self.normalize_advantages not in {Config.AdvantageNormType.rollout, Config.AdvantageNormType.batch, Config.AdvantageNormType.off}:  # type: ignore[operator]
-            raise ValueError("normalize_advantages must be 'rollout', 'batch', or 'off'.")
+        validate_ppo_config(self, config_enum_cls=Config)
 
 def load_config(config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> Config:
     """Convenience function to load configuration."""

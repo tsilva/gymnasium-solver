@@ -36,7 +36,7 @@ from utils.playback import (
     get_action_label_list_from_env,
     resolve_playback_seed,
 )
-from utils.rollouts import (
+from utils.returns_advantages import (
     compute_batched_gae_advantages_and_returns,
     compute_batched_mc_returns,
 )

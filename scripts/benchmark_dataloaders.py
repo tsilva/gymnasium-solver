@@ -83,7 +83,7 @@ def make_rollout_dataset(cfg: BenchmarkConfig):
     policy = MLPActorCritic(input_dim, output_dim, hidden_dims=exp_cfg.hidden_dims).to(torch.device("cpu"))
 
     # Build collector and collect one rollout
-    from utils.rollouts import RolloutCollector
+    from utils.rollout_collector import RolloutCollector
     collector = RolloutCollector(
         env,
         policy,

@@ -18,7 +18,7 @@ from utils.playback import (
     get_action_labels_from_env,
     resolve_playback_seed,
 )
-from utils.rollouts import RolloutCollector
+from utils.rollout_collector import RolloutCollector
 from utils.run import load_available_run
 
 # Global window layout file

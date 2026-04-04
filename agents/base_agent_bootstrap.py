@@ -70,7 +70,7 @@ def build_stage_env(agent: "BaseAgent", stage: str, **kwargs) -> None:
 
 def build_stage_rollout_collector(agent: "BaseAgent", stage: str) -> None:
     """Build and attach the rollout collector for one lifecycle stage."""
-    from utils.rollouts import RolloutCollector
+    from utils.rollout_collector import RolloutCollector
 
     agent._rollout_collectors = (
         agent._rollout_collectors if hasattr(agent, "_rollout_collectors") else {}

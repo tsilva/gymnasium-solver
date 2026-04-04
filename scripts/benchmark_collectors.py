@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from utils.config import load_config
 from utils.environment import build_env
 from utils.policy_factory import build_policy_from_env_and_config
-from utils.rollouts import RolloutCollector
+from utils.rollout_collector import RolloutCollector
 from utils.environment_registry import list_available_environments
 
 

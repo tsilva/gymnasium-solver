@@ -20,7 +20,8 @@ from utils.decorators import must_implement
 from utils.metric_bundles import CoreMetricAlerts
 from utils.metrics_monitor import MetricsMonitor
 from utils.metrics_recorder import MetricsRecorder
-from utils.rollouts import RolloutCollector, RolloutTrajectory
+from utils.rollout_buffer import RolloutTrajectory
+from utils.rollout_collector import RolloutCollector
 from utils.run import Run
 from utils.timings_tracker import TimingsTracker
 

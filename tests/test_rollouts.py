@@ -4,7 +4,8 @@ import numpy as np
 import pytest
 import torch
 
-from utils.rollouts import RolloutBuffer, RolloutCollector
+from utils.rollout_buffer import RolloutBuffer
+from utils.rollout_collector import RolloutCollector
 
 
 class DummyVecEnv:

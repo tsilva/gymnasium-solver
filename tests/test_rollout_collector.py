@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 import torch
 
-from utils.rollouts import RolloutCollector
+from utils.rollout_collector import RolloutCollector
 
 
 class DummyVecEnvTimeout1:

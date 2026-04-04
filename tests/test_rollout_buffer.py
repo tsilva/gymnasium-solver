@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import torch
 
-from utils.rollouts import RolloutBuffer
+from utils.rollout_buffer import RolloutBuffer
 
 
 @pytest.mark.unit

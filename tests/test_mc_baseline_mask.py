@@ -1,7 +1,8 @@
+import gymnasium as gym
 import numpy as np
 import torch
 
-from utils.rollouts import RolloutCollector
+from utils.rollout_collector import RolloutCollector
 
 
 class SingleEnvWithTrailingPartial:
@@ -15,11 +16,20 @@ class SingleEnvWithTrailingPartial:
         self.num_envs = 1
         self._step = 0
         self._obs = np.array([[0.0]], dtype=np.float32)
+        self.single_observation_space = gym.spaces.Box(
+            low=-np.inf,
+            high=np.inf,
+            shape=(1,),
+            dtype=np.float32,
+        )
+        self.observation_space = self.single_observation_space
+        self.single_action_space = gym.spaces.Discrete(2)
+        self.action_space = self.single_action_space
 
     def reset(self):
         self._step = 0
         self._obs[:] = 0.0
-        return self._obs.copy()
+        return self._obs.copy(), {}
 
     def step(self, actions):
         # Define rewards and dones per step
@@ -27,15 +37,23 @@ class SingleEnvWithTrailingPartial:
         dones_seq = [False, True, False, False]
         idx = min(self._step, len(rewards_seq) - 1)
         reward = np.array([rewards_seq[idx]], dtype=np.float32)
-        done = np.array([dones_seq[idx]], dtype=bool)
-        info = {"episode": {"r": float(sum(rewards_seq[: idx + 1])), "l": idx + 1}} if done[0] else {}
-        infos = [info]
+        terminated = np.array([dones_seq[idx]], dtype=bool)
+        truncated = np.array([False], dtype=bool)
+        infos = {}
+        if terminated[0]:
+            infos = {
+                "episode": {
+                    "r": np.array([float(sum(rewards_seq[: idx + 1]))], dtype=np.float32),
+                    "l": np.array([idx + 1], dtype=np.int32),
+                },
+                "_episode": terminated.copy(),
+            }
 
         # Next obs stays constant shape
         next_obs = self._obs
         self._obs = next_obs
         self._step += 1
-        return next_obs.copy(), reward, done, infos
+        return next_obs.copy(), reward, terminated, truncated, infos
 
 
 class DummyPolicy(torch.nn.Module):

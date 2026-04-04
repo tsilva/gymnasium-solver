@@ -3,10 +3,9 @@ import numpy as np
 import pytest
 import torch
 
-from utils.rollouts import (
-    RollingWindow,
-    RolloutCollector,
-    RunningStats,
+from utils.rollout_collector import RolloutCollector
+from utils.rollout_stats import RollingWindow, RunningStats
+from utils.returns_advantages import (
     _build_idx_map_from_valid_mask,
     _build_valid_mask_and_index_map,
     _normalize_advantages,

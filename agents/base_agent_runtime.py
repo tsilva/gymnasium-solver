@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import wandb
 
+from agents.base_agent_async_eval import sync_eval_model
 from agents.base_agent_checkpointing import restore_deferred_optimizer_states
 from utils.run import Run
 
@@ -54,6 +55,8 @@ def train_dataloader(agent: "BaseAgent"):
 
 
 def on_train_epoch_start(agent: "BaseAgent") -> None:
+    agent._early_stop_epoch = False
+
     if agent.config.eval_async:
         with agent._async_eval_lock:
             agent._async_eval_metrics = {}
@@ -141,6 +144,8 @@ def validation_step(agent: "BaseAgent", batch, batch_idx, dataloader_idx=0):
 
     if agent.config.eval_async:
         return
+
+    sync_eval_model(agent, stage="val")
 
     val_collector = agent.get_rollout_collector("val")
     val_metrics = val_collector.evaluate_episodes(

@@ -201,6 +201,60 @@ def test_validation_hooks_record_async_eval_metrics():
     assert inst.metrics_recorder.calls[-1][1]["eval/model_epoch"] == 5
 
 
+def test_validation_step_refreshes_sync_eval_model_copy():
+    class _Timings:
+        def throughput_since(self, *_args, **_kwargs):
+            return {"cnt/total_vec_steps": 42.0}
+
+    class _Recorder:
+        def __init__(self):
+            self.calls = []
+
+        def record(self, stage, metrics):
+            self.calls.append((stage, metrics))
+
+    class _Collector:
+        def __init__(self):
+            self.evaluate_calls = 0
+
+        def evaluate_episodes(self, *, n_episodes, deterministic):
+            self.evaluate_calls += 1
+            assert n_episodes == 2
+            assert deterministic is False
+            return {"roll/ep_rew/mean": 3.5, "cnt/total_vec_steps": 9}
+
+    inst = BaseAgent.__new__(BaseAgent)
+    policy_model = torch.nn.Linear(1, 1)
+    eval_model = torch.nn.Linear(1, 1)
+    collector = _Collector()
+    object.__setattr__(
+        inst,
+        "config",
+        SimpleNamespace(eval_async=False, eval_episodes=2, eval_deterministic=False),
+    )
+    object.__setattr__(inst, "_print_metrics_logger", None)
+    object.__setattr__(inst, "_rollout_collectors", {"val": collector})
+    object.__setattr__(inst, "timings", _Timings())
+    object.__setattr__(inst, "metrics_recorder", _Recorder())
+    object.__setattr__(inst, "policy_model", policy_model)
+    object.__setattr__(inst, "_eval_models", {"val": eval_model})
+    object.__setattr__(inst, "current_epoch", 4)
+
+    with torch.no_grad():
+        for param in policy_model.parameters():
+            param.fill_(7.0)
+        for param in eval_model.parameters():
+            param.zero_()
+
+    inst.validation_step(None, 0)
+
+    for eval_param, policy_param in zip(eval_model.parameters(), policy_model.parameters()):
+        assert torch.allclose(eval_param, policy_param)
+    assert collector.evaluate_calls == 1
+    assert inst.metrics_recorder.calls[-1][0] == "val"
+    assert inst.metrics_recorder.calls[-1][1]["cnt/epoch"] == 4
+
+
 def test_learn_creates_run_and_redirects_output(monkeypatch, tmp_path):
     events = []
 

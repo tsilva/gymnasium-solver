@@ -9,6 +9,12 @@ if TYPE_CHECKING:
     from agents.base_agent import BaseAgent
 
 
+def sync_eval_model(agent: "BaseAgent", *, stage: str = "val") -> None:
+    """Refresh the isolated eval model copy from the current training model."""
+    if hasattr(agent, "_eval_models") and stage in agent._eval_models:
+        agent._eval_models[stage].load_state_dict(agent.policy_model.state_dict())
+
+
 def launch_async_eval(agent: "BaseAgent", eval_epoch: Optional[int] = None) -> None:
     """Launch asynchronous validation without blocking the training loop."""
     if agent._async_eval_shutdown.is_set():
@@ -27,8 +33,7 @@ def launch_async_eval(agent: "BaseAgent", eval_epoch: Optional[int] = None) -> N
         agent._async_eval_running_epoch = eval_epoch
         agent._async_eval_pending_epoch = None
 
-    if hasattr(agent, "_eval_models") and "val" in agent._eval_models:
-        agent._eval_models["val"].load_state_dict(agent.policy_model.state_dict())
+    sync_eval_model(agent, stage="val")
 
     def _run_eval() -> None:
         with agent._async_eval_lock:

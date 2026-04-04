@@ -293,6 +293,11 @@ class Config:
     # Whether to enable Weights & Biases logging
     enable_wandb: bool = True
 
+    # Whether to compute per-batch activation and gradient diagnostics.
+    # These metrics are useful for debugging, but they add measurable overhead
+    # on image-based PPO workloads.
+    detailed_optimization_metrics: bool = False
+
     # Plateau intervention configuration (optional)
     # When a metric plateaus, cycle through parameter adjustments
     # Example: {"monitor": "train/roll/ep_rew/mean", "patience": 20, "actions": [...]}
@@ -438,6 +443,14 @@ class Config:
             "n_steps": self.n_steps,
             **self.rollout_collector_hyperparams(),
         }
+
+    def get_rollout_tensor_options(self) -> Dict[str, bool]:
+        """Describe which rollout tensors should be materialized for training."""
+        return {
+            "include_rewards": True,
+            "include_dones": True,
+            "include_next_observations": True,
+        }
     
     def save_to_json(self, path: str) -> None:
         """Save configuration to a JSON file."""
@@ -498,6 +511,14 @@ class PPOConfig(Config):
     def validate(self):
         super().validate()
         validate_ppo_config(self, config_enum_cls=Config)
+
+    def get_rollout_tensor_options(self) -> Dict[str, bool]:
+        """PPO training does not consume rewards/dones/next observations per batch."""
+        return {
+            "include_rewards": False,
+            "include_dones": False,
+            "include_next_observations": False,
+        }
 
 def load_config(config_id: str, variant_id: str = None, config_dir: str = "config/environments") -> Config:
     """Convenience function to load configuration."""

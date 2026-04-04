@@ -244,3 +244,44 @@ def test_multibinary_action_space():
 
     # Verify dtypes: MultiBinary actions must be float32 for Bernoulli distribution
     assert traj.actions.dtype == torch.float32
+
+
+@pytest.mark.unit
+def test_flatten_slice_can_skip_unused_training_tensors():
+    n_envs, T, D = 2, 3, 4
+    buf = RolloutBuffer(
+        n_envs=n_envs,
+        obs_shape=(D,),
+        obs_dtype=np.float32,
+        device=torch.device("cpu"),
+        maxsize=T,
+    )
+    start = buf.begin_rollout(T)
+
+    for t in range(T):
+        obs = np.full((n_envs, D), t, dtype=np.float32)
+        next_obs = obs + 1
+        actions = np.array([t, t + 1], dtype=np.int64)
+        logps = np.zeros(n_envs, dtype=np.float32)
+        values = np.zeros(n_envs, dtype=np.float32)
+        rewards = np.ones(n_envs, dtype=np.float32)
+        dones = np.zeros(n_envs, dtype=bool)
+        timeouts = np.zeros(n_envs, dtype=bool)
+        buf.add(start + t, obs, next_obs, actions, logps, values, rewards, dones, timeouts)
+
+    adv = np.zeros((T, n_envs), dtype=np.float32)
+    ret = np.zeros((T, n_envs), dtype=np.float32)
+    traj = buf.flatten_slice_env_major(
+        start,
+        start + T,
+        adv,
+        ret,
+        include_rewards=False,
+        include_dones=False,
+        include_next_observations=False,
+    )
+
+    assert traj.observations.shape == (n_envs * T, D)
+    assert traj.rewards is None
+    assert traj.dones is None
+    assert traj.next_observations is None

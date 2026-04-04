@@ -104,14 +104,15 @@ def training_step(agent: "BaseAgent", batch, batch_idx):
     if agent._early_stop_epoch:
         return None
 
-    agent.policy_model._track_activations = True
+    detailed_metrics = getattr(agent.config, "detailed_optimization_metrics", False)
+    agent.policy_model._track_activations = bool(detailed_metrics)
     result = agent.losses_for_batch(batch, batch_idx)
 
-    activation_metrics = agent.policy_model.compute_activation_stats()
-    if activation_metrics:
-        agent.metrics_recorder.record("train", activation_metrics)
-
     agent.policy_model._track_activations = False
+    if detailed_metrics:
+        activation_metrics = agent.policy_model.compute_activation_stats()
+        if activation_metrics:
+            agent.metrics_recorder.record("train", activation_metrics)
 
     early_stop_epoch = result["early_stop_epoch"]
     if early_stop_epoch:

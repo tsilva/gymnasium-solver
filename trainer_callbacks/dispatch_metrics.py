@@ -89,13 +89,14 @@ class DispatchMetricsCallback(pl.Callback):
 
         # Log action distribution histogram to wandb separately (not sent to other loggers)
         if action_dist is not None and wandb.run is not None:
-            # Create histogram from action counts
-            # action_dist is an array where index i contains count for action i
-            action_indices = []
-            for action_idx, count in enumerate(action_dist):
-                action_indices.extend([action_idx] * int(count))
-            if len(action_indices) > 0:
-                wandb.log({f"{stage}/roll/actions/histogram": wandb.Histogram(np_histogram=(action_dist, np.arange(len(action_dist) + 1)))})
+            if int(np.asarray(action_dist).sum()) > 0:
+                wandb.log(
+                    {
+                        f"{stage}/roll/actions/histogram": wandb.Histogram(
+                            np_histogram=(action_dist, np.arange(len(action_dist) + 1))
+                        )
+                    }
+                )
 
         # Update step-aware history with aggregated snapshot
         pl_module.metrics_recorder.update_history(prefixed_metrics)

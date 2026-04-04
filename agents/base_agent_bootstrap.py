@@ -89,4 +89,5 @@ def build_stage_rollout_collector(agent: "BaseAgent", stage: str) -> None:
         agent.get_env(stage),
         model_for_collector,
         **agent.config.get_rollout_collector_kwargs(),
+        **agent.config.get_rollout_tensor_options(),
     )

@@ -25,6 +25,7 @@ class RetroSuperMarioBros_RewardShaper(RewardShaperBase):
         x_position_scale: float = 1.0,
         score_scale: float = 0.1,
         x_reset_threshold: float = -100.0,
+        emit_debug_info: bool = False,
     ):
         """
         Args:
@@ -45,6 +46,7 @@ class RetroSuperMarioBros_RewardShaper(RewardShaperBase):
         self.x_position_scale = x_position_scale
         self.score_scale = score_scale
         self.x_reset_threshold = x_reset_threshold
+        self.emit_debug_info = emit_debug_info
 
         # Track previous values
         self.prev_x = None
@@ -121,15 +123,16 @@ class RetroSuperMarioBros_RewardShaper(RewardShaperBase):
         scaled_shaping = self.reward_scale * total_shaping
 
         # Add debug info
-        self._add_shaping_info(
-            info,
-            scaled_shaping,
-            v_reward=v_reward,
-            p_reward=p_reward,
-            d_reward=d_reward,
-            s_reward=s_reward,
-            total_unscaled=total_shaping,
-        )
+        if self.emit_debug_info:
+            self._add_shaping_info(
+                info,
+                scaled_shaping,
+                v_reward=v_reward,
+                p_reward=p_reward,
+                d_reward=d_reward,
+                s_reward=s_reward,
+                total_unscaled=total_shaping,
+            )
 
         # Update previous values
         self.prev_x = current_x

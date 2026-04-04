@@ -1,4 +1,4 @@
-from typing import NamedTuple, Tuple
+from typing import NamedTuple, Optional, Tuple
 
 import numpy as np
 import torch
@@ -16,13 +16,13 @@ def _flat_env_major(arr: np.ndarray, start: int, end: int) -> np.ndarray:
 class RolloutTrajectory(NamedTuple):
     observations: torch.Tensor
     actions: torch.Tensor
-    rewards: torch.Tensor
-    dones: torch.Tensor
+    rewards: Optional[torch.Tensor]
+    dones: Optional[torch.Tensor]
     logprobs: torch.Tensor
     values: torch.Tensor
     advantages: torch.Tensor
     returns: torch.Tensor
-    next_observations: torch.Tensor
+    next_observations: Optional[torch.Tensor]
 
 
 class RolloutBuffer:
@@ -108,6 +108,10 @@ class RolloutBuffer:
         end: int,
         advantages_buf: np.ndarray,
         returns_buf: np.ndarray,
+        *,
+        include_rewards: bool = True,
+        include_dones: bool = True,
+        include_next_observations: bool = True,
     ) -> RolloutTrajectory:
         """Create torch training tensors for the contiguous slice [start, end)."""
         T = end - start
@@ -145,20 +149,31 @@ class RolloutBuffer:
         logprobs = _flat_env_major_cpu_to_torch(self.logprobs_buf, torch.float32)
         values = _flat_env_major_cpu_to_torch(self.values_buf, torch.float32)
 
-        rewards = _flat_env_major_cpu_to_torch(self.rewards_buf, torch.float32)
-        dones = _flat_env_major_cpu_to_torch(self.dones_buf, torch.bool)
+        rewards = (
+            _flat_env_major_cpu_to_torch(self.rewards_buf, torch.float32)
+            if include_rewards
+            else None
+        )
+        dones = (
+            _flat_env_major_cpu_to_torch(self.dones_buf, torch.bool)
+            if include_dones
+            else None
+        )
         advantages = _flat_env_major_cpu_to_torch(advantages_buf, torch.float32)
         returns = _flat_env_major_cpu_to_torch(returns_buf, torch.float32)
 
         # Next observations: same env-major flattening as observations
-        next_obs_tensor = torch.as_tensor(self.next_obs_buf[start:end], device=self.device)
-        next_obs_env_major = next_obs_tensor.transpose(0, 1)
-        if len(self.obs_shape) == 0:
-            next_observations = next_obs_env_major.reshape(n_envs * T, 1)
-        elif len(self.obs_shape) == 1:
-            next_observations = next_obs_env_major.reshape(n_envs * T, int(self.obs_shape[0]))
+        if include_next_observations:
+            next_obs_tensor = torch.as_tensor(self.next_obs_buf[start:end], device=self.device)
+            next_obs_env_major = next_obs_tensor.transpose(0, 1)
+            if len(self.obs_shape) == 0:
+                next_observations = next_obs_env_major.reshape(n_envs * T, 1)
+            elif len(self.obs_shape) == 1:
+                next_observations = next_obs_env_major.reshape(n_envs * T, int(self.obs_shape[0]))
+            else:
+                next_observations = next_obs_env_major.reshape(n_envs * T, *self.obs_shape)
         else:
-            next_observations = next_obs_env_major.reshape(n_envs * T, *self.obs_shape)
+            next_observations = None
 
         return RolloutTrajectory(
             observations=observations,

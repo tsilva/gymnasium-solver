@@ -21,6 +21,8 @@ module.HyperparameterScheduler = _Dummy
 sys.modules.setdefault("callbacks", module)
 
 BaseAgent = importlib.import_module("agents.base_agent").BaseAgent
+base_agent_optimization = importlib.import_module("agents.base_agent_optimization")
+base_agent_runtime = importlib.import_module("agents.base_agent_runtime")
 
 
 def _build_agent(*, max_env_steps=100, total_steps=25, async_metrics=None):
@@ -253,6 +255,72 @@ def test_validation_step_refreshes_sync_eval_model_copy():
     assert collector.evaluate_calls == 1
     assert inst.metrics_recorder.calls[-1][0] == "val"
     assert inst.metrics_recorder.calls[-1][1]["cnt/epoch"] == 4
+
+
+def test_training_step_skips_activation_metrics_when_detailed_metrics_disabled():
+    class _Policy:
+        def __init__(self):
+            self._track_activations = False
+            self.activation_stats_calls = 0
+
+        def compute_activation_stats(self):
+            self.activation_stats_calls += 1
+            return {"opt/activations/backbone/mean": 1.0}
+
+    class _Recorder:
+        def __init__(self):
+            self.calls = []
+
+        def record(self, stage, metrics):
+            self.calls.append((stage, metrics))
+
+    inst = BaseAgent.__new__(BaseAgent)
+    object.__setattr__(inst, "_early_stop_epoch", False)
+    object.__setattr__(inst, "config", SimpleNamespace(detailed_optimization_metrics=False))
+    object.__setattr__(inst, "policy_model", _Policy())
+    object.__setattr__(inst, "metrics_recorder", _Recorder())
+    object.__setattr__(inst, "_backpropagate_and_step", lambda losses: None)
+    object.__setattr__(inst, "losses_for_batch", lambda batch, batch_idx: {"loss": torch.tensor(1.0), "early_stop_epoch": False})
+
+    base_agent_runtime.training_step(inst, None, 0)
+
+    assert inst.policy_model._track_activations is False
+    assert inst.policy_model.activation_stats_calls == 0
+    assert inst.metrics_recorder.calls == []
+
+
+def test_backpropagate_and_step_skips_grad_metrics_when_detailed_metrics_disabled():
+    model = torch.nn.Linear(1, 1)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+    grad_metric_calls = {"count": 0}
+
+    def _compute_grad_norms():
+        grad_metric_calls["count"] += 1
+        return {"opt/grads/norm/all": 1.0}
+
+    model.compute_grad_norms = _compute_grad_norms  # type: ignore[attr-defined]
+
+    class _Recorder:
+        def __init__(self):
+            self.calls = []
+
+        def record(self, stage, metrics):
+            self.calls.append((stage, metrics))
+
+    agent = SimpleNamespace(
+        optimizers=lambda: optimizer,
+        policy_model=model,
+        config=SimpleNamespace(detailed_optimization_metrics=False, max_grad_norm=None),
+        metrics_recorder=_Recorder(),
+        manual_backward=lambda loss: loss.backward(),
+        clip_gradients=lambda *args, **kwargs: None,
+    )
+
+    loss = model(torch.ones(1, 1)).sum()
+    base_agent_optimization.backpropagate_and_step(agent, loss)
+
+    assert grad_metric_calls["count"] == 0
+    assert agent.metrics_recorder.calls == []
 
 
 def test_learn_creates_run_and_redirects_output(monkeypatch, tmp_path):

@@ -21,8 +21,10 @@ def backpropagate_and_step(agent: "BaseAgent", losses) -> None:
         optimizer.zero_grad()
         agent.manual_backward(loss)
 
-        metrics = model.compute_grad_norms()
-        agent.metrics_recorder.record("train", metrics)
+        if getattr(agent.config, "detailed_optimization_metrics", False):
+            metrics = model.compute_grad_norms()
+            if metrics:
+                agent.metrics_recorder.record("train", metrics)
 
         if agent.config.max_grad_norm is not None:
             agent.clip_gradients(

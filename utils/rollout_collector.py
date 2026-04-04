@@ -35,6 +35,10 @@ class RolloutCollector():
         normalize_advantages: bool = False, # Whether to normalize advantages
         buffer_maxsize: Optional[int] = None, # Maximum size of the rollout buffer
         mc_treat_timeouts_as_terminals: bool = True,
+        show_progress: bool = False,
+        include_rewards: bool = True,
+        include_dones: bool = True,
+        include_next_observations: bool = True,
         use_gae: Optional[bool] = None,
         **kwargs
     ) -> None:
@@ -83,6 +87,10 @@ class RolloutCollector():
         self.advantages_type = atype
         self.normalize_advantages = normalize_advantages
         self.mc_treat_timeouts_as_terminals = mc_treat_timeouts_as_terminals # TODO: review this
+        self.show_progress = show_progress
+        self.include_rewards = include_rewards
+        self.include_dones = include_dones
+        self.include_next_observations = include_next_observations
         self.kwargs = kwargs
         self.buffer_maxsize = buffer_maxsize
 
@@ -471,7 +479,16 @@ class RolloutCollector():
 
         # Collect one rollout
         rollout_start = time.time()
-        for step_idx in tqdm(range(self.n_steps), desc="Rollout", leave=False, dynamic_ncols=True, position=0):
+        step_iterator = range(self.n_steps)
+        if self.show_progress:
+            step_iterator = tqdm(
+                step_iterator,
+                desc="Rollout",
+                leave=False,
+                dynamic_ncols=True,
+                position=0,
+            )
+        for step_idx in step_iterator:
             # Convert current observations to torch tensor (ship to device)
             obs_t = torch.as_tensor(self.obs, device=self.device)
 
@@ -557,7 +574,15 @@ class RolloutCollector():
         advantages_buf, returns_buf = self._compute_targets(start, end, last_obs)
 
         # Create final training tensors from persistent buffers
-        trajectories = self._buffer.flatten_slice_env_major(start, end, advantages_buf, returns_buf)
+        trajectories = self._buffer.flatten_slice_env_major(
+            start,
+            end,
+            advantages_buf,
+            returns_buf,
+            include_rewards=self.include_rewards,
+            include_dones=self.include_dones,
+            include_next_observations=self.include_next_observations,
+        )
 
         self.total_rollouts += 1
         rollout_elapsed = time.time() - rollout_start
@@ -672,13 +697,17 @@ class RolloutCollector():
         return RolloutTrajectory(
             observations=trajectories.observations[idxs],
             actions=trajectories.actions[idxs],
-            rewards=trajectories.rewards[idxs],
-            dones=trajectories.dones[idxs],
+            rewards=None if trajectories.rewards is None else trajectories.rewards[idxs],
+            dones=None if trajectories.dones is None else trajectories.dones[idxs],
             logprobs=trajectories.logprobs[idxs],
             values=trajectories.values[idxs],
             advantages=trajectories.advantages[idxs],
             returns=trajectories.returns[idxs],
-            next_observations=trajectories.next_observations[idxs]
+            next_observations=(
+                None
+                if trajectories.next_observations is None
+                else trajectories.next_observations[idxs]
+            ),
         )
 
 

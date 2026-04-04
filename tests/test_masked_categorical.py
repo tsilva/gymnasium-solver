@@ -63,9 +63,6 @@ def test_masked_categorical_entropy_single_valid_action():
 @pytest.mark.unit
 def test_masked_categorical_entropy_non_uniform():
     """Test entropy calculation with non-uniform probabilities over valid actions."""
-    batch_size = 1
-    n_actions = 4
-
     # Create non-uniform logits: [2.0, 1.0, -inf, -inf]
     # This means only actions 0 and 1 are valid
     logits = torch.tensor([[2.0, 1.0, float('-inf'), float('-inf')]])

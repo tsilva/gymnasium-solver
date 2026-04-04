@@ -38,7 +38,6 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 
 import wandb
-import yaml
 
 
 @dataclass

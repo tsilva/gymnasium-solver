@@ -1,5 +1,3 @@
-import gymnasium as gym
-from utils.environment_builders import build_single_env
 from utils.environment_types import get_env_type
 from utils.environment_vectorizers import (
     build_vec_env_alepy,
@@ -53,9 +51,8 @@ def build_env(
     is_alepy_env = get_env_type(env_id) == 'alepy'
     if is_alepy_env: import ale_py; gym.register_envs(ale_py)
     
-    # In case vectorization_mode is auto, resolve to 
-    # atari native vectorization for ALE RGB envs
-    is_ale_rgb_env = is_alepy_env and obs_type == "rgb"
+    # In case vectorization_mode is auto, resolve to
+    # the appropriate vectorization strategy for the env/observation type.
     vectorization_mode = resolve_vectorization_mode(env_id, obs_type, vectorization_mode, n_envs)
 
     # Create the vectorized environment

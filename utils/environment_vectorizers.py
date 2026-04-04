@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import gymnasium as gym
 
 from utils.environment_builders import annotate_vec_env, build_single_env
 from utils.environment_types import get_env_type

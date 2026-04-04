@@ -1,7 +1,6 @@
 import torch
-import torch.nn.functional as F
 
-from utils.torch import assert_detached, batch_normalize, compute_kl_diagnostics, compute_kl_metrics
+from utils.torch import assert_detached, compute_kl_metrics
 
 from ..base_agent import BaseAgent
 from .ppo_alerts import PPOAlerts

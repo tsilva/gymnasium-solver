@@ -1,4 +1,3 @@
-import gymnasium as gym
 import numpy as np
 from gym_wrappers.reward_shaper_base import RewardShaperBase
 

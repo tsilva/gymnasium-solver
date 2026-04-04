@@ -1,7 +1,7 @@
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
-from typing import Iterable, Optional, Tuple
+from typing import Iterable, Optional
 
 from gym_wrappers.ocatari_helpers import center, normalize_linear, normalize_position, normalize_velocity, index_objects_by_category
 

@@ -13,12 +13,8 @@ from utils.config import load_config
 from utils.train_debugger import maybe_merge_debugger_config as _maybe_merge_debugger_config
 from utils.train_overrides import (
     apply_cli_overrides,
-    apply_config_overrides as _apply_config_overrides,
-    apply_env_kwargs_overrides as _apply_env_kwargs_overrides,
-    parse_config_overrides as _parse_config_overrides,
 )
 from utils.train_reporting import (
-    extract_elapsed_seconds as _extract_elapsed_seconds,
     print_training_completion,
 )
 from utils.train_resume import (
@@ -32,6 +28,13 @@ from utils.train_wandb import (
 from utils.training_summary import present_prefit_summary
 from utils.user import prompt_confirm
 
+DEFAULT_CONFIG_SPEC = "Bandit-v0:ppo"
+
+
+def resolve_requested_config_spec(args) -> str:
+    """Return the requested config spec, falling back to the default training target."""
+    return args.config or args.config_id or DEFAULT_CONFIG_SPEC
+
 
 def launch_training_from_args(args) -> None:
     """Resolve config, apply runtime overrides, and launch training."""
@@ -43,7 +46,7 @@ def launch_training_from_args(args) -> None:
         _launch_training_resume(args)
         return
 
-    config_spec = args.config or args.config_id or "Bandit-v0:ppo"
+    config_spec = resolve_requested_config_spec(args)
     if ":" not in config_spec:
         raise SystemExit("Config spec must be '<env>:<variant>' (e.g., CartPole-v1:ppo)")
     env_id, variant_id = config_spec.split(":", 1)

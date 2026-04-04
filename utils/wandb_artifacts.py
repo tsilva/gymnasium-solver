@@ -44,10 +44,10 @@ def _recreate_checkpoint_symlinks(run_dir: Path) -> None:
     checkpoints.sort(key=lambda x: x[0])
 
     # Last checkpoint is the one with highest epoch number
-    last_epoch, last_dir = checkpoints[-1]
+    _, last_dir = checkpoints[-1]
 
     # Determine best checkpoint by reading metrics and comparing val rewards
-    best_epoch, best_dir = last_epoch, last_dir  # Default to last
+    best_dir = last_dir  # Default to last
     best_reward = float("-inf")
 
     for epoch, ckpt_dir in checkpoints:
@@ -68,7 +68,7 @@ def _recreate_checkpoint_symlinks(run_dir: Path) -> None:
 
         if val_reward > best_reward:
             best_reward = val_reward
-            best_epoch, best_dir = epoch, ckpt_dir
+            best_dir = ckpt_dir
 
     # Create symlinks (remove existing ones first)
     last_symlink = checkpoints_dir / "@last"

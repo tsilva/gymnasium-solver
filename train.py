@@ -4,8 +4,8 @@ import warnings
 
 import torch
 
-from utils.train_launcher import launch_training_from_args
 from utils.environment_registry import list_available_environments
+from utils.train_launcher import launch_training_from_args, resolve_requested_config_spec
 
 # Suppress PyTorch Lightning's num_workers warning.
 # num_workers=0 is intentional: we keep rollout tensors in memory and
@@ -135,7 +135,7 @@ def main():
         return
 
     # Otherwise, check if we need to search for environment
-    config_id = args.config or args.config_id or "Bandit-v0:ppo" # TODO: move default up
+    config_id = resolve_requested_config_spec(args)
     should_search = ":" not in config_id
     if should_search:
         list_available_environments(config_id)

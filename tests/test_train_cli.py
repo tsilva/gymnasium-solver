@@ -1,4 +1,12 @@
 import sys
+from types import SimpleNamespace
+
+from utils.train_launcher import DEFAULT_CONFIG_SPEC, resolve_requested_config_spec
+
+
+def test_resolve_requested_config_spec_uses_shared_default():
+    args = SimpleNamespace(config=None, config_id=None)
+    assert resolve_requested_config_spec(args) == DEFAULT_CONFIG_SPEC
 
 
 def test_max_steps_override(monkeypatch):

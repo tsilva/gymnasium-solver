@@ -92,7 +92,7 @@ def install_keyboard_shortcuts(win, additional_handlers=None):
         additional_handlers: Dict of {key_code: handler_function} for additional shortcuts
     """
     try:
-        from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
+        from pyqtgraph.Qt import QtCore
 
         class KeyPressFilter(QtCore.QObject):
             def eventFilter(self, obj, event):
@@ -601,7 +601,6 @@ class VisualizationToolbar:
                 else:
                     print("No action labels found in environment")
 
-                space_type = "MultiBinary buttons" if isinstance(action_space, MultiBinary) else "Discrete actions"
                 self.action_viewer = ActionVisualizer(n_actions=n_actions, action_labels=action_labels, update_interval=0.05)
                 _active_viewers['action_visualizer'] = self.action_viewer
                 print("Action visualizer enabled")
@@ -800,7 +799,7 @@ class VisualizationToolbar:
             # Force pygame window to front
             self.pygame.event.pump()
             self.pygame.display.flip()
-        except Exception as e:
+        except Exception:
             # Focus restoration is best-effort, don't fail if it doesn't work
             pass
 
@@ -2100,7 +2099,7 @@ class ReceptiveFieldOverlay:
             self.view.addItem(self.obs_item)
 
             # Add ROI rectangle for receptive field
-            from pyqtgraph.Qt import QtCore, QtGui
+            from pyqtgraph.Qt import QtCore
             self.rf_box = pg.ROI([0, 0], [1, 1], pen=pg.mkPen(color='cyan', width=3), movable=False, resizable=False)
             # No need to remove handles - already has none when movable=False
             self.view.addItem(self.rf_box)
@@ -2792,7 +2791,6 @@ class CNNFilterActivationViewer:
 
         try:
             import pyqtgraph as pg
-            from pyqtgraph.Qt import QtWidgets
             import numpy as np
 
             self.pg = pg
@@ -2837,8 +2835,6 @@ class CNNFilterActivationViewer:
 
             for idx, info in enumerate(self.conv_info):
                 # Add row for this layer
-                label = f"Layer {idx} ({info['out_channels']} filters, {info['kernel_size']}x{info['kernel_size']})"
-
                 # Filters column
                 filter_view = self.win.addViewBox()
                 filter_view.setAspectLocked(True)
@@ -2939,7 +2935,6 @@ class CNNFilterActivationViewer:
             if not self.is_open:
                 return
             # Store activation (detach and move to CPU)
-            import torch
             self.conv_info[layer_idx]['activation'] = output.detach().cpu()
             self.needs_update = True
 
@@ -3828,7 +3823,6 @@ class CNNFilterActivationViewer:
             return
 
         # Calculate required dimensions
-        max_row_height = 0
         total_height = 0
         max_width = 0
 
@@ -3988,7 +3982,6 @@ class PreprocessedObservationViewer:
         """
         try:
             import pyqtgraph as pg
-            from pyqtgraph.Qt import QtWidgets
             import time
 
             self.pg = pg
@@ -4182,7 +4175,7 @@ class PreprocessedObservationViewer:
             # Normalize to 0-255 range for display
             if display_img.dtype == np.float32 or display_img.dtype == np.float64:
                 # Assume normalized to [0, 1] or [-1, 1]
-                img_min, img_max = display_img.min(), display_img.max()
+                img_min = display_img.min()
                 if img_min < 0:
                     # Assume [-1, 1] range
                     display_img = ((display_img + 1) * 127.5).astype(np.uint8)
@@ -4784,7 +4777,6 @@ class GradCAMViewer:
             action: Selected action index (for targeted GradCAM)
         """
         import torch
-        import numpy as np
 
         # Convert to numpy if needed
         if isinstance(obs, torch.Tensor):
@@ -5028,7 +5020,6 @@ def main():
     )
 
     # Attach a live observation bar printer for interactive play (vector-level wrapper)
-    from gym_wrappers.vec_obs_printer import VecObsBarPrinter
     #env = VecObsBarPrinter(env, bar_width=40, env_index=0, enable=args.show_obs, target_episodes=target_episodes)
 
     action_labels = get_action_labels_from_env(env)
@@ -5195,7 +5186,7 @@ def main():
                     break
 
             step_start = time.perf_counter()
-            rollout = collector.collect(deterministic=args.deterministic)
+            collector.collect(deterministic=args.deterministic)
 
             # Update plotter with step reward if plotting is enabled
             if plotter and plotter.is_open and collector.n_steps == 1:

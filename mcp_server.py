@@ -2387,13 +2387,6 @@ async def health_check(run_id: str) -> Dict[str, Any]:
     # Get alerts
     alerts_result = await get_metric_alerts(run_id)
 
-    # Get key metric trends
-    key_metrics = [
-        "train/roll/ep_rew/mean",
-        "train/opt/policy/entropy",
-        "train/opt/value/explained_var"
-    ]
-
     anomalies = []
 
     # Check alerts first
@@ -2689,8 +2682,6 @@ async def comprehensive_diagnostic(
     status = await get_training_status(run_id)
     is_active = status.get("running", False)
 
-    # Get first and last rows for analysis
-    first_row = all_rows[0]
     last_row = all_rows[-1]
 
     # Recent metrics for trend analysis (last 20 epochs or less)

@@ -7,7 +7,7 @@ order-sensitive training lifecycle into a focused module.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 import wandb
 

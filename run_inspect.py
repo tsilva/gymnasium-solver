@@ -4,8 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import random
-import time
 
 # Avoid macOS AppKit main-thread violations when environments initialize
 # Pygame/SDL from Gradio worker threads. Using the headless SDL drivers

@@ -1,4 +1,3 @@
-import gymnasium as gym
 from gym_wrappers.reward_shaper_base import RewardShaperBase
 
 

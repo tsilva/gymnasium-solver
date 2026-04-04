@@ -7,7 +7,6 @@ from trainer_callbacks import (
     DispatchMetricsCallback,
     EarlyStoppingCallback,
     IncrementalWandbUploadCallback,
-    KeyboardShortcutCallback,
     ModelCheckpointCallback,
     MonitorMetricsCallback,
     PlateauInterventionCallback,

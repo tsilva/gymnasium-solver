@@ -1,6 +1,5 @@
-import torch
 
-from utils.torch import assert_detached, batch_normalize, compute_kl_metrics, normalize_batch_with_metrics
+from utils.torch import assert_detached, compute_kl_metrics, normalize_batch_with_metrics
 
 from ..base_agent import BaseAgent
 

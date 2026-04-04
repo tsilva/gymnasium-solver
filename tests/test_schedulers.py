@@ -1,5 +1,4 @@
 import pytest
-import math
 
 # Import functions directly to avoid circular imports in trainer_callbacks.__init__
 from trainer_callbacks.hyperparameter_scheduler import (
@@ -65,7 +64,6 @@ def test_exponential_scheduler():
 
     # Test that exponential decays faster at the start
     val_25 = exponential(start, end, 0.25)
-    val_50 = exponential(start, end, 0.5)
     val_75 = exponential(start, end, 0.75)
 
     # First quarter should have larger change than last quarter

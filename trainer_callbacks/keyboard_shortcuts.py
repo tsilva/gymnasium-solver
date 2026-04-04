@@ -123,7 +123,7 @@ class KeyboardShortcutCallback(pl.Callback):
 
         # Run evaluation episodes
         with val_env.recorder(video_path="", record_video=False):
-            val_results = val_collector.evaluate_episodes(
+            val_collector.evaluate_episodes(
                 n_episodes=pl_module.config.eval_episodes,
                 deterministic=pl_module.config.eval_deterministic,
             )

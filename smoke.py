@@ -110,7 +110,7 @@ def smoke_test_config(env_id: str, variant_id: str, n_epochs: int) -> tuple[str,
 
         return config_spec, True, None
 
-    except Exception as e:
+    except Exception:
         import traceback
         # Include both traceback and stderr output in error message
         error_parts = [traceback.format_exc()]

@@ -3,7 +3,7 @@ import numpy as np
 from gymnasium import spaces
 from typing import Optional, Sequence
 
-from gym_wrappers.ocatari_helpers import center_x, center_y, normalize_linear, normalize_position, normalize_velocity, index_objects_by_category
+from gym_wrappers.ocatari_helpers import center_x, center_y, normalize_position, normalize_velocity, index_objects_by_category
 
 
 def _find_env_with_objects(env):

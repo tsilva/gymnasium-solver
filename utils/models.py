@@ -5,10 +5,8 @@ from typing import Dict, Union
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.distributions import Categorical, Bernoulli, Independent
 
 from .torch import compute_param_group_grad_norm, init_model_weights, ACTIVATION_MAPPING
-from .distributions import MaskedCategorical
 from .policy_ops import create_action_distribution
 
 

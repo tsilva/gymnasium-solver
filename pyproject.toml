@@ -41,7 +41,7 @@ dependencies = [
     "opencv-python-headless>=4.8.0",  # Override grad-cam's opencv-python to avoid Qt conflicts
     "google-generativeai>=0.8.6",
     "openai>=2.21.0",
-    "pillow>=11.3.0",
+    "pillow>=12.2.0",
 ]
 
 [tool.setuptools.packages.find]

@@ -36,12 +36,12 @@ uv run pytest -q
 
 ## Notes
 
-- Python 3.12 or newer is required.
+- Python 3.12 or 3.13 is required.
 - Environment variants live in `config/environments/*.yaml`; sweep configs live in `config/sweeps/*.yaml`.
 - W&B is enabled by default unless `WANDB_MODE=disabled` is set. `.env.example` documents `WANDB_ENTITY` and `WANDB_API_KEY`.
 - Hugging Face publishing requires `HF_TOKEN` or a local `huggingface-cli login`.
 - Modal training is optional and uses `python train.py <env:variant> --backend modal`; it requires Modal credentials and the expected W&B secret setup.
-- Retro support uses `stable-retro-apple-silicon` on Apple Silicon and `stable-retro` elsewhere, as declared in `pyproject.toml`.
+- Retro support uses the `stable-retro-turbo` package from PyPI on all supported platforms.
 - This is a self-education project under active development, so configs, APIs, and stored run formats may change before a formal release.
 
 ## Architecture

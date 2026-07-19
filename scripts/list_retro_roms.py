@@ -20,7 +20,7 @@ def get_retro_games_map() -> dict[str, dict]:
         }
     """
     try:
-        import retro
+        import stable_retro as retro
     except ImportError:
         return {}
 
@@ -69,7 +69,7 @@ def get_retro_games_map() -> dict[str, dict]:
 
 def main():
     try:
-        import retro
+        import stable_retro as retro
     except ImportError:
         print("ERROR: Retro support is not installed.")
         print("Install project dependencies with: uv sync")
@@ -91,7 +91,7 @@ def main():
         print("No games/ROMs found.")
         print()
         print("To import ROMs, use:")
-        print("  python -m retro.import /path/to/rom/directory")
+        print("  python -m stable_retro.import /path/to/rom/directory")
         return
 
     # Count games with ROMs
@@ -134,10 +134,10 @@ def main():
     print("=" * 80)
     print()
     print("To import ROMs:")
-    print("  python -m retro.import /path/to/rom/directory")
+    print("  python -m stable_retro.import /path/to/rom/directory")
     print()
     print("To import a specific ROM:")
-    print("  python -m retro.import --game GameName /path/to/rom.md")
+    print("  python -m stable_retro.import --game GameName /path/to/rom.md")
 
 
 if __name__ == "__main__":

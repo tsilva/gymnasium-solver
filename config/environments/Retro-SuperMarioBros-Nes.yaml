@@ -4,7 +4,7 @@
 # Environment Specification
 # =====================
 spec: &spec
-  source: https://github.com/Farama-Foundation/stable-retro
+  source: https://pypi.org/project/stable-retro-turbo/
   description: >
     Side-scrolling platformer. Guide Mario through levels to reach the flagpole
     while avoiding enemies and hazards. Observations are raw game frames; rewards
@@ -34,7 +34,7 @@ spec: &spec
 
 
   #action_space:
-    # When using stable-retro with use_restricted_actions=FILTERED, actions are a
+    # When using stable-retro-turbo with use_restricted_actions=FILTERED, actions are a
     # filtered discrete set of gamepad combinations. Exact count can vary by game.
   #  note: filtered discrete action set (retro.Actions.FILTERED)
 

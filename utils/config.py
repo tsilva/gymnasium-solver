@@ -381,7 +381,7 @@ class Config:
         resolve_vizdoom_defaults(self)
 
     def _resolve_retro_defaults(self) -> None:
-        """Apply Retro (stable-retro) defaults when params are not explicitly set."""
+        """Apply Retro defaults when params are not explicitly set."""
         resolve_retro_defaults(self)
 
     def _resolve_numeric_strings(self) -> None:

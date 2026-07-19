@@ -54,7 +54,7 @@ image = (
         "setuptools<80",
         "huggingface_hub>=0.22.0",
         "vizdoom",
-        "mcp",
+        "stable-retro-turbo==1.0.1.post22",
     )
 )
 

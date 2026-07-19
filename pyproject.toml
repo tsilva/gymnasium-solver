@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "gymsolve-env"
 version = "0.1.0"
 description = "Environment for gymsolve (uv/jupyter kernel)"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 dependencies = [
     "gymnasium[classic-control,atari,box2d,mujoco,other]",
     "gymnasium-robotics",
@@ -31,11 +31,9 @@ dependencies = [
     "gradio>=4.0.0",
     "matplotlib",
     "vizdoom",
-    "mcp",
     "python-dotenv",
     "modal>=0.64.0",
-    "stable-retro-apple-silicon==0.9.9.post1; sys_platform == 'darwin' and platform_machine == 'arm64'",
-    "stable-retro>=0.9.9; sys_platform != 'darwin' or platform_machine != 'arm64'",
+    "stable-retro-turbo==1.0.1.post22",
     "pyqtgraph>=0.13.7",
     "grad-cam>=1.5.4",
     "opencv-python-headless>=4.8.0",  # Override grad-cam's opencv-python to avoid Qt conflicts

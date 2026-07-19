@@ -59,7 +59,7 @@ class RetroSuperMarioBros_RewardShaper(RewardShaperBase):
         obs, info = self.env.reset(**kwargs)
 
         # Initialize tracking from info dict
-        # stable-retro provides RAM variables in info
+        # stable-retro-turbo provides RAM variables in info
         self.prev_x = info.get('x', 0) if 'x' in info else info.get('xscrollHi', 0) * 256 + info.get('xscrollLo', 0)
         self.prev_time = info.get('time', 0)
         self.prev_score = info.get('score', 0)

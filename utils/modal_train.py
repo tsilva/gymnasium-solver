@@ -408,8 +408,8 @@ def create_training_function(app: modal.App, resources: ResourceRequirements, de
                         f"Upload ROM with: python scripts/upload_rom_to_modal.py {rom_game_id}"
                     )
 
-                # Import the ROM using retro.import
-                import_cmd = ["python", "-m", "retro.import", str(rom_path)]
+                # Import the ROM using stable-retro-turbo's canonical module.
+                import_cmd = ["python", "-m", "stable_retro.import", str(rom_path)]
                 print(f"Running: {' '.join(import_cmd)}", flush=True)
                 result = subprocess.run(import_cmd, capture_output=True, text=True)
 
@@ -545,8 +545,8 @@ def create_training_function(app: modal.App, resources: ResourceRequirements, de
                         f"Upload ROM with: python scripts/upload_rom_to_modal.py {rom_game_id}"
                     )
 
-                # Import the ROM using retro.import
-                import_cmd = ["python", "-m", "retro.import", str(rom_path)]
+                # Import the ROM using stable-retro-turbo's canonical module.
+                import_cmd = ["python", "-m", "stable_retro.import", str(rom_path)]
                 yield from log_and_yield(f"Running: {' '.join(import_cmd)}\n")
                 result = subprocess.run(import_cmd, capture_output=True, text=True)
 

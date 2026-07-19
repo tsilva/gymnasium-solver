@@ -54,7 +54,7 @@ def build_vizdoom_env(env_id, obs_type, render_mode, **env_kwargs):
 
 def build_stable_retro_env(env_id, obs_type, render_mode, **env_kwargs):
     del obs_type
-    import retro
+    import stable_retro as retro
 
     game = env_id.replace("Retro/", "")
     make_kwargs = dict(env_kwargs)

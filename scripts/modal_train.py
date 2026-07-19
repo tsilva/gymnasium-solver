@@ -82,8 +82,8 @@ def train(
                 f"Upload ROM with: python scripts/upload_rom_to_modal.py {rom_game_id}"
             )
 
-        # Import the ROM using retro.import
-        import_cmd = ["python", "-m", "retro.import", str(rom_path)]
+        # Import the ROM using stable-retro-turbo's canonical module.
+        import_cmd = ["python", "-m", "stable_retro.import", str(rom_path)]
         print(f"Running: {' '.join(import_cmd)}")
         result = subprocess.run(import_cmd, capture_output=True, text=True)
 

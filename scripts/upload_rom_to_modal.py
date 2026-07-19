@@ -33,7 +33,7 @@ def upload_rom_to_volume(game_id: str, volume_name: str = "roms"):
     if not game_info["rom_exists"]:
         raise RuntimeError(
             f"ROM for '{game_id}' not imported locally. "
-            f"Import with: python -m retro.import /path/to/rom/directory"
+            f"Import with: python -m stable_retro.import /path/to/rom/directory"
         )
 
     rom_path = Path(game_info["path"])

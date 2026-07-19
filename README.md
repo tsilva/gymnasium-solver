@@ -6,6 +6,9 @@
 
 </div>
 
+> [!WARNING]
+> **This repository is archived and no longer maintained.** Development has moved to [rlab](https://github.com/tsilva/rlab), which supersedes gymsolve. Please use rlab for new work.
+
 gymsolve is a config-first reinforcement learning framework for training PyTorch Lightning agents on Gymnasium environments. It currently supports PPO and REINFORCE, vectorized rollout collection, checkpointed runs, playback tools, and optional W&B, Hugging Face Hub, Modal, Atari, VizDoom, and Retro integrations.
 
 Use it by choosing an environment variant such as `CartPole-v1:ppo`, training from the repo root, then replaying or inspecting a saved run from `runs/`.
